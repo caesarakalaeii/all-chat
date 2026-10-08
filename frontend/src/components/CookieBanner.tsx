@@ -52,9 +52,35 @@ import { cn } from '@/lib/utils'
 const AFFIRMED_GLYPH = '✓'
 const DENIED_GLYPH = '✗'
 
-// Pride month cookie: rainbow stripes top to bottom, the lanes hero's
-// desaturated palette plus blue. Decoration only, like the lane colors.
-const PRIDE_COOKIE_STOPS = ['#d95c50', '#e08a3c', '#dcc24a', '#56b847', '#5f86d6', '#8464d6']
+// Pride month cookie: one of these flags, picked at random per page load,
+// drawn as horizontal stripes top to bottom. Repeated entries keep a flag's
+// stripe proportions (bi is 2:1:2). Official colors, except black stripes
+// lift to #4a4a4a: the banner is dark and a black stripe would vanish.
+// Decoration only, like the lane colors.
+const PRIDE_COOKIE_FLAGS: readonly (readonly string[])[] = [
+  // rainbow, the lanes hero's desaturated palette plus blue
+  ['#d95c50', '#e08a3c', '#dcc24a', '#56b847', '#5f86d6', '#8464d6'],
+  // transgender
+  ['#5bcefa', '#f5a9b8', '#ffffff', '#f5a9b8', '#5bcefa'],
+  // non-binary
+  ['#fcf434', '#ffffff', '#9c59d1', '#4a4a4a'],
+  // lesbian
+  ['#d52d00', '#ff9a56', '#ffffff', '#d362a4', '#a30262'],
+  // gay men
+  ['#078d70', '#26ceaa', '#98e8c1', '#ffffff', '#7bade2', '#5049cc', '#3d1a78'],
+  // bisexual
+  ['#d60270', '#d60270', '#9b4f96', '#0038a8', '#0038a8'],
+  // pansexual
+  ['#ff218c', '#ffd800', '#21b1ff'],
+  // asexual
+  ['#4a4a4a', '#a3a3a3', '#ffffff', '#800080'],
+  // aromantic
+  ['#3da542', '#a7d379', '#ffffff', '#a9a9a9', '#4a4a4a'],
+  // genderfluid
+  ['#ff76a4', '#ffffff', '#c011d7', '#4a4a4a', '#2f3cbe'],
+  // agender
+  ['#4a4a4a', '#bcc4c7', '#ffffff', '#b7f684', '#ffffff', '#bcc4c7', '#4a4a4a'],
+]
 
 export default function CookieBanner() {
   const t = useTranslations()
@@ -62,6 +88,9 @@ export default function CookieBanner() {
   const [showBanner, setShowBanner] = useState(false)
   const pathname = usePathname()
   const pride = usePrideMonth()
+  const [prideFlag] = useState(
+    () => PRIDE_COOKIE_FLAGS[Math.floor(Math.random() * PRIDE_COOKIE_FLAGS.length)]
+  )
   // The lanes homepage has its own art direction; the banner picks it up so
   // it doesn't clash with the design. Root layout mounts us outside the
   // .lanes-home wrapper, so the variant is applied here directly.
@@ -118,7 +147,9 @@ export default function CookieBanner() {
               {/* userSpaceOnUse over lucide's 24-unit viewBox: the chocolate
                   chips are zero-width dot paths, and an objectBoundingBox
                   gradient on a zero-size bbox paints nothing. Hard stops
-                  make stripes rather than a blur. */}
+                  make stripes rather than a blur. Rendered only after
+                  hydration (see the early return), so the random flag
+                  never meets server markup. */}
               {pride && (
                 <defs>
                   <linearGradient
@@ -129,17 +160,9 @@ export default function CookieBanner() {
                     x2="0"
                     y2="22"
                   >
-                    {PRIDE_COOKIE_STOPS.flatMap((color, i) => [
-                      <stop
-                        key={`${i}a`}
-                        offset={i / PRIDE_COOKIE_STOPS.length}
-                        stopColor={color}
-                      />,
-                      <stop
-                        key={`${i}b`}
-                        offset={(i + 1) / PRIDE_COOKIE_STOPS.length}
-                        stopColor={color}
-                      />,
+                    {prideFlag.flatMap((color, i) => [
+                      <stop key={`${i}a`} offset={i / prideFlag.length} stopColor={color} />,
+                      <stop key={`${i}b`} offset={(i + 1) / prideFlag.length} stopColor={color} />,
                     ])}
                   </linearGradient>
                 </defs>

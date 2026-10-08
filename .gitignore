@@ -80,8 +80,10 @@ docs/overlay-themes/custom-fonts/
 *.otf
 *.woff
 *.woff2
-# Exception: OG image font (required for build-time rendering)
-!frontend/public/fonts/Barlow-Bold.ttf
+# Exception: social card fonts (opengraph-image.tsx renders with them)
+!frontend/public/fonts/ArchivoBlack-Regular.ttf
+!frontend/public/fonts/SpaceMono-Regular.ttf
+!frontend/public/fonts/SpaceMono-Bold.ttf
 
 # Vendored Monaco Editor assets (16 MB, regenerated from node_modules at build
 # time by frontend/scripts/copy-monaco.mjs — see ADR-0040)
