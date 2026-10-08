@@ -38,14 +38,16 @@
  * Pride month (June, in the visitor's own calendar) repaints the lanes as
  * a rainbow and swaps every lane's chatter for the flowPride pool. The
  * prerender is always the brand version; the client switches on hydration.
+ * `?pride=1` / `?pride=0` on the page URL force it on or off.
  */
 
 'use client'
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { type MessageKey, formatNumber, useTranslations } from '@/lib/i18n'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
+import { usePrideMonth } from '@/hooks/usePrideMonth'
 import { LANE_COUNT, laneBaseWeights, useLaneWaves } from '@/hooks/useLaneWaves'
 import { EMOTE_SRC, type EmoteToken } from '@/components/home/emotes'
 
@@ -245,12 +247,6 @@ function buildMarqueeRows(
 const MARQUEE_ROWS = buildMarqueeRows(false)
 const PRIDE_MARQUEE_ROWS = buildMarqueeRows(true)
 
-// Pride month is June. Month index 5 = June in Date's 0-based months.
-const isPrideMonth = () => new Date().getMonth() === 5
-// The month never changes under a mounted hero, so there is nothing to
-// subscribe to; the store exists for its server snapshot.
-const subscribeNever = () => () => {}
-
 export interface LanesHeroProps {
   /** Ticking all-time count (shared with Numbers; formatted locally). */
   totalCount: number
@@ -282,10 +278,7 @@ export function LanesHero({
 }: LanesHeroProps) {
   const t = useTranslations()
   const reducedMotion = useReducedMotion()
-  // Server snapshot false: the prerendered markup is always the brand
-  // version (it may have been built in another month), and the client
-  // re-renders into pride right after hydration without a mismatch.
-  const pride = useSyncExternalStore(subscribeNever, isPrideMonth, () => false)
+  const pride = usePrideMonth()
   const marqueeRows = pride ? PRIDE_MARQUEE_ROWS : MARQUEE_ROWS
   const stageRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)

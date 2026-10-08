@@ -40,6 +40,7 @@ import { usePathname } from 'next/navigation'
 import { Cookie } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useHydrated } from '@/hooks/useHydrated'
+import { usePrideMonth } from '@/hooks/usePrideMonth'
 import { useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
@@ -51,11 +52,16 @@ import { cn } from '@/lib/utils'
 const AFFIRMED_GLYPH = '✓'
 const DENIED_GLYPH = '✗'
 
+// Pride month cookie: rainbow stripes top to bottom, the lanes hero's
+// desaturated palette plus blue. Decoration only, like the lane colors.
+const PRIDE_COOKIE_STOPS = ['#d95c50', '#e08a3c', '#dcc24a', '#56b847', '#5f86d6', '#8464d6']
+
 export default function CookieBanner() {
   const t = useTranslations()
   const isHydrated = useHydrated()
   const [showBanner, setShowBanner] = useState(false)
   const pathname = usePathname()
+  const pride = usePrideMonth()
   // The lanes homepage has its own art direction; the banner picks it up so
   // it doesn't clash with the design. Root layout mounts us outside the
   // .lanes-home wrapper, so the variant is applied here directly.
@@ -107,7 +113,38 @@ export default function CookieBanner() {
               className="mt-1 h-8 w-8 flex-shrink-0 text-text-sub sm:h-10 sm:w-10"
               role="img"
               aria-label={t('legal.cookieBanner.iconLabel')}
-            />
+              color={pride ? 'url(#pride-cookie)' : undefined}
+            >
+              {/* userSpaceOnUse over lucide's 24-unit viewBox: the chocolate
+                  chips are zero-width dot paths, and an objectBoundingBox
+                  gradient on a zero-size bbox paints nothing. Hard stops
+                  make stripes rather than a blur. */}
+              {pride && (
+                <defs>
+                  <linearGradient
+                    id="pride-cookie"
+                    gradientUnits="userSpaceOnUse"
+                    x1="0"
+                    y1="2"
+                    x2="0"
+                    y2="22"
+                  >
+                    {PRIDE_COOKIE_STOPS.flatMap((color, i) => [
+                      <stop
+                        key={`${i}a`}
+                        offset={i / PRIDE_COOKIE_STOPS.length}
+                        stopColor={color}
+                      />,
+                      <stop
+                        key={`${i}b`}
+                        offset={(i + 1) / PRIDE_COOKIE_STOPS.length}
+                        stopColor={color}
+                      />,
+                    ])}
+                  </linearGradient>
+                </defs>
+              )}
+            </Cookie>
 
             {/* Content */}
             <div className="flex-1">
@@ -204,9 +241,7 @@ export default function CookieBanner() {
                   <p className="text-xs text-text-dim">
                     {interpolateElements(t('legal.cookieBanner.fontsNote'), {
                       label: (
-                        <strong className="text-text">
-                          {t('legal.cookieBanner.fontsLabel')}
-                        </strong>
+                        <strong className="text-text">{t('legal.cookieBanner.fontsLabel')}</strong>
                       ),
                     })}
                   </p>
@@ -262,9 +297,7 @@ export default function CookieBanner() {
               {/* Feedback: this line used to live in a dedicated footer box,
                   which read as a highlighted legal disclaimer. Same text,
                   inline as fine print instead. */}
-              <p className="mb-4 text-xs text-text-dim">
-                {t('legal.cookieBanner.footer')}
-              </p>
+              <p className="mb-4 text-xs text-text-dim">{t('legal.cookieBanner.footer')}</p>
 
               {/* Action Buttons — same box on both: h-12, 2px border, mono.
                   The lanes overrides repaint them (fill vs ghost), but the
@@ -272,7 +305,10 @@ export default function CookieBanner() {
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                 <Button
                   onClick={acknowledgeBanner}
-                  className={cn('h-12 w-full px-6 py-0 text-base sm:w-auto', lanes && 'lanes-cookie-ack')}
+                  className={cn(
+                    'h-12 w-full px-6 py-0 text-base sm:w-auto',
+                    lanes && 'lanes-cookie-ack'
+                  )}
                 >
                   {t('legal.cookieBanner.acknowledge')}
                 </Button>
