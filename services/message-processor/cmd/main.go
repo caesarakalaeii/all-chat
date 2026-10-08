@@ -170,7 +170,6 @@ func main() {
 	facebookNormalizer := normalizer.NewFacebookNormalizer()
 	goodgameNormalizer := normalizer.NewGoodGameNormalizer()
 	picartoNormalizer := normalizer.NewPicartoNormalizer()
-	rumbleNormalizer := normalizer.NewRumbleNormalizer()
 	instagramNormalizer := normalizer.NewInstagramNormalizer()
 
 	// Map of platform-specific normalizers
@@ -184,7 +183,6 @@ func main() {
 		"facebook":  facebookNormalizer,
 		"goodgame":  goodgameNormalizer,
 		"picarto":   picartoNormalizer,
-		"rumble":    rumbleNormalizer,
 		"instagram": instagramNormalizer,
 	}
 

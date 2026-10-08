@@ -45,7 +45,6 @@ interface Source {
     | 'picarto'
     | 'facebook'
     | 'instagram'
-    | 'rumble'
     | 'discord'
     | 'shared_overlay'
   // badge neutral-styles anything it doesn't recognize, so no cast is needed.
@@ -121,7 +120,6 @@ export default function SourcesPage() {
             'picarto',
             'facebook',
             'instagram',
-            'rumble',
             'discord',
             'shared_overlay',
           ].includes(p)
@@ -172,7 +170,6 @@ export default function SourcesPage() {
     picarto: sources.filter((s) => s.platform === 'picarto').length,
     facebook: sources.filter((s) => s.platform === 'facebook').length,
     instagram: sources.filter((s) => s.platform === 'instagram').length,
-    rumble: sources.filter((s) => s.platform === 'rumble').length,
   }
 
   if (error) {
@@ -342,7 +339,6 @@ export default function SourcesPage() {
               <option value="picarto">{t('common.platforms.picarto')}</option>
               <option value="facebook">{t('common.platforms.facebook')}</option>
               <option value="instagram">{t('common.platforms.instagram')}</option>
-              <option value="rumble">{t('common.platforms.rumble')}</option>
             </select>
           </div>
           <div>

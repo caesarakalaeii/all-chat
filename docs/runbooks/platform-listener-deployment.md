@@ -1,4 +1,4 @@
-# New-Listener Deployment Runbook (Owncast, GoodGame, Picarto, Facebook, Rumble, Instagram)
+# New-Listener Deployment Runbook (Owncast, GoodGame, Picarto, Facebook, Instagram)
 
 **Owner:** Platform / SRE
 **Last reviewed:** 2026-09-12
@@ -13,12 +13,12 @@ SOPS-vs-live drift apply here unchanged — `kubectl patch` only, never
 
 | Trigger | Action |
 |---------|--------|
-| Deploy the four secretless listeners (owncast, goodgame, picarto, rumble) | Section 1 — no new secrets needed, manifests need key-name fixes first |
+| Deploy the three secretless listeners (owncast, goodgame, picarto) | Section 1 — no new secrets needed, manifests need key-name fixes first |
 | Deploy the facebook listener | Section 2 — requires a Meta app and two new secret keys first |
 | Deploy the instagram listener | Section 2a — same Meta app as facebook plus the Instagram product; separate `instagram-app-id`/`instagram-app-secret` keys |
-| A listener CrashLoops after deploy | Section 4 — the two known failure modes are both key-name drift |
+| A listener CrashLoops after deploy | Section 3 — the two known failure modes are both key-name drift |
 
-Decision taken 2026-09-11: deploy the secretless four when ready; facebook-listener
+Decision taken 2026-09-11: deploy the secretless listeners when ready; facebook-listener
 waits for the Meta app (business verification takes weeks — start it now if the
 platform is wanted at all; see Section 2 step 1).
 
@@ -64,7 +64,6 @@ that **do not match live `allchat-secrets`**:
 |---|---|---|
 | `allchat-secrets/DATABASE_PASSWORD` | `database-password` | `CreateContainerConfigError`, pod never starts |
 | `allchat-secrets/SERVICE_JWT_SECRET` | `service-jwt-secret` | same |
-| `allchat-secrets/RUMBLE_SESSION_COOKIE` | (absent) | none — `optional: true`, kubelet skips it |
 | `redis-auth/redis-password` | (no such Secret; Redis runs without AUTH) | `CreateContainerConfigError` |
 
 Deployment-repo manifests must use the live lowercase key names. Pattern to
@@ -74,10 +73,10 @@ copy: `caesar-deployment/apps/workloads/all-chat/kick-listener-deployment.yaml`
 
 ---
 
-## Section 1 — Deploy owncast, goodgame, picarto, rumble
+## Section 1 — Deploy owncast, goodgame, picarto
 
 Prereq: PR (platform expansion) merged to `beta`, images
-`ghcr.io/caesarakalaeii/allchat-{owncast,goodgame,picarto,rumble}-listener:beta`
+`ghcr.io/caesarakalaeii/allchat-{owncast,goodgame,picarto}-listener:beta`
 exist in ghcr (workflow `build-and-push.yml` tags `type=ref,event=branch` on
 push to `beta`).
 
@@ -88,18 +87,17 @@ push to `beta`).
    - `owncast-listener-deployment.yaml` — port 8095
    - `goodgame-listener-deployment.yaml` — port 8096
    - `picarto-listener-deployment.yaml` — port 8097
-   - `rumble-listener-deployment.yaml` — port 8098
    - HPA files optional (repo base ships `minReplicas: 1, maxReplicas: 5` on
      CPU; leadership coordination makes extra replicas safe — every listener
      calls `NewLeadershipListenerFromEnv`, and with `SOURCE_MANAGER_SECRET`
      set only the leader ingests)
 
-2. **Env block per listener** (identical for all four):
+2. **Env block per listener** (identical for all three):
 
    ```yaml
    env:
      - name: PORT
-       value: "<8095-8098>"
+       value: "<8095-8097>"
      - name: LOG_LEVEL
        valueFrom:
          configMapKeyRef:
@@ -152,17 +150,6 @@ push to `beta`).
            key: service-jwt-secret      # lowercase — matches live
    ```
 
-   Rumble only, additionally (optional — pod starts without the key present):
-
-   ```yaml
-     - name: RUMBLE_SESSION_COOKIE
-       valueFrom:
-         secretKeyRef:
-           name: allchat-secrets
-           key: rumble-session-cookie
-           optional: true
-   ```
-
    Skip `REDIS_PASSWORD` entirely (no AUTH in prod, no `redis-auth` Secret).
    Skip `SERVICE_JWT_SECRET`/`_V1` — listeners use `SOURCE_MANAGER_SECRET`.
 
@@ -175,7 +162,6 @@ push to `beta`).
    kubectl --context default rollout status deployment/owncast-listener -n allchat --timeout=5m
    kubectl --context default rollout status deployment/goodgame-listener -n allchat --timeout=5m
    kubectl --context default rollout status deployment/picarto-listener -n allchat --timeout=5m
-   kubectl --context default rollout status deployment/rumble-listener -n allchat --timeout=5m
    ```
 
 5. **Verify ingest path** (gate still closed for non-premium users — expected
@@ -183,11 +169,11 @@ push to `beta`).
 
    ```bash
    # /health/ready returns 200 (Redis reachable)
-   kubectl --context default exec -n allchat deploy/rumble-listener -- \
-     wget -qO- http://localhost:8098/health/ready
+   kubectl --context default exec -n allchat deploy/picarto-listener -- \
+     wget -qO- http://localhost:8097/health/ready
 
    # no CrashLoop; restartCount stable at 0
-   kubectl --context default get pods -n allchat -l platform=rumble
+   kubectl --context default get pods -n allchat -l platform=picarto
    ```
 
    End-to-end message flow additionally needs: a premium (or gate-flipped)
@@ -197,8 +183,8 @@ push to `beta`).
    overlay renders. Watch with:
 
    ```bash
-   kubectl --context default logs -n allchat deploy/rumble-listener --tail=100
-   # expect "leadership coordination" and, once a source exists, SSE connect lines
+   kubectl --context default logs -n allchat deploy/picarto-listener --tail=100
+   # expect "leadership coordination" and, once a source exists, websocket connect lines
    ```
 
 ---
@@ -337,31 +323,7 @@ Instagram. No rotation procedure needed.
 
 ---
 
-## Section 3 — Rumble session cookie (optional, only if age-gated streams matter)
-
-Anonymous SSE reads work without it (ADR-0061). If streams with chat
-age-restriction must be supported:
-
-1. Extract the `session_token` cookie value from a logged-in Rumble browser
-   session (it is a long-lived bearer for read endpoints).
-2. Patch it in:
-
-   ```bash
-   kubectl --context default patch secret allchat-secrets -n allchat \
-     --type='json' -p="[{\"op\": \"add\", \"path\": \"/data/rumble-session-cookie\", \"value\": \"$(printf '%s' "$COOKIE" | base64)\"}]"
-   ```
-
-3. Ensure the deployment mounts it with `optional: true` (already the case in
-   both repo base and the Section 1 manifest snippet). The pod picks it up on
-   next restart; no rollout trigger needed for an optional key.
-
-The cookie is personal to the operator's Rumble account — treat it as a
-credential; it grants read access to that account's subscribed/age-gated
-content.
-
----
-
-## Section 4 — Troubleshooting
+## Section 3 — Troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|

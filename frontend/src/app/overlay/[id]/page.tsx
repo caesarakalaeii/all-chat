@@ -228,7 +228,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       'picarto',
       'facebook',
       'instagram',
-      'rumble',
       'discord',
     ],
   })
@@ -599,7 +598,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             'picarto',
             'facebook',
             'instagram',
-            'rumble',
             'discord',
           ],
       skip_links: display.tts_skip_links !== false,
@@ -722,8 +720,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         return 'text-facebook'
       case 'instagram':
         return 'text-instagram'
-      case 'rumble':
-        return 'text-rumble'
       default:
         return 'text-slate-400'
     }
@@ -845,14 +841,6 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             />
             <circle cx="12" cy="12" r="4" fill="none" stroke="#ED6FA4" strokeWidth="2" />
             <circle cx="17.2" cy="6.8" r="1.2" fill="#ED6FA4" />
-          </svg>
-        )
-      case 'rumble':
-        // Rumble mark: play triangle in a ring (functional glyph).
-        return (
-          <svg viewBox="0 0 24 24" className={iconClass}>
-            <circle cx="12" cy="12" r="9" fill="none" stroke="#85C742" strokeWidth="2" />
-            <path fill="#85C742" d="M10 8.5v7l6-3.5z" />
           </svg>
         )
       default:
