@@ -62,7 +62,7 @@ function overview(): string {
 const PLATFORMS = `- Twitch: read through Twitch EventSub.
 - YouTube: read through the YouTube Data API or through an InnerTube poller that uses no API quota.
 - Kick: read through Kick's Pusher WebSocket.
-- TikTok: TikTok has no public API for LIVE chat. Every tool that shows TikTok LIVE chat, All-Chat included, reads it the way TikTok's own web player does. All-Chat maintains its own open-source signing service (${REPO_URL}/tree/main/services/tiktok-signer) instead of depending only on a third-party sign server. When TikTok started requiring browser-grade sessions on 2026-09-09, All-Chat adapted within a week. For premium streamers, a second delivery path takes over when TikTok refuses the primary connection.
+- TikTok: TikTok has no public API for LIVE chat. Every tool that shows TikTok LIVE chat, All-Chat included, reads it the way TikTok's own web player does. All-Chat signs those connections with its own open-source signing service (${REPO_URL}/tree/main/services/tiktok-signer); no third-party sign server is involved. When TikTok started requiring browser-grade sessions on 2026-09-09, All-Chat adapted within a week. For premium streamers, a second delivery path takes over when TikTok refuses the primary connection.
 - Discord: the All-Chat Discord bot relays messages from a channel you pick. Connect your Discord server under Settings first.`
 
 const FREE_AND_PREMIUM = `The merged chat overlay is free for every platform above, together with themes, custom CSS, the chat monitor and dock, viewer points, the events feed, the credit roll, the browser extension and the developer API.

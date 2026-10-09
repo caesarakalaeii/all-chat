@@ -246,7 +246,7 @@ export const docs = {
     tiktokNoApi:
       "TikTok has no public API for LIVE chat. Every tool that shows TikTok LIVE chat, All-Chat included, reads it the way TikTok's own web player does. Add a TikTok source by username, and chat appears while you are LIVE.",
     tiktokSigner:
-      'That connection has to be signed. All-Chat maintains its own open-source signing service instead of depending only on a third-party sign server. When TikTok moved to browser-grade session checks on 2026-09-09, All-Chat tracked the change the same week. The design and its updates are written up in {adr}.',
+      'That connection has to be signed. All-Chat signs it with its own open-source signing service; no third-party sign server is involved. When TikTok moved to browser-grade session checks on 2026-09-09, All-Chat tracked the change the same week. The design and its updates are written up in {adr}.',
     tiktokAdrLinkText: 'ADR-0052 on GitHub',
     tiktokFallback:
       'Premium rooms get a second delivery path, used when TikTok refuses the main connection.',
