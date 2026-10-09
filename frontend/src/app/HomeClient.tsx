@@ -332,7 +332,10 @@ export default function HomeClient({ initialStats }: { initialStats: LandingStat
               {t('marketing.footer.impressum')}
             </Link>
           </p>
-          <p className="flex flex-wrap items-center justify-center gap-3 text-xs">
+          {/* pt-2: the links are 16px tall, so the two rows need 8px more than
+              space-y-2 gives for every link to keep the 24px target spacing
+              WCAG 2.5.8 asks for. */}
+          <p className="flex flex-wrap items-center justify-center gap-3 pt-2 text-xs">
             <Link
               href="/obs-chat-overlay"
               className="underline-offset-4 hover:text-text hover:underline"
