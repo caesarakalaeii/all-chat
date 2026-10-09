@@ -33,6 +33,15 @@ import type { OverlayType } from '@/lib/types/overlay'
 export const OVERLAY_KINDS: readonly OverlayType[] = ['chat', 'alerts', 'goal', 'list']
 
 /**
+ * The kinds a user may create today. Alerts, goal and list have no renderer
+ * yet, so offering them would only put a "not supported yet" placeholder on
+ * stream; existing overlays of those kinds still resolve and render as before.
+ * overlay-manager refuses the same kinds on create (unreleasedOverlayTypes);
+ * release a kind by adding it here and removing it there.
+ */
+export const CREATABLE_OVERLAY_KINDS: readonly OverlayType[] = ['chat']
+
+/**
  * Resolve a raw overlay_type value to a known kind, defaulting to chat.
  *
  * An unknown non-empty value also resolves to chat: the DB CHECK constraint
