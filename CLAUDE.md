@@ -174,7 +174,7 @@ Shipping a new user-facing feature is not "done" until all three of these releas
 
 ## Tech Stack
 
-**Backend**: Go 1.25+, Gin (HTTP), PostgreSQL 16 (pgx/v5), Redis 7 (go-redis/v9), Zap (logging)
+**Backend**: Go 1.26+, Gin (HTTP), PostgreSQL 16 (pgx/v5), Redis 7 (go-redis/v9), Zap (logging)
 
 **Frontend**: React 19+, Next.js 16+ (App Router), TypeScript, Tailwind CSS, Zustand
 
