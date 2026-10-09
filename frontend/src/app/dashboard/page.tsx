@@ -43,6 +43,7 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTranslations } from '@/lib/i18n'
 import type { ChatSource, OverlayType } from '@/lib/types/overlay'
 import { resolveOverlayKind } from '@/lib/utils/overlayKind'
+import { usePlatformAvailable } from '@/lib/platform-availability'
 import { OverlayKindBadge } from '@/components/overlays/OverlayKindBadge'
 
 // Extended overlay type that includes sources when available
@@ -119,6 +120,7 @@ function OverlayGridSkeleton() {
 
 function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
   const t = useTranslations()
+  const isPlatformAvailable = usePlatformAvailable()
   return (
     <div className="flex flex-col items-center gap-4 py-24 text-center">
       <MonitorPlay className="text-dim size-16" strokeWidth={1} aria-hidden="true" />
@@ -137,9 +139,11 @@ function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
             'facebook',
             'instagram',
           ] as const
-        ).map((p) => (
-          <PlatformBadge key={p} platform={p} size="sm" />
-        ))}
+        )
+          .filter(isPlatformAvailable)
+          .map((p) => (
+            <PlatformBadge key={p} platform={p} size="sm" />
+          ))}
       </div>
       <button onClick={onCreateClick} className="lanes-btn mt-4">
         {t('dashboard.empty.createFirst')}
