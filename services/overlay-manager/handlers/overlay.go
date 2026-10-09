@@ -47,6 +47,17 @@ func NewOverlayHandler(repo OverlayRepository, sourceRepo SourceRepository, conf
 	return &OverlayHandler{repo: repo, sourceRepo: sourceRepo, configRepo: configRepo}
 }
 
+// unreleasedOverlayTypes can be stored and rendered but not newly created:
+// nothing feeds or renders them yet, so a new one would only put the
+// "not supported yet" placeholder on stream. Existing overlays of these kinds
+// keep working and can still be cloned. Release a kind by deleting it here and
+// in CREATABLE_OVERLAY_KINDS (frontend/src/lib/utils/overlayKind.ts).
+var unreleasedOverlayTypes = map[string]bool{
+	models.OverlayTypeAlerts: true,
+	models.OverlayTypeGoal:   true,
+	models.OverlayTypeList:   true,
+}
+
 // HandleCreateOverlay handles POST /overlays
 func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 	// Get user ID from context (set by auth middleware)
@@ -88,6 +99,11 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 	// Validate early — catches input errors cheaply before hitting the DB.
 	if err := overlay.Validate(); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if unreleasedOverlayTypes[overlay.OverlayType] {
+		c.JSON(http.StatusForbidden, gin.H{"error": overlay.OverlayType + " overlays are not available yet"})
 		return
 	}
 

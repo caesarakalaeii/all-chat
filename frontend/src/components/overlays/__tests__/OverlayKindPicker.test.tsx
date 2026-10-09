@@ -22,13 +22,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { OverlayKindPicker } from '@/components/overlays/OverlayKindPicker'
+import { OVERLAY_KINDS } from '@/lib/utils/overlayKind'
 import type { OverlayType } from '@/lib/types/overlay'
 
 afterEach(() => cleanup())
 
 describe('OverlayKindPicker', () => {
-  it('offers all four kinds', () => {
-    render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
+  it('renders nothing while chat is the only creatable kind', () => {
+    const { container } = render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('offers every kind it is given', () => {
+    render(<OverlayKindPicker value="chat" onChange={vi.fn()} kinds={OVERLAY_KINDS} />)
     for (const label of ['Chat', 'Alerts', 'Goal', 'List']) {
       expect(screen.getByRole('radio', { name: new RegExp(label) })).toBeInTheDocument()
     }
@@ -36,7 +42,7 @@ describe('OverlayKindPicker', () => {
 
   it('reports the picked kind to the parent', () => {
     const onChange = vi.fn()
-    render(<OverlayKindPicker value="chat" onChange={onChange} />)
+    render(<OverlayKindPicker value="chat" onChange={onChange} kinds={OVERLAY_KINDS} />)
 
     fireEvent.click(screen.getByRole('radio', { name: /Alerts/ }))
 
@@ -44,7 +50,7 @@ describe('OverlayKindPicker', () => {
   })
 
   it('marks the selected kind', () => {
-    render(<OverlayKindPicker value="goal" onChange={vi.fn()} />)
+    render(<OverlayKindPicker value="goal" onChange={vi.fn()} kinds={OVERLAY_KINDS} />)
     expect(screen.getByRole('radio', { name: /Goal/ })).toBeChecked()
     expect(screen.getByRole('radio', { name: /Chat/ })).not.toBeChecked()
   })
