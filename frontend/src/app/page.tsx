@@ -21,12 +21,14 @@
  *
  * Owns the homepage canonical URL and JSON-LD structured data, then renders the
  * interactive landing UI (`HomeClient`). Emitting the structured data here puts it
- * in the initial server HTML for crawlers, independent of client hydration.
+ * in the initial server HTML for crawlers, independent of client hydration. The
+ * landing stats are read here for the same reason and handed down as initial data.
  */
 
 import type { Metadata } from 'next'
 import HomeClient from './HomeClient'
 import { JsonLd } from '@/components/JsonLd'
+import { fetchLandingStats } from '@/lib/api/stats'
 import { FAQ_MESSAGE_STEMS } from '@/lib/faq'
 import { getTranslations } from '@/lib/i18n'
 
@@ -50,16 +52,28 @@ const softwareApplicationLd = {
   applicationCategory: 'MultimediaApplication',
   operatingSystem: 'Web',
   offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+  isAccessibleForFree: true,
+  license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+  softwareHelp: { '@type': 'CreativeWork', url: 'https://allch.at/docs' },
   description:
-    'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in.',
+    'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one overlay. Drop it into OBS as a browser source, and open the chat monitor as an OBS dock. 7TV, BTTV, and FFZ emotes built in.',
   featureList: [
-    'Twitch IRC chat',
+    'Twitch chat (EventSub)',
     'YouTube Live chat',
     'Kick chat',
-    'TikTok Live chat',
-    'Discord chat relay',
-    '7TV, BTTV, FFZ emote support',
+    'TikTok LIVE chat',
+    'Discord channel relay',
+    '7TV, BTTV, FFZ and native emotes',
     'OBS Browser Source overlay',
+    'Chat monitor usable as an OBS dock',
+    'Multiple overlays per account',
+    '16 built-in themes and custom CSS',
+    'Cross-platform polls, predictions and viewer points',
+    'Events feed and credit roll',
+    'Moderation from the chat monitor (premium)',
+    'Text-to-speech (premium)',
+    'Browser extension for Chrome and Firefox',
+    'Public developer WebSocket API',
   ],
 }
 
@@ -73,12 +87,13 @@ const faqLd = {
   })),
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  const initialStats = await fetchLandingStats()
   return (
     <>
       <JsonLd data={softwareApplicationLd} />
       <JsonLd data={faqLd} />
-      <HomeClient />
+      <HomeClient initialStats={initialStats} />
     </>
   )
 }

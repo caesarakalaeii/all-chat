@@ -20,8 +20,9 @@
  * Landing Page — client portion (mockup G "lanes" redesign)
  *
  * Rendered by the server wrapper in `page.tsx`, which owns the page metadata
- * and the JSON-LD structured data. Stays a Client Component because it reads
- * auth state and browser APIs.
+ * and the JSON-LD structured data, and passes the server-read landing stats as
+ * `initialStats` so the first HTML carries real numbers. Stays a Client
+ * Component because it reads auth state and browser APIs.
  *
  * Structure:
  *   - LanesHero: five proportional platform lanes under fixed mono chrome.
@@ -55,19 +56,12 @@ import { WedgeSection } from '@/components/home/WedgeSection'
 import { toastManager } from '@/lib/toast'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { trackEvent } from '@/lib/analytics'
+import type { LandingStats } from '@/lib/api/stats'
 import { stashSigninPlatform } from '@/lib/analytics-auth'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { type TFunction, formatNumber, useTranslations } from '@/lib/i18n'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { useReveal } from '@/hooks/useReveal'
-
-/** The public /stats payload the counters below read. */
-interface LandingStats {
-  platforms: Record<string, number>
-  all_time: number
-  users: number
-  overlays_live: number
-}
 
 /**
  * The failure copy is identical for every platform except the platform name in
@@ -88,13 +82,13 @@ function reportLoginFailure(t: TFunction, reason: 'noAuthUrl' | 'requestFailed',
   })
 }
 
-export default function HomeClient() {
+export default function HomeClient({ initialStats }: { initialStats: LandingStats | null }) {
   const t = useTranslations()
   const router = useRouter()
   const reducedMotion = useReducedMotion()
   const { user, init } = useAuthStore()
-  const [stats, setStats] = useState<LandingStats | null>(null)
-  const [totalCount, setTotalCount] = useState(0)
+  const [stats, setStats] = useState<LandingStats | null>(initialStats)
+  const [totalCount, setTotalCount] = useState(initialStats?.all_time ?? 0)
   const homeRef = useRef<HTMLDivElement>(null)
 
   // Scroll-activated reveals: one observer for every [data-reveal] section
@@ -336,6 +330,42 @@ export default function HomeClient() {
               className="underline-offset-4 hover:text-text hover:underline"
             >
               {t('marketing.footer.impressum')}
+            </Link>
+          </p>
+          {/* pt-2: the links are 16px tall, so the two rows need 8px more than
+              space-y-2 gives for every link to keep the 24px target spacing
+              WCAG 2.5.8 asks for. */}
+          <p className="flex flex-wrap items-center justify-center gap-3 pt-2 text-xs">
+            <Link
+              href="/obs-chat-overlay"
+              className="underline-offset-4 hover:text-text hover:underline"
+            >
+              {t('marketing.footer.obsOverlay')}
+            </Link>
+            <span aria-hidden="true">&bull;</span>
+            <Link
+              href="/obs-chat-dock"
+              className="underline-offset-4 hover:text-text hover:underline"
+            >
+              {t('marketing.footer.obsDock')}
+            </Link>
+            <span aria-hidden="true">&bull;</span>
+            <Link
+              href="/tiktok-live-chat-overlay"
+              className="underline-offset-4 hover:text-text hover:underline"
+            >
+              {t('marketing.footer.tiktokLiveChat')}
+            </Link>
+            <span aria-hidden="true">&bull;</span>
+            <Link
+              href="/multistream-chat"
+              className="underline-offset-4 hover:text-text hover:underline"
+            >
+              {t('marketing.footer.multistreamChat')}
+            </Link>
+            <span aria-hidden="true">&bull;</span>
+            <Link href="/compare" className="underline-offset-4 hover:text-text hover:underline">
+              {t('marketing.footer.compare')}
             </Link>
           </p>
         </footer>
