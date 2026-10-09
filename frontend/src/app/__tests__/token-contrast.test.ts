@@ -171,6 +171,11 @@ const PLATFORMS = [
   '--color-youtube',
   '--color-kick',
   '--color-tiktok',
+  '--color-owncast',
+  '--color-goodgame',
+  '--color-picarto',
+  '--color-facebook',
+  '--color-instagram',
   '--color-discord',
 ] as const
 
@@ -204,10 +209,9 @@ describe('design token contrast (WCAG 2.2 AA)', () => {
     })
   }
 
-  // The token block claims text-level AA for these four ("Twitch: lightened
-  // ... for 4.5:1", "Others already pass"). Discord is deliberately absent:
-  // it sits at ~4.5:1 exactly and is only used as a badge/brand color.
-  for (const platform of PLATFORMS.filter((p) => p !== '--color-discord')) {
+  // The token block claims text-level AA for every platform color: the raw
+  // brands that miss it (Twitch, Facebook, Instagram, Discord) are lightened.
+  for (const platform of PLATFORMS) {
     it(`${platform} as text on --color-bg ≥ ${AA_TEXT}:1`, () => {
       expect(contrast(token(platform), token('--color-bg'))).toBeGreaterThanOrEqual(AA_TEXT)
     })

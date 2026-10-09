@@ -59,7 +59,7 @@ export function PreviewBackdropPicker({
   const t = useTranslations()
   return (
     <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 rounded-full border border-border bg-surface/85 px-2.5 py-1.5 shadow-sm backdrop-blur-sm">
-      <span className="text-[10px] font-medium tracking-widest text-text-sub uppercase select-none">
+      <span className="text-[11px] font-medium tracking-widest text-text-sub uppercase select-none">
         {t('overlayEditor.previewBackdrop.heading')}
       </span>
       {PRESETS.map((preset) => (

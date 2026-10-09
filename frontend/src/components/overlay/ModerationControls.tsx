@@ -158,7 +158,7 @@ export function ModerationControls({
             </Popover.Title>
             {can('timeout') && (
               <div className="mb-1">
-                <p className="mb-1 px-1 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
+                <p className="mb-1 px-1 text-[11px] font-semibold tracking-wide text-text-dim uppercase">
                   {t('viewerOverlay.moderationControls.timeout')}
                 </p>
                 <div className="flex gap-1">
@@ -235,4 +235,12 @@ function platformLabel(t: TFunction, platform: string): string {
   return known ? t(`common.platforms.${known}`) : platform
 }
 
-const NAMEABLE_PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
+const NAMEABLE_PLATFORMS = [
+  'twitch',
+  'youtube',
+  'kick',
+  'tiktok',
+  'facebook',
+  'instagram',
+  'discord',
+] as const

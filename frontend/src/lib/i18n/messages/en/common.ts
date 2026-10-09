@@ -45,6 +45,7 @@ export const common = {
     // "translate".
     translate: 'Translate',
     logOut: 'Log out',
+    signIn: 'Sign in',
   },
   // The soundPlayer presets. Read by the overlay editor's on-stream notification
   // sounds and by the monitor view's private activity sound. Casing rules are
@@ -63,6 +64,11 @@ export const common = {
     youtube: 'YouTube',
     kick: 'Kick',
     tiktok: 'TikTok',
+    owncast: 'Owncast',
+    goodgame: 'GoodGame',
+    picarto: 'Picarto',
+    facebook: 'Facebook',
+    instagram: 'Instagram',
     discord: 'Discord',
   },
   // Overlay kinds (ADR-0064), keyed by the overlay_type wire value. Read by

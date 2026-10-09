@@ -50,6 +50,8 @@ import { resolveSigninPlatform, readAndClearSigninPlatform } from '@/lib/analyti
 import { isAllowedExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import { InfinityLogo } from '@/components/InfinityLogo'
 import { useTranslations } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 
 // Not copy: the decoration above the error text, which states the failure in
 // words directly beneath it.
@@ -163,20 +165,25 @@ function AuthCallbackContent() {
   }, [searchParams, setUser, router, t])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg">
+    <div
+      className={cn(
+        'lanes-app flex min-h-screen items-center justify-center',
+        archivoBlack.variable,
+        spaceMono.variable
+      )}
+    >
       {loading ? (
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-4" role="status">
           <InfinityLogo size={64} />
-          <p className="text-sm text-text-sub">{t('auth.callback.authenticating')}</p>
+          <p className="text-sub text-sm">{t('auth.callback.authenticating')}</p>
         </div>
       ) : error ? (
-        <div className="text-center">
+        // Error, not brand: destructive token instead of the YouTube red, and
+        // the lanes button instead of the retired purple pill.
+        <div className="lanes-panel p-8 text-center" role="alert">
           <div className="mb-4 text-5xl">{WARNING_GLYPH}</div>
-          <p className="mb-4 text-lg text-youtube">{error}</p>
-          <Link
-            href="/"
-            className="inline-block rounded-lg bg-twitch px-6 py-2 font-semibold text-bg transition-opacity hover:opacity-90"
-          >
+          <p className="mb-6 text-lg text-destructive">{error}</p>
+          <Link href="/#get-started" className="lanes-btn">
             {t('auth.callback.returnHome')}
           </Link>
         </div>

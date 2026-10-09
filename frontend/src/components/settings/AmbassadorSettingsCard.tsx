@@ -29,7 +29,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { apiClient } from '@/lib/api/client'
 import { useTranslations } from '@/lib/i18n'
@@ -88,14 +87,14 @@ export function AmbassadorSettingsCard() {
   }
 
   return (
-    <Card className="p-6">
-      <h2 className="mb-4 text-lg font-semibold text-text">{t('settings.ambassador.heading')}</h2>
-      <p className="mb-4 text-sm text-text-sub">{t('settings.ambassador.body')}</p>
+    <div className="lanes-panel p-6">
+      <h2 className="mb-4 text-lg">{t('settings.ambassador.heading')}</h2>
+      <p className="text-sub mb-4 text-sm">{t('settings.ambassador.body')}</p>
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-sm font-medium text-text">{t('settings.ambassador.featureToggle')}</p>
+          <p className="text-sm font-medium">{t('settings.ambassador.featureToggle')}</p>
           {tagline && (
-            <p className="mt-1 truncate text-xs text-text-sub">
+            <p className="text-sub mt-1 truncate text-xs">
               {t('settings.ambassador.cardReads', { tagline })}
             </p>
           )}
@@ -109,6 +108,6 @@ export function AmbassadorSettingsCard() {
           <Switch.Thumb />
         </Switch.Root>
       </div>
-    </Card>
+    </div>
   )
 }

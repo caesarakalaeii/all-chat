@@ -19,23 +19,28 @@
 'use client'
 
 /**
- * The four-kind picker on the overlay create surfaces (ADR-0064), shared by
+ * The kind picker on the overlay create surfaces (ADR-0064), shared by
  * /overlays/new and the onboarding create dialog. Controlled: the parent owns
- * the state and the request payload.
+ * the state and the request payload. Renders nothing while only one kind is
+ * creatable: a single-option radio group is a question with no choice.
  */
 
-import { OVERLAY_KINDS } from '@/lib/utils/overlayKind'
+import { CREATABLE_OVERLAY_KINDS } from '@/lib/utils/overlayKind'
 import { useTranslations } from '@/lib/i18n'
 import type { OverlayType } from '@/lib/types/overlay'
 
 export function OverlayKindPicker({
   value,
   onChange,
+  kinds = CREATABLE_OVERLAY_KINDS,
 }: {
   value: OverlayType
   onChange: (kind: OverlayType) => void
+  kinds?: readonly OverlayType[]
 }) {
   const t = useTranslations()
+
+  if (kinds.length < 2) return null
 
   return (
     <fieldset className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -46,7 +51,7 @@ export function OverlayKindPicker({
           radio spanning both): jsx-a11y/label-has-associated-control does not
           find accessible text through a wrapper element, so the picker cannot
           use a single wrapping span for the text column. */}
-      {OVERLAY_KINDS.map((kind) => (
+      {kinds.map((kind) => (
         <label
           key={kind}
           className="grid cursor-pointer grid-cols-[auto_1fr] items-start gap-x-2 gap-y-0.5 rounded-lg border border-border bg-surface p-3 text-sm transition-colors has-checked:border-primary has-checked:bg-primary/5"

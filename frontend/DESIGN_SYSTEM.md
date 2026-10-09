@@ -274,6 +274,7 @@ chrome and follows this document.
 | Broken utilities | `npx vitest run --project unit src/__tests__/no-broken-tailwind-utilities.test.ts`               | Class names Tailwind v4 silently drops                                         |
 | Design rules     | `npx eslint .`                                                                                   | `gray-*`/`slate-*`, template `className`s, bare `focus:`                       |
 | Accessibility    | `npx eslint -c eslint.a11y.config.mjs --suppressions-location eslint.a11y.suppressions.json src` | New a11y violations (shrink-only ratchet)                                      |
+| Pixel baselines  | `npm run test:visual` (`.github/workflows/frontend-visual.yml` on every PR)                       | A chrome route rendering differently than its committed baseline               |
 | Types            | `npx tsc --noEmit`                                                                               |                                                                                |
 | Format           | `npx prettier --check .`                                                                         | Also sorts Tailwind classes                                                    |
 
@@ -291,7 +292,11 @@ tests fail in the node-environment `unit` project (missing jsdom globals), and
 3. Only then hand-roll — with tokens, `cn()`, and `focus-visible:`.
 4. Run the design-token test and `npx tsc --noEmit`.
 5. Add a Storybook story (`src/stories/`) — the a11y CI gate runs axe over it.
-6. Ship the release steps in `CLAUDE.md` → _Shipping a Feature_: premium gate,
+6. Shoot it at both widths and read the screenshots
+   (`docs/frontend/AGENT_UI_VERIFICATION.md`), and update the pixel baselines
+   if the change is deliberate (dispatch `frontend-visual.yml` with
+   `update_snapshots=true`, commit the PNGs in this PR).
+7. Ship the release steps in `CLAUDE.md` → _Shipping a Feature_: premium gate,
    onboarding tour entry, Patreon post.
 
 ## Anti-patterns, with the fix

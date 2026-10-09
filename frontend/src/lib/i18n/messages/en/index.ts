@@ -40,6 +40,7 @@ import { common } from './common'
 import { dashboard } from './dashboard'
 import { docs } from './docs'
 import { errors } from './errors'
+import { guides } from './guides'
 import { legal } from './legal'
 import { maintenanceBanner } from './maintenanceBanner'
 import { marketing } from './marketing'
@@ -59,6 +60,7 @@ export const enMessages = {
   dashboard,
   docs,
   errors,
+  guides,
   legal,
   maintenanceBanner,
   marketing,
@@ -70,6 +72,5 @@ export const enMessages = {
   translate,
   viewerOverlay,
 } as const
-
 
 export type EnMessages = typeof enMessages

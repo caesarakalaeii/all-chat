@@ -28,7 +28,7 @@
 'use client'
 
 import { Suspense } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useTrackOnce } from '@/hooks/useTrackOnce'
@@ -42,7 +42,15 @@ const FAILURE_GLYPH = '❌'
 // Anything else falls back to a platform-neutral label so the page never
 // misnames the provider that failed (it used to hardcode "Twitch" for every
 // platform).
-const NAMEABLE_PLATFORMS = ['twitch', 'youtube', 'kick', 'tiktok', 'discord'] as const
+const NAMEABLE_PLATFORMS = [
+  'twitch',
+  'youtube',
+  'kick',
+  'tiktok',
+  'facebook',
+  'instagram',
+  'discord',
+] as const
 
 function AuthErrorContent() {
   const t = useTranslations()
@@ -70,15 +78,12 @@ function AuthErrorContent() {
       <div className="max-w-md text-center">
         <div className="mb-6 text-6xl">{FAILURE_GLYPH}</div>
         <h1 className="mb-4 text-3xl font-bold text-text">{t('auth.viewerError.title')}</h1>
-        <p className="mb-6 text-lg text-youtube">{error}</p>
+        <p className="mb-6 text-lg text-destructive">{error}</p>
         <p className="mb-8 text-text-sub">
           {t('auth.viewerError.body', { account: accountLabel })}
         </p>
         <div className="space-y-4">
-          <Link
-            href="/"
-            className="block rounded-lg bg-twitch px-6 py-3 font-semibold text-bg transition-colors hover:bg-twitch/80"
-          >
+          <Link href="/" className={buttonVariants({ size: 'lg', className: 'w-full' })}>
             {t('auth.viewerError.returnHome')}
           </Link>
           <Button

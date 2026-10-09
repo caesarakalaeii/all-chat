@@ -36,10 +36,15 @@
  */
 
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
+import { Cookie } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useHydrated } from '@/hooks/useHydrated'
+import { usePrideMonth } from '@/hooks/usePrideMonth'
 import { useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
+import { cn } from '@/lib/utils'
 
 // Not copy: the glyphs the list draws beside an affirmed or denied row. They
 // are U+2713 CHECK MARK and U+2717 BALLOT X, rendered as decoration next to
@@ -47,19 +52,71 @@ import { interpolateElements } from '@/lib/i18n/emphasise'
 const AFFIRMED_GLYPH = '✓'
 const DENIED_GLYPH = '✗'
 
-// Not copy either: the banner's illustration. It carries role="img" and an
-// aria-label, so its accessible name is the translated string, not this glyph.
-const COOKIE_GLYPH = '🍪'
+// Pride month cookie: one of these flags, picked at random per page load,
+// drawn as horizontal stripes top to bottom. Repeated entries keep a flag's
+// stripe proportions (bi is 2:1:2). Official colors, except black stripes
+// lift to #4a4a4a: the banner is dark and a black stripe would vanish.
+// Decoration only, like the lane colors.
+const PRIDE_COOKIE_FLAGS: readonly (readonly string[])[] = [
+  // rainbow, the lanes hero's desaturated palette plus blue
+  ['#d95c50', '#e08a3c', '#dcc24a', '#56b847', '#5f86d6', '#8464d6'],
+  // transgender
+  ['#5bcefa', '#f5a9b8', '#ffffff', '#f5a9b8', '#5bcefa'],
+  // non-binary
+  ['#fcf434', '#ffffff', '#9c59d1', '#4a4a4a'],
+  // lesbian
+  ['#d52d00', '#ff9a56', '#ffffff', '#d362a4', '#a30262'],
+  // gay men
+  ['#078d70', '#26ceaa', '#98e8c1', '#ffffff', '#7bade2', '#5049cc', '#3d1a78'],
+  // bisexual
+  ['#d60270', '#d60270', '#9b4f96', '#0038a8', '#0038a8'],
+  // pansexual
+  ['#ff218c', '#ffd800', '#21b1ff'],
+  // asexual
+  ['#4a4a4a', '#a3a3a3', '#ffffff', '#800080'],
+  // aromantic
+  ['#3da542', '#a7d379', '#ffffff', '#a9a9a9', '#4a4a4a'],
+  // genderfluid
+  ['#ff76a4', '#ffffff', '#c011d7', '#4a4a4a', '#2f3cbe'],
+  // agender
+  ['#4a4a4a', '#bcc4c7', '#ffffff', '#b7f684', '#ffffff', '#bcc4c7', '#4a4a4a'],
+]
+
+const LANES_ROUTE_PREFIXES = [
+  '/compare',
+  '/dashboard',
+  '/docs',
+  '/legal',
+  '/multistream-chat',
+  '/obs-chat-dock',
+  '/obs-chat-overlay',
+  '/settings',
+  '/tiktok-live-chat-overlay',
+  '/upgrade',
+] as const
 
 export default function CookieBanner() {
   const t = useTranslations()
   const isHydrated = useHydrated()
   const [showBanner, setShowBanner] = useState(false)
+  const pathname = usePathname()
+  const pride = usePrideMonth()
+  const [prideFlag] = useState(
+    () => PRIDE_COOKIE_FLAGS[Math.floor(Math.random() * PRIDE_COOKIE_FLAGS.length)]
+  )
+  // Lanes-styled routes get the lanes variant so the banner doesn't clash
+  // with the page. Root layout mounts us outside the .lanes-home/.lanes-app
+  // wrappers, so the variant is applied here directly; keep this list in
+  // step with the routes that wrap themselves in .lanes-app.
+  const lanes =
+    pathname === '/' || LANES_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 
   useEffect(() => {
     if (!isHydrated) return // Wait for hydration
 
-    // Do not render the banner on public overlays where it obstructs the chat view
+    // Do not render the banner on public overlays where it obstructs the chat
+    // view. The prefix also covers /overlays, whose preview embed renders in
+    // an iframe inside the editor and must stay banner-free too.
     if (window.location.pathname.startsWith('/overlay')) {
       return
     }
@@ -85,19 +142,49 @@ export default function CookieBanner() {
       <div
         role="region"
         aria-label={t('legal.cookieBanner.regionLabel')}
-        className="animate-slide-up pointer-events-auto w-full max-w-4xl rounded-xl border border-border bg-surface shadow-2xl"
+        className={cn(
+          'animate-slide-up pointer-events-auto w-full rounded-xl border border-border bg-surface shadow-2xl sm:max-w-4xl',
+          lanes && 'lanes-cookie',
+          lanes && archivoBlack.variable,
+          lanes && spaceMono.variable
+        )}
       >
         {/* Main Banner */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           <div className="flex items-start gap-4">
-            {/* Cookie Icon */}
-            <div
-              className="flex-shrink-0 text-4xl"
+            {/* Illustration: a minimal lucide outline (feedback: the cookie
+                emoji read as clip art). aria-label keeps the accessible
+                name on the translated string. */}
+            <Cookie
+              className="mt-1 h-8 w-8 flex-shrink-0 text-text-sub sm:h-10 sm:w-10"
               role="img"
               aria-label={t('legal.cookieBanner.iconLabel')}
+              color={pride ? 'url(#pride-cookie)' : undefined}
             >
-              {COOKIE_GLYPH}
-            </div>
+              {/* userSpaceOnUse over lucide's 24-unit viewBox: the chocolate
+                  chips are zero-width dot paths, and an objectBoundingBox
+                  gradient on a zero-size bbox paints nothing. Hard stops
+                  make stripes rather than a blur. Rendered only after
+                  hydration (see the early return), so the random flag
+                  never meets server markup. */}
+              {pride && (
+                <defs>
+                  <linearGradient
+                    id="pride-cookie"
+                    gradientUnits="userSpaceOnUse"
+                    x1="0"
+                    y1="2"
+                    x2="0"
+                    y2="22"
+                  >
+                    {prideFlag.flatMap((color, i) => [
+                      <stop key={`${i}a`} offset={i / prideFlag.length} stopColor={color} />,
+                      <stop key={`${i}b`} offset={(i + 1) / prideFlag.length} stopColor={color} />,
+                    ])}
+                  </linearGradient>
+                </defs>
+              )}
+            </Cookie>
 
             {/* Content */}
             <div className="flex-1">
@@ -187,42 +274,42 @@ export default function CookieBanner() {
                       })}
                     </div>
                   </div>
-                  <div className="mt-3 border-t border-border pt-2">
-                    <p className="text-xs text-text-dim">
-                      {interpolateElements(t('legal.cookieBanner.fontsNote'), {
-                        label: (
-                          <strong className="text-text">
-                            {t('legal.cookieBanner.fontsLabel')}
-                          </strong>
-                        ),
-                      })}
-                    </p>
-                    <p className="mt-2 text-xs text-text-dim">
-                      {interpolateElements(t('legal.cookieBanner.thirdPartyNote'), {
-                        label: (
-                          <strong className="text-text">
-                            {t('legal.cookieBanner.thirdPartyLabel')}
-                          </strong>
-                        ),
-                        avatars: <strong>{t('legal.cookieBanner.thirdPartyAvatars')}</strong>,
-                        github: <strong>{t('legal.cookieBanner.thirdPartyGithub')}</strong>,
-                        privacy: (
-                          <a
-                            href="/legal/privacy"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-twitch underline underline-offset-2"
-                          >
-                            {t('legal.cookieBanner.privacyPolicy')}
-                          </a>
-                        ),
-                      })}
-                    </p>
-                  </div>
+                  {/* Feedback: fine print used to sit in its own bordered box,
+                      which read as a highlighted callout. Same text, no box —
+                      it flows on from the rows above like the rest of the
+                      details list. */}
+                  <p className="text-xs text-text-dim">
+                    {interpolateElements(t('legal.cookieBanner.fontsNote'), {
+                      label: (
+                        <strong className="text-text">{t('legal.cookieBanner.fontsLabel')}</strong>
+                      ),
+                    })}
+                  </p>
+                  <p className="mt-2 text-xs text-text-dim">
+                    {interpolateElements(t('legal.cookieBanner.thirdPartyNote'), {
+                      label: (
+                        <strong className="text-text">
+                          {t('legal.cookieBanner.thirdPartyLabel')}
+                        </strong>
+                      ),
+                      avatars: <strong>{t('legal.cookieBanner.thirdPartyAvatars')}</strong>,
+                      github: <strong>{t('legal.cookieBanner.thirdPartyGithub')}</strong>,
+                      privacy: (
+                        <a
+                          href="/legal/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-twitch underline underline-offset-2"
+                        >
+                          {t('legal.cookieBanner.privacyPolicy')}
+                        </a>
+                      ),
+                    })}
+                  </p>
                 </div>
               </details>
 
-              <p className="mb-4 text-sm text-text-sub">
+              <p className="mb-3 text-sm text-text-sub">
                 {interpolateElements(t('legal.cookieBanner.agreement'), {
                   privacy: (
                     <a
@@ -247,27 +334,38 @@ export default function CookieBanner() {
                 })}
               </p>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap gap-3">
-                <Button onClick={acknowledgeBanner} size="lg">
+              {/* Feedback: this line used to live in a dedicated footer box,
+                  which read as a highlighted legal disclaimer. Same text,
+                  inline as fine print instead. */}
+              <p className="mb-4 text-xs text-text-dim">{t('legal.cookieBanner.footer')}</p>
+
+              {/* Action Buttons — same box on both: h-12, 2px border, mono.
+                  The lanes overrides repaint them (fill vs ghost), but the
+                  shared geometry here is what keeps the pair the same size. */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <Button
+                  onClick={acknowledgeBanner}
+                  className={cn(
+                    'h-12 w-full px-6 py-0 text-base sm:w-auto',
+                    lanes && 'lanes-cookie-ack'
+                  )}
+                >
                   {t('legal.cookieBanner.acknowledge')}
                 </Button>
                 <a
                   href="/legal/privacy"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-lg border border-border bg-surface-2 px-6 py-2.5 font-medium text-text transition-colors hover:bg-surface-2/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none"
+                  className={cn(
+                    'inline-flex h-12 w-full items-center justify-center rounded-lg border border-border bg-surface-2 px-6 font-medium text-text transition-colors hover:bg-surface-2/80 focus-visible:ring-3 focus-visible:ring-twitch/50 focus-visible:outline-none sm:w-auto',
+                    lanes && 'lanes-cookie-more'
+                  )}
                 >
                   {t('legal.cookieBanner.learnMore')}
                 </a>
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="rounded-b-xl border-t border-border bg-bg px-6 py-3">
-          <p className="text-center text-xs text-text-dim">{t('legal.cookieBanner.footer')}</p>
         </div>
       </div>
     </div>

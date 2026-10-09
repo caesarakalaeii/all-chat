@@ -26,6 +26,7 @@ export default defineConfig({
           exclude: ['src/**/__tests__/**/*.browser.test.ts', 'src/**/__tests__/**/*.browser.test.tsx'],
           alias: {
             '@': path.join(dirname, 'src'),
+            'next/font/google': path.join(dirname, 'src/__tests__/__mocks__/next-font-google.ts'),
           },
         },
       },

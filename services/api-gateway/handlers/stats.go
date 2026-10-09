@@ -197,8 +197,17 @@ func (h *StatsHandler) GetActiveOverlays(c *gin.Context) {
 	c.JSON(http.StatusOK, overlays)
 }
 
-// scanActiveOverlayIDs returns the de-duplicated overlay IDs that currently
-// have an overlay:connected:* key (i.e. a live WebSocket connection).
+// scanBatchSize is the COUNT hint for the active-overlay SCAN. Redis's default
+// (10, go-redis passes 100) yields ~640 sequential round trips over a 60k-key
+// keyspace at ~25ms cluster RTT — 16s of latency for the unauthenticated
+// /stats hit. COUNT is a per-call work hint, not a page size, so a large value
+// trades a marginally longer single Redis call for two orders of magnitude
+// fewer round trips; matches are a tiny fraction of the keyspace, so the
+// response stays small either way.
+const scanBatchSize = 5000
+
+ // scanActiveOverlayIDs returns the de-duplicated overlay IDs that currently
+ // have an overlay:connected:* key (i.e. a live WebSocket connection).
 func (h *StatsHandler) scanActiveOverlayIDs(ctx context.Context) ([]string, error) {
 	// SCAN guarantees full coverage but not uniqueness (a key can repeat across
 	// batches during rehashing), so de-duplicate to avoid duplicate rows and
@@ -207,7 +216,7 @@ func (h *StatsHandler) scanActiveOverlayIDs(ctx context.Context) ([]string, erro
 	seen := make(map[string]struct{})
 	var cursor uint64
 	for {
-		keys, next, err := h.redis.Scan(ctx, cursor, "overlay:connected:*", 100).Result()
+		keys, next, err := h.redis.Scan(ctx, cursor, "overlay:connected:*", scanBatchSize).Result()
 		if err != nil {
 			return nil, err
 		}

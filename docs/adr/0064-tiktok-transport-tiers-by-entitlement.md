@@ -1,4 +1,8 @@
-# ADR-0058: TikTok transport tiers by entitlement
+# ADR-0064: TikTok transport tiers by entitlement
+
+**(Renumbered from ADR-0058 at the 2026-09-30 beta←main merge: `main` assigned
+0058 to this decision while `beta` had already shipped 0058-0062 for the
+platform-expansion records. Content otherwise unchanged.)**
 
 **Date**: 2026-09-17
 **Status**: Accepted

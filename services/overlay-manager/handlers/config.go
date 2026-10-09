@@ -58,7 +58,12 @@ var bubbleColorSettings = []string{
 	"youtubeBubbleBg",
 	"kickBubbleBg",
 	"tiktokBubbleBg",
+	"owncastBubbleBg",
+	"goodgameBubbleBg",
+	"picartoBubbleBg",
+	"facebookBubbleBg",
 	"discordBubbleBg",
+	"instagramBubbleBg",
 }
 
 // ConfigHandler manages overlay configuration routes.

@@ -29,7 +29,6 @@ import clsx from 'clsx'
 import { sharesApi } from '@/lib/api/shares'
 import { overlaysApi } from '@/lib/api/overlays'
 import { PlatformBadge } from './PlatformBadge'
-import { Button } from '@/components/ui/button'
 import { Dialog, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import type { ShareRequest } from '@/lib/types/share'
@@ -148,14 +147,14 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
   if (error && overlays.length === 0) {
     return (
       <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-        <Dialog.Content>
+        <Dialog.Content className="lanes-app rounded-none border-white bg-black">
           <DialogTitle className="mb-4 pr-8 text-xl">
             {t('dashboard.shares.cannotAcceptTitle')}
           </DialogTitle>
           <DialogDescription className="mb-6 text-base">{error}</DialogDescription>
-          <Button variant="outline" className="w-full" onClick={onClose}>
+          <button className="lanes-btn w-full" onClick={onClose}>
             {t('dashboard.shares.close')}
-          </Button>
+          </button>
         </Dialog.Content>
       </Dialog.Root>
     )
@@ -163,7 +162,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content>
+      <Dialog.Content className="lanes-app rounded-none border-white bg-black">
         {/* Title */}
         <DialogTitle className="mb-4 pr-8 text-xl">
           {t('dashboard.shares.acceptTitle', {
@@ -181,17 +180,12 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
         )}
 
         {loadingOverlays ? (
-          <div className="py-8 text-center text-text-sub">
-            {t('dashboard.shares.loadingOverlays')}
-          </div>
+          <div className="text-sub py-8 text-center">{t('dashboard.shares.loadingOverlays')}</div>
         ) : (
           <>
             {/* Overlay dropdown */}
             <div className="mb-4">
-              <label
-                htmlFor="overlay-select"
-                className="mb-2 block text-sm font-medium text-text-sub"
-              >
+              <label className="text-sub mb-2 block text-sm font-medium" htmlFor="overlay-select">
                 {interpolateElements(t('dashboard.shares.shareBackLabel'), {
                   required: (
                     <span className="text-red-400">{t('dashboard.shares.requiredMarker')}</span>
@@ -202,7 +196,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                 id="overlay-select"
                 value={selectedOverlay}
                 onChange={(e) => setSelectedOverlay(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm text-text placeholder-text-dim transition-all duration-200 focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:outline-none"
+                className="lanes-input w-full px-3 py-2 text-sm"
               >
                 {overlays.map((overlay) => (
                   <option key={overlay.id} value={overlay.id}>
@@ -214,7 +208,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
             {/* Expiry options */}
             <fieldset className="mb-6">
-              <legend className="mb-2 block text-sm font-medium text-text-sub">
+              <legend className="text-sub mb-2 block text-sm font-medium">
                 {t('dashboard.shares.expiryLegend')}
               </legend>
               <div className="space-y-2">
@@ -232,16 +226,16 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     checked={expiryOption === 'this_stream'}
                     onChange={(e) => setPickedExpiry(e.target.value as any)}
                     disabled={isKickUser}
-                    className="mt-1 mr-2 accent-blue-500"
+                    className="mt-1 mr-2 accent-kick"
                   />
-                  <span className="text-sm font-medium text-text">
+                  <span className="text-sm font-medium">
                     {t('dashboard.shares.expiryThisStream')}
                     {isKickUser && (
-                      <span className="ml-1 text-xs text-text-dim">
+                      <span className="text-dim ml-1 text-xs">
                         {t('dashboard.shares.expiryKickUnavailable')}
                       </span>
                     )}
-                    <span className="block text-xs font-normal text-text-dim">
+                    <span className="text-dim block text-xs font-normal">
                       {t('dashboard.shares.expiryThisStreamHint')}
                     </span>
                   </span>
@@ -255,12 +249,10 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     value="custom"
                     checked={expiryOption === 'custom'}
                     onChange={(e) => setPickedExpiry(e.target.value as any)}
-                    className="mt-1 mr-2 accent-blue-500"
+                    className="mt-1 mr-2 accent-kick"
                   />
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-text">
-                      {t('dashboard.shares.expiryCustom')}
-                    </div>
+                    <div className="text-sm font-medium">{t('dashboard.shares.expiryCustom')}</div>
                     {expiryOption === 'custom' && (
                       <div className="mt-2">
                         <div className="flex items-center gap-2">
@@ -278,7 +270,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                             }
                             className="w-24"
                           />
-                          <span id={hoursHintId} className="text-sm text-text-sub">
+                          <span id={hoursHintId} className="text-sub text-sm">
                             {t('dashboard.shares.expiryCustomHint')}
                           </span>
                         </div>
@@ -300,11 +292,11 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                     value="unlimited"
                     checked={expiryOption === 'unlimited'}
                     onChange={(e) => setPickedExpiry(e.target.value as any)}
-                    className="mt-1 mr-2 accent-blue-500"
+                    className="mt-1 mr-2 accent-kick"
                   />
-                  <span className="text-sm font-medium text-text">
+                  <span className="text-sm font-medium">
                     {t('dashboard.shares.expiryUnlimited')}
-                    <span className="block text-xs font-normal text-text-dim">
+                    <span className="text-dim block text-xs font-normal">
                       {t('dashboard.shares.expiryUnlimitedHint')}
                     </span>
                   </span>
@@ -314,17 +306,12 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
             {/* Action buttons */}
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={onClose} disabled={loading}>
+              <button className="lanes-btn ghost flex-1" onClick={onClose} disabled={loading}>
                 {t('dashboard.shares.cancel')}
-              </Button>
-              <Button
-                variant="gradient"
-                className="flex-1"
-                onClick={handleAccept}
-                disabled={!canSubmit}
-              >
+              </button>
+              <button className="lanes-btn flex-1" onClick={handleAccept} disabled={!canSubmit}>
                 {loading ? t('dashboard.shares.accepting') : t('dashboard.shares.acceptButton')}
-              </Button>
+              </button>
             </div>
           </>
         )}

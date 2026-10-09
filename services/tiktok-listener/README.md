@@ -150,7 +150,7 @@ TIKTOK_FLAP_RETRY_DELAY_MS=1000
 # per stint — tiktok_canary_warms_total{outcome} audits that budget.
 TIKTOK_CANARY_ROOMS=                   # Comma-separated usernames; empty = no canary
 
-# Premium fallback (ADR-0058, off by default): on flap-retry exhaustion a
+# Premium fallback (ADR-0064, off by default): on flap-retry exhaustion a
 # premium room's delivery switches to the signer's viewer-tab relay
 # (signer: SIGNER_RELAY_FALLBACK=on). A stint ends on stream end, tab death,
 # signer refusal, or TIKTOK_FALLBACK_MAX_DURATION_MS (default 6h), and the
@@ -284,7 +284,7 @@ sum(rate(tiktok_sign_attempts_total{reason="rate_limit"}[5m]))
 sum(rate(tiktok_sign_attempts_total{reason="budget"}[5m]))
 ```
 
-### Transport tiers and the premium fallback (ADR-0058)
+### Transport tiers and the premium fallback (ADR-0064)
 
 The primary transport is this service's own Node WebSocket. Two auxiliary
 paths share the signer's viewer-tab relay (`GET /v1/stream/:username`, SSE):
@@ -295,7 +295,7 @@ paths share the signer's viewer-tab relay (`GET /v1/stream/:username`, SSE):
   but never affects the connection. In pure-node mode the consumer warms
   the room's tab on the signer when the relay answers 409 (no warm tab):
   at most once per stint, `tiktok_canary_warms_total{outcome}`.
-- **Premium fallback (ADR-0058)**: with `TIKTOK_PREMIUM_FALLBACK=on`, a
+- **Premium fallback (ADR-0064)**: with `TIKTOK_PREMIUM_FALLBACK=on`, a
   room whose flap retries are exhausted **and** whose streamer is premium
   (`users.is_premium` via overlay ownership, TTL-cached, fail-closed)
   switches delivery to the relay. Frames are decoded with the connector's

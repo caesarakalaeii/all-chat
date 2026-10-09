@@ -97,7 +97,7 @@ export function MaintenanceInfoButton() {
 
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-72 rounded-lg border border-border bg-surface p-3 shadow-lg">
-          <p className="mb-2 text-[10px] font-semibold tracking-wide text-text-dim uppercase">
+          <p className="mb-2 text-[11px] font-semibold tracking-wide text-text-dim uppercase">
             {t('common.maintenanceInfo.popoverHeading')}
           </p>
           <div className="flex flex-col gap-3">

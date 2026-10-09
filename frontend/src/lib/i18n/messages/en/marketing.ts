@@ -17,7 +17,12 @@
  */
 
 /**
- * The public homepage, the upgrade page and the device-link flow.
+ * The public homepage ("lanes" design), the upgrade page and the device-link
+ * flow.
+ *
+ * The homepage is marketing art direction (mockup G): manifesto voice,
+ * lowercase mono chrome, five platform lanes. Its copy lives under
+ * `lanes`, `convergence`, `wedge`, `numbers`, `steps` and `final`.
  */
 
 export const marketing = {
@@ -27,19 +32,271 @@ export const marketing = {
     dashboard: 'Dashboard',
     signIn: 'Sign in',
   },
-  hero: {
-    eyebrow: 'Free · open source · every platform',
-    title: 'One overlay. Every platform.',
-    subtitle: 'Every message from Twitch, YouTube, Kick, TikTok and Discord in one OBS overlay.',
-    reassurance: 'Free & open source · No bots · Just a URL in OBS',
-    // Doubles as each button's aria-label, so one key keeps the accessible
-    // name and the visible label from ever drifting apart.
+  lanes: {
+    // The mid-dot wordmark is the marketing treatment of the brand; the app
+    // chrome keeps common.brand.wordmark ('all-chat').
+    brand: 'all·chat',
+    navLabel: 'Main',
+    navThemes: 'themes',
+    navDocs: 'docs',
+    navDiscord: 'discord',
+    navDashboard: 'dashboard',
+    // The logged-in nav chip; '▸' rides inside the key so no JSX carries it.
+    navDashboardChip: '▸ dashboard',
+    kicker: 'A DECLARATION OF WAR ON CHAT TOOLING',
+    // Two display lines of one headline, not two sentences.
+    titleTop: 'EVERY CHAT.',
+    titleBottom: 'ONE URL.',
+    // Small type inside the same h1, naming the category the display lines leave out.
+    titleCategory:
+      'Free multistream chat overlay and OBS dock for Twitch, YouTube, Kick, TikTok and Discord',
+    // The multistream objection, answered in the same voice: one merged
+    // chat means one community, and one mod queue means no extra load.
+    // Two keys = the two display lines (feedback: a soft wrap broke the
+    // sentence after "COMMUNITY?"). Same pattern as titleTop/Bottom.
+    manifestoLine1: 'YOUR CHATS? MERGED.',
+    manifestoLine2: 'YOUR COMMUNITY? UNITED.',
+    totalLabel: 'MSG DELIVERED',
+    cta: 'GET YOUR OVERLAY — FREE →',
+    ctaNote: 'lane height ≈ live share of messages',
+    howItWorks: 'how it works ↓',
+    backToDashboard: 'BACK TO YOUR DASHBOARD →',
+    welcomeNote: 'welcome back, {name} — {count} overlays are live, yours is one click away',
+    // Doubles as each sign-in button's aria-label, so one key keeps the
+    // accessible name and the visible label from ever drifting apart.
     signInWith: 'Sign in with {platform}',
-    statsCaption: 'messages delivered this week',
-    welcomeEyebrow: 'Welcome back',
-    welcomeTitle: 'Welcome back, {name}.',
-    goToDashboard: 'Go to Dashboard',
-    adminDashboard: 'Welcome aboard, captain!',
+    // Decorative marquee chatter per lane — curated strings, deliberately not
+    // wired to live chat. Lives in the flat flow* groups below, not under
+    // lanes.flow.<platform>, because the catalog caps nesting at three
+    // segments (messages.test.ts, docs/frontend/I18N.md).
+  },
+  // Marquee chatter for the twitch lane. m-keys enumerated by the hero's
+  // MARQUEE_MESSAGE_COUNTS table.
+  flowTwitch: {
+    m1: 'that clip was INSANE',
+    m2: 'KEKW',
+    m3: 'CLIP IT',
+    m4: 'GIGACHAD',
+    m5: 'W',
+    m6: 'been lurking 3 years',
+    m7: 'modCheck',
+    m8: 'gg',
+    m9: 'RAID INCOMING',
+    m10: 'lets gooooo',
+    m11: 'HOLY',
+    m12: 'peepoHappy',
+    m13: 'actual cinema',
+    m14: 'SourPls SourPls',
+    m15: 'OK dude',
+    m16: 'chat is this real',
+    m17: 'POGGERS',
+    m18: 'no way that worked',
+    m19: 'first time here, love it',
+    m20: 'catJAM catJAM catJAM',
+    m21: 'this overlay goes hard',
+    m22: 'monkaS',
+  },
+  // Marquee chatter for the youtube lane.
+  flowYoutube: {
+    m1: 'hi from the VOD gang',
+    m2: 'first time catching live',
+    m3: 'audio is crisp today',
+    m4: 'timestamp 2:14:33',
+    m5: 'subbing now',
+    m6: 'this overlay sold me',
+    m7: 'great stream as always',
+    m8: 'notification squad',
+    m9: 'the editor is going to eat this VOD',
+    m10: 'chat works here now?',
+    m11: 'lurking from the TV app',
+    m12: 'premiere hype',
+    m13: 'this segment is going in the highlight reel',
+    m14: 'joined from the community post',
+    m15: 'POGGERS it actually merges',
+    m16: 'late but here',
+    m17: 'SourPls the stream quality',
+    m18: 'chapter 3 is peak',
+    m19: 'PepePls premiere starting',
+    m20: 'replay the intro',
+    m21: 'chat actually synced here',
+    m22: 'this is my Roman Empire',
+  },
+  // Marquee chatter for the tiktok lane.
+  flowTiktok: {
+    m1: 'came from the fyp',
+    m2: 'what game is this',
+    m3: 'how is chat in one box',
+    m4: 'the algorithm brought me here',
+    m5: 'fyp fyp fyp',
+    m6: 'live rn??',
+    m7: 'saving this',
+    m8: 'wait chat is real here',
+    m9: 'typing from the bus',
+    m10: 'my fyp knows me too well',
+    m11: 'this is so satisfying to watch',
+    m12: 'the overlay is so clean',
+    m13: 'no way this is free',
+    m14: 'watching instead of sleeping',
+    m15: 'AYAYA finally live',
+    m16: 'dropping a follow',
+    m17: 'the vibes are immaculate',
+    m18: 'KKona he actually did it',
+    m19: 'comment section won today',
+    m20: 'no bots just chat',
+    m21: 'zooming to the end',
+    m22: 'been here since 200 views',
+  },
+  // Marquee chatter for the kick lane.
+  flowKick: {
+    m1: 'W streamer',
+    m2: 'OMEGALUL',
+    m3: 'the grind never stops',
+    m4: 'kick keep it',
+    m5: 'W takes',
+    m6: 'clip it quick',
+    m7: 'EZ Clap',
+    m8: 'this site actually respects chat',
+    m9: 'no ads just vibes',
+    m10: 'GIGACHAD move',
+    m11: 'signing up after this stream',
+    m12: 'the 95/5 split goes crazy',
+    m13: 'WAYTOODANK',
+    m14: 'PartyParrot kickoff',
+    m15: 'no kick from me',
+    m16: 'the chat speed here is unreal',
+    m17: 'LuL streamer.exe stopped',
+    m18: 'signed up in 30 seconds',
+    m19: 'gambling less, chatting more',
+    m20: 'this lane is my home now',
+    m21: 'ratio the algorithm',
+    m22: 'PETPET the mods',
+  },
+  // Marquee chatter for the discord lane.
+  flowDiscord: {
+    m1: 'discord games after the raid!',
+    m2: 'gg everyone',
+    m3: 'movie night friday',
+    m4: 'nice stream',
+    m5: 'clips channel is popping off',
+    m6: 'GG',
+    m7: 'watching from the server vc',
+    m8: 'the bot announcements are elite',
+    m9: 'lurking while i cook',
+    m10: 'stream ping squad assemble',
+    m11: 'this overlay in our events channel would go hard',
+    m12: 'raid train forming',
+    m13: 'peepoHey new here',
+    m14: 'Stare at the chat merge',
+    m15: 'reactor just said that',
+    m16: 'movie night poll is up',
+    m17: 'who else is multitasking',
+    m18: 'the events calendar is stacked',
+    m19: 'first stream on the server',
+    m20: 'xdx the overlay works here',
+    m21: 'lurking with dinner',
+    m22: 'feels like the old internet',
+  },
+  // Marquee chatter for every lane during pride month (June): the hero
+  // swaps each lane's own pool for this one while the lanes turn rainbow.
+  flowPride: {
+    m1: 'happy pride month!',
+    m2: 'love is love',
+    m3: 'the rainbow lanes go hard',
+    m4: 'so proud of this community',
+    m5: 'trans rights are human rights',
+    m6: 'queer and here',
+    m7: 'pride stream lets gooo',
+    m8: 'sending love to everyone in chat',
+    m9: 'be yourself, always',
+    m10: 'this chat is a safe space',
+    m11: 'came out to my friends today',
+    m12: 'raid the pride stream',
+    m13: 'every color, one chat',
+    m14: 'love wins',
+    m15: 'happy pride from the VOD gang',
+    m16: 'rainbow emotes when',
+    m17: 'ally checking in',
+    m18: 'see you at the parade',
+    m19: 'you are valid',
+    m20: 'catJAM pride edition',
+    m21: 'bi visibility in chat',
+    m22: 'proud and streaming',
+  },
+  convergence: {
+    label: 'THE WHOLE PRODUCT',
+    headingTop: 'FIVE CHATS IN.',
+    headingBottom: 'ONE WINDOW OUT.',
+    // Bold runs ride as {placeholders} with sibling *Emphasis keys, so word
+    // order stays a translator decision. See emphasise()/interpolateElements.
+    body: "Your chat tool should weigh {oneUrl} and nothing else. All-Chat merges your {platforms} chat into a single OBS browser source. Every message keeps its platform color, {emotes} render natively, animated — because chat without emotes isn't chat.",
+    oneUrlEmphasis: 'one URL',
+    platformsEmphasis: 'Twitch, YouTube, TikTok, Kick and Discord',
+    emotesEmphasis: '7TV, BTTV and FFZ emotes',
+    liveLabel: '● LIVE PREVIEW',
+    frameUrl: 'allch.at/overlay/8f3e…',
+    // The static demo feed's messages live in the flat marketing.feed group
+    // below (three-segment cap, messages.test.ts). Usernames are handles
+    // kept in the component.
+  },
+  // The static demo feed below the manifesto; one message per m-key.
+  feed: {
+    m1: 'that clip was INSANE GIGACHAD',
+    m2: 'first time catching the stream live!',
+    m3: 'W streamer W takes POGGERS',
+    m4: 'lurking 3 years, this overlay is clean',
+    m5: 'came from the fyp, what game is this',
+    m6: 'hi from the VOD gang',
+    m7: 'CLIP IT OMEGALUL',
+    m8: 'peepoHappy the 7tv support!!',
+    m9: 'how is chat from 4 apps in one box KEKW',
+    m10: 'RAID INCOMING — welcome!',
+  },
+  wedge: {
+    label: 'EVERY MULTICHAT TOOL MAKES YOU PAY SOMETHING',
+    headingTop: 'MONEY. DISK SPACE.',
+    headingMiddle: 'PATIENCE.',
+    headingAccent: 'NOT HERE.',
+    themTitle: 'THEM',
+    usTitle: 'ALL·CHAT',
+    them1: 'download a desktop app first — your chat tool should weigh one URL, not 200 MB',
+    them2: 'a browser extension required just to merge your chats',
+    them3: 'a subscription to read your own chat — rent-seeking on infrastructure',
+    them4: 'closed source — "trust us, bro"',
+    them5: 'one tool for the overlay, another to read and moderate chat',
+    us1: 'nothing to install: it is a URL. the extension is optional',
+    us2: 'free — merged chat is infrastructure, not a premium tier',
+    us3: 'AGPL-3.0 — audit it, fork it, self-host it',
+    us4: '5 platforms, Discord included, one feed for overlay and monitor',
+    us5: 'emotes are the language: 7TV · BTTV · FFZ, native and animated',
+  },
+  numbers: {
+    label: 'BY THE NUMBERS',
+    weeklyHeading: 'MESSAGES THIS WEEK, BY PLATFORM',
+    platformLabel: '{platform} · {share}%',
+    totalLabel: 'MESSAGES DELIVERED, ALL TIME',
+    usersLabel: 'STREAMERS ON BOARD',
+    overlaysLabel: 'OVERLAYS LIVE RIGHT NOW',
+  },
+  steps: {
+    label: 'THE ENTIRE SETUP — NO, REALLY',
+    signInTitle: 'Sign in',
+    signInBody:
+      'Twitch, YouTube or Kick account. No bot to invite, no tokens to paste, nothing to download.',
+    addChannelsTitle: 'Add your channels',
+    addChannelsBody:
+      'Any mix of the five platforms. Five windows is four too many — one overlay carries all of them.',
+    pasteUrlTitle: 'Paste one URL',
+    pasteUrlBody:
+      "That's the install. Drop the link into an OBS browser source; emotes, badges and themes come along.",
+  },
+  final: {
+    line1: 'NOTHING TO INSTALL.',
+    line2: 'NOTHING TO PAY.',
+    line3: 'EVERYTHING TO READ.',
+    cta: 'GET YOUR OVERLAY — FREE →',
+    micro: 'free · no download · agpl-3.0, self-hostable',
+    welcomeBack: 'welcome back, {name}.',
+    welcomeMicro: 'your chat never stopped',
   },
   explore: {
     summary: 'Explore All-Chat',
@@ -47,42 +304,9 @@ export const marketing = {
     api: 'Developer API',
     docsAndFaq: 'Docs & FAQ',
   },
-  why: {
-    eyebrow: 'Why All-Chat',
-    title: 'Built for multistreamers',
-    themesTitle: '16 themes, full control',
-    themesBody:
-      'From Win98 retro to cyberpunk neon — pick a built-in theme, tweak it point-and-click, or write your own CSS.',
-    emotesTitle: 'Every emote, everywhere',
-    emotesBody:
-      '7TV, BTTV, FFZ plus native Twitch and YouTube emotes — they all render correctly in your overlay.',
-    resourcesTitle: 'Smart resource usage',
-    resourcesBody:
-      'Only polls a platform while your overlay is live in OBS. Switch scenes and All-Chat stands down.',
-  },
-  steps: {
-    heading: 'Live in 3 steps:',
-    signIn: 'Sign in',
-    addChannels: 'Add your channels',
-    pasteUrl: 'Paste the URL in OBS',
-  },
   ambassadors: {
     eyebrow: 'Ambassadors',
     title: 'Streamers who run on All-Chat',
-  },
-  beyond: {
-    eyebrow: 'Beyond the overlay',
-    title: 'Do more with All-Chat',
-    extensionTitle: 'Browser extension',
-    extensionBody:
-      'Give your viewers unified cross-platform chat right in their browser — it replaces native Twitch, YouTube, and Kick chat.',
-    firefox: 'Firefox',
-    chrome: 'Chrome',
-    githubReleases: 'GitHub Releases',
-    apiTitle: 'Build on the API',
-    apiBody:
-      "One unified chat WebSocket — every platform, one message format. There's a public test stream you can hook up in seconds, no account needed.",
-    apiCta: 'Read the API docs',
   },
   footer: {
     tagline: 'Free. Open source. Built for streamers who refuse to pick just one platform.',
@@ -93,18 +317,33 @@ export const marketing = {
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
     impressum: 'Impressum',
+    obsOverlay: 'OBS chat overlay',
+    obsDock: 'OBS chat dock',
+    tiktokLiveChat: 'TikTok LIVE chat',
+    multistreamChat: 'Multistream chat',
+    compare: 'Compare',
   },
   // Rendered twice: by FaqSection, and verbatim into the FAQPage JSON-LD on the
   // home route. Google requires the structured text to match the visible
   // answer exactly, so both read these keys and neither restates them.
   faq: {
-    heading: 'Frequently asked questions',
+    label: 'FAQ',
+    heading: 'Frequently Asked Questions',
     platformsQuestion: 'Which platforms can I combine?',
     platformsAnswer:
       'Twitch, YouTube, Kick, TikTok, and Discord — in any combination, all in a single overlay.',
+    tiktokQuestion: 'Is TikTok LIVE chat reliable?',
+    tiktokAnswer:
+      "TikTok has no public API for LIVE chat, so every tool that shows it, All-Chat included, reads chat the way TikTok's own web player does. All-Chat signs those connections with its own open-source signing service, with no third-party sign server involved, and premium rooms get a second delivery path when the main connection is refused. The limit: TikTok is the platform most likely to see short interruptions when TikTok changes its web player.",
     obsQuestion: 'How do I add All-Chat to OBS?',
     obsAnswer:
       'Create an overlay, add your chat sources, then paste the overlay URL into an OBS Browser Source. No plugins or bots required.',
+    obsDockQuestion: 'Can I dock the chat inside OBS?',
+    obsDockAnswer:
+      'Yes. The chat monitor runs as an OBS dock beside your mixer, a readable view for you rather than something your viewers see. In the overlay editor, click Copy dock URL to copy https://allch.at/overlay/<overlay-id>/view?dock=1. In OBS, open View > Docks > Custom Browser Docks, name the dock, paste the link and click Apply. The dock asks you to sign in once. Streamlabs Desktop takes the same link.',
+    overlaysQuestion: 'Can I run more than one overlay?',
+    overlaysAnswer:
+      'Yes. One account can create several overlays, each with its own mix of chat sources, its own theme and its own OBS URL. For example, one overlay for Twitch and TikTok on a gaming stream and a YouTube-only one for a podcast.',
     freeQuestion: 'Is All-Chat free?',
     freeAnswer: 'Yes. All-Chat is free and open source under the AGPL-3.0 license.',
     premiumQuestion: 'Why are some features premium?',
@@ -163,7 +402,8 @@ export const marketing = {
     errorTitle: 'Login error',
     errorBody: 'Failed to initiate {platform} login.',
   },
-  // The landing page's rotating theme showcase.
+  // The landing page's rotating theme showcase. Not rendered by the lanes
+  // homepage (the lanes nav links to /docs#themes instead); kept for reuse.
   themeSwitcher: {
     heading: 'Themes',
     carouselLabel: 'Featured themes',

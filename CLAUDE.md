@@ -6,14 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok, Discord) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
+All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok, Discord; Owncast, GoodGame, Picarto, Facebook and Instagram in beta) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
 
-**Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from Twitch + YouTube + Kick + TikTok + Discord simultaneously, providing full flexibility for streamers who multistream.
+**Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from every supported platform simultaneously, providing full flexibility for streamers who multistream.
 
 **Architecture**: Standard Go Layout with microservices communicating via Redis Streams (raw messages) → Message Processor (normalization + enrichment) → Redis Pub/Sub (overlay-specific) → API Gateway WebSocket (client delivery).
 
 **Platform Status**:
 - ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Pusher WebSocket) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
+- 🚧 Beta only: Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Instagram (ADR-0062, Graph API live_comments polling, read-only). The listeners are deployed and the backend is shared, but the frontend offers these platforms only on `beta.allch.at` (`frontend/src/lib/platform-availability.ts`); allch.at hides them. Adding a source is still limited by the ADR-0008 `platform_*` gate (seeded `is_premium=TRUE`, migrations 091-094 and 096; beta testers are granted premium). Release to production by removing the platform from `platform-availability.ts`, then flip its gate via the feature-gate admin endpoint to open it beyond premium.
 
 ---
 
@@ -111,6 +112,11 @@ Each service has a detailed README:
 - [tiktok-signer](./services/tiktok-signer/README.md) - Self-hosted TikTok webcast signing (X-Bogus/X-Gnarly via TikTok's own SDK in a headless browser; replaces Euler Stream, ADR-0052)
 - [tiktok-relay](./services/tiktok-relay/README.md) - US-region relay for TikTok's live lookup by handle (Cloud Run, not in the cluster); used by tiktok-listener for accounts that only resolve from the US
 - discord-listener — Discord channel chat relay (`services/discord-listener/`, no README yet)
+- [owncast-listener](./services/owncast-listener/README.md) - Self-hosted Owncast instances; one websocket per instance URL (ADR-0058)
+- [goodgame-listener](./services/goodgame-listener/README.md) - GoodGame.ru chat websocket; resolves channel key to numeric chat id
+- [picarto-listener](./services/picarto-listener/README.md) - Picarto pop-out chat websocket, defensively parsed (ADR-0059)
+- [facebook-listener](./services/facebook-listener/README.md) - Facebook Live comments via Graph API polling + moderation (ADR-0060)
+- [instagram-listener](./services/instagram-listener/README.md) - Instagram Live comments via Graph API `live_comments` polling, read-only (ADR-0062)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
@@ -129,6 +135,7 @@ Each service has a detailed README:
 - [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
 - [Accessibility](./docs/ACCESSIBILITY.md) - WCAG 2.2 AA scope, CI gates (shrink-only ratchets), contracts for new UI code
 - [Frontend i18n](./docs/frontend/I18N.md) - the UI string catalog: how to add a string, placeholder syntax, why there is no provider and no locale in the URL
+- [Agent UI verification](./docs/frontend/AGENT_UI_VERIFICATION.md) - the screenshot ritual and pixel-baseline gate every UI change must pass before "done"; [Onlook pilot](./docs/frontend/ONLOOK_PILOT.md) for visual editing
 - [Design System](./frontend/DESIGN_SYSTEM.md) - shadcn primitives, design tokens, and the CI gates that keep the UI consistent (ADR-0056). Agents: use the `shadcn-ui` skill
 
 ---
@@ -206,7 +213,7 @@ services/<service-name>/
 ## Message Flow Architecture
 
 ```
-Listeners (Twitch/YouTube/Kick/TikTok/Discord)
+Listeners (Twitch/YouTube/Kick/TikTok/Discord/Owncast/GoodGame/Picarto/Facebook/Instagram)
   ↓ publish raw messages
 Redis Streams (chat:raw)
   ↓ consume via XREADGROUP (group: message-processors)

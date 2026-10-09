@@ -52,6 +52,19 @@ import { OverlayViewGuard } from '../OverlayViewGuard'
 // no SVG geometry, so force a getTotalLength stub to let it mount.
 ;(SVGElement.prototype as unknown as { getTotalLength: () => number }).getTotalLength = () => 0
 
+// InfinityLogo's reduced-motion gate reads matchMedia, which jsdom lacks.
+// Static non-matching stub, same as ChatRow.test.tsx.
+;(window as unknown as { matchMedia: typeof window.matchMedia }).matchMedia = (query) => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
+  dispatchEvent: () => false,
+})
+
 afterEach(() => {
   cleanup()
   push.mockClear()
@@ -59,14 +72,14 @@ afterEach(() => {
 })
 
 describe('OverlayViewGuard', () => {
-  it('redirects anonymous visitors home and does not render children', async () => {
+  it('redirects anonymous visitors to the homepage sign-in band and does not render children', async () => {
     render(
       <OverlayViewGuard>
         <div data-testid="protected-child">secret monitor</div>
       </OverlayViewGuard>
     )
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/'))
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/#get-started'))
     expect(screen.queryByTestId('protected-child')).not.toBeInTheDocument()
   })
 
@@ -90,7 +103,7 @@ describe('OverlayViewGuard', () => {
     expect(screen.queryByTestId('protected-child')).not.toBeInTheDocument()
   })
 
-  it('still redirects home for a dock value that is not truthy', async () => {
+  it('still redirects to sign-in for a dock value that is not truthy', async () => {
     searchParams = new URLSearchParams('dock=0')
 
     render(
@@ -99,6 +112,6 @@ describe('OverlayViewGuard', () => {
       </OverlayViewGuard>
     )
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/'))
+    await waitFor(() => expect(push).toHaveBeenCalledWith('/#get-started'))
   })
 })

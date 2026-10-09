@@ -1,0 +1,143 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: facebook-listener
+  namespace: allchat
+  labels:
+    app: facebook-listener
+    component: listener
+    platform: facebook
+spec:
+  # Single replica by design (ADR-0060): the comments poll is a per-Page
+  # created_time cursor; a second replica would double the Graph call count
+  # for zero throughput gain. Facebook polling is light (one live-video
+  # resolve + one comments fetch per Page per interval), so no HPA.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: facebook-listener
+  template:
+    metadata:
+      labels:
+        app: facebook-listener
+        component: listener
+        platform: facebook
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: facebook-listener
+        image: ghcr.io/caesarakalaeii/allchat-facebook-listener:latest
+        imagePullPolicy: Always
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        ports:
+        - containerPort: 8099
+          name: http
+        env:
+        - name: PORT
+          value: "8099"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: LOG_LEVEL
+        - name: DATABASE_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_HOST
+        - name: DATABASE_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_PORT
+        - name: DATABASE_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_NAME
+        - name: DATABASE_USER
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: DATABASE_USER
+        - name: DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: database-password
+        - name: REDIS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_HOST
+        - name: REDIS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: allchat-config
+              key: REDIS_PORT
+        # Decrypts stored Page tokens (Phase 14 KeyChain V1). Live key name
+        # is lowercase in allchat-secrets.
+        - name: TOKEN_ENCRYPTION_KEY_V1
+          valueFrom:
+            secretKeyRef:
+              name: allchat-secrets
+              key: token-encryption-key-v1
+        - name: FACEBOOK_POLLING_INTERVAL_MS
+          value: "10000"
+        - name: FACEBOOK_SOURCE_SYNC_SECONDS
+          value: "30"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 8099
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8099
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: facebook-listener
+  namespace: allchat
+  labels:
+    app: facebook-listener
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8099
+    targetPort: 8099
+    protocol: TCP
+    name: http
+  selector:
+    app: facebook-listener

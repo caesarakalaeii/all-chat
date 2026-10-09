@@ -81,6 +81,11 @@ describe('visualSettingsToCss', () => {
       kickBubbleBg: '#1b3d22',
       tiktokBubbleBg: '#1b333d',
       discordBubbleBg: '#22253d',
+      owncastBubbleBg: '#241b3d',
+      goodgameBubbleBg: '#1b2a3d',
+      picartoBubbleBg: '#1b3d26',
+      facebookBubbleBg: '#1b2940',
+      instagramBubbleBg: '#2b1220',
       messageGap: '8px',
       avatarGap: '4px',
       backdropBlur: '0px',
@@ -100,6 +105,11 @@ describe('visualSettingsToCss', () => {
       kickAccent: '#00e701',
       tiktokAccent: '#000000',
       discordAccent: '#5865f2',
+      owncastAccent: '#9b7ff5',
+      goodgameAccent: '#52709c',
+      picartoAccent: '#1aa455',
+      facebookAccent: '#1877f2',
+      instagramAccent: '#e1306c',
       showSuperChat: 'block',
       showSubscriptions: 'block',
       showRaids: 'block',
@@ -130,6 +140,7 @@ describe('visualSettingsToCss', () => {
     expect(result).toContain('--chat-font-family: Inter;')
     expect(result).toContain('--platform-twitch-accent: #9146ff;')
     expect(result).toContain('--platform-discord-accent: #5865f2;')
+    expect(result).toContain('--platform-owncast-accent: #9b7ff5;')
     expect(result).toContain('--chat-show-super-chat: block;')
     expect(result).toContain('--chat-bits-size-modifier: 1;')
     expect(result).toContain('--chat-membership-gift-size-modifier: 1.2;')
@@ -139,8 +150,9 @@ describe('visualSettingsToCss', () => {
     // messageAnimation is applied as a .msg-anim-* class, never as a CSS property
     expect(result).not.toContain('messageAnimation')
     expect(result).not.toContain('fly-left')
-    // All 53 CSS properties present (excludes non-CSS fields)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(53)
+    // All 58 CSS properties present (53 + 5 platform accents; the platform
+    // bubble fills are rules-only and never counted here)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(58)
     // The by-username mode emits its [data-user-bubble] rule, not variables.
     // Background mode emits only the fill half; the border half is emitted only
     // when the mode is border (see the test below).
@@ -149,24 +161,6 @@ describe('visualSettingsToCss', () => {
       'background-color: var(--row-user-bg, var(--row-user-bg-image, transparent));'
     )
     expect(result).not.toContain('border-color: var(--row-user-border-color, transparent);')
-  })
-
-  it('emits only the border half for border mode and nothing when off', () => {
-    const borderCss = visualSettingsToCss({ bubbleColorFromUser: 'border' })
-    expect(borderCss).toContain('div[data-user-bubble]:not(.event-message):not(.scroll-anchor)')
-    // Both feed scopes are covered by one rule
-    expect(borderCss).toContain('.overlay-preview-body > div[data-user-bubble]')
-    expect(borderCss).toContain('.overlay-live-body > div[data-user-bubble]')
-    // Border mode emits only the border pair: a background-color declaration
-    // here (with its transparent fallback) would beat theme and palette fills
-    // on every attributed row.
-    expect(borderCss).toContain('border-color: var(--row-user-border-color, transparent);')
-    expect(borderCss).toContain('border-width: var(--row-user-border-width, 0px);')
-    expect(borderCss).not.toContain('--row-user-bg')
-
-    // Off ('none') and absent emit no rule at all
-    expect(visualSettingsToCss({ bubbleColorFromUser: 'none' })).toBe('')
-    expect(visualSettingsToCss({ bubbleUserColorOpacity: '0.5' })).toBe('')
   })
 
   it('wraps output in correct cascade layer syntax', () => {

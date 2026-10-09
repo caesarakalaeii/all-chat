@@ -66,10 +66,10 @@ export function MaintenanceBanner() {
             key={mw.id}
             role="status"
             className={cn(
-              'flex items-center gap-3 rounded-lg px-4 py-3 text-sm',
+              'flex items-center gap-3 border-2 px-4 py-3 text-sm',
               active
-                ? 'border border-amber-500/20 bg-amber-500/10 text-amber-300'
-                : 'border border-blue-500/20 bg-blue-500/10 text-blue-300'
+                ? 'border-amber-400 bg-black text-amber-300'
+                : 'border-white/40 bg-black text-white'
             )}
           >
             <Wrench className="size-4 shrink-0" aria-hidden="true" />

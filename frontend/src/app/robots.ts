@@ -17,8 +17,18 @@
  */
 
 import type { MetadataRoute } from 'next'
+import { headers } from 'next/headers'
 
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  // The beta deployment shares this codebase; it must never be indexed.
+  // Disallowing everything keeps crawlers off the host entirely.
+  const host = (await headers()).get('host') ?? ''
+  if (host === 'beta.allch.at') {
+    return {
+      rules: [{ userAgent: '*', disallow: '/' }],
+    }
+  }
+
   return {
     rules: [
       {
