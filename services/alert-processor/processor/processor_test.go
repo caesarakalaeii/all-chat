@@ -224,6 +224,27 @@ func TestHandle_LeaderboardScoreIsIdempotentOnRedelivery(t *testing.T) {
 	}
 }
 
+// TestHandle_LeaderboardSkipsUnattributableSpend: an amount-bearing event
+// with no resolved user id (a platform that did not send one) must not rank
+// on the board — the member key would be the bare "platform:" prefix, a
+// leaderboard row that renders as a nameless entry and can never be
+// attributed later. Handle still succeeds: the alert itself is real and
+// belongs in history and on the overlay.
+func TestHandle_LeaderboardSkipsUnattributableSpend(t *testing.T) {
+	store := &fakeStore{overlays: []repository.AlertOverlay{
+		{OverlayID: "overlay-c", OverlayType: "list"},
+	}}
+	mr, _, p := newHarness(t, store)
+
+	event := bitsEvent()
+	event.UserID = "" // the platform attributed the spend to no user
+	require.NoError(t, p.Handle(context.Background(), event))
+
+	require.Len(t, store.inserts, 1, "the alert must still be persisted")
+	assert.False(t, mr.Exists("overlay:overlay-c:leaderboard:bits"),
+		"spend with no user id must not rank on the board")
+}
+
 // TestHandle_PersistFailureStopsBeforePublish: if history cannot be written,
 // the alert must not be broadcast — overlays would animate on an event that
 // does not exist, and the redelivery would animate them twice.
