@@ -333,7 +333,7 @@ export const marketing = {
       'Twitch, YouTube, Kick, TikTok, and Discord — in any combination, all in a single overlay.',
     tiktokQuestion: 'Is TikTok LIVE chat reliable?',
     tiktokAnswer:
-      "TikTok has no public API for LIVE chat, so every tool that shows it, All-Chat included, reads chat the way TikTok's own web player does. All-Chat maintains its own open-source signing service instead of depending only on a third-party sign server, and premium rooms get a second delivery path when the main connection is refused. The limit: TikTok is the platform most likely to see short interruptions when TikTok changes its web player.",
+      "TikTok has no public API for LIVE chat, so every tool that shows it, All-Chat included, reads chat the way TikTok's own web player does. All-Chat signs those connections with its own open-source signing service, with no third-party sign server involved, and premium rooms get a second delivery path when the main connection is refused. The limit: TikTok is the platform most likely to see short interruptions when TikTok changes its web player.",
     obsQuestion: 'How do I add All-Chat to OBS?',
     obsAnswer:
       'Create an overlay, add your chat sources, then paste the overlay URL into an OBS Browser Source. No plugins or bots required.',

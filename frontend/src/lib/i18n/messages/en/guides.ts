@@ -169,7 +169,7 @@ export const guides = {
       "TikTok has no public API for LIVE chat. Every tool that shows TikTok LIVE chat, All-Chat included, reads it the way TikTok's own web player does.",
     approachHeading: 'What All-Chat does about it',
     approachSigner:
-      'All-Chat maintains its own {signer} instead of depending only on a third-party sign server. The decision and its history are in {adr}.',
+      'All-Chat signs TikTok connections with its own {signer}; no third-party sign server is involved. The decision and its history are in {adr}.',
     approachSignerLinkText: 'open-source signing service',
     approachAdrLinkText: 'ADR-0052',
     approachSessions:
