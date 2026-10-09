@@ -36,6 +36,8 @@ import { useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { trackEvent } from '@/lib/analytics'
 import { toastManager } from '@/lib/toast'
 import { useTranslations } from '@/lib/i18n'
+import { OverlayKindPicker } from '@/components/overlays/OverlayKindPicker'
+import type { OverlayType } from '@/lib/types/overlay'
 
 export interface CreateOverlayDialogProps {
   open: boolean
@@ -49,6 +51,7 @@ export function CreateOverlayDialog({ open, onOpenChange }: CreateOverlayDialogP
   const setActiveOverlay = useOnboardingStore((s) => s.setActiveOverlay)
   const reportStepCompleted = useOnboardingStore((s) => s.reportStepCompleted)
   const [name, setName] = useState('My Stream')
+  const [kind, setKind] = useState<OverlayType>('chat')
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
@@ -57,7 +60,7 @@ export function CreateOverlayDialog({ open, onOpenChange }: CreateOverlayDialogP
     if (!trimmed || submitting) return
     setSubmitting(true)
     try {
-      const overlay = await createOverlay({ name: trimmed })
+      const overlay = await createOverlay({ name: trimmed, overlay_type: kind })
       trackEvent('overlay_created')
       reportStepCompleted('create_overlay')
       setActiveOverlay(overlay.id)
@@ -90,6 +93,7 @@ export function CreateOverlayDialog({ open, onOpenChange }: CreateOverlayDialogP
               }
             />
           </Field.Root>
+          <OverlayKindPicker value={kind} onChange={setKind} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               {t('onboarding.createDialog.cancel')}

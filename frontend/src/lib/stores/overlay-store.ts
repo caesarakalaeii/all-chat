@@ -27,7 +27,7 @@
  */
 
 import { create } from 'zustand'
-import type { Overlay, ChatSource } from '../types/overlay'
+import type { Overlay, ChatSource, CreateOverlayRequest } from '../types/overlay'
 import { overlaysApi } from '../api/overlays'
 
 interface OverlayStore {
@@ -37,7 +37,7 @@ interface OverlayStore {
 
   // Actions
   fetchOverlays: () => Promise<void>
-  createOverlay: (data: { name: string; description?: string }) => Promise<Overlay>
+  createOverlay: (data: CreateOverlayRequest) => Promise<Overlay>
   updateOverlay: (id: string, data: Partial<Overlay>) => Promise<Overlay>
   deleteOverlay: (id: string) => Promise<void>
 }

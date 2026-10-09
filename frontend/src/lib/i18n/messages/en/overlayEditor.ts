@@ -838,16 +838,28 @@ export const overlayEditor = {
     likeWindowLabel: 'Like Aggregation Window (seconds)',
     likeWindowDescription: 'Likes are collected in this window to prevent spam',
   },
-  // /overlays/new: the name-only create form.
+  // /overlays/new: the create form.
   create: {
     heading: 'Create Overlay',
     body: 'Give your overlay a name. You can add chat sources after creation.',
     nameLabel: 'Overlay Name',
     namePlaceholder: 'e.g. Main Stream, TikTok Only',
     nameRequired: 'Overlay name is required',
+    // The kind picker, shared by this form and the onboarding create dialog.
+    kindLabel: 'Overlay Type',
     cancel: 'Cancel',
     submit: 'Create Overlay',
     submitting: 'Creating…',
+  },
+  // Per-kind picker descriptions, keyed by the overlay_type wire value so the
+  // picker looks them up from the row it is already iterating. Sits beside
+  // `create`, not inside it, because the catalog caps keys at three levels
+  // (I18N.md) and these are rendered by two surfaces, not just /overlays/new.
+  createKindDescriptions: {
+    chat: 'Your live chat from every connected platform.',
+    alerts: 'On-stream alerts for subs, bits, raids and more.',
+    goal: 'A progress bar for a follower or subscriber goal.',
+    list: 'A rolling list of recent followers or subscribers.',
   },
   // /overlays/[id]/preview/embed. Chat message content is never copy — only the
   // chrome around it, which here is one empty state.

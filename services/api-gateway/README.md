@@ -167,7 +167,7 @@ curl -H "Authorization: Bearer eyJhbGci..." \
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Backend services running (auth-service, overlay-manager, emote-service)
 
 ### Development

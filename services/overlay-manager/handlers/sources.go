@@ -602,6 +602,21 @@ func (h *SourcesHandler) annotateParkedDiscovery(ctx context.Context, sources []
 	}
 }
 
+// rejectNonChatOverlay writes the 400 that keeps chat sources off
+// alerts/goal/list overlays (ADR-0064): their pipelines have nothing that
+// reads a chat source, so an attached row would be inert data that still
+// shows up in admin listings and source counts. Returns true when the
+// request was rejected, so callers can `return`.
+func (h *SourcesHandler) rejectNonChatOverlay(c *gin.Context, overlay *models.Overlay) bool {
+	if overlay.Kind() == models.OverlayTypeChat {
+		return false
+	}
+	c.JSON(http.StatusBadRequest, gin.H{
+		"error": fmt.Sprintf("chat sources can only be added to chat overlays, but this overlay is of type '%s'", overlay.Kind()),
+	})
+	return true
+}
+
 // HandleAddSource handles POST /:id/sources
 func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	// Get user ID from context
@@ -614,9 +629,13 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	overlayID := c.Param("id")
 
 	// Verify user owns this overlay
-	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	overlay, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+
+	if h.rejectNonChatOverlay(c, overlay) {
 		return
 	}
 
@@ -669,6 +688,12 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 				return
 			}
 		}
+	}
+
+	// TikTok handles are lowercase, and TikTok's lookups are case-sensitive: "MrBeast"
+	// returns user_not_found where "mrbeast" resolves, so a mixed-case handle is never live.
+	if req.Platform == "tiktok" {
+		channelID = strings.ToLower(strings.TrimSpace(channelID))
 	}
 
 	// For Kick, validate that channel_id is a valid slug (not a numeric ID)
@@ -1021,9 +1046,13 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 	overlayID := c.Param("id")
 
 	// Verify user owns this overlay
-	_, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	overlay, err := h.overlayRepo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+
+	if h.rejectNonChatOverlay(c, overlay) {
 		return
 	}
 
@@ -1072,6 +1101,11 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 				return
 			}
 		}
+	}
+
+	// See HandleAddSource: TikTok lookups are case-sensitive and handles are lowercase.
+	if req.Platform == "tiktok" {
+		channelID = strings.ToLower(strings.TrimSpace(channelID))
 	}
 
 	// For Kick, validate that channel_id is a valid slug (not a numeric ID)

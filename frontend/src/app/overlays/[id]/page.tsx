@@ -79,6 +79,7 @@ import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { DEFAULT_FEED_ANCHOR, parseFeedAnchor, type FeedAnchor } from '@/lib/utils/feedAnchor'
 import { isCustomCssForked } from '@/lib/utils/custom-css'
 import type { CssIssue } from '@/lib/utils/custom-css'
+import { usePlatformAvailable } from '@/lib/platform-availability'
 import { computeThemeCssDiff, reconstructEditorCss } from '@/lib/utils/theme-css-diff'
 import type { CustomCssMode } from '@/lib/utils/theme-css-diff'
 import type { Theme } from '@/lib/theme-marketplace/types'
@@ -1196,6 +1197,7 @@ function AddSourceForm({
   isAdmin?: boolean
 }) {
   const t = useTranslations()
+  const isPlatformAvailable = usePlatformAvailable()
   const [tiktokUsername, setTiktokUsername] = useState('')
   const [tiktokDialogOpen, setTiktokDialogOpen] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
@@ -1206,9 +1208,9 @@ function AddSourceForm({
   // GoodGame/Picarto key a channel; Owncast's "channel" is the base URL
   // of the instance (one stream per server). One dialog serves all three; the
   // label and placeholder come from the catalog per platform.
-  const [channelDialog, setChannelDialogOpen] = useState<
-    'owncast' | 'goodgame' | 'picarto' | null
-  >(null)
+  const [channelDialog, setChannelDialogOpen] = useState<'owncast' | 'goodgame' | 'picarto' | null>(
+    null
+  )
   const [channelValue, setChannelValue] = useState('')
   // Discord dialog state
   const [guilds, setGuilds] = useState<DiscordGuild[]>([])
@@ -1456,106 +1458,120 @@ function AddSourceForm({
         )}
         {/* Owncast — instance URL dialog; an instance serves one stream, so the
             "channel" is the base URL of the server, not a username. */}
-        <Button
-          onClick={() => setChannelDialogOpen('owncast')}
-          size="lg"
-          className="gap-2.5 text-bg"
-          style={{ backgroundColor: 'var(--color-owncast)' }}
-        >
-          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="17" r="2.5" fill="#9B7FF5" />
-            <path
-              fill="none"
-              stroke="#9B7FF5"
-              strokeWidth="2"
-              strokeLinecap="round"
-              d="M7.8 12.8a6 6 0 0 1 8.4 0M5 10a10 10 0 0 1 14 0"
-            />
-          </svg>
-          {t('overlayEditor.addSource.connectOwncast')}
-        </Button>
+        {isPlatformAvailable('owncast') && (
+          <Button
+            onClick={() => setChannelDialogOpen('owncast')}
+            size="lg"
+            className="gap-2.5 text-bg"
+            style={{ backgroundColor: 'var(--color-owncast)' }}
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="17" r="2.5" fill="#9B7FF5" />
+              <path
+                fill="none"
+                stroke="#9B7FF5"
+                strokeWidth="2"
+                strokeLinecap="round"
+                d="M7.8 12.8a6 6 0 0 1 8.4 0M5 10a10 10 0 0 1 14 0"
+              />
+            </svg>
+            {t('overlayEditor.addSource.connectOwncast')}
+          </Button>
+        )}
 
         {/* GoodGame / Picarto — channel-name dialogs, same shape as TikTok. */}
-        <Button
-          onClick={() => setChannelDialogOpen('goodgame')}
-          size="lg"
-          className="gap-2.5 text-bg"
-          style={{ backgroundColor: 'var(--color-goodgame)' }}
-        >
-          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-            <text
-              x="12"
-              y="17"
-              fontSize="11"
-              fontWeight="bold"
-              fill="#7FA3D1"
-              textAnchor="middle"
-              fontFamily="monospace"
-            >
-              {GOODGAME_GLYPH}
-            </text>
-          </svg>
-          {t('overlayEditor.addSource.connectGoodgame')}
-        </Button>
+        {isPlatformAvailable('goodgame') && (
+          <Button
+            onClick={() => setChannelDialogOpen('goodgame')}
+            size="lg"
+            className="gap-2.5 text-bg"
+            style={{ backgroundColor: 'var(--color-goodgame)' }}
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <text
+                x="12"
+                y="17"
+                fontSize="11"
+                fontWeight="bold"
+                fill="#7FA3D1"
+                textAnchor="middle"
+                fontFamily="monospace"
+              >
+                {GOODGAME_GLYPH}
+              </text>
+            </svg>
+            {t('overlayEditor.addSource.connectGoodgame')}
+          </Button>
+        )}
 
-        <Button
-          onClick={() => setChannelDialogOpen('picarto')}
-          size="lg"
-          className="gap-2.5 text-bg"
-          style={{ backgroundColor: 'var(--color-picarto)' }}
-        >
-          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" fill="#27B756" />
-            <circle cx="9" cy="9" r="1.4" fill="#FFFFFF" />
-            <circle cx="15" cy="9" r="1.4" fill="#FFFFFF" />
-            <circle cx="8" cy="14" r="1.4" fill="#FFFFFF" />
-            <circle cx="14.5" cy="15" r="1.4" fill="#FFFFFF" />
-          </svg>
-          {t('overlayEditor.addSource.connectPicarto')}
-        </Button>
+        {isPlatformAvailable('picarto') && (
+          <Button
+            onClick={() => setChannelDialogOpen('picarto')}
+            size="lg"
+            className="gap-2.5 text-bg"
+            style={{ backgroundColor: 'var(--color-picarto)' }}
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" fill="#27B756" />
+              <circle cx="9" cy="9" r="1.4" fill="#FFFFFF" />
+              <circle cx="15" cy="9" r="1.4" fill="#FFFFFF" />
+              <circle cx="8" cy="14" r="1.4" fill="#FFFFFF" />
+              <circle cx="14.5" cy="15" r="1.4" fill="#FFFFFF" />
+            </svg>
+            {t('overlayEditor.addSource.connectPicarto')}
+          </Button>
+        )}
 
         {/* Facebook — connect-first OAuth like YouTube: the source is the
             streamer's connected Page, so the add flow IS the OAuth flow and the
             backend refuses when no Page credential exists. */}
-        <Button
-          onClick={() => startOAuth(`/api/v1/auth/facebook/add-source/${overlayId}`)}
-          size="lg"
-          className="gap-2.5 text-white"
-          style={{ backgroundColor: '#1877F2', '--tw-ring-color': '#1877F2' } as React.CSSProperties}
-        >
-          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              fill="#FFFFFF"
-              d="M12 2a10 10 0 1 0-1.6 19.9v-7h-2.5V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 12 2z"
-            />
-          </svg>
-          {t('overlayEditor.addSource.connectFacebook')}
-        </Button>
+        {isPlatformAvailable('facebook') && (
+          <Button
+            onClick={() => startOAuth(`/api/v1/auth/facebook/add-source/${overlayId}`)}
+            size="lg"
+            className="gap-2.5 text-white"
+            style={
+              { backgroundColor: '#1877F2', '--tw-ring-color': '#1877F2' } as React.CSSProperties
+            }
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="#FFFFFF"
+                d="M12 2a10 10 0 1 0-1.6 19.9v-7h-2.5V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 12 2z"
+              />
+            </svg>
+            {t('overlayEditor.addSource.connectFacebook')}
+          </Button>
+        )}
 
         {/* Instagram — connect-first OAuth like Facebook: the source is the
             streamer's connected account, so the add flow IS the OAuth flow. */}
-        <Button
-          onClick={() => startOAuth(`/api/v1/auth/instagram/add-source/${overlayId}`)}
-          size="lg"
-          className="gap-2.5 text-white"
-          style={{ backgroundColor: '#E1306C', '--tw-ring-color': '#E1306C' } as React.CSSProperties}
-        >
-          <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-            <rect
-              x="3.5"
-              y="3.5"
-              width="17"
-              height="17"
-              rx="5"
-              fill="none"
-              stroke="#FFFFFF"
-              strokeWidth="2"
-            />
-            <circle cx="12" cy="12" r="4" fill="none" stroke="#FFFFFF" strokeWidth="2" />
-            <circle cx="17.2" cy="6.8" r="1.2" fill="#FFFFFF" />
-          </svg>
-          {t('overlayEditor.addSource.connectInstagram')}
-        </Button>
+        {isPlatformAvailable('instagram') && (
+          <Button
+            onClick={() => startOAuth(`/api/v1/auth/instagram/add-source/${overlayId}`)}
+            size="lg"
+            className="gap-2.5 text-white"
+            style={
+              { backgroundColor: '#E1306C', '--tw-ring-color': '#E1306C' } as React.CSSProperties
+            }
+          >
+            <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <rect
+                x="3.5"
+                y="3.5"
+                width="17"
+                height="17"
+                rx="5"
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth="2"
+              />
+              <circle cx="12" cy="12" r="4" fill="none" stroke="#FFFFFF" strokeWidth="2" />
+              <circle cx="17.2" cy="6.8" r="1.2" fill="#FFFFFF" />
+            </svg>
+            {t('overlayEditor.addSource.connectInstagram')}
+          </Button>
+        )}
       </div>
 
       {/* Discord 2-step dialog */}
@@ -1799,10 +1815,18 @@ function AddSourceForm({
                 <option value="youtube">{t('common.platforms.youtube')}</option>
                 <option value="kick">{t('common.platforms.kick')}</option>
                 <option value="tiktok">{t('common.platforms.tiktok')}</option>
-                <option value="owncast">{t('common.platforms.owncast')}</option>
-                <option value="goodgame">{t('common.platforms.goodgame')}</option>
-                <option value="picarto">{t('common.platforms.picarto')}</option>
-                <option value="facebook">{t('common.platforms.facebook')}</option>
+                {isPlatformAvailable('owncast') && (
+                  <option value="owncast">{t('common.platforms.owncast')}</option>
+                )}
+                {isPlatformAvailable('goodgame') && (
+                  <option value="goodgame">{t('common.platforms.goodgame')}</option>
+                )}
+                {isPlatformAvailable('picarto') && (
+                  <option value="picarto">{t('common.platforms.picarto')}</option>
+                )}
+                {isPlatformAvailable('facebook') && (
+                  <option value="facebook">{t('common.platforms.facebook')}</option>
+                )}
               </select>
               <Input
                 value={adminChannelId}
@@ -4376,36 +4400,36 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       </Button>
                     </div>
                   )}
-                {/* Sticky Save footer — position:sticky works inside
+                  {/* Sticky Save footer — position:sticky works inside
                     overflow-y-auto split-view-config container. It pins
                     inside the panel column, not beside the nav rail: as a
                     full-width sibling its z-10 bar covered the rail's last
                     button and shrank its target below the 24px WCAG 2.5.8
                     floor. */}
-                <div className="sticky bottom-0 z-10 mt-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
-                  <Button
-                    onClick={() => void handleSaveConfiguration()}
-                    disabled={!configLoaded || isSavingConfig}
-                    className="w-full"
-                  >
-                    {isSavingConfig
-                      ? t('overlayEditor.page.savingConfiguration')
-                      : t('overlayEditor.page.saveConfiguration')}
-                  </Button>
-                  {/* Always-mounted live region so save success/failure announces
+                  <div className="sticky bottom-0 z-10 mt-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
+                    <Button
+                      onClick={() => void handleSaveConfiguration()}
+                      disabled={!configLoaded || isSavingConfig}
+                      className="w-full"
+                    >
+                      {isSavingConfig
+                        ? t('overlayEditor.page.savingConfiguration')
+                        : t('overlayEditor.page.saveConfiguration')}
+                    </Button>
+                    {/* Always-mounted live region so save success/failure announces
                       to screen readers (WCAG 4.1.3) — conditionally mounting the
                       role="status" element would not announce reliably. */}
-                  <p
-                    role="status"
-                    className={cn(
-                      'text-center text-sm',
-                      configAlert && 'mt-2',
-                      configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
-                    )}
-                  >
-                    {configAlert?.message}
-                  </p>
-                </div>
+                    <p
+                      role="status"
+                      className={cn(
+                        'text-center text-sm',
+                        configAlert && 'mt-2',
+                        configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
+                      )}
+                    >
+                      {configAlert?.message}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

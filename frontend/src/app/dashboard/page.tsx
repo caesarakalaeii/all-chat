@@ -41,13 +41,17 @@ import { CreateOverlayDialog } from '@/components/onboarding/CreateOverlayDialog
 import { useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTranslations } from '@/lib/i18n'
-import type { ChatSource } from '@/lib/types/overlay'
+import type { ChatSource, OverlayType } from '@/lib/types/overlay'
+import { resolveOverlayKind } from '@/lib/utils/overlayKind'
+import { usePlatformAvailable } from '@/lib/platform-availability'
+import { OverlayKindBadge } from '@/components/overlays/OverlayKindBadge'
 
 // Extended overlay type that includes sources when available
 interface OverlayWithSources {
   id: string
   name: string
   is_public_for_viewers: boolean
+  overlay_type?: OverlayType
   sources?: ChatSource[]
 }
 
@@ -116,6 +120,7 @@ function OverlayGridSkeleton() {
 
 function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
   const t = useTranslations()
+  const isPlatformAvailable = usePlatformAvailable()
   return (
     <div className="flex flex-col items-center gap-4 py-24 text-center">
       <MonitorPlay className="text-dim size-16" strokeWidth={1} aria-hidden="true" />
@@ -134,9 +139,11 @@ function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
             'facebook',
             'instagram',
           ] as const
-        ).map((p) => (
-          <PlatformBadge key={p} platform={p} size="sm" />
-        ))}
+        )
+          .filter(isPlatformAvailable)
+          .map((p) => (
+            <PlatformBadge key={p} platform={p} size="sm" />
+          ))}
       </div>
       <button onClick={onCreateClick} className="lanes-btn mt-4">
         {t('dashboard.empty.createFirst')}
@@ -331,6 +338,7 @@ function DashboardContent() {
                   <div className="mb-3 flex items-start justify-between">
                     <div className="flex min-w-0 items-center gap-2">
                       <h3 className="truncate">{overlay.name}</h3>
+                      <OverlayKindBadge kind={resolveOverlayKind(overlay.overlay_type)} />
                       {overlay.is_public_for_viewers && (
                         <span className="lanes-chip shrink-0 text-twitch">
                           <Puzzle className="size-2.5" />

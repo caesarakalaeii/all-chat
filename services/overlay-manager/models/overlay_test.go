@@ -17,6 +17,7 @@
 package models
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -114,4 +115,66 @@ func TestOverlay_Validate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// overlay_type (ADR-0064): the four kinds Validate accepts, the default an
+// absent kind resolves to, and what must be rejected.
+func TestOverlay_ValidateOverlayType(t *testing.T) {
+	// The smallest Overlay that passes Validate, so each case below varies only
+	// the field under test.
+	validOverlay := func() *Overlay {
+		return &Overlay{
+			UserID: uuid.New().String(),
+			Name:   "My Overlay",
+		}
+	}
+
+	supported := []string{OverlayTypeChat, OverlayTypeAlerts, OverlayTypeGoal, OverlayTypeList}
+
+	for _, overlayType := range supported {
+		t.Run("accepts "+overlayType, func(t *testing.T) {
+			overlay := validOverlay()
+			overlay.OverlayType = overlayType
+
+			if err := overlay.Validate(); err != nil {
+				t.Fatalf("supported kind %q rejected: %v", overlayType, err)
+			}
+			if overlay.OverlayType != overlayType {
+				t.Errorf("a supported kind must survive validation unchanged, got %q", overlay.OverlayType)
+			}
+		})
+	}
+
+	t.Run("absent kind resolves to chat", func(t *testing.T) {
+		overlay := validOverlay()
+
+		if err := overlay.Validate(); err != nil {
+			t.Fatalf("an overlay created before the column existed must still validate: %v", err)
+		}
+		if overlay.OverlayType != OverlayTypeChat {
+			t.Errorf("absent kind resolved to %q, want %q", overlay.OverlayType, OverlayTypeChat)
+		}
+	})
+
+	t.Run("rejects unknown kind", func(t *testing.T) {
+		overlay := validOverlay()
+		overlay.OverlayType = "webcam"
+
+		err := overlay.Validate()
+		if err == nil {
+			t.Fatal("an unknown kind must be rejected")
+		}
+		if !strings.Contains(err.Error(), "overlay_type") || !strings.Contains(err.Error(), "webcam") {
+			t.Errorf("error must name the field and the bad value, got: %v", err)
+		}
+	})
+
+	t.Run("rejects case variant", func(t *testing.T) {
+		overlay := validOverlay()
+		overlay.OverlayType = "Chat"
+
+		if err := overlay.Validate(); err == nil {
+			t.Fatal("kinds are wire values, not free text: 'Chat' must not silently become a chat overlay")
+		}
+	})
 }
