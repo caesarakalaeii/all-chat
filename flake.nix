@@ -45,12 +45,13 @@
         # store path), so the pin is free today and stops a nixpkgs bump from
         # moving the compiler under the repo without a lock change.
         #
-        # 1.26.5 satisfies every module the verbs walk: all 22 go.mod files
-        # under services/ and shared/ declare `go 1.26.0`. The Go service
-        # Dockerfiles are less uniform -- they range from golang:1.26-alpine to
-        # golang:1.27.1-alpine -- and CI's actions/setup-go pins 1.26.9.
-        # GOTOOLCHAIN below is what keeps that spread honest
-        # instead of silently downloading a fourth Go.
+        # 1.26.5 satisfies every module the verbs walk: 24 of the 25 go.mod
+        # files under services/ and shared/ declare `go 1.26.0` (the lone
+        # exception, services/auth-service/shared/tracing, is an empty module
+        # the walk skips). The Go service Dockerfiles are less uniform -- they
+        # range from golang:1.26.0-alpine to golang:1.27.1-alpine -- and CI's
+        # actions/setup-go pins 1.26.9. GOTOOLCHAIN below is what keeps that
+        # spread honest instead of silently downloading a fourth Go.
         pkgs.go_1_26
         pkgs.gopls
         # CONTRIBUTING.md asks for `golangci-lint run` before a PR. It is NOT
