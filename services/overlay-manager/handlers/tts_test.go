@@ -1141,15 +1141,27 @@ func (s *stubConfigRepo) Update(_ context.Context, _ *models.OverlayConfig) erro
 	return nil
 }
 
-type stubOverlayRepo struct{ owned bool }
+// stubOverlayRepo serves a fixed overlay to the config handlers. The overlay
+// field is nil for the legacy tests, which want the zero-value (chat-default)
+// overlay the DB rows carried before overlay_type existed.
+type stubOverlayRepo struct {
+	owned   bool
+	overlay *models.Overlay
+}
 
 func (s *stubOverlayRepo) Create(_ context.Context, _ *models.Overlay) error { return nil }
 func (s *stubOverlayRepo) GetByID(_ context.Context, id string) (*models.Overlay, error) {
+	if s.overlay != nil {
+		return s.overlay, nil
+	}
 	return &models.Overlay{ID: id, UserID: "u1"}, nil
 }
 func (s *stubOverlayRepo) GetByIDAndUserID(_ context.Context, id, _ string) (*models.Overlay, error) {
 	if !s.owned {
 		return nil, errors.New("not owned")
+	}
+	if s.overlay != nil {
+		return s.overlay, nil
 	}
 	return &models.Overlay{ID: id, UserID: "u1"}, nil
 }

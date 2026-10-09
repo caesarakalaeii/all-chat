@@ -105,7 +105,7 @@ the user-facing warning.
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - PostgreSQL with all-chat schema
 - Redis
 - Twitch bot account with OAuth token

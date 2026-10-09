@@ -57,6 +57,7 @@ jobs:
       goodgame-listener: ${{ steps.changes.outputs.goodgame-listener }}
       picarto-listener: ${{ steps.changes.outputs.picarto-listener }}
       instagram-listener: ${{ steps.changes.outputs.instagram-listener }}
+      media-service: ${{ steps.changes.outputs.media-service }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
       migrations: ${{ steps.changes.outputs.migrations }}
@@ -148,6 +149,9 @@ jobs:
               - 'shared/**'
             instagram-listener:
               - 'services/instagram-listener/**'
+              - 'shared/**'
+            media-service:
+              - 'services/media-service/**'
               - 'shared/**'
             frontend:
               - 'frontend/**'
@@ -260,6 +264,9 @@ jobs:
           - name: instagram-listener
             changed: ${{ needs.detect-changes.outputs.instagram-listener }}
             path: services/instagram-listener
+          - name: media-service
+            changed: ${{ needs.detect-changes.outputs.media-service }}
+            path: services/media-service
           - name: frontend
             changed: ${{ needs.detect-changes.outputs.frontend }}
             path: frontend
@@ -359,6 +366,7 @@ jobs:
           - instagram-listener
           - picarto-listener
           - facebook-listener
+          - media-service
           # Every Go service under services/ belongs here. tiktok-listener is
           # deliberately absent: it is a Node service and has no go.mod. Verify with:
           #   for d in services/*/; do [ -f "$d/go.mod" ] && basename "$d"; done
@@ -370,7 +378,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25.13'
+          go-version: '1.26.9'
 
       - name: Run tests for ${{ matrix.service }}
         # Skip the actual suite on docs-only PRs. The job still succeeds, so the
@@ -408,7 +416,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.25.13'
+          go-version: '1.26.9'
 
       - name: Apply migrations
         env:

@@ -270,9 +270,10 @@ export const marketing = {
     us5: 'emotes are the language: 7TV · BTTV · FFZ, native and animated',
   },
   numbers: {
-    label: 'THIS WEEK, BY PLATFORM',
-    platformLabel: '{platform} · MSGS/WK · {share}%',
-    totalLabel: 'MESSAGES DELIVERED',
+    label: 'BY THE NUMBERS',
+    weeklyHeading: 'MESSAGES THIS WEEK, BY PLATFORM',
+    platformLabel: '{platform} · {share}%',
+    totalLabel: 'MESSAGES DELIVERED, ALL TIME',
     usersLabel: 'STREAMERS ON BOARD',
     overlaysLabel: 'OVERLAYS LIVE RIGHT NOW',
   },
@@ -327,7 +328,7 @@ export const marketing = {
   // answer exactly, so both read these keys and neither restates them.
   faq: {
     label: 'FAQ',
-    heading: 'Frequently asked questions',
+    heading: 'Frequently Asked Questions',
     platformsQuestion: 'Which platforms can I combine?',
     platformsAnswer:
       'Twitch, YouTube, Kick, TikTok, and Discord — in any combination, all in a single overlay.',

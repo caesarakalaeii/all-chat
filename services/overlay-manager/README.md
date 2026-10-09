@@ -100,7 +100,7 @@ DISCORD_BOT_TOKEN=your_discord_bot_token_here
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - PostgreSQL with all-chat schema
 - Redis
 - YouTube Listener running (for YouTube channel resolution)

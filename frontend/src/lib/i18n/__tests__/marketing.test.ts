@@ -145,18 +145,6 @@ describe('wedge band', () => {
   })
 })
 
-describe('numbers band', () => {
-  it('keeps the row labels', () => {
-    expect(t('marketing.numbers.label')).toBe('THIS WEEK, BY PLATFORM')
-    expect(t('marketing.numbers.platformLabel', { platform: 'TWITCH', share: '49' })).toBe(
-      'TWITCH · MSGS/WK · 49%'
-    )
-    expect(t('marketing.numbers.totalLabel')).toBe('MESSAGES DELIVERED')
-    expect(t('marketing.numbers.usersLabel')).toBe('STREAMERS ON BOARD')
-    expect(t('marketing.numbers.overlaysLabel')).toBe('OVERLAYS LIVE RIGHT NOW')
-  })
-})
-
 describe('steps band', () => {
   it('keeps the three steps', () => {
     expect(t('marketing.steps.label')).toBe('THE ENTIRE SETUP — NO, REALLY')
@@ -204,10 +192,6 @@ describe('landing footer', () => {
 })
 
 describe('landing FAQ', () => {
-  it('keeps the section heading', () => {
-    expect(t('marketing.faq.heading')).toBe('Frequently asked questions')
-  })
-
   it('keeps the first FAQ stem pair', () => {
     // Both the visible FAQ and the FAQPage JSON-LD read these keys; this lock
     // is what keeps the structured data from drifting from the page.

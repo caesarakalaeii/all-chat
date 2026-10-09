@@ -16,6 +16,9 @@ WORKDIR /app
 # Copy package files
 COPY services/tiktok-listener/package*.json ./
 COPY services/tiktok-listener/tsconfig.json ./
+# npm ci resolves the file: dependency on this vendored package (see
+# vendor/http-cache-semantics/README.md), so it must be present before install.
+COPY services/tiktok-listener/vendor/ ./vendor/
 
 # Install dependencies
 RUN npm ci
@@ -33,6 +36,7 @@ WORKDIR /app
 
 # Install production dependencies only
 COPY services/tiktok-listener/package*.json ./
+COPY services/tiktok-listener/vendor/ ./vendor/
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy built files from builder

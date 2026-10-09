@@ -112,7 +112,8 @@ func (h *ConfigHandler) HandleGetConfig(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.overlays.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string)); err != nil {
+	overlay, err := h.overlays.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
 		return
 	}
@@ -126,12 +127,16 @@ func (h *ConfigHandler) HandleGetConfig(c *gin.Context) {
 	// Embedded pointer flattens into the same JSON object, so the response shape
 	// is unchanged apart from one added field. Resolved per request and never
 	// persisted; the unauthenticated HandleGetPublicConfig does not carry it.
+	// overlay_type is carried so the editor can route its settings by kind
+	// (ADR-0064) without a second request.
 	c.JSON(http.StatusOK, struct {
 		*models.OverlayConfig
-		BubbleColorsLocked bool `json:"bubble_colors_locked"`
+		BubbleColorsLocked bool   `json:"bubble_colors_locked"`
+		OverlayType        string `json:"overlay_type"`
 	}{
 		OverlayConfig:      config,
 		BubbleColorsLocked: h.bubbleColorsLocked(c.Request.Context(), userID.(string)),
+		OverlayType:        overlay.Kind(),
 	})
 }
 
@@ -268,7 +273,8 @@ func (h *ConfigHandler) HandleGetPublicConfig(c *gin.Context) {
 		return
 	}
 
-	if _, err := h.overlays.GetByID(c.Request.Context(), overlayID); err != nil {
+	overlay, err := h.overlays.GetByID(c.Request.Context(), overlayID)
+	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
 		return
 	}
@@ -297,7 +303,10 @@ func (h *ConfigHandler) HandleGetPublicConfig(c *gin.Context) {
 		})
 	}
 
+	// overlay_type routes the render page by kind (ADR-0064): this endpoint is
+	// the unauthenticated renderer's only source of truth about the overlay.
 	c.JSON(http.StatusOK, gin.H{
+		"overlay_type":         overlay.Kind(),
 		"display_settings":     config.DisplaySettings,
 		"filter_settings":      config.FilterSettings,
 		"custom_css":           config.CustomCSS,
