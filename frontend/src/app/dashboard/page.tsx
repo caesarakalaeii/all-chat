@@ -41,13 +41,16 @@ import { CreateOverlayDialog } from '@/components/onboarding/CreateOverlayDialog
 import { useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTranslations } from '@/lib/i18n'
-import type { ChatSource } from '@/lib/types/overlay'
+import type { ChatSource, OverlayType } from '@/lib/types/overlay'
+import { resolveOverlayKind } from '@/lib/utils/overlayKind'
+import { OverlayKindBadge } from '@/components/overlays/OverlayKindBadge'
 
 // Extended overlay type that includes sources when available
 interface OverlayWithSources {
   id: string
   name: string
   is_public_for_viewers: boolean
+  overlay_type?: OverlayType
   sources?: ChatSource[]
 }
 
@@ -331,6 +334,7 @@ function DashboardContent() {
                   <div className="mb-3 flex items-start justify-between">
                     <div className="flex min-w-0 items-center gap-2">
                       <h3 className="truncate">{overlay.name}</h3>
+                      <OverlayKindBadge kind={resolveOverlayKind(overlay.overlay_type)} />
                       {overlay.is_public_for_viewers && (
                         <span className="lanes-chip shrink-0 text-twitch">
                           <Puzzle className="size-2.5" />

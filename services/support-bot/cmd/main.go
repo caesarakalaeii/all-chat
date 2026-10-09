@@ -61,13 +61,21 @@ func main() {
 	if cfg.DiscordToken == "" {
 		log.Fatal("DISCORD_BOT_TOKEN must be set")
 	}
-	if cfg.LLMModel == "" {
-		log.Fatal("LOCAL_LLM_MODEL must be set")
+	// The model id is resolved at boot: a pin that is no longer served falls
+	// back to discovery, so an upstream model swap needs no manifest edit.
+	// Fatal only when nothing usable can be resolved at all.
+	resolvedModel, err := llm.DiscoverModel(context.Background(), llm.Config{
+		BaseURL: cfg.LLMBaseURL,
+		APIKey:  cfg.LLMAPIKey,
+		Model:   cfg.LLMModel,
+	}, log)
+	if err != nil {
+		log.Fatal("no usable LLM model", zap.Error(err))
 	}
 
 	log.Info("starting support-bot",
 		zap.String("llm_base_url", cfg.LLMBaseURL),
-		zap.String("llm_model", cfg.LLMModel),
+		zap.String("llm_model", resolvedModel),
 		zap.Int("admin_uids", len(cfg.AdminDiscordIDs)),
 		zap.Bool("grafana", cfg.GrafanaEnabled()),
 		zap.Strings("repos", cfg.RepoPaths()),
@@ -87,7 +95,7 @@ func main() {
 	llmClient, err := llm.New(llm.Config{
 		BaseURL:        cfg.LLMBaseURL,
 		APIKey:         cfg.LLMAPIKey,
-		Model:          cfg.LLMModel,
+		Model:          resolvedModel,
 		RequestTimeout: 90 * time.Second,
 	}, log)
 	if err != nil {
@@ -122,7 +130,7 @@ func main() {
 	policy := access.NewPolicy(cfg.AdminDiscordIDs)
 	redactor := redact.NewRedactor()
 	agentCfg := agent.Config{
-		Model:            cfg.LLMModel,
+		Model:            resolvedModel,
 		MaxTokens:        cfg.LLMMaxTokens,
 		MaxIterations:    cfg.MaxIterations,
 		PerCallTimeout:   cfg.PerCallTimeout,

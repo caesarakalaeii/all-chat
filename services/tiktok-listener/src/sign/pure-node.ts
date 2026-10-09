@@ -33,8 +33,12 @@
  *    cursor is rejected ("Unexpected server response: 200"). The synthesized
  *    fetchResult therefore forwards every recorded param except the four the
  *    connector appends itself.
- *  - The lease is durable (wsUrl ≥16 min measured); a 10-min reuse window
- *    keeps lease fetches ≤ single-digit/hour (constraint 1).
+ *  - The lease is durable (wsUrl ≥16 min measured); a 10-min reuse window,
+ *    counted from OUR fetch, keeps lease fetches ≤ single-digit/hour
+ *    (constraint 1). Never from the lease's capturedAt: a warm tab keeps
+ *    serving its original URL and stamp for hours, so a capturedAt-keyed
+ *    window made every lease stale on arrival: every sign, pre-signs
+ *    included, re-fetched and burned the 8/h lease budget in ~4 connects.
  *  - WS connects flag the shared session by burst rate (~15/hour observed):
  *    a per-pod rolling-hour connect budget paces flap storms. Per-pod, not
  *    per-room: the session's flag budget is shared by all rooms and all
@@ -59,7 +63,6 @@ interface SessionLeaseResponse {
   roomId?: string;
   userAgent?: string;
   proxyHost?: string;
-  capturedAt?: number;
   error?: string;
 }
 
@@ -73,7 +76,7 @@ export interface PureNodeSignerOptions {
   authToken?: string;
   /** Lease fetch timeout. A lease is served from a warm tab — fast. */
   sessionTimeoutMs?: number;
-  /** Lease reuse window. Must sit inside the measured wsUrl durability (≥16 min). */
+  /** Lease reuse window from the local fetch. Must sit inside the measured wsUrl durability (≥16 min). */
   staleAfterMs?: number;
   /** Successful lease fetches per rolling hour (constraint 1). */
   maxLeasesPerHour?: number;
@@ -88,7 +91,7 @@ interface CachedLease {
   cookieHeader: string;
   userAgent: string;
   proxyHost: string;
-  capturedAt: number;
+  fetchedAt: number;
 }
 
 export class PureNodeSigner implements WebcastSigner {
@@ -149,7 +152,7 @@ export class PureNodeSigner implements WebcastSigner {
    */
   private async currentLease(): Promise<CachedLease> {
     const now = Date.now();
-    if (this.lease && now - this.lease.capturedAt < this.staleAfterMs) {
+    if (this.lease && now - this.lease.fetchedAt < this.staleAfterMs) {
       return this.lease;
     }
     if (!this.inFlight) {
@@ -223,7 +226,7 @@ export class PureNodeSigner implements WebcastSigner {
       cookieHeader: bodyJson.cookieHeader ?? '',
       userAgent: bodyJson.userAgent ?? '',
       proxyHost: bodyJson.proxyHost ?? '',
-      capturedAt: typeof bodyJson.capturedAt === 'number' ? bodyJson.capturedAt : now
+      fetchedAt: now
     };
   }
 

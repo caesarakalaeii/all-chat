@@ -123,6 +123,20 @@ describe('PureNodeSigner lease caching', () => {
     }
     expect(edgeImpl).toHaveBeenCalledTimes(2);
   });
+
+  it('reuses a lease whose wsUrl was captured long ago: the window counts from our fetch', async () => {
+    // Prod 2026-10-08: warm tabs serve their original URL and capturedAt for
+    // hours. Keyed on capturedAt, every lease was stale on arrival, so every
+    // sign (pre-sign included) re-fetched and the 8/h lease budget refused
+    // connects after ~4 of them.
+    const { impl } = okFetch(leaseResponse({ capturedAt: Date.now() - 3 * 3_600_000 }));
+    const signer = new PureNodeSigner({ baseUrl: 'http://signer', fetchImpl: impl as never });
+    await signer.sign({ roomId: 'unused', username: 'a', userAgent: 'ws-pin' });
+    for (let i = 0; i < 10; i++) {
+      await signer.sign(signRequest({ roomId: String(i) }));
+    }
+    expect(impl).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('PureNodeSigner lease budget', () => {

@@ -55,13 +55,13 @@ resumed by a background worker until capacity returns or
 
 ## Configuration
 
-Required: `DISCORD_BOT_TOKEN`, `LOCAL_LLM_MODEL`. See [.env.example](./.env.example) for
+Required: `DISCORD_BOT_TOKEN`. See [.env.example](./.env.example) for
 the full list. Key variables:
 
 | Variable | Purpose |
 |---|---|
 | `DISCORD_BOT_TOKEN` / `DISCORD_CLIENT_ID` / `DISCORD_GUILD_ID` | Discord bot + slash-command registration |
-| `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY` | vLLM endpoint (OpenAI-compatible); key sent as `Authorization: Bearer <key>` |
+| `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY` | vLLM endpoint (OpenAI-compatible); key sent as `Authorization: Bearer <key>`. The model id is resolved at boot from `GET <base URL>/v1/models`; `LOCAL_LLM_MODEL` is an optional pin that wins while the gateway still lists it, and is kept when the list endpoint cannot be reached |
 | `SUPPORT_BOT_ADMIN_DISCORD_IDS` | Comma-separated maintainer UIDs → ADMIN |
 | `GITHUB_TOKEN` / `GITHUB_OWNER` / `GITHUB_BOT_LOGIN` | GitHub tools (owner default `caesarakalaeii`) |
 | `GRAFANA_URL` / `GRAFANA_SERVICE_ACCOUNT_TOKEN` | Enables the Grafana tools |

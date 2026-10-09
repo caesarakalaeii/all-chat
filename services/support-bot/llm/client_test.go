@@ -19,6 +19,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -30,6 +31,91 @@ import (
 	"go.uber.org/zap"
 )
 
+// modelListServer serves a gateway-shaped /v1/models response for discovery tests.
+func modelListServer(t *testing.T, ids []string, status int) *httptest.Server {
+	t.Helper()
+	payload := `{"object":"list","data":[` + strings.Join(ids, ",") + `]}`
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(payload))
+	}))
+}
+
+func TestDiscoverModel(t *testing.T) {
+	entry := func(id string) string {
+		return fmt.Sprintf(`{"id":%q,"object":"model","created":0}`, id)
+	}
+	ctx := context.Background()
+
+	t.Run("pin set and listed wins", func(t *testing.T) {
+		srv := modelListServer(t, []string{entry("m/one"), entry("m/pinned")}, http.StatusOK)
+		defer srv.Close()
+		got, err := DiscoverModel(ctx, Config{BaseURL: srv.URL, Model: "m/pinned"}, zap.NewNop())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "m/pinned" {
+			t.Fatalf("pin must win: got %q", got)
+		}
+	})
+
+	t.Run("pinned but not listed falls back to discovery", func(t *testing.T) {
+		srv := modelListServer(t, []string{entry("m/fresh")}, http.StatusOK)
+		defer srv.Close()
+		got, err := DiscoverModel(ctx, Config{BaseURL: srv.URL, Model: "m/stale"}, zap.NewNop())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "m/fresh" {
+			t.Fatalf("expected discovered fallback, got %q", got)
+		}
+	})
+
+	t.Run("multiple unpinned candidates pick lexicographically smallest", func(t *testing.T) {
+		ids := []string{entry("m/beta"), entry("m/alpha"), entry("m/gamma")}
+		// Shuffle so the pick is proven deterministic, not list order.
+		for i := range ids {
+			j := (i*7 + 3) % len(ids)
+			ids[i], ids[j] = ids[j], ids[i]
+		}
+		srv := modelListServer(t, ids, http.StatusOK)
+		defer srv.Close()
+		got, err := DiscoverModel(ctx, Config{BaseURL: srv.URL}, zap.NewNop())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "m/alpha" {
+			t.Fatalf("expected smallest id m/alpha, got %q", got)
+		}
+	})
+
+	t.Run("fetch failure with pin keeps the pin", func(t *testing.T) {
+		srv := modelListServer(t, nil, http.StatusInternalServerError)
+		defer srv.Close()
+		got, err := DiscoverModel(ctx, Config{BaseURL: srv.URL, Model: "m/pinned"}, zap.NewNop())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "m/pinned" {
+			t.Fatalf("fetch failure must keep the pin, got %q", got)
+		}
+	})
+
+	t.Run("fetch failure without pin errors naming the URL", func(t *testing.T) {
+		srv := modelListServer(t, nil, http.StatusInternalServerError)
+		defer srv.Close()
+		_, err := DiscoverModel(ctx, Config{BaseURL: srv.URL}, zap.NewNop())
+		if err == nil {
+			t.Fatal("expected error")
+		}
+		if !strings.Contains(err.Error(), "/v1/models") {
+			t.Fatalf("error must name the tried URL, got %v", err)
+		}
+	})
+}
 func testClient(t *testing.T, url string) *Client {
 	t.Helper()
 	c, err := New(Config{
