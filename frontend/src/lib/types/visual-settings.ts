@@ -135,6 +135,11 @@ export interface VisualSettings {
   kickBubbleBg?: string
   tiktokBubbleBg?: string
   discordBubbleBg?: string
+  owncastBubbleBg?: string
+  goodgameBubbleBg?: string
+  picartoBubbleBg?: string
+  facebookBubbleBg?: string
+  instagramBubbleBg?: string
 
   // Visibility toggles ('inline' | 'none' for inline elements; 'block' | 'none' for block)
   showAvatars?: 'inline' | 'none' // --chat-show-avatars
@@ -183,6 +188,11 @@ export interface VisualSettings {
   kickAccent?: string // --platform-kick-accent
   tiktokAccent?: string // --platform-tiktok-accent
   discordAccent?: string // --platform-discord-accent
+  owncastAccent?: string // --platform-owncast-accent
+  goodgameAccent?: string // --platform-goodgame-accent
+  picartoAccent?: string // --platform-picarto-accent
+  facebookAccent?: string // --platform-facebook-accent
+  instagramAccent?: string // --platform-instagram-accent
 
   // Event visibility
   showSuperChat?: 'block' | 'none' // --chat-show-super-chat

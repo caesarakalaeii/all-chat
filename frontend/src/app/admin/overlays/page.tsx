@@ -55,7 +55,18 @@ interface OverlaySource {
   id: string
   // Matches the Sources page union; the badge neutral-styles anything it does
   // not recognize (discord, shared_overlay), so no cast is needed.
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'shared_overlay'
+  platform:
+    | 'twitch'
+    | 'youtube'
+    | 'kick'
+    | 'tiktok'
+    | 'owncast'
+    | 'goodgame'
+    | 'picarto'
+    | 'facebook'
+    | 'instagram'
+    | 'discord'
+    | 'shared_overlay'
   channel_id: string
   channel_name: string
   channel_handle?: string | null
@@ -317,7 +328,7 @@ export default function OverlaysPage() {
                     className={clsx(
                       'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                       showConnectedOnly
-                        ? 'border-kick/30 bg-kick/10 text-kick'
+                        ? 'border-success/30 bg-success/10 text-success'
                         : 'border-border bg-surface-2 text-text-sub hover:text-text'
                     )}
                   >
@@ -569,7 +580,7 @@ export default function OverlaysPage() {
                               <div className="flex items-center space-x-2">
                                 <PlatformBadge platform={source.platform} size="sm" />
                                 {source.is_active ? (
-                                  <span className="inline-flex items-center rounded bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
+                                  <span className="inline-flex items-center rounded bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
                                     {t('admin.overlays.sourceActive')}
                                   </span>
                                 ) : (

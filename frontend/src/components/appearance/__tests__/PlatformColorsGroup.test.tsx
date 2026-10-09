@@ -25,10 +25,11 @@ import { PlatformColorsGroup } from '../PlatformColorsGroup'
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
 })
 
 describe('PlatformColorsGroup', () => {
-  it('renders 5 platform labels', () => {
+  it('hides beta-only platforms outside the beta host', () => {
     const onChange = vi.fn()
     render(<PlatformColorsGroup visualSettings={{}} onChange={onChange} />)
     expect(screen.getByText('Twitch')).toBeDefined()
@@ -36,6 +37,17 @@ describe('PlatformColorsGroup', () => {
     expect(screen.getByText('Kick')).toBeDefined()
     expect(screen.getByText('TikTok')).toBeDefined()
     expect(screen.getByText('Discord')).toBeDefined()
+    expect(screen.queryByText('Instagram')).toBeNull()
+  })
+
+  it('shows beta-only platforms on beta.allch.at', () => {
+    vi.spyOn(window, 'location', 'get').mockReturnValue({
+      ...window.location,
+      hostname: 'beta.allch.at',
+    })
+    render(<PlatformColorsGroup visualSettings={{}} onChange={vi.fn()} />)
+    expect(document.querySelectorAll('[data-testid="color-swatch"]')).toHaveLength(10)
+    expect(screen.getByLabelText(/reset instagram accent/i)).toBeDefined()
   })
 
   it('renders 5 color swatches', () => {
@@ -53,6 +65,11 @@ describe('PlatformColorsGroup', () => {
     expect(screen.getByLabelText(/reset kick accent/i)).toBeDefined()
     expect(screen.getByLabelText(/reset tiktok accent/i)).toBeDefined()
     expect(screen.getByLabelText(/reset discord accent/i)).toBeDefined()
+    expect(screen.queryByLabelText(/reset owncast accent/i)).toBeNull()
+    expect(screen.queryByLabelText(/reset goodgame accent/i)).toBeNull()
+    expect(screen.queryByLabelText(/reset picarto accent/i)).toBeNull()
+    expect(screen.queryByLabelText(/reset facebook accent/i)).toBeNull()
+    expect(screen.queryByLabelText(/reset instagram accent/i)).toBeNull()
   })
 
   it('clicking Twitch reset button calls onChange with { twitchAccent: undefined }', () => {
@@ -62,14 +79,14 @@ describe('PlatformColorsGroup', () => {
     expect(onChange).toHaveBeenCalledWith({ twitchAccent: undefined })
   })
 
-  it('color picker displays brand default "#9147FF" when twitchAccent is undefined', () => {
+  it('color picker displays brand default "#9146FF" when twitchAccent is undefined', () => {
     const onChange = vi.fn()
     render(<PlatformColorsGroup visualSettings={{}} onChange={onChange} />)
     const swatches = document.querySelectorAll('[data-testid="color-swatch"]')
     const twitchSwatch = swatches[0] as HTMLElement
-    // rgb(145, 71, 255) is #9147FF
+    // rgb(145, 70, 255) is #9146FF
     expect(twitchSwatch.style.backgroundColor).toBeTruthy()
-    expect(twitchSwatch.getAttribute('style')).toContain('rgb(145, 71, 255)')
+    expect(twitchSwatch.getAttribute('style')).toContain('rgb(145, 70, 255)')
   })
 
   it('color picker displays set value when twitchAccent is "#ff0000"', () => {

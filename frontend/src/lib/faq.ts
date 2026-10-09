@@ -25,7 +25,10 @@
  * ⚠️ MARKETING COPY — the answers now live in `marketing.faq.*`; please
  * review/approve any wording change there before merge. Every claim is
  * grounded in current product facts: supported platforms (Twitch/YouTube/Kick/
- * TikTok/Discord), OBS browser source, free & open source (AGPL-3.0), 7TV/BTTV/FFZ +
+ * TikTok/Discord), how TikTok LIVE chat is read and its interruption risk
+ * (ADR-0052, ADR-0064), OBS browser source, the monitor as an OBS custom browser
+ * dock (`?dock=1`, ObsDockHelpContent), several overlays per account with their
+ * own sources and theme, free & open source (AGPL-3.0), 7TV/BTTV/FFZ +
  * native emotes, 16 built-in themes + custom CSS, cookieless self-hosted analytics
  * with ~1h chat retention, the browser extension, and the premium gating reasons
  * (TTS users bring their own ElevenLabs API key — the gate is the audio streams,
@@ -42,7 +45,10 @@
  */
 export const FAQ_MESSAGE_STEMS = [
   'platforms',
+  'tiktok',
   'obs',
+  'obsDock',
+  'overlays',
   'free',
   'premium',
   'emotes',

@@ -53,6 +53,10 @@ jobs:
       discord-bot: ${{ steps.changes.outputs.discord-bot }}
       discord-listener: ${{ steps.changes.outputs.discord-listener }}
       support-bot: ${{ steps.changes.outputs.support-bot }}
+      owncast-listener: ${{ steps.changes.outputs.owncast-listener }}
+      goodgame-listener: ${{ steps.changes.outputs.goodgame-listener }}
+      picarto-listener: ${{ steps.changes.outputs.picarto-listener }}
+      instagram-listener: ${{ steps.changes.outputs.instagram-listener }}
       media-service: ${{ steps.changes.outputs.media-service }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
@@ -131,6 +135,21 @@ jobs:
               - 'shared/**'
             support-bot:
               - 'services/support-bot/**'
+            owncast-listener:
+              - 'services/owncast-listener/**'
+              - 'shared/**'
+            goodgame-listener:
+              - 'services/goodgame-listener/**'
+              - 'shared/**'
+            picarto-listener:
+              - 'services/picarto-listener/**'
+              - 'shared/**'
+            facebook-listener:
+              - 'services/facebook-listener/**'
+              - 'shared/**'
+            instagram-listener:
+              - 'services/instagram-listener/**'
+              - 'shared/**'
             media-service:
               - 'services/media-service/**'
               - 'shared/**'
@@ -230,6 +249,21 @@ jobs:
           - name: support-bot
             changed: ${{ needs.detect-changes.outputs.support-bot }}
             path: services/support-bot
+          - name: owncast-listener
+            changed: ${{ needs.detect-changes.outputs.owncast-listener }}
+            path: services/owncast-listener
+          - name: goodgame-listener
+            changed: ${{ needs.detect-changes.outputs.goodgame-listener }}
+            path: services/goodgame-listener
+          - name: picarto-listener
+            changed: ${{ needs.detect-changes.outputs.picarto-listener }}
+            path: services/picarto-listener
+          - name: facebook-listener
+            changed: ${{ needs.detect-changes.outputs.facebook-listener }}
+            path: services/facebook-listener
+          - name: instagram-listener
+            changed: ${{ needs.detect-changes.outputs.instagram-listener }}
+            path: services/instagram-listener
           - name: media-service
             changed: ${{ needs.detect-changes.outputs.media-service }}
             path: services/media-service
@@ -327,6 +361,11 @@ jobs:
           - payment-service
           - engagement-service
           - discord-listener
+          - owncast-listener
+          - goodgame-listener
+          - instagram-listener
+          - picarto-listener
+          - facebook-listener
           - media-service
           # Every Go service under services/ belongs here. tiktok-listener is
           # deliberately absent: it is a Node service and has no go.mod. Verify with:

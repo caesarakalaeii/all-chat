@@ -36,11 +36,8 @@ describe('social card copy', () => {
   it('keeps the alt text and every line the card draws', () => {
     // The card is a generated PNG, so its text ships as an image and its alt is
     // the only version a screen reader ever reaches. Both are copy.
-    expect(t('metadata.socialCard.alt')).toBe('All-Chat \u2014 Every chat. One overlay.')
-    expect(t('metadata.socialCard.title')).toBe('All-Chat')
-    expect(t('metadata.socialCard.subtitle')).toBe('Every chat. One overlay.')
-    expect(t('metadata.socialCard.emoteProviders')).toBe('7TV + BTTV + FFZ Emotes')
-    expect(t('metadata.socialCard.tagline')).toBe('One overlay. Every chat. All platforms.')
+    expect(t('metadata.socialCard.alt')).toBe('All-Chat \u2014 Every chat. One URL.')
+    expect(t('metadata.socialCard.emoteProviders')).toBe('7TV + BTTV + FFZ EMOTES')
   })
 })
 
@@ -94,7 +91,7 @@ describe('docs metadata', () => {
 
 describe('upgrade metadata', () => {
   it('keeps the upgrade title and description', () => {
-    expect(t('metadata.upgrade.title')).toBe('Upgrade to Premium | All-Chat')
+    expect(t('metadata.upgrade.title')).toBe('Upgrade to Premium')
     expect(t('metadata.upgrade.description')).toBe(
       'Back All-Chat on Patreon to unlock premium features: moderate from your overlay, ElevenLabs TTS, YouTube stream selection, shared chat, and viewer flairs.'
     )
@@ -103,9 +100,9 @@ describe('upgrade metadata', () => {
 
 describe('overlay metadata', () => {
   it('keeps the OBS browser-source titles and descriptions', () => {
-    expect(t('metadata.overlay.title')).toBe('All-Chat Overlay')
+    expect(t('metadata.overlay.title')).toBe('Overlay')
     expect(t('metadata.overlay.description')).toBe('Chat overlay for OBS Browser Source')
-    expect(t('metadata.overlayMonitor.title')).toBe('All-Chat Monitor')
+    expect(t('metadata.overlayMonitor.title')).toBe('Chat Monitor')
     expect(t('metadata.overlayMonitor.description')).toBe(
       'Readable chat & activity monitor for streamers'
     )

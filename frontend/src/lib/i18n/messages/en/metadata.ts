@@ -24,13 +24,11 @@
 
 export const metadata = {
   // The generated social card. Its text ships as an image, so the alt is the
-  // only version a screen reader ever reaches; both are copy.
+  // only version a screen reader ever reaches; both are copy. The card's
+  // brand, kicker and headline reuse the hero's marketing.lanes keys.
   socialCard: {
-    alt: 'All-Chat — Every chat. One overlay.',
-    title: 'All-Chat',
-    subtitle: 'Every chat. One overlay.',
-    emoteProviders: '7TV + BTTV + FFZ Emotes',
-    tagline: 'One overlay. Every chat. All platforms.',
+    alt: 'All-Chat — Every chat. One URL.',
+    emoteProviders: '7TV + BTTV + FFZ EMOTES',
   },
   // layout.tsx, inherited by every route that does not override it.
   site: {
@@ -59,31 +57,33 @@ export const metadata = {
     description:
       'Connect third-party tools to the All-Chat unified chat WebSocket stream: message format, platform events, status messages and reconnection (Twitch, YouTube, Kick, TikTok, Discord).',
   },
+  // Route titles stay bare: the layout's titleTemplate appends the brand, so a
+  // suffix here renders it twice ('Upgrade to Premium | All-Chat | All-Chat').
   upgrade: {
-    title: 'Upgrade to Premium | All-Chat',
+    title: 'Upgrade to Premium',
     description:
       'Back All-Chat on Patreon to unlock premium features: moderate from your overlay, ElevenLabs TTS, YouTube stream selection, shared chat, and viewer flairs.',
   },
   // The OBS browser-source routes. Seen in the browser-source title bar and in
   // a tab title, so still copy.
   overlay: {
-    title: 'All-Chat Overlay',
+    title: 'Overlay',
     description: 'Chat overlay for OBS Browser Source',
   },
   overlayMonitor: {
-    title: 'All-Chat Monitor',
+    title: 'Chat Monitor',
     description: 'Readable chat & activity monitor for streamers',
   },
   impressum: {
-    title: 'Impressum | All-Chat',
+    title: 'Impressum',
     description: 'Legal notice (Impressum) as required by § 5 DDG.',
   },
   privacy: {
-    title: 'Privacy Policy | All-Chat',
+    title: 'Privacy Policy',
     description: 'Learn how All-Chat collects, processes, and protects your information.',
   },
   terms: {
-    title: 'Terms of Service | All-Chat',
+    title: 'Terms of Service',
     description: 'Understand the rules and responsibilities for using All-Chat.',
   },
 } as const

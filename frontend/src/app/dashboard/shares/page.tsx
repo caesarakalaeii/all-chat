@@ -21,18 +21,33 @@
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { sharesApi } from '@/lib/api/shares'
+import { cn } from '@/lib/utils'
+import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { ShareRequest } from '@/lib/types/share'
 import { ShareRequestCard } from './components/ShareRequestCard'
 import { AddSourceModal } from './components/AddSourceModal'
 import { toastManager } from '@/lib/toast'
 import { useTranslations } from '@/lib/i18n'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AppNav } from '@/components/AppNav'
+import { ProtectedRoute } from '@/components/ProtectedRoute'
 
+// Same guard and nav as /dashboard: without them a signed-out visitor got a
+// page with no way out and an empty list where the real answer was "sign in".
 export default function ShareRequestsPage() {
+  return (
+    <ProtectedRoute>
+      <ShareRequestsContent />
+    </ProtectedRoute>
+  )
+}
+
+function ShareRequestsContent() {
   const t = useTranslations()
   const [requests, setRequests] = useState<ShareRequest[]>([])
   const [filter, setFilter] = useState<'pending' | 'history'>('pending')
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [unseenAcceptances, setUnseenAcceptances] = useState<ShareRequest[]>([])
   const [showUnseenPrompt, setShowUnseenPrompt] = useState(false)
 
@@ -44,11 +59,12 @@ export default function ShareRequestsPage() {
   async function fetchRequests() {
     try {
       setLoading(true)
+      setLoadFailed(false)
       const data = await sharesApi.fetchIncoming()
       setRequests(data)
     } catch (error) {
       console.error('Failed to fetch share requests:', error)
-      toastManager.add({ title: t('dashboard.shares.loadRequestsFailed'), type: 'error' })
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -121,59 +137,74 @@ export default function ShareRequestsPage() {
   const historyCount = requests.length - pendingCount
 
   return (
-    <div className="px-4 py-6">
-      {/* Add Source Modal for unseen acceptances */}
-      {showUnseenPrompt && unseenAcceptances.length > 0 && (
-        <AddSourceModal
-          senderName={unseenAcceptances[0].sender_display_name || t('dashboard.shares.unknownUser')}
-          senderOverlayId={unseenAcceptances[0].sender_overlay_id}
-          onClose={handleCloseUnseenPrompt}
-          onAdded={handleAddedSource}
-        />
-      )}
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
+      <AppNav />
+      <main id="main-content" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-6">
+        {/* Add Source Modal for unseen acceptances */}
+        {showUnseenPrompt && unseenAcceptances.length > 0 && (
+          <AddSourceModal
+            senderName={
+              unseenAcceptances[0].sender_display_name || t('dashboard.shares.unknownUser')
+            }
+            senderOverlayId={unseenAcceptances[0].sender_overlay_id}
+            onClose={handleCloseUnseenPrompt}
+            onAdded={handleAddedSource}
+          />
+        )}
 
-      <h1 className="mb-6 text-2xl font-semibold text-text">{t('dashboard.shares.heading')}</h1>
+        <h1 className="mb-6 text-2xl">{t('dashboard.shares.heading')}</h1>
 
-      {/* Tab Filters */}
-      <Tabs
-        value={filter}
-        onValueChange={(value) => setFilter(value as 'pending' | 'history')}
-        className="mb-6"
-      >
-        <TabsList variant="line" className="w-full justify-start border-b border-border">
-          <TabsTrigger value="pending">
-            {t('dashboard.shares.tabPending', { count: pendingCount })}
-          </TabsTrigger>
-          <TabsTrigger value="history">
-            {t('dashboard.shares.tabHistory', { count: historyCount })}
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+        {/* Tab Filters */}
+        <Tabs
+          value={filter}
+          onValueChange={(value) => setFilter(value as 'pending' | 'history')}
+          className="mb-6"
+        >
+          <TabsList variant="line" className="w-full justify-start border-b border-white/20">
+            <TabsTrigger value="pending">
+              {t('dashboard.shares.tabPending', { count: pendingCount })}
+            </TabsTrigger>
+            <TabsTrigger value="history">
+              {t('dashboard.shares.tabHistory', { count: historyCount })}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-      {/* Loading state */}
-      {loading && (
-        <div role="status" className="py-8 text-center text-text-sub">
-          {t('dashboard.shares.loading')}
-        </div>
-      )}
+        {/* Loading state */}
+        {loading && (
+          <div role="status" className="text-sub py-8 text-center">
+            {t('dashboard.shares.loading')}
+          </div>
+        )}
 
-      {/* Empty state */}
-      {!loading && sortedRequests.length === 0 && (
-        <div className="py-8 text-center text-text-sub">
-          {filter === 'pending'
-            ? t('dashboard.shares.emptyPending')
-            : t('dashboard.shares.emptyHistory')}
-        </div>
-      )}
+        {/* Error state: an empty list would claim there are no requests. */}
+        {!loading && loadFailed && (
+          <div role="alert" className="space-y-3 py-8 text-center">
+            <p className="text-sm text-destructive">{t('dashboard.shares.loadRequestsFailed')}</p>
+            <button type="button" className="lanes-btn ghost" onClick={() => void fetchRequests()}>
+              {t('dashboard.shares.retry')}
+            </button>
+          </div>
+        )}
 
-      {/* Card Grid */}
-      {!loading && sortedRequests.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {sortedRequests.map((request) => (
-            <ShareRequestCard key={request.id} request={request} onUpdate={fetchRequests} />
-          ))}
-        </div>
-      )}
+        {/* Empty state */}
+        {!loading && !loadFailed && sortedRequests.length === 0 && (
+          <div className="text-sub py-8 text-center">
+            {filter === 'pending'
+              ? t('dashboard.shares.emptyPending')
+              : t('dashboard.shares.emptyHistory')}
+          </div>
+        )}
+
+        {/* Card Grid */}
+        {!loading && sortedRequests.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {sortedRequests.map((request) => (
+              <ShareRequestCard key={request.id} request={request} onUpdate={fetchRequests} />
+            ))}
+          </div>
+        )}
+      </main>
     </div>
   )
 }

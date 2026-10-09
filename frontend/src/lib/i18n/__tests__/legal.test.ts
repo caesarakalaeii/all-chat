@@ -145,7 +145,7 @@ describe('legal layout chrome copy', () => {
 describe('impressum fallback copy', () => {
   it('keeps the page title and metadata', () => {
     expect(t('legal.impressum.title')).toBe('Impressum')
-    expect(t('metadata.impressum.title')).toBe('Impressum | All-Chat')
+    expect(t('metadata.impressum.title')).toBe('Impressum')
     expect(t('metadata.impressum.description')).toBe(
       'Legal notice (Impressum) as required by \u00A7 5 DDG.'
     )
@@ -174,7 +174,7 @@ describe('terms of service headings', () => {
   it('keeps the page title, the effective date and the metadata', () => {
     expect(t('legal.terms.title')).toBe('Terms of Service (Nutzungsbedingungen)')
     expect(t('legal.terms.lastUpdated')).toBe('July 30, 2026')
-    expect(t('metadata.terms.title')).toBe('Terms of Service | All-Chat')
+    expect(t('metadata.terms.title')).toBe('Terms of Service')
     expect(t('metadata.terms.description')).toBe(
       'Understand the rules and responsibilities for using All-Chat.'
     )
@@ -370,7 +370,7 @@ describe('privacy policy headings', () => {
     // &auml; in the source title.
     expect(t('legal.privacy.title')).toBe('Privacy Policy (Datenschutzerkl\u00E4rung)')
     expect(t('legal.privacy.lastUpdated')).toBe('July 30, 2026')
-    expect(t('metadata.privacy.title')).toBe('Privacy Policy | All-Chat')
+    expect(t('metadata.privacy.title')).toBe('Privacy Policy')
     expect(t('metadata.privacy.description')).toBe(
       'Learn how All-Chat collects, processes, and protects your information.'
     )

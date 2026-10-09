@@ -46,6 +46,7 @@ import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { useTranslations } from '@/lib/i18n'
 import { emphasise } from '@/lib/i18n/emphasise'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { usePlatformAvailable } from '@/lib/platform-availability'
 import { MAX_BUBBLE_PALETTE } from '@/lib/utils/visual-settings-to-css'
 import { ColorPickerControl } from './ColorPickerControl'
 import { SliderControl } from './SliderControl'
@@ -58,13 +59,28 @@ const NEW_SWATCH = '#1e293b'
 // moderator roster rather than duplicated here.
 const PLATFORMS: ReadonlyArray<{
   field: keyof VisualSettings
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord'
+  platform:
+    | 'twitch'
+    | 'youtube'
+    | 'kick'
+    | 'tiktok'
+    | 'owncast'
+    | 'goodgame'
+    | 'picarto'
+    | 'facebook'
+    | 'instagram'
+    | 'discord'
   sample: string
 }> = [
   { field: 'twitchBubbleBg', platform: 'twitch', sample: '#2a1b3d' },
   { field: 'youtubeBubbleBg', platform: 'youtube', sample: '#3d1b1b' },
   { field: 'kickBubbleBg', platform: 'kick', sample: '#1b3d22' },
   { field: 'tiktokBubbleBg', platform: 'tiktok', sample: '#1b333d' },
+  { field: 'owncastBubbleBg', platform: 'owncast', sample: '#241b3d' },
+  { field: 'goodgameBubbleBg', platform: 'goodgame', sample: '#1b2a3d' },
+  { field: 'picartoBubbleBg', platform: 'picarto', sample: '#1b3d26' },
+  { field: 'facebookBubbleBg', platform: 'facebook', sample: '#1b2940' },
+  { field: 'instagramBubbleBg', platform: 'instagram', sample: '#2b1220' },
   { field: 'discordBubbleBg', platform: 'discord', sample: '#22253d' },
 ]
 
@@ -81,6 +97,7 @@ export function BubbleColorsGroup({
   locked = false,
 }: BubbleColorsGroupProps): React.ReactElement {
   const t = useTranslations()
+  const isPlatformAvailable = usePlatformAvailable()
   const palette = visualSettings.bubblePalette ?? []
 
   // Always write the whole list back: the setting is one array, and an entry's
@@ -180,7 +197,7 @@ export function BubbleColorsGroup({
               {t('overlayEditor.bubbleColors.perPlatformBody')}
             </p>
           </div>
-          {PLATFORMS.map((platform) => {
+          {PLATFORMS.filter((p) => isPlatformAvailable(p.platform)).map((platform) => {
             const current = visualSettings[platform.field]
             const platformName = t(`common.platforms.${platform.platform}`)
             return (

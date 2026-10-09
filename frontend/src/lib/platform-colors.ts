@@ -27,6 +27,11 @@ export const PLATFORM_COLORS = {
   youtube: { text: 'text-youtube', bg: 'bg-youtube' },
   kick: { text: 'text-kick', bg: 'bg-kick' },
   tiktok: { text: 'text-tiktok', bg: 'bg-tiktok' },
+  owncast: { text: 'text-owncast', bg: 'bg-owncast' },
+  goodgame: { text: 'text-goodgame', bg: 'bg-goodgame' },
+  picarto: { text: 'text-picarto', bg: 'bg-picarto' },
+  facebook: { text: 'text-facebook', bg: 'bg-facebook' },
+  instagram: { text: 'text-instagram', bg: 'bg-instagram' },
   discord: { text: 'text-discord', bg: 'bg-discord' },
   system: { text: 'text-text-sub', bg: 'bg-surface' },
 } as const

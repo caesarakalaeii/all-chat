@@ -19,7 +19,7 @@
  */
 
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { usePathname, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
@@ -31,13 +31,13 @@ import { trackEvent } from '@/lib/analytics'
 import { useTranslations } from '@/lib/i18n'
 
 const activeClass =
-  'relative text-text flex items-center px-3.5 h-full text-sm ' +
+  'nav-link active relative text-text flex items-center px-3.5 h-full text-sm ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch rounded-sm ' +
   'after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 ' +
   'after:bg-linear-to-r after:from-twitch after:to-tiktok'
 
 const inactiveClass =
-  'text-text-sub hover:text-text transition-colors flex items-center px-3.5 h-full text-sm ' +
+  'nav-link text-text-sub hover:text-text transition-colors flex items-center px-3.5 h-full text-sm ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-twitch rounded-sm'
 
 export function AppNav() {
@@ -71,7 +71,7 @@ export function AppNav() {
     <nav
       className={
         // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- 60px must stay a literal pixel height: SplitView and overlays/[id]/page.tsx hard-code h-[calc(100vh-60px)] against these navs, and globals.css documents "AppNav h-60px" for its scroll-padding-top. The suggested h-15 is calc(var(--spacing) * 15) = 3.75rem, so it only equals 60px at the default root font size; anywhere else the navs and those calc() consumers disagree and the content pane overflows or leaves a gap
-        'sticky top-0 z-50 flex h-[60px] items-center border-b border-border bg-nav-bg px-3 backdrop-blur-[20px] sm:px-8'
+        'app-nav sticky top-0 z-50 flex h-[60px] items-center border-b border-border bg-nav-bg px-3 backdrop-blur-[20px] sm:px-8'
       }
     >
       <Link
@@ -79,7 +79,7 @@ export function AppNav() {
         className="mr-4 flex shrink-0 items-center gap-2.5 rounded-sm focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none sm:mr-10"
       >
         <InfinityLogo size={28} />
-        <span className="text-base font-extrabold tracking-tight text-text">
+        <span className="app-wordmark text-base font-extrabold tracking-tight text-text">
           {t('common.brand.wordmark')}
         </span>
       </Link>
@@ -126,10 +126,16 @@ export function AppNav() {
           <DiscordIcon className="h-4 w-4 text-discord" />
           <span className="sr-only sm:not-sr-only">{t('common.platforms.discord')}</span>
         </a>
-        {isLoggedIn && (
+        {isLoggedIn ? (
           <Button onClick={handleLogout} variant="ghost">
             {t('common.appNav.logOut')}
           </Button>
+        ) : (
+          // Signed-out visitors reach app pages from shared links and the docs;
+          // without this the nav offered no way back into an account.
+          <Link href="/#get-started" className={buttonVariants({ variant: 'ghost' })}>
+            {t('common.appNav.signIn')}
+          </Link>
         )}
       </div>
     </nav>

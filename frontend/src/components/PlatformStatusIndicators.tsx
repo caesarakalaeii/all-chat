@@ -73,36 +73,33 @@ const TwitchIcon = () => (
 
 const YouTubeIcon = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5">
-    {/* YouTube official red: #FF0000 - Never modify this color per branding guidelines */}
+    {/* Full-color YouTube Icon per brand.youtube/youtube-icon: official red
+     * #FF0033 (2025 refresh) with the triangle always white in full-color. */}
     <path
-      fill="#FF0000"
-      d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
+      fill="#FF0033"
+      d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"
     />
+    <path fill="#FFFFFF" d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
   </svg>
 )
 
 const KickIcon = () => (
-  <svg viewBox="0 0 24 24" className="h-5 w-5" style={{ imageRendering: 'pixelated' }}>
-    {/* Kick - Simple green K */}
-    <text
-      x="12"
-      y="18"
-      fontSize="20"
-      fontWeight="bold"
-      fill="#00E701"
-      textAnchor="middle"
-      fontFamily="monospace"
-    >
-      {KICK_GLYPH}
-    </text>
+  <svg viewBox="0 0 512 512" className="h-5 w-5">
+    {/* Official Kick block-K mark, same path as PlatformSignInButton, in
+     * Kick brand green #53FC18. */}
+    <path
+      fill="#53FC18"
+      d="M37 .036h164.448v113.621h54.71v-56.82h54.731V.036h164.448v170.777h-54.73v56.82h-54.711v56.8h54.71v56.82h54.73V512.03H310.89v-56.82h-54.73v-56.8h-54.711v113.62H37V.036z"
+    />
   </svg>
 )
 
 const TikTokIcon = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5">
-    {/* TikTok teal (#69C9D0) used here for visibility on dark overlay backgrounds */}
+    {/* TikTok's mono note is brand-allowed only in white or black; white reads
+     * on these dark surfaces. */}
     <path
-      fill="#69C9D0"
+      fill="#FFFFFF"
       d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z"
     />
   </svg>
@@ -110,8 +107,73 @@ const TikTokIcon = () => (
 
 const DiscordIcon = () => <DiscordMark className="h-5 w-5 text-discord" />
 
-// The letter the Kick mark draws. A brand glyph, not copy.
-const KICK_GLYPH = 'K'
+const OwncastIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <circle cx="12" cy="17" r="2.5" fill="#9B7FF5" />
+    <path
+      fill="none"
+      stroke="#9B7FF5"
+      strokeWidth="2"
+      strokeLinecap="round"
+      d="M7.8 12.8a6 6 0 0 1 8.4 0M5 10a10 10 0 0 1 14 0"
+    />
+  </svg>
+)
+
+const GoodGameIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <text
+      x="12"
+      y="17"
+      fontSize="11"
+      fontWeight="bold"
+      fill="#7FA3D1"
+      textAnchor="middle"
+      fontFamily="monospace"
+    >
+      {GOODGAME_GLYPH}
+    </text>
+  </svg>
+)
+
+const PicartoIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <circle cx="12" cy="12" r="9" fill="#27B756" />
+    <circle cx="9" cy="9" r="1.4" fill="#FFFFFF" />
+    <circle cx="15" cy="9" r="1.4" fill="#FFFFFF" />
+    <circle cx="8" cy="14" r="1.4" fill="#FFFFFF" />
+    <circle cx="14.5" cy="15" r="1.4" fill="#FFFFFF" />
+  </svg>
+)
+
+const FacebookIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <path
+      fill="#3B93F5"
+      d="M12 2a10 10 0 1 0-1.6 19.9v-7h-2.5V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 12 2z"
+    />
+  </svg>
+)
+
+const InstagramIcon = () => (
+  <svg viewBox="0 0 24 24" className="h-5 w-5">
+    <rect
+      x="3.5"
+      y="3.5"
+      width="17"
+      height="17"
+      rx="5"
+      fill="none"
+      stroke="#ED6FA4"
+      strokeWidth="2"
+    />
+    <circle cx="12" cy="12" r="4" fill="none" stroke="#ED6FA4" strokeWidth="2" />
+    <circle cx="17.2" cy="6.8" r="1.2" fill="#ED6FA4" />
+  </svg>
+)
+
+// The letters the GoodGame mark draws. A brand glyph, not copy.
+const GOODGAME_GLYPH = 'GG'
 
 // The icon plus the catalog key naming the platform. `as const satisfies` rather
 // than an annotation: an annotation widens the key to string and a typo would
@@ -121,6 +183,11 @@ const platformIcons = {
   youtube: { icon: YouTubeIcon, nameKey: 'common.platforms.youtube' },
   kick: { icon: KickIcon, nameKey: 'common.platforms.kick' },
   tiktok: { icon: TikTokIcon, nameKey: 'common.platforms.tiktok' },
+  owncast: { icon: OwncastIcon, nameKey: 'common.platforms.owncast' },
+  goodgame: { icon: GoodGameIcon, nameKey: 'common.platforms.goodgame' },
+  picarto: { icon: PicartoIcon, nameKey: 'common.platforms.picarto' },
+  facebook: { icon: FacebookIcon, nameKey: 'common.platforms.facebook' },
+  instagram: { icon: InstagramIcon, nameKey: 'common.platforms.instagram' },
   discord: { icon: DiscordIcon, nameKey: 'common.platforms.discord' },
 } as const satisfies Record<string, { icon: React.FC; nameKey: MessageKey }>
 

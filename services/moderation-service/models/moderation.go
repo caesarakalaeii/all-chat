@@ -91,6 +91,12 @@ var PlatformActions = map[string][]Action{
 	// renderer ids instead, and unban keys on the ban resource id returned by insert, which
 	// nothing persists and no list endpoint can recover.
 	"youtube": {ActionTimeout, ActionBan},
+	// Facebook (ADR-0060) supports delete (DELETE on a comment id), ban and
+	// unban (POST/DELETE on the Page blocked edge). Timeout is absent:
+	// Facebook has no time-bounded mute; the closest verb (hiding a
+	// comment) is not a timeout, so mapping it would misstate what
+	// actually happened on the Page.
+	"facebook": {ActionDelete, ActionBan, ActionUnban},
 }
 
 // SupportsAction reports whether the platform supports the given moderation action.
@@ -236,6 +242,32 @@ func RequiredKickScope(a Action) string {
 	default:
 		return ""
 	}
+}
+
+// Facebook moderation OAuth scope. Unlike the other platforms there is
+// exactly one: pages_manage_engagement authorizes comment deletion, comment
+// hiding and Page blocking alike (ADR-0060 requests it at first consent, so
+// there is no separate opt-in re-consent flow for Facebook).
+const ScopeFacebookModeration = "pages_manage_engagement"
+
+// ActionsForFacebookScopes maps a page token's granted scopes to moderation
+// actions. All three supported actions share the one scope, so a granted token
+// enables the full set. (Mirrors ActionsForYouTubeScopes.)
+func ActionsForFacebookScopes(scopes []string) []Action {
+	if scopesContain(scopes, ScopeFacebookModeration) {
+		return PlatformActions["facebook"]
+	}
+	return nil
+}
+
+// RequiredFacebookScope returns the Facebook permission an action needs, or ""
+// if the action is not a Facebook moderation action.
+func RequiredFacebookScope(a Action) string {
+	switch a {
+	case ActionDelete, ActionBan, ActionUnban:
+		return ScopeFacebookModeration
+	}
+	return ""
 }
 
 // YouTube moderation OAuth scope. force-ssl grants live-chat write access (incl.

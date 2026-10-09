@@ -33,7 +33,7 @@
 
 'use client'
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import clsx from 'clsx'
 import ThemePreview from '@/components/theme-marketplace/ThemePreview'
@@ -94,8 +94,6 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
   // Explicit pause via the visible control (WCAG 2.2.2 Pause, Stop, Hide) —
   // unlike hover/focus pause, this persists until the visitor resumes.
   const [userPaused, setUserPaused] = useState(false)
-  const [frameH, setFrameH] = useState<number>()
-  const slideRef = useRef<HTMLDivElement>(null)
   const reducedMotion = useReducedMotion()
 
   // Auto-advance, paused while the visitor is hovering/focusing the widget or
@@ -107,19 +105,6 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
     const id = setInterval(() => setActive((a) => (a + 1) % RESOLVED.length), ROTATE_MS)
     return () => clearInterval(id)
   }, [paused, userPaused, reducedMotion])
-
-  // Drive the frame height from the active slide's real content so every theme
-  // shows at its true size — no scrollbar and no dead padding. A ResizeObserver
-  // keeps it in sync as the theme's webfont finishes loading and reflows.
-  useLayoutEffect(() => {
-    const el = slideRef.current
-    if (!el) return
-    const update = () => setFrameH(el.offsetHeight)
-    update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [active])
 
   // Defensive: nothing to show if the bundle was emptied/renamed wholesale.
   if (RESOLVED.length === 0) return null
@@ -150,31 +135,38 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
       </p>
 
       <div
-        className="overflow-hidden rounded-xl border border-border-md bg-surface"
+        className="panel-fill overflow-hidden rounded-xl border border-border-md bg-surface"
         role="group"
         aria-roledescription="carousel"
         aria-label={t('marketing.themeSwitcher.carouselLabel')}
       >
-        {/* Only the active slide is mounted (one webfont at a time); the frame
-            eases between each theme's natural height. */}
-        <div
-          className="overflow-hidden transition-[height] duration-500 ease-out motion-reduce:transition-none"
-          style={{ height: frameH }}
-        >
-          <div
-            key={current.id}
-            ref={slideRef}
-            className="animate-[theme-fade_0.5s_ease-out] motion-reduce:animate-none"
-          >
-            <ThemePreview
-              css={current.theme.css}
-              messages={SHOWCASE_MESSAGES}
-              themeId={current.theme.id}
-              platformBadge="icon"
-              showTimestamp={false}
-              fit
-            />
-          </div>
+        {/* Every slide stays mounted in the same grid cell, so the frame is as
+            tall as the tallest theme and the page never jumps as it rotates.
+            Inactive slides are hidden from view, assistive tech and focus. */}
+        <div className="grid">
+          {RESOLVED.map((entry, i) => {
+            const isActive = i === active
+            return (
+              <div
+                key={entry.id}
+                aria-hidden={!isActive}
+                inert={!isActive}
+                className={clsx(
+                  'col-start-1 row-start-1 self-center transition-[opacity,visibility] duration-500 ease-out motion-reduce:transition-none',
+                  isActive ? 'visible opacity-100' : 'invisible opacity-0'
+                )}
+              >
+                <ThemePreview
+                  css={entry.theme.css}
+                  messages={SHOWCASE_MESSAGES}
+                  themeId={entry.theme.id}
+                  platformBadge="icon"
+                  showTimestamp={false}
+                  fit
+                />
+              </div>
+            )
+          })}
         </div>
 
         {/* Caption + dots */}
@@ -202,7 +194,7 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
                     : t('marketing.themeSwitcher.pauseLabel')
                 }
                 aria-pressed={userPaused}
-                className="flex h-6 w-6 items-center justify-center rounded-full text-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
+                className="flex h-6 w-6 items-center justify-center border border-border-md text-text-sub hover:border-text-sub hover:text-text focus-visible:ring-2 focus-visible:ring-text focus-visible:ring-offset-2 focus-visible:ring-offset-surface focus-visible:outline-none"
               >
                 {userPaused ? (
                   <Play className="h-3.5 w-3.5" aria-hidden="true" />

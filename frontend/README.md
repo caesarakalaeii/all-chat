@@ -214,6 +214,11 @@ NEXT_PUBLIC_API_URL=https://allch.at
 NEXT_PUBLIC_WS_URL=wss://allch.at
 ```
 
+The server also reads `NEXT_PUBLIC_API_URL` when it renders the homepage: it
+fetches `GET /api/v1/stats` (cached for 5 minutes, 2 second timeout) so the first
+HTML already carries the landing numbers. If the gateway is unreachable from the
+frontend container, the page still renders and the browser fills the numbers in.
+
 ## Code Organization
 
 ### API Layer (`src/lib/api/`)

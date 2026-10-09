@@ -90,6 +90,47 @@ func (c *TwitchScopeChecker) ModLogGranted(ctx context.Context, userID, channelI
 	return models.ModLogGranted(cred.GrantedScopes), nil
 }
 
+// facebookCredentialResolver is the subset of FacebookSource the scope checker needs.
+type facebookCredentialResolver interface {
+	Resolve(ctx context.Context, userID, channelID string) (*FacebookCredential, error)
+}
+
+// FacebookScopeChecker reports which moderation actions the owner's Facebook
+// page credential allows. All supported actions share the single
+// pages_manage_engagement permission (ADR-0060), granted at first consent —
+// there is no separate moderation re-consent flow for Facebook. A missing
+// credential yields no actions (reported missing_scope).
+type FacebookScopeChecker struct {
+	src facebookCredentialResolver
+}
+
+// NewFacebookScopeChecker wires a scope checker over a FacebookSource.
+func NewFacebookScopeChecker(src *FacebookSource) *FacebookScopeChecker {
+	return &FacebookScopeChecker{src: src}
+}
+
+// GrantedActions resolves the owner's Facebook credential and maps its granted
+// scopes to moderation actions. A missing credential yields no actions.
+func (c *FacebookScopeChecker) GrantedActions(ctx context.Context, userID, platform, channelID string) ([]models.Action, error) {
+	if platform != "facebook" {
+		return nil, nil
+	}
+	cred, err := c.src.Resolve(ctx, userID, channelID)
+	if errors.Is(err, ErrNoCredential) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return models.ActionsForFacebookScopes(cred.GrantedScopes), nil
+}
+
+// CanSend reports whether the owner's Facebook credential allows sending chat.
+// Facebook has no streamer chat-send path (ADR-0060): always false.
+func (c *FacebookScopeChecker) CanSend(ctx context.Context, userID, platform, channelID string) (bool, error) {
+	return false, nil
+}
+
 // kickCredentialResolver is the subset of KickSource the scope checker needs.
 type kickCredentialResolver interface {
 	Resolve(ctx context.Context, userID, channelID string) (*KickCredential, error)

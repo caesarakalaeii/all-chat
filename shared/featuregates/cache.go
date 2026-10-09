@@ -90,6 +90,21 @@ const (
 	// not because it is one today.
 	GateBubbleColors = "bubble_colors"
 
+	// The platform_ gates (ADR-0008) gate ADDING A SOURCE on a rollout platform:
+	// platform_owncast, platform_goodgame, platform_picarto, platform_facebook,
+	// platform_instagram. Each ships seeded is_premium=TRUE (migrations
+	// 091-094 and 096) so a new listener cannot reach every overlay at
+	// once; flip a row to is_premium=false via the feature-gate admin endpoint
+	// to graduate a platform with no redeploy. Sources created while the gate
+	// is open keep working after it closes — the gate only ever blocks new
+	// adds, mirroring how the moderation/engagement gates gate the write, not
+	// the reads.
+	GatePlatformOwncast   = "platform_owncast"
+	GatePlatformGoodGame  = "platform_goodgame"
+	GatePlatformPicarto   = "platform_picarto"
+	GatePlatformFacebook  = "platform_facebook"
+	GatePlatformInstagram = "platform_instagram"
+
 	// GateLocalizationContribution is the feature key for the beta-tester
 	// translation tool (ADR-0063): contributing UI-catalog translations into
 	// requested/approved locales. Seeded early_access=TRUE (migration 097),
@@ -98,6 +113,23 @@ const (
 	// English catalog is never gated — every user already reads English.
 	GateLocalizationContribution = "localization_contribution"
 )
+
+// rolloutPlatformGates maps a platform slug to its source-add rollout gate
+// (ADR-0008). Platforms absent from this map are not gated at all.
+var rolloutPlatformGates = map[string]string{
+	"owncast":   GatePlatformOwncast,
+	"goodgame":  GatePlatformGoodGame,
+	"picarto":   GatePlatformPicarto,
+	"facebook":  GatePlatformFacebook,
+	"instagram": GatePlatformInstagram,
+}
+
+// RolloutPlatformGateKey returns the feature-gate key that gates adding a
+// source on the given platform, and whether the platform is gated at all.
+func RolloutPlatformGateKey(platform string) (string, bool) {
+	key, ok := rolloutPlatformGates[platform]
+	return key, ok
+}
 
 // FeatureGate represents a single row from the feature_gates table.
 type FeatureGate struct {

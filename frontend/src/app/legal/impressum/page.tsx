@@ -55,14 +55,16 @@ export default function ImpressumPage() {
         <div dangerouslySetInnerHTML={{ __html: html }} />
       ) : (
         <section className="space-y-4">
-          <p className="text-text-sub">{t('legal.impressum.notConfigured')}</p>
-          <p className="text-sm text-text-dim">
+          <p className="text-sub">{t('legal.impressum.notConfigured')}</p>
+          <p className="text-dim text-sm">
             {interpolateElements(t('legal.impressum.operatorHint'), {
               path: (
-                <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">{IMPRESSUM_PATH}</code>
+                <code className="border border-white/50 bg-black px-1.5 py-0.5 text-xs">
+                  {IMPRESSUM_PATH}
+                </code>
               ),
               variable: (
-                <code className="rounded bg-surface-2 px-1.5 py-0.5 text-xs">
+                <code className="border border-white/50 bg-black px-1.5 py-0.5 text-xs">
                   {IMPRESSUM_ENV_VAR}
                 </code>
               ),

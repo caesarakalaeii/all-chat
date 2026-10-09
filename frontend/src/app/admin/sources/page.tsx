@@ -30,12 +30,24 @@ import { formatDate, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 
 interface Source {
+  // Stored platforms outgrow the chromatic set (discord, shared_overlay); the
+  // badge neutral-styles anything it doesn't recognize, so no cast is needed.
   id: string
   overlay_id: string
   overlay_name: string
-  // Stored platforms outgrow the chromatic set (discord, shared_overlay); the
+  platform:
+    | 'twitch'
+    | 'youtube'
+    | 'kick'
+    | 'tiktok'
+    | 'owncast'
+    | 'goodgame'
+    | 'picarto'
+    | 'facebook'
+    | 'instagram'
+    | 'discord'
+    | 'shared_overlay'
   // badge neutral-styles anything it doesn't recognize, so no cast is needed.
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'discord' | 'shared_overlay'
   channel_id: string
   channel_name: string
   channel_handle?: string | null
@@ -96,7 +108,22 @@ export default function SourcesPage() {
         const params = new URLSearchParams(window.location.search)
         setUserFilter(params.get('user'))
         const p = params.get('platform')
-        if (p && ['twitch', 'youtube', 'kick', 'tiktok', 'discord', 'shared_overlay'].includes(p)) {
+        if (
+          p &&
+          [
+            'twitch',
+            'youtube',
+            'kick',
+            'tiktok',
+            'owncast',
+            'goodgame',
+            'picarto',
+            'facebook',
+            'instagram',
+            'discord',
+            'shared_overlay',
+          ].includes(p)
+        ) {
           setPlatformFilter(p)
         }
         setLoading(false)
@@ -122,7 +149,6 @@ export default function SourcesPage() {
       return (
         s.channel_name.toLowerCase().includes(searchLower) ||
         s.channel_id.toLowerCase().includes(searchLower) ||
-        s.overlay_name.toLowerCase().includes(searchLower) ||
         (s.owner_username?.toLowerCase().includes(searchLower) ?? false)
       )
     }
@@ -139,6 +165,11 @@ export default function SourcesPage() {
     youtube: sources.filter((s) => s.platform === 'youtube').length,
     kick: sources.filter((s) => s.platform === 'kick').length,
     tiktok: sources.filter((s) => s.platform === 'tiktok').length,
+    owncast: sources.filter((s) => s.platform === 'owncast').length,
+    goodgame: sources.filter((s) => s.platform === 'goodgame').length,
+    picarto: sources.filter((s) => s.platform === 'picarto').length,
+    facebook: sources.filter((s) => s.platform === 'facebook').length,
+    instagram: sources.filter((s) => s.platform === 'instagram').length,
   }
 
   if (error) {
@@ -303,6 +334,11 @@ export default function SourcesPage() {
               <option value="youtube">{t('common.platforms.youtube')}</option>
               <option value="kick">{t('common.platforms.kick')}</option>
               <option value="tiktok">{t('common.platforms.tiktok')}</option>
+              <option value="owncast">{t('common.platforms.owncast')}</option>
+              <option value="goodgame">{t('common.platforms.goodgame')}</option>
+              <option value="picarto">{t('common.platforms.picarto')}</option>
+              <option value="facebook">{t('common.platforms.facebook')}</option>
+              <option value="instagram">{t('common.platforms.instagram')}</option>
             </select>
           </div>
           <div>
@@ -409,7 +445,7 @@ export default function SourcesPage() {
                       </td>
                       <td className="px-4 py-3">
                         {source.is_active ? (
-                          <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 text-xs font-medium text-kick">
+                          <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
                             {t('admin.sources.statusActive')}
                           </span>
                         ) : (
@@ -467,7 +503,7 @@ export default function SourcesPage() {
                   )}
                   <span>{formatDate(new Date(source.created_at))}</span>
                   {source.is_active ? (
-                    <span className="inline-flex items-center rounded-full bg-kick/10 px-2 py-0.5 font-medium text-kick">
+                    <span className="inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 font-medium text-success">
                       {t('admin.sources.statusActive')}
                     </span>
                   ) : (

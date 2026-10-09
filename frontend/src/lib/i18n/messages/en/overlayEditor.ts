@@ -462,6 +462,20 @@ export const overlayEditor = {
     connectYoutube: 'Connect YouTube',
     connectKick: 'Connect Kick',
     connectTiktok: 'Connect TikTok',
+    // Owncast instances serve one stream each, so the ask is the server's base
+    // URL; the other two take a channel name like TikTok's username.
+    connectOwncast: 'Connect Owncast',
+    connectGoodgame: 'Connect GoodGame',
+    connectPicarto: 'Connect Picarto',
+    connectFacebook: 'Connect Facebook Page',
+    connectInstagram: 'Connect Instagram',
+    channelTitle: 'Connect {platform}',
+    owncastBody:
+      'An Owncast server streams one channel. Enter its base URL (e.g. https://watch.example.com) and we will follow its chat.',
+    channelBody:
+      "No login step here. Enter the channel name and we'll pull its live chat.",
+    owncastPlaceholder: 'https://watch.example.com',
+    channelPlaceholder: 'Channel name',
     connectDiscord: 'Connect Discord',
     // {emphasis} is the link to /settings.
     discordNeedsServer: 'Connect a Discord server in {emphasis} first to add Discord sources.',
@@ -835,6 +849,7 @@ export const overlayEditor = {
     kindLabel: 'Overlay Type',
     cancel: 'Cancel',
     submit: 'Create Overlay',
+    submitting: 'Creating…',
   },
   // Per-kind picker descriptions, keyed by the overlay_type wire value so the
   // picker looks them up from the row it is already iterating. Sits beside
@@ -865,6 +880,10 @@ export const overlayEditor = {
     relaySaved: 'Relay settings saved',
     relaySaveFailed: 'Failed to save relay settings',
     engagementSaved: 'Engagement settings saved',
+    facebookSourceAdded: 'Facebook source added',
+    facebookSourceAddFailed: 'Could not connect Facebook',
+    instagramSourceAdded: 'Instagram source added',
+    instagramSourceAddFailed: 'Could not connect Instagram',
     engagementSaveFailed: 'Failed to save engagement settings',
     twitchConsentFailed: 'Could not start Twitch consent. Please try again.',
     discordSourceAdded: 'Discord source added',

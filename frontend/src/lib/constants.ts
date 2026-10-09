@@ -32,3 +32,14 @@ export const PATREON_JOIN_URL = 'https://www.patreon.com/16269405/join'
  * docs, upsell modals, onboarding setup guide, JSON-LD sameAs).
  */
 export const DISCORD_INVITE_URL = 'https://discord.gg/xCGBSuz39P'
+
+/**
+ * Patreon creator page. Identity links (JSON-LD sameAs, llms.txt) want the page
+ * itself; PATREON_JOIN_URL is the checkout flow and belongs on upsell CTAs only.
+ */
+export const PATREON_PAGE_URL = 'https://www.patreon.com/all_chat'
+
+export const EXTENSION_CHROME_URL =
+  'https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm'
+export const EXTENSION_FIREFOX_URL =
+  'https://addons.mozilla.org/en-US/firefox/addon/all-chat-extension/'

@@ -30,9 +30,9 @@ export const metadata = {
   alternates: { canonical: '/legal/privacy' },
 }
 
-const listClasses = 'list-disc pl-6 space-y-1 text-text-sub'
-const linkClasses = 'text-twitch underline decoration-twitch/30 underline-offset-4'
-const noteClasses = 'text-sm text-text-dim'
+const listClasses = 'list-disc pl-6 space-y-1 text-sub'
+const linkClasses = 'underline decoration-white/40 underline-offset-4'
+const noteClasses = 'text-sm text-dim'
 
 const SUPPORT_MAILTO = 'mailto:all.chat.support@gmail.com'
 const REPOSITORY_URL = 'https://github.com/caesarakalaeii/all-chat'
@@ -45,7 +45,7 @@ const FONT_PROXY_PATH = '/font-proxy/*'
 
 /** Bolds a run inside a sentence. Every emphasis on this page renders this way. */
 function Emphasis({ children }: { children: React.ReactNode }) {
-  return <strong className="text-text">{children}</strong>
+  return <strong>{children}</strong>
 }
 
 /** A row whose bolded label opens the sentence the rest of the row continues. */
@@ -80,7 +80,7 @@ export default function PrivacyPolicyPage() {
   return (
     <LegalLayout title={t('legal.privacy.title')} lastUpdated={t('legal.privacy.lastUpdated')}>
       <div className="space-y-4">
-        <div className="rounded-xl border border-twitch/20 bg-twitch/5 p-5 text-text-sub">
+        <div className="text-sub border-2 border-white/30 p-5">
           {emphasise(
             t('legal.privacy.tldr', { label: t('legal.privacy.tldrLabel') }),
             t('legal.privacy.tldrLabel'),
@@ -89,7 +89,7 @@ export default function PrivacyPolicyPage() {
             )
           )}
         </div>
-        <div className="rounded-xl border border-tiktok/20 bg-tiktok/5 p-5 text-text-sub">
+        <div className="text-sub border-2 border-tiktok/60 p-5">
           {interpolateElements(
             t('legal.privacy.openSourceCallout', {
               label: t('legal.privacy.openSourceCalloutLabel'),
@@ -100,7 +100,7 @@ export default function PrivacyPolicyPage() {
                   href={REPOSITORY_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-semibold text-tiktok underline decoration-tiktok/30 underline-offset-4"
+                  className="font-semibold text-tiktok underline decoration-tiktok/50 underline-offset-4"
                 >
                   {t('legal.privacy.githubLinkText')}
                 </a>
@@ -112,7 +112,7 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Verantwortlicher --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.controllerHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.controllerHeading')}</h2>
         <p>
           {interpolateElements(t('legal.privacy.controllerBody'), {
             impressum: (
@@ -127,10 +127,10 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Information We Collect --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.collectHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.collectHeading')}</h2>
 
         <div>
-          <h3 className="text-lg font-semibold text-text">{t('legal.privacy.authSubheading')}</h3>
+          <h3 className="text-lg">{t('legal.privacy.authSubheading')}</h3>
           <p>{t('legal.privacy.authIntro')}</p>
           <ul className={listClasses}>
             <li>{t('legal.privacy.authIdentifiers')}</li>
@@ -142,7 +142,7 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold text-text">{t('legal.privacy.chatSubheading')}</h3>
+          <h3 className="text-lg">{t('legal.privacy.chatSubheading')}</h3>
           <p>{t('legal.privacy.chatIntro')}</p>
           <ul className={listClasses}>
             <li>{t('legal.privacy.chatMessages')}</li>
@@ -164,9 +164,7 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold text-text">
-            {t('legal.privacy.overlaySubheading')}
-          </h3>
+          <h3 className="text-lg">{t('legal.privacy.overlaySubheading')}</h3>
           <p>{t('legal.privacy.overlayIntro')}</p>
           <ul className={listClasses}>
             <li>{t('legal.privacy.overlayNames')}</li>
@@ -177,9 +175,7 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold text-text">
-            {t('legal.privacy.viewerIdentitySubheading')}
-          </h3>
+          <h3 className="text-lg">{t('legal.privacy.viewerIdentitySubheading')}</h3>
           <p>
             {emphasise(
               t('legal.privacy.viewerIdentityBody', {
@@ -195,9 +191,7 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold text-text">
-            {t('legal.privacy.logDataSubheading')}
-          </h3>
+          <h3 className="text-lg">{t('legal.privacy.logDataSubheading')}</h3>
           <p>{t('legal.privacy.logDataIntro')}</p>
           <ul className={listClasses}>
             <li>{t('legal.privacy.logDataIp')}</li>
@@ -208,9 +202,7 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold text-text">
-            {t('legal.privacy.patreonSubheading')}
-          </h3>
+          <h3 className="text-lg">{t('legal.privacy.patreonSubheading')}</h3>
           <p>{t('legal.privacy.patreonIntro')}</p>
           <ul className={listClasses}>
             <li>{t('legal.privacy.patreonUserId')}</li>
@@ -239,7 +231,7 @@ export default function PrivacyPolicyPage() {
 
       {/* --- How We Use --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.useHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.useHeading')}</h2>
         <p>{t('legal.privacy.useIntro')}</p>
         <ul className={listClasses}>
           <li>{t('legal.privacy.useAuthenticate')}</li>
@@ -252,10 +244,8 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Storage & Security --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.storageHeading')}</h2>
-        <h3 className="text-lg font-semibold text-text">
-          {t('legal.privacy.storageLocationsSubheading')}
-        </h3>
+        <h2 className="text-2xl">{t('legal.privacy.storageHeading')}</h2>
+        <h3 className="text-lg">{t('legal.privacy.storageLocationsSubheading')}</h3>
         <ul className={listClasses}>
           <li>{t('legal.privacy.storagePostgres')}</li>
           <li>{t('legal.privacy.storageRedis')}</li>
@@ -269,9 +259,7 @@ export default function PrivacyPolicyPage() {
             )}
           </li>
         </ul>
-        <h3 className="text-lg font-semibold text-text">
-          {t('legal.privacy.safeguardsSubheading')}
-        </h3>
+        <h3 className="text-lg">{t('legal.privacy.safeguardsSubheading')}</h3>
         <ul className={listClasses}>
           <li>{t('legal.privacy.safeguardsEncryption')}</li>
           <li>{t('legal.privacy.safeguardsHttps')}</li>
@@ -284,11 +272,9 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Third Parties --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.sharingHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.sharingHeading')}</h2>
 
-        <h3 className="text-lg font-semibold text-text">
-          {t('legal.privacy.platformApisSubheading')}
-        </h3>
+        <h3 className="text-lg">{t('legal.privacy.platformApisSubheading')}</h3>
         <p>{t('legal.privacy.platformApisIntro')}</p>
         <ul className={listClasses}>
           <li>{t('legal.privacy.platformApisTwitch')}</li>
@@ -299,21 +285,21 @@ export default function PrivacyPolicyPage() {
         </ul>
         <p>{t('legal.privacy.platformApisScopes')}</p>
 
-        <h3 className="text-lg font-semibold text-text">{t('legal.privacy.fontsSubheading')}</h3>
+        <h3 className="text-lg">{t('legal.privacy.fontsSubheading')}</h3>
         <p>
           {interpolateElements(t('legal.privacy.fontsBody'), {
             selfHosted: <Emphasis>{t('legal.privacy.fontsSelfHostedEmphasis')}</Emphasis>,
             proxyPath: (
-              <code className="rounded bg-surface-2 px-1 py-0.5 text-xs">{FONT_PROXY_PATH}</code>
+              <code className="border border-white/50 bg-black px-1 py-0.5 text-xs">
+                {FONT_PROXY_PATH}
+              </code>
             ),
             noTransmission: <Emphasis>{t('legal.privacy.fontsNoTransmissionEmphasis')}</Emphasis>,
           })}
         </p>
         <p className={noteClasses}>{t('legal.privacy.fontsLegalBasis')}</p>
 
-        <h3 className="text-lg font-semibold text-text">
-          {t('legal.privacy.frontendResourcesSubheading')}
-        </h3>
+        <h3 className="text-lg">{t('legal.privacy.frontendResourcesSubheading')}</h3>
         <p>
           {emphasise(
             t('legal.privacy.frontendResourcesIntro', {
@@ -330,10 +316,8 @@ export default function PrivacyPolicyPage() {
         </ul>
         <p className={noteClasses}>{t('legal.privacy.frontendResourcesLegalBasis')}</p>
 
-        <h3 className="text-lg font-semibold text-text">
-          {t('legal.privacy.youtubeNoticeSubheading')}
-        </h3>
-        <p className="font-semibold text-text">
+        <h3 className="text-lg">{t('legal.privacy.youtubeNoticeSubheading')}</h3>
+        <p className="font-semibold">
           {interpolateElements(t('legal.privacy.youtubeNoticeBody'), {
             googlePolicy: (
               <a
@@ -349,12 +333,10 @@ export default function PrivacyPolicyPage() {
           })}
         </p>
 
-        <h3 className="text-lg font-semibold text-text">{t('legal.privacy.noSalesSubheading')}</h3>
+        <h3 className="text-lg">{t('legal.privacy.noSalesSubheading')}</h3>
         <p className={noteClasses}>{t('legal.privacy.noSalesBody')}</p>
 
-        <h3 className="text-lg font-semibold text-text">
-          {t('legal.privacy.analyticsSubheading')}
-        </h3>
+        <h3 className="text-lg">{t('legal.privacy.analyticsSubheading')}</h3>
         <p>
           {interpolateElements(t('legal.privacy.analyticsBody'), {
             umami: (
@@ -389,7 +371,7 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Data Retention --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.retentionHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.retentionHeading')}</h2>
         <ul className={listClasses}>
           {labelledRow('legal.privacy.retentionAccount', 'legal.privacy.retentionAccountLabel')}
           {labelledRow('legal.privacy.retentionTokens', 'legal.privacy.retentionTokensLabel')}
@@ -408,7 +390,7 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Your Rights --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.rightsHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.rightsHeading')}</h2>
         <p>{t('legal.privacy.rightsIntro')}</p>
         <ul className={listClasses}>
           {labelledRow('legal.privacy.rightsAccess', 'legal.privacy.rightsAccessLabel')}
@@ -430,7 +412,7 @@ export default function PrivacyPolicyPage() {
           )}
         </p>
         <p className={noteClasses}>{t('legal.privacy.noProfiling')}</p>
-        <p className="font-semibold text-text">
+        <p className="font-semibold">
           {interpolateElements(t('legal.privacy.youtubeRevoke'), {
             googleSettings: (
               <a
@@ -448,7 +430,7 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Cookies & Browser Storage --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.cookiesHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.cookiesHeading')}</h2>
         <p>
           {emphasise(
             t('legal.privacy.cookiesIntro', { emphasis: t('legal.privacy.localStorageEmphasis') }),
@@ -477,20 +459,20 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Children --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.childrenHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.childrenHeading')}</h2>
         <p>{t('legal.privacy.childrenBody')}</p>
       </section>
 
       {/* --- International Transfers --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.transfersHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.transfersHeading')}</h2>
         <p>{t('legal.privacy.transfersBody')}</p>
         <p className={noteClasses}>{t('legal.privacy.transfersLegalBasis')}</p>
       </section>
 
       {/* --- Updates --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.updatesHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.updatesHeading')}</h2>
         <p>
           {interpolateElements(t('legal.privacy.updatesBody'), {
             lastUpdatedLabel: <em>{t('legal.privacy.updatesLastUpdatedEmphasis')}</em>,
@@ -500,7 +482,7 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Open Source --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.openSourceHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.openSourceHeading')}</h2>
         <ul className={listClasses}>
           <li>{t('legal.privacy.openSourceAuditable')}</li>
           <li>{t('legal.privacy.openSourceNoTracking')}</li>
@@ -519,14 +501,12 @@ export default function PrivacyPolicyPage() {
 
       {/* --- Platform-Specific --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">
-          {t('legal.privacy.platformNotesHeading')}
-        </h2>
+        <h2 className="text-2xl">{t('legal.privacy.platformNotesHeading')}</h2>
 
-        <h3 className="text-lg font-semibold text-text">{t('legal.privacy.twitchSubheading')}</h3>
+        <h3 className="text-lg">{t('legal.privacy.twitchSubheading')}</h3>
         <p>{t('legal.privacy.twitchNote')}</p>
 
-        <h3 className="text-lg font-semibold text-text">{t('legal.privacy.youtubeSubheading')}</h3>
+        <h3 className="text-lg">{t('legal.privacy.youtubeSubheading')}</h3>
         <p>
           {interpolateElements(t('legal.privacy.youtubeNote'), {
             googleSettings: (
@@ -542,19 +522,19 @@ export default function PrivacyPolicyPage() {
           })}
         </p>
 
-        <h3 className="text-lg font-semibold text-text">{t('legal.privacy.tiktokSubheading')}</h3>
+        <h3 className="text-lg">{t('legal.privacy.tiktokSubheading')}</h3>
         <p>{t('legal.privacy.tiktokNote')}</p>
 
-        <h3 className="text-lg font-semibold text-text">{t('legal.privacy.kickSubheading')}</h3>
+        <h3 className="text-lg">{t('legal.privacy.kickSubheading')}</h3>
         <p>{t('legal.privacy.kickNote')}</p>
 
-        <h3 className="text-lg font-semibold text-text">{t('legal.privacy.discordSubheading')}</h3>
+        <h3 className="text-lg">{t('legal.privacy.discordSubheading')}</h3>
         <p>{t('legal.privacy.discordNote')}</p>
       </section>
 
       {/* --- Contact --- */}
       <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-text">{t('legal.privacy.contactHeading')}</h2>
+        <h2 className="text-2xl">{t('legal.privacy.contactHeading')}</h2>
         <p>
           {emphasise(
             t('legal.privacy.contactEmailRow', { email: supportEmail }),

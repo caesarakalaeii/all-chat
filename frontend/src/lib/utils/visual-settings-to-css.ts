@@ -75,6 +75,11 @@ export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['kickAccent', '--platform-kick-accent'],
   ['tiktokAccent', '--platform-tiktok-accent'],
   ['discordAccent', '--platform-discord-accent'],
+  ['owncastAccent', '--platform-owncast-accent'],
+  ['goodgameAccent', '--platform-goodgame-accent'],
+  ['picartoAccent', '--platform-picarto-accent'],
+  ['facebookAccent', '--platform-facebook-accent'],
+  ['instagramAccent', '--platform-instagram-accent'],
   // Event visibility
   ['showSuperChat', '--chat-show-super-chat'],
   ['showSubscriptions', '--chat-show-subscriptions'],
@@ -142,6 +147,11 @@ const ACCENT_PLATFORMS: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['youtubeAccent', 'youtube'],
   ['kickAccent', 'kick'],
   ['tiktokAccent', 'tiktok'],
+  ['owncastAccent', 'owncast'],
+  ['goodgameAccent', 'goodgame'],
+  ['picartoAccent', 'picarto'],
+  ['facebookAccent', 'facebook'],
+  ['instagramAccent', 'instagram'],
   ['discordAccent', 'discord'],
 ]
 
@@ -226,6 +236,11 @@ const BUBBLE_TINT_PLATFORMS: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['youtubeBubbleBg', 'youtube'],
   ['kickBubbleBg', 'kick'],
   ['tiktokBubbleBg', 'tiktok'],
+  ['owncastBubbleBg', 'owncast'],
+  ['goodgameBubbleBg', 'goodgame'],
+  ['picartoBubbleBg', 'picarto'],
+  ['facebookBubbleBg', 'facebook'],
+  ['instagramBubbleBg', 'instagram'],
   ['discordBubbleBg', 'discord'],
 ]
 

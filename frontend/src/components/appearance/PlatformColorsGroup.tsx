@@ -22,6 +22,7 @@ import React from 'react'
 import { Button } from '@/components/ui/button'
 import { RotateCcw } from 'lucide-react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { usePlatformAvailable } from '@/lib/platform-availability'
 import { ColorPickerControl } from './ColorPickerControl'
 
 export interface PlatformColorsGroupProps {
@@ -30,20 +31,25 @@ export interface PlatformColorsGroupProps {
 }
 
 const PLATFORMS: Array<{ field: keyof VisualSettings; label: string; brandDefault: string }> = [
-  { field: 'twitchAccent', label: 'Twitch', brandDefault: '#9147FF' },
-  { field: 'youtubeAccent', label: 'YouTube', brandDefault: '#FF0000' },
+  { field: 'twitchAccent', label: 'Twitch', brandDefault: '#9146FF' },
+  { field: 'youtubeAccent', label: 'YouTube', brandDefault: '#FF0033' },
   { field: 'kickAccent', label: 'Kick', brandDefault: '#53FC18' },
   { field: 'tiktokAccent', label: 'TikTok', brandDefault: '#000000' },
+  { field: 'owncastAccent', label: 'Owncast', brandDefault: '#9B7FF5' },
+  { field: 'goodgameAccent', label: 'GoodGame', brandDefault: '#52709C' },
+  { field: 'picartoAccent', label: 'Picarto', brandDefault: '#1AA455' },
+  { field: 'facebookAccent', label: 'Facebook', brandDefault: '#1877F2' },
+  { field: 'instagramAccent', label: 'Instagram', brandDefault: '#E1306C' },
   { field: 'discordAccent', label: 'Discord', brandDefault: '#5865F2' },
 ]
-
 export function PlatformColorsGroup({
   visualSettings,
   onChange,
 }: PlatformColorsGroupProps): React.ReactElement {
+  const isPlatformAvailable = usePlatformAvailable()
   return (
     <div className="space-y-3">
-      {PLATFORMS.map((p) => {
+      {PLATFORMS.filter((p) => isPlatformAvailable(p.field.replace(/Accent$/, ''))).map((p) => {
         const settings = visualSettings as Record<string, string | undefined>
         return (
           <div key={p.field} className="flex items-center gap-1">

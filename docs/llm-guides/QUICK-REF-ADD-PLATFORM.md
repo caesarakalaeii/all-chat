@@ -2,7 +2,7 @@
 
 **Time Estimate**: 6-8 hours | **Difficulty**: ⭐⭐⭐ Moderate
 
-**Goal**: Implement support for a new streaming platform (e.g., Rumble, Facebook Gaming) by creating a new listener service and integrating it into the message processing pipeline.
+**Goal**: Implement support for a new streaming platform (e.g., DLive, Facebook Gaming) by creating a new listener service and integrating it into the message processing pipeline.
 
 ---
 

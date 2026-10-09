@@ -29,6 +29,7 @@ export const dashboard = {
     deactivateExtension: 'Deactivate Extension',
     setAsExtension: 'Set as Extension Overlay',
     deleteLabel: 'Delete {name}',
+    openLabel: 'Open {name}',
     // Two keys rather than a concatenated 's': see the comment in
     // __tests__/dashboard.test.ts. The caller picks by count.
     sourceCountOne: '{count} source',
@@ -125,8 +126,10 @@ export const dashboard = {
     revokeCancel: 'Cancel',
     revokeConfirm: 'Revoke',
     revoking: 'Revoking...',
-    // Toasts. loadOverlaysFailed above is the modal's inline error, not a toast.
+    // loadRequestsFailed doubles as the page's inline error; loadOverlaysFailed
+    // above is the modal's inline error.
     loadRequestsFailed: 'Failed to load share requests',
+    retry: 'Try again',
     // One key for both notification toggles: the call sites were identical.
     notificationUpdateFailed: 'Failed to update notification status',
     acceptedToast: 'Share accepted from {sender}!',
