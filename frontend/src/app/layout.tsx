@@ -36,6 +36,7 @@ import Analytics from '@/components/Analytics'
 import { JsonLd } from '@/components/JsonLd'
 import CookieBanner from '@/components/CookieBanner'
 import ImpersonationBanner from '@/components/ImpersonationBanner'
+import { SiteFooter } from '@/components/SiteFooter'
 import { ToastProvider } from '@/components/ui/toast'
 import { DEFAULT_LOCALE, getTranslations } from '@/lib/i18n'
 
@@ -161,6 +162,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ToastProvider>
           <ImpersonationBanner />
           {children}
+          <SiteFooter />
           <CookieBanner />
         </ToastProvider>
       </body>
