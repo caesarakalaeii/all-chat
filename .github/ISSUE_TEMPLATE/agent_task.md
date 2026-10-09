@@ -115,7 +115,7 @@ Repo-specific traps that have already cost a run:
   `node_modules` it writes.
 - **Quote `[id]` path segments** in shell gates. Unquoted, `[id]` is a glob
   character class and silently matches nothing.
-- **Go builds:** `GOTOOLCHAIN=go1.25.7`. The default go1.26.5 `nodwarf5`
+- **Go builds:** `GOTOOLCHAIN=go1.26.9`. The default go1.26.5 `nodwarf5`
   toolchain mis-loads modules and reports bogus "undefined" errors.
 - **Migrations re-run on every pod start**, so a non-idempotent migration
   crash-loops every fresh pod.

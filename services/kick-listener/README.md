@@ -210,7 +210,7 @@ The `chatroom.id` is used to subscribe to the Pusher channel.
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - PostgreSQL 16+
 - Redis 7+
 - Access to Kick.com API
