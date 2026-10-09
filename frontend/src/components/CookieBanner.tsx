@@ -83,10 +83,15 @@ const PRIDE_COOKIE_FLAGS: readonly (readonly string[])[] = [
 ]
 
 const LANES_ROUTE_PREFIXES = [
+  '/compare',
   '/dashboard',
   '/docs',
   '/legal',
+  '/multistream-chat',
+  '/obs-chat-dock',
+  '/obs-chat-overlay',
   '/settings',
+  '/tiktok-live-chat-overlay',
   '/upgrade',
 ] as const
 

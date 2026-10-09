@@ -33,7 +33,7 @@
 
 // In production: /api/* is proxied to API Gateway by Nginx
 // In development: use NEXT_PUBLIC_API_URL or localhost
-function getApiUrl(): string {
+export function getApiUrl(): string {
   if (typeof window !== 'undefined') {
     // Browser: use same origin (Nginx will proxy /api/* to backend)
     return window.location.origin

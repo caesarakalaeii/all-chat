@@ -18,11 +18,12 @@ Step 4 (lever 1) remains **verified live**, not merely implemented:
 answers is-live with `SignConfig.basePath` pointed at a closed port, so Euler
 demonstrably is not on that path. Opt-in via `TIKTOK_LIVE_TESTS=1`.
 
-Not yet retired: the default signer mode is still `euler`. Walk
-`shadow` (measure) → `self` (cutover, Euler fallback on) →
-`TIKTOK_SELF_SIGN_FALLBACK=false` (retire) per the listener README. The
-connection-rate ceiling and gift enrichment acceptance criteria land with
-that rollout, not with the code.
+Retired in production: the listener runs `TIKTOK_SIGNER_MODE=pure-node` with
+`TIKTOK_SELF_SIGN_FALLBACK=false`, so no TikTok connection has an Euler leg.
+The code default is still `euler`, so a deployment that sets nothing stays on
+Euler; the walk `shadow` (measure) → `self` (cutover, Euler fallback on) →
+`TIKTOK_SELF_SIGN_FALLBACK=false` (retire) in the listener README still
+applies to such a deployment.
 
 > **Update 2026-09-15** (incident follow-up): the ceiling bit us in production
 > before the signing work landed. On 2026-09-14 one tiktok-listener pod held 43

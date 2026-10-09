@@ -236,6 +236,7 @@ const toc = [
   { id: 'what-is-all-chat', labelKey: 'docs.guide.tocWhatIsAllChat' },
   { id: 'getting-started', labelKey: 'docs.guide.tocGettingStarted' },
   { id: '24-7-irl', labelKey: 'docs.guide.tocIrl' },
+  { id: 'tiktok', labelKey: 'docs.guide.tocTiktok' },
   { id: 'monitor', labelKey: 'docs.guide.tocMonitor' },
   { id: 'moderation', labelKey: 'docs.guide.tocModeration' },
   { id: 'engagement', labelKey: 'docs.guide.tocEngagement' },
@@ -264,6 +265,11 @@ const DISCORD_LINK_KEY = 'common.platforms.discord'
 // sample that does not work when pasted. Hoisted out of the JSX so the i18n
 // gate, which cannot tell a <Pre> child from a paragraph, does not have to.
 const PASSIVE_URL_EXAMPLE = `https://allch.at/overlay/<overlay-id>?passive=true`
+
+const DOCK_URL_EXAMPLE = `https://allch.at/overlay/<overlay-id>/view?dock=1`
+
+const TIKTOK_ADR_URL =
+  'https://github.com/caesarakalaeii/all-chat/blob/main/docs/adr/0052-retiring-euler-stream-for-tiktok-signing.md'
 
 const CSS_VARIABLES_EXAMPLE = `:root {
   --chat-font-size: 20px;
@@ -389,6 +395,7 @@ export default function DocsPage() {
                 </li>
                 <li>{t('docs.guide.startDemandDriven')}</li>
               </ol>
+              <p>{t('docs.guide.startMultipleOverlays')}</p>
             </section>
 
             {/* 24/7 & IRL streams */}
@@ -429,6 +436,32 @@ export default function DocsPage() {
               </p>
             </section>
 
+            {/* TikTok */}
+            <section id="tiktok">
+              <h2>{t('docs.guide.tiktokHeading')}</h2>
+              <p>{t('docs.guide.tiktokNoApi')}</p>
+              <p>
+                {interpolateElements(t('docs.guide.tiktokSigner'), {
+                  adr: (
+                    <a
+                      href={TIKTOK_ADR_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2"
+                    >
+                      {t('docs.guide.tiktokAdrLinkText')}
+                    </a>
+                  ),
+                })}
+              </p>
+              <p>{t('docs.guide.tiktokFallback')}</p>
+              <p>
+                {interpolateElements(t('docs.guide.tiktokLimit'), {
+                  limit: <strong>{t('docs.guide.tiktokLimitEmphasis')}</strong>,
+                })}
+              </p>
+            </section>
+
             {/* Chat monitor */}
             <section id="monitor">
               <h2>{t('docs.guide.monitorHeading')}</h2>
@@ -457,6 +490,18 @@ export default function DocsPage() {
                   })}
                 </li>
               </ul>
+              <h3>{t('docs.guide.monitorDockHeading')}</h3>
+              <p>
+                {interpolateElements(t('docs.guide.monitorDockIntro'), {
+                  copyDock: <strong>{t('overlayEditor.page.copyDockUrl')}</strong>,
+                })}
+              </p>
+              <Pre>{DOCK_URL_EXAMPLE}</Pre>
+              <p>
+                {interpolateElements(t('docs.guide.monitorDockSteps'), {
+                  menu: <strong>{t('docs.guide.monitorDockMenu')}</strong>,
+                })}
+              </p>
             </section>
 
             {/* Moderation */}

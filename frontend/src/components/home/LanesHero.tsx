@@ -472,10 +472,13 @@ export function LanesHero({
         {/* Headline chips over the lanes. */}
         <div className="lanes-headline">
           <div className="warkicker">{t('marketing.lanes.kicker')}</div>
+          {/* The display lines carry no search terms, so the category line
+              sits inside the h1: the heading itself says what this is. */}
           <h1>
             {t('marketing.lanes.titleTop')}
             <br />
-            {t('marketing.lanes.titleBottom')}
+            {t('marketing.lanes.titleBottom')}{' '}
+            <span className="lanes-category">{t('marketing.lanes.titleCategory')}</span>
           </h1>
           <div className="lanes-total">
             <b>{formatNumber(totalCount)}</b>

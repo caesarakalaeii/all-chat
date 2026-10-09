@@ -45,7 +45,13 @@ import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toastManager } from '@/lib/toast'
 import { useTranslations } from '@/lib/i18n'
@@ -86,6 +92,7 @@ const TOOL_NAMESPACES = [
   'dashboard',
   'docs',
   'errors',
+  'guides',
   'legal',
   'maintenanceBanner',
   'marketing',
@@ -96,7 +103,6 @@ const TOOL_NAMESPACES = [
   'settings',
   'viewerOverlay',
 ] as const
-
 
 // apiErrorDetail appends the server's own error text when present: the
 // translate page's catch blocks used to swallow it, so every 400

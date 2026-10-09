@@ -986,6 +986,18 @@ span.font-semibold.text-sm.username-gradient {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
+/* The category line inside the h1: body face at caption size, so the heading
+ * carries the search terms without competing with the two display lines. */
+.lanes-headline h1 .lanes-category {
+  display: block;
+  max-width: 44ch;
+  margin: 10px auto 6px;
+  font-family: var(--font-space-mono), monospace;
+  font-size: clamp(11px, 1.1vw, 14px);
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+}
 .warkicker {
   background: var(--lanes-youtube);
   color: #0a0a0e;
