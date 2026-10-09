@@ -203,8 +203,8 @@ finding independently verified, surfaced 7 defects — all fixed and regression-
 1. Merge this all-chat PR → CI builds `ghcr.io/caesarakalaeii/allchat-support-bot:main`.
 2. Add the `SUPPORT_BOT_LLM_API_KEY` secret (the vLLM access key, sent as
    `Authorization: Bearer <key>`) and confirm the vLLM service is reachable in-cluster at
-   the configured `LOCAL_LLM_BASE_URL`, with `LOCAL_LLM_MODEL` matching one of its
-   `--served-model-name` values.
+   the configured `LOCAL_LLM_BASE_URL`; the model id is resolved at boot from its
+   `GET /v1/models`, with `LOCAL_LLM_MODEL` only an optional pin.
 3. Merge the caesar-deployment PR → ArgoCD syncs the new env/probes; Keel rolls the image.
 4. Verify: `/support` answers as support (redacted), an allow-listed maintainer gets admin
    tools, and `github_write` opens a PR (never a push to `main`).
@@ -212,7 +212,8 @@ finding independently verified, surfaced 7 defects — all fixed and regression-
 ## Residual risks / follow-ups
 
 - **vLLM endpoint**: `LOCAL_LLM_BASE_URL=https://coding-gateway.tools.sipgate.net`,
-  `LOCAL_LLM_MODEL=zai-org/GLM-5.3-verda`. The access key is the sealed
+  `LOCAL_LLM_MODEL=XiaomiMiMo/MiMo-V2.6-Pro-verda` (fallback pin; the model in use is
+  discovered at boot). The access key is the sealed
   `SUPPORT_BOT_LLM_API_KEY` (caesar-deployment: `support-bot-llm-api-key`).
 - **`push_file` content is not auto-redacted** (redacting code risks corrupting it); it relies
   on admin trust + PR review + GitHub secret scanning. Human text (titles/bodies/comments) is

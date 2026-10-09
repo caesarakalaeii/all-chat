@@ -391,6 +391,11 @@ export class LiveStreamPoller {
       const state = this.backoffManager.getState(username);
       
       if (!state) continue;
+      // A budget park outlasts the 5-minute threshold by design, and a room
+      // parked after an offline streak keeps that streak's max backoff, so it
+      // looks stuck. Forcing it re-dials into the same refusal (prod
+      // 2026-10-08: a 39-minute park was cut after 5 minutes).
+      if (this.backoffManager.budgetParkRemainingMs(username) > 0) continue;
 
       // Check if stuck: max backoff (180000ms = 3min) for >5 minutes
       const isAtMaxBackoff = state.currentBackoffMs >= 180000;

@@ -71,6 +71,15 @@ export const common = {
     instagram: 'Instagram',
     discord: 'Discord',
   },
+  // Overlay kinds (ADR-0064), keyed by the overlay_type wire value. Read by
+  // the dashboard's kind badge, both create surfaces and the render page's
+  // unsupported-kind placeholder — three surfaces, none of which owns the copy.
+  overlayKinds: {
+    chat: 'Chat',
+    alerts: 'Alerts',
+    goal: 'Goal',
+    list: 'List',
+  },
   // The Patreon connect flow. /settings/premium and /settings/viewer/premium
   // render these byte-identically; the strings that name which premium tier is
   // meant stay in each page's own namespace.
