@@ -215,7 +215,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 
 ### Tech Stack
 
-- **Backend**: Go 1.25+, Gin framework, pgx/v5 (PostgreSQL), go-redis/v9, Zap logging
+- **Backend**: Go 1.26+, Gin framework, pgx/v5 (PostgreSQL), go-redis/v9, Zap logging
 - **Frontend**: React 19, Next.js 16 (App Router), TypeScript, Tailwind CSS, Zustand
 - **Database**: PostgreSQL 16
 - **Messaging**: Redis 7 (Streams + Pub/Sub)
