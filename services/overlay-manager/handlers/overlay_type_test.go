@@ -52,9 +52,9 @@ func TestHandleCreateOverlay_OverlayType(t *testing.T) {
 	}{
 		{name: "absent resolves to chat", requestType: nil, wantType: "chat", wantStatusCode: http.StatusCreated},
 		{name: "chat", requestType: "chat", wantType: "chat", wantStatusCode: http.StatusCreated},
-		{name: "alerts", requestType: "alerts", wantType: "alerts", wantStatusCode: http.StatusCreated},
-		{name: "goal", requestType: "goal", wantType: "goal", wantStatusCode: http.StatusCreated},
-		{name: "list", requestType: "list", wantType: "list", wantStatusCode: http.StatusCreated},
+		{name: "alerts is not available yet", requestType: "alerts", wantStatusCode: http.StatusForbidden},
+		{name: "goal is not available yet", requestType: "goal", wantStatusCode: http.StatusForbidden},
+		{name: "list is not available yet", requestType: "list", wantStatusCode: http.StatusForbidden},
 		{
 			name:           "unknown type is rejected before the DB is touched",
 			requestType:    "webcam",
