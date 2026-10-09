@@ -38,6 +38,7 @@ export interface BackoffState {
   nextCheckTime: number;
   currentBackoffMs: number;
   lastSeenLive?: number; // Timestamp of last successful connection
+  budgetParkedUntil?: number; // End of the latest sign-budget park; see budgetParkRemainingMs
 }
 
 /**
@@ -147,12 +148,12 @@ export class BackoffManager {
    * refused again, and spin the failure counter that fired the
    * 2026-09-23 budget-exhausted alert flap.
    *
-   * The park rides nextCheckTime alone: recoverStuckChannels (poller.ts)
-   * force-resets any state whose currentBackoffMs is at max with a
-   * 5-minute-old lastCheckTime, and currentBackoffMs is derived state the
-   * next record* call recomputes anyway. consecutiveErrors is likewise
-   * untouched — a budget refusal is not the room's fault, and the next
-   * genuine error resumes the error curve where it left off.
+   * The park rides nextCheckTime; currentBackoffMs is derived state the
+   * next record* call recomputes anyway, and recoverStuckChannels
+   * (poller.ts) skips a room while budgetParkRemainingMs is positive.
+   * consecutiveErrors is untouched: a budget refusal is not the room's
+   * fault, and the next genuine error resumes the error curve where it
+   * left off.
    *
    * @param username TikTok username
    * @param retryAfterMs ms until the window slides, from the refusal error
@@ -162,6 +163,7 @@ export class BackoffManager {
     const parkMs = Math.max(0, retryAfterMs);
     state.lastCheckTime = Date.now();
     state.nextCheckTime = Date.now() + parkMs;
+    state.budgetParkedUntil = state.nextCheckTime;
 
     this.logger.warn('Sign budget refused - parking until window slides', {
       username,
@@ -252,6 +254,18 @@ export class BackoffManager {
     }
 
     return Math.max(0, state.nextCheckTime - Date.now());
+  }
+
+  /**
+   * ms left on this room's sign-budget park, 0 when none. The budget is
+   * this pod's, so the park must outlive a rebalance release: the teardown
+   * drops the backoff state, and without carrying the park into the
+   * re-claim hold this pod re-dials the room ~40s later and is refused
+   * again (prod 2026-10-08: one room refused every ~75s for 15 minutes).
+   */
+  budgetParkRemainingMs(username: string): number {
+    const until = this.backoffStates.get(username)?.budgetParkedUntil;
+    return until === undefined ? 0 : Math.max(0, until - Date.now());
   }
 
   /**

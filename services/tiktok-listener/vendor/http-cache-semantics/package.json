@@ -1,0 +1,14 @@
+{
+    "name": "http-cache-semantics",
+    "version": "4.2.1",
+    "description": "Parses Cache-Control and other headers. Vendored copy of upstream 4.2.0; see README.md for why it lives here and when to delete it",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/kornelski/http-cache-semantics.git"
+    },
+    "main": "index.js",
+    "types": "index.js",
+    "license": "BSD-2-Clause",
+    "author": "Kornel Lesiński <npms2@geekhood.net> (https://kornel.ski/)",
+    "private": true
+}

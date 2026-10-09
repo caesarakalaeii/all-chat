@@ -60,6 +60,8 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 		Name        string `json:"name" binding:"required"`
 		Description string `json:"description"`
 		IsActive    *bool  `json:"is_active"`
+		// One of models.OverlayType* (ADR-0064). Absent means chat.
+		OverlayType string `json:"overlay_type"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -80,6 +82,7 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 		Name:        req.Name,
 		Description: req.Description,
 		IsActive:    isActive,
+		OverlayType: req.OverlayType,
 	}
 
 	// Validate early — catches input errors cheaply before hitting the DB.
@@ -169,10 +172,10 @@ func (h *OverlayHandler) HandleUpdateOverlay(c *gin.Context) {
 
 	// Bind update request
 	var req struct {
-		Name                *string `json:"name"`
-		Description         *string `json:"description"`
-		IsActive            *bool   `json:"is_active"`
-		IsPublicForViewers  *bool   `json:"is_public_for_viewers"`
+		Name               *string `json:"name"`
+		Description        *string `json:"description"`
+		IsActive           *bool   `json:"is_active"`
+		IsPublicForViewers *bool   `json:"is_public_for_viewers"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -291,6 +294,7 @@ func (h *OverlayHandler) HandleCloneOverlay(c *gin.Context) {
 		Description:        source.Description,
 		IsActive:           source.IsActive,
 		IsPublicForViewers: false,
+		OverlayType:        source.OverlayType,
 	}
 
 	if err := h.repo.Create(c.Request.Context(), newOverlay); err != nil {

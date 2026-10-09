@@ -307,7 +307,7 @@ Published to Redis Streams (`chat:raw`) with platform = "youtube":
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - PostgreSQL 16 (with migrations applied)
 - Redis 7
 - YouTube OAuth credentials
