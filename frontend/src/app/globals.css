@@ -279,16 +279,6 @@
   }
 }
 
-/* Landing theme-carousel slide fade — document scope, same rationale as ring-spin */
-@keyframes theme-fade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 /* ============================================================
    MESSAGE ENTRY ANIMATIONS — how a new chat message appears on the overlay.
    Document scope (same rationale as ring-spin) and BEFORE the reduced-motion
@@ -1045,6 +1035,7 @@ span.font-semibold.text-sm.username-gradient {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
+  padding: 0 24px;
   background: #000;
   color: #f4f3ef;
 }
@@ -1155,6 +1146,9 @@ span.font-semibold.text-sm.username-gradient {
   flex-direction: column;
   justify-content: flex-end;
   gap: 8px;
+  /* New messages push the older ones up. Without this, the browser picks a
+   * message as the scroll anchor and scrolls the whole page to follow it. */
+  overflow-anchor: none;
 }
 .msg {
   display: flex;
@@ -1256,17 +1250,32 @@ span.font-semibold.text-sm.username-gradient {
   color: var(--lanes-kick);
 }
 
-/* Numbers rows. */
+/* Numbers rows. Captions sit 8px under their figure while rows and grid
+ * cells are 32px+ apart, so a caption always reads as belonging to the
+ * number above it rather than the one below. */
+.numbers-section h2 {
+  font-family: var(--font-archivo-black), sans-serif;
+  font-size: clamp(26px, 4vw, 52px);
+  line-height: 1.02;
+  margin-top: 28px;
+}
 .numbers {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
+  gap: 32px 24px;
+  margin-top: 44px;
 }
 .numbers.five {
   grid-template-columns: repeat(5, 1fr);
 }
 .numbers.five .figure {
   font-size: clamp(20px, 2.7vw, 40px);
+}
+/* The all-time row: a rule and air separate it from the weekly row. */
+.numbers + .numbers {
+  margin-top: 56px;
+  padding-top: 44px;
+  border-top: 1px solid rgba(244, 243, 239, 0.28);
 }
 .figure {
   font-family: var(--font-archivo-black), sans-serif;
@@ -1276,7 +1285,7 @@ span.font-semibold.text-sm.username-gradient {
   font-variant-numeric: tabular-nums;
 }
 .figure-caption {
-  margin-top: 10px;
+  margin-top: 8px;
   font-size: 11px;
   letter-spacing: 0.2em;
   color: rgba(244, 243, 239, 0.5);
