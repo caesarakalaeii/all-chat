@@ -62,8 +62,8 @@ func (r *OverlayRepository) Create(ctx context.Context, overlay *models.Overlay)
 	}
 
 	query := `
-		INSERT INTO overlays (id, user_id, name, description, is_active, is_public_for_viewers, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+		INSERT INTO overlays (id, user_id, name, description, is_active, is_public_for_viewers, overlay_type, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
 		RETURNING created_at, updated_at
 	`
 
@@ -74,6 +74,7 @@ func (r *OverlayRepository) Create(ctx context.Context, overlay *models.Overlay)
 		overlay.Description,
 		overlay.IsActive,
 		overlay.IsPublicForViewers,
+		overlay.OverlayType,
 	).Scan(&overlay.CreatedAt, &overlay.UpdatedAt)
 
 	if err != nil {
@@ -86,7 +87,7 @@ func (r *OverlayRepository) Create(ctx context.Context, overlay *models.Overlay)
 // GetByID retrieves an overlay by ID
 func (r *OverlayRepository) GetByID(ctx context.Context, id string) (*models.Overlay, error) {
 	query := `
-		SELECT id, user_id, name, description, is_active, is_public_for_viewers, created_at, updated_at
+		SELECT id, user_id, name, description, is_active, is_public_for_viewers, overlay_type, created_at, updated_at
 		FROM overlays
 		WHERE id = $1
 	`
@@ -99,6 +100,7 @@ func (r *OverlayRepository) GetByID(ctx context.Context, id string) (*models.Ove
 		&overlay.Description,
 		&overlay.IsActive,
 		&overlay.IsPublicForViewers,
+		&overlay.OverlayType,
 		&overlay.CreatedAt,
 		&overlay.UpdatedAt,
 	)
@@ -116,7 +118,7 @@ func (r *OverlayRepository) GetByID(ctx context.Context, id string) (*models.Ove
 // GetByIDAndUserID retrieves an overlay by ID and user ID (authorization check)
 func (r *OverlayRepository) GetByIDAndUserID(ctx context.Context, id, userID string) (*models.Overlay, error) {
 	query := `
-		SELECT id, user_id, name, description, is_active, is_public_for_viewers, created_at, updated_at
+		SELECT id, user_id, name, description, is_active, is_public_for_viewers, overlay_type, created_at, updated_at
 		FROM overlays
 		WHERE id = $1 AND user_id = $2
 	`
@@ -129,6 +131,7 @@ func (r *OverlayRepository) GetByIDAndUserID(ctx context.Context, id, userID str
 		&overlay.Description,
 		&overlay.IsActive,
 		&overlay.IsPublicForViewers,
+		&overlay.OverlayType,
 		&overlay.CreatedAt,
 		&overlay.UpdatedAt,
 	)
@@ -146,7 +149,7 @@ func (r *OverlayRepository) GetByIDAndUserID(ctx context.Context, id, userID str
 // ListByUserID retrieves all overlays for a user
 func (r *OverlayRepository) ListByUserID(ctx context.Context, userID string) ([]*models.Overlay, error) {
 	query := `
-		SELECT id, user_id, name, description, is_active, is_public_for_viewers, created_at, updated_at
+		SELECT id, user_id, name, description, is_active, is_public_for_viewers, overlay_type, created_at, updated_at
 		FROM overlays
 		WHERE user_id = $1
 		ORDER BY created_at DESC
@@ -168,6 +171,7 @@ func (r *OverlayRepository) ListByUserID(ctx context.Context, userID string) ([]
 			&overlay.Description,
 			&overlay.IsActive,
 			&overlay.IsPublicForViewers,
+			&overlay.OverlayType,
 			&overlay.CreatedAt,
 			&overlay.UpdatedAt,
 		)
@@ -193,8 +197,8 @@ func (r *OverlayRepository) Update(ctx context.Context, overlay *models.Overlay)
 
 	query := `
 		UPDATE overlays
-		SET name = $1, description = $2, is_active = $3, is_public_for_viewers = $4, updated_at = NOW()
-		WHERE id = $5
+		SET name = $1, description = $2, is_active = $3, is_public_for_viewers = $4, overlay_type = $5, updated_at = NOW()
+		WHERE id = $6
 		RETURNING updated_at
 	`
 
@@ -203,6 +207,7 @@ func (r *OverlayRepository) Update(ctx context.Context, overlay *models.Overlay)
 		overlay.Description,
 		overlay.IsActive,
 		overlay.IsPublicForViewers,
+		overlay.OverlayType,
 		overlay.ID,
 	).Scan(&overlay.UpdatedAt)
 
@@ -250,7 +255,7 @@ func (r *OverlayRepository) Delete(ctx context.Context, id string) error {
 // GetAllOverlays returns all overlays (admin only)
 func (r *OverlayRepository) GetAllOverlays(ctx context.Context) ([]*models.Overlay, error) {
 	query := `
-		SELECT id, user_id, name, created_at, updated_at
+		SELECT id, user_id, name, overlay_type, created_at, updated_at
 		FROM overlays
 		ORDER BY created_at DESC
 	`
@@ -264,7 +269,7 @@ func (r *OverlayRepository) GetAllOverlays(ctx context.Context) ([]*models.Overl
 	var overlays []*models.Overlay
 	for rows.Next() {
 		var overlay models.Overlay
-		if err := rows.Scan(&overlay.ID, &overlay.UserID, &overlay.Name, &overlay.CreatedAt, &overlay.UpdatedAt); err != nil {
+		if err := rows.Scan(&overlay.ID, &overlay.UserID, &overlay.Name, &overlay.OverlayType, &overlay.CreatedAt, &overlay.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan overlay: %w", err)
 		}
 		overlays = append(overlays, &overlay)
@@ -291,7 +296,7 @@ type OverlayWithSourceCount struct {
 // ListByOverlayID per overlay just to count rows.
 func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) ([]*OverlayWithSourceCount, error) {
 	query := `
-		SELECT o.id, o.user_id, o.name, o.created_at, o.updated_at, COUNT(s.id) AS sources_count,
+		SELECT o.id, o.user_id, o.name, o.overlay_type, o.created_at, o.updated_at, COUNT(s.id) AS sources_count,
 		       u.username, u.display_name
 		FROM overlays o
 		LEFT JOIN overlay_chat_sources s ON s.overlay_id = o.id
@@ -310,7 +315,7 @@ func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) (
 	for rows.Next() {
 		var o OverlayWithSourceCount
 		var username, displayName sql.NullString
-		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount, &username, &displayName); err != nil {
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.OverlayType, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount, &username, &displayName); err != nil {
 			return nil, fmt.Errorf("failed to scan overlay: %w", err)
 		}
 		o.OwnerUsername = username.String
@@ -329,7 +334,7 @@ func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) (
 // counts in one aggregated query, replacing a per-overlay ListByOverlayID loop.
 func (r *OverlayRepository) ListByUserIDWithSourceCount(ctx context.Context, userID string) ([]*OverlayWithSourceCount, error) {
 	query := `
-		SELECT o.id, o.user_id, o.name, o.created_at, o.updated_at, COUNT(s.id) AS sources_count,
+		SELECT o.id, o.user_id, o.name, o.overlay_type, o.created_at, o.updated_at, COUNT(s.id) AS sources_count,
 		       u.username, u.display_name
 		FROM overlays o
 		LEFT JOIN overlay_chat_sources s ON s.overlay_id = o.id
@@ -349,7 +354,7 @@ func (r *OverlayRepository) ListByUserIDWithSourceCount(ctx context.Context, use
 	for rows.Next() {
 		var o OverlayWithSourceCount
 		var username, displayName sql.NullString
-		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount, &username, &displayName); err != nil {
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.OverlayType, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount, &username, &displayName); err != nil {
 			return nil, fmt.Errorf("failed to scan overlay: %w", err)
 		}
 		o.OwnerUsername = username.String

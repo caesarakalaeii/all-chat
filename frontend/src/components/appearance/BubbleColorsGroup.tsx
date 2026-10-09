@@ -46,6 +46,7 @@ import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { useTranslations } from '@/lib/i18n'
 import { emphasise } from '@/lib/i18n/emphasise'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { usePlatformAvailable } from '@/lib/platform-availability'
 import { MAX_BUBBLE_PALETTE } from '@/lib/utils/visual-settings-to-css'
 import { ColorPickerControl } from './ColorPickerControl'
 import { SliderControl } from './SliderControl'
@@ -96,6 +97,7 @@ export function BubbleColorsGroup({
   locked = false,
 }: BubbleColorsGroupProps): React.ReactElement {
   const t = useTranslations()
+  const isPlatformAvailable = usePlatformAvailable()
   const palette = visualSettings.bubblePalette ?? []
 
   // Always write the whole list back: the setting is one array, and an entry's
@@ -195,7 +197,7 @@ export function BubbleColorsGroup({
               {t('overlayEditor.bubbleColors.perPlatformBody')}
             </p>
           </div>
-          {PLATFORMS.map((platform) => {
+          {PLATFORMS.filter((p) => isPlatformAvailable(p.platform)).map((platform) => {
             const current = visualSettings[platform.field]
             const platformName = t(`common.platforms.${platform.platform}`)
             return (

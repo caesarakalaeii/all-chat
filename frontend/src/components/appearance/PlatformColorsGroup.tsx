@@ -22,6 +22,7 @@ import React from 'react'
 import { Button } from '@/components/ui/button'
 import { RotateCcw } from 'lucide-react'
 import type { VisualSettings } from '@/lib/types/visual-settings'
+import { usePlatformAvailable } from '@/lib/platform-availability'
 import { ColorPickerControl } from './ColorPickerControl'
 
 export interface PlatformColorsGroupProps {
@@ -45,9 +46,10 @@ export function PlatformColorsGroup({
   visualSettings,
   onChange,
 }: PlatformColorsGroupProps): React.ReactElement {
+  const isPlatformAvailable = usePlatformAvailable()
   return (
     <div className="space-y-3">
-      {PLATFORMS.map((p) => {
+      {PLATFORMS.filter((p) => isPlatformAvailable(p.field.replace(/Accent$/, ''))).map((p) => {
         const settings = visualSettings as Record<string, string | undefined>
         return (
           <div key={p.field} className="flex items-center gap-1">

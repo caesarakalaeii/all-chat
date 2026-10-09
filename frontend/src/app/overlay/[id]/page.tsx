@@ -85,6 +85,8 @@ import type { SoundPlayer, SoundSettings } from '@/lib/utils/soundPlayer'
 import { createTTSPlayer } from '@/lib/utils/ttsPlayer'
 import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
 import { messageExpiry, nextFadeDelayMs } from '@/lib/utils/messageFade'
+import { resolveOverlayKind } from '@/lib/utils/overlayKind'
+import { UnsupportedKindPlaceholder } from '@/components/overlays/UnsupportedKindPlaceholder'
 
 // Fonts are proxied through /font-proxy/css so end-user IPs never reach Google
 // (DSGVO / "Google Fonts Urteil" LG München 2022-01-20, Az. 3 O 17493/20).
@@ -868,6 +870,19 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         {platforms.join('+')}
       </span>
     )
+  }
+
+  // Kind dispatch (ADR-0064): the render route is unauthenticated and the
+  // public config is its only source of truth about the overlay. Chat — and
+  // the absent value every pre-column overlay carries — renders the chat feed
+  // exactly as before; the three new kinds get a placeholder until their own
+  // renderer issues land. This sits AFTER the last hook on purpose: React
+  // requires a stable hook count across renders, and the kind can flip
+  // mid-session (first render sees no config, the 30s refresh delivers one).
+  // The effects above then run harmlessly against state nothing renders.
+  const kind = resolveOverlayKind(config?.overlay_type)
+  if (kind !== 'chat') {
+    return <UnsupportedKindPlaceholder kind={kind} />
   }
 
   return (

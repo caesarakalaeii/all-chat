@@ -30,6 +30,11 @@ vendor/
 # COPYs them — see ADR-0052.
 !services/tiktok-signer/vendor/
 !services/tiktok-signer/vendor/**
+# Exception: tiktok-listener vendors a patched http-cache-semantics (BSD-2-Clause)
+# because GHSA-ch52-4w7c-c8xp has no fixed release to upgrade to; see
+# services/tiktok-listener/vendor/http-cache-semantics/README.md.
+!services/tiktok-listener/vendor/
+!services/tiktok-listener/vendor/**
 
 # Build artifacts and binaries
 # LSP and build cache directories

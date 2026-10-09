@@ -99,10 +99,11 @@ UA, viewport and `navigator.platform` to it, and `/v1/identity` reports it
 for the listener to pin its connector presets to.
 
 `capturedAt` on a session lease stamps the capture of the served `wsUrl`
-(a kept wsUrl keeps its original stamp), so a consumer's freshness budget
-keys on the URL's true age. The session lease is the credential source for
-the pure-Node delivery tier the listener builds next (its mode value and
-tier table land with that change).
+(a kept wsUrl keeps its original stamp), so it reports the URL's true age.
+A warm tab serves the same URL and stamp for hours, so a consumer must not
+key its lease reuse window on it: every lease would be stale on arrival. The
+listener's `pure-node` signer (`TIKTOK_SIGNER_MODE=pure-node`) counts its
+10-minute reuse window from its own fetch instead.
 
 
 ## Scripts

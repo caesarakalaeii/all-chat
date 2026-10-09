@@ -26,6 +26,9 @@ import type { VisualSettings } from './visual-settings'
  * Includes types for overlays, configurations, and chat sources.
  */
 
+/** The four overlay kinds (ADR-0064), the value of `overlays.overlay_type`. */
+export type OverlayType = 'chat' | 'alerts' | 'goal' | 'list'
+
 export interface Overlay {
   id: string
   user_id: string
@@ -33,6 +36,8 @@ export interface Overlay {
   description?: string
   is_active: boolean
   is_public_for_viewers: boolean
+  /** Which kind of overlay this is. Absent on overlays created before the column existed. */
+  overlay_type?: OverlayType
   created_at: string
   updated_at: string
 }
@@ -64,6 +69,12 @@ export interface OverlayConfig {
    * Absent on the unauthenticated public overlay-config route.
    */
   bubble_colors_locked?: boolean
+  /**
+   * Which kind of overlay this config belongs to (ADR-0064), carried alongside
+   * the flattened config so the editor can route its settings by kind without
+   * a second request. Resolved per request by overlay-manager, never persisted.
+   */
+  overlay_type?: OverlayType
   created_at: string
   updated_at: string
 }
@@ -88,6 +99,11 @@ export interface PublicSourceStatus {
  * `ConfigHandler.HandleGetPublicConfig` in overlay-manager.
  */
 export interface PublicOverlayConfig {
+  /**
+   * Which kind of overlay this is (ADR-0064) — the render page's only way to
+   * route by kind, since it is unauthenticated and reads nothing else.
+   */
+  overlay_type?: OverlayType
   display_settings?: DisplaySettings
   filter_settings?: FilterSettings
   custom_css?: string
@@ -277,6 +293,8 @@ export interface DiscordSourceConfig {
 export interface CreateOverlayRequest {
   name: string
   description?: string
+  /** Which kind to create (ADR-0064). Absent means chat. */
+  overlay_type?: OverlayType
 }
 
 export interface UpdateOverlayRequest {

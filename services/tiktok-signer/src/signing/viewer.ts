@@ -1241,8 +1241,8 @@ export interface SessionLease {
   /** The lane the capture rode ("" = direct): the WS handshake must egress
    * via the same proxy or TikTok rejects it. */
   proxyHost: string;
-  /** When the served wsUrl was captured — the freshness stamp the
-   * listener's connect budget keys on. */
+  /** When the served wsUrl was captured: the URL's age, not a reuse
+   * deadline (a warm tab serves the same stamp for hours). */
   capturedAt: number;
 }
 
