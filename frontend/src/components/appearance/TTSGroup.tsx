@@ -32,6 +32,7 @@ import { useBrowserVoices } from '@/lib/hooks/useBrowserVoices'
 import { formatNumber, useTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import type { DisplaySettings } from '@/lib/types/overlay'
+import { usePlatformAvailable } from '@/lib/platform-availability'
 
 /**
  * TTSGroup — the Text-to-Speech settings group under the AppearancePanel.
@@ -163,10 +164,11 @@ interface PlatformChipRowProps {
 
 function PlatformChipRow({ platforms, onToggle }: PlatformChipRowProps): React.ReactElement {
   const t = useTranslations()
+  const isPlatformAvailable = usePlatformAvailable()
 
   return (
     <div className="flex flex-wrap gap-2">
-      {ALL_PLATFORMS.map((p) => {
+      {ALL_PLATFORMS.filter(isPlatformAvailable).map((p) => {
         const active = platforms.includes(p)
         return (
           <button
