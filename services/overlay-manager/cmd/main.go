@@ -40,6 +40,7 @@ import (
 	"github.com/caesar/all-chat/shared/middleware"
 	sharedRedis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/tracing"
+	"github.com/caesar/all-chat/shared/youtubetoken"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
@@ -259,6 +260,11 @@ func main() {
 	youtubeResolver := youtube.NewResolver(youtubeAPIKey, youtubeQuotaClient, log)
 	youtubeHandler := handlers.NewYouTubeHandler(youtubeResolver, log)
 	sourcesHandler.SetYouTubeVideoResolver(youtubeResolver)
+	// The anchor only reads youtube_oauth_tokens and never refreshes, so no OAuth client credentials.
+	sourcesHandler.SetYouTubeOfficialAPI(
+		premiumKeyGate{gates: gateCache, db: dbPool, key: featuregates.GateYouTubeOfficialAPI},
+		youtubetoken.NewYouTubeSource(dbPool, tokenCipher, "", ""),
+	)
 
 	// Setup Gin router
 	if config.GinMode == "release" {
