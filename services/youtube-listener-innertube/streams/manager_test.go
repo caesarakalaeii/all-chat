@@ -18,12 +18,22 @@ package streams
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sort"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
+	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -490,4 +500,332 @@ func TestManager_DiscoveryLoop_ExitsWhenReservationLost(t *testing.T) {
 		"the orphan must not touch the current owner's reservation")
 	assert.Error(t, ctx.Err(),
 		"the orphan must cancel its own context so its cross-platform subscriber shuts down")
+}
+
+// fakeStreamDiscovery records every call in order so the tests can assert the
+// pin is tried before the channel browse. A successful GetInitialContinuation
+// returns an empty token: the started poller then idles in its own backoff
+// instead of calling YouTube.
+type fakeStreamDiscovery struct {
+	mu        sync.Mutex
+	calls     []string
+	liveVideo string
+	notLive   map[string]bool
+	onCall    func(call string)
+}
+
+func (f *fakeStreamDiscovery) record(call string) {
+	f.mu.Lock()
+	f.calls = append(f.calls, call)
+	hook := f.onCall
+	f.mu.Unlock()
+	if hook != nil {
+		hook(call)
+	}
+}
+
+func (f *fakeStreamDiscovery) Calls() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.calls...)
+}
+
+func (f *fakeStreamDiscovery) setNotLive(videoID string, notLive bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.notLive[videoID] = notLive
+}
+
+func (f *fakeStreamDiscovery) DiscoverLiveStream(_ context.Context, _, _, _ string) (string, error) {
+	f.record("browse")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.liveVideo == "" {
+		return "", errors.New("channel offline")
+	}
+	return f.liveVideo, nil
+}
+
+func (f *fakeStreamDiscovery) DiscoverAllLiveStreams(_ context.Context, _, _ string) ([]string, error) {
+	f.record("browse-all")
+	return nil, errors.New("channel offline")
+}
+
+func (f *fakeStreamDiscovery) GetInitialContinuation(_ context.Context, videoID, _ string) (string, string, error) {
+	f.record("continuation:" + videoID)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.notLive[videoID] {
+		return "", "", errors.New("no live chat for video")
+	}
+	return "", "", nil
+}
+
+type fakeSourceManager struct {
+	mu      sync.Mutex
+	sources []*sourcemanager.ActiveSource
+}
+
+func (f *fakeSourceManager) set(sources ...*sourcemanager.ActiveSource) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sources = sources
+}
+
+func newFakeSourceManager(t *testing.T) (*fakeSourceManager, *sourcemanager.Client) {
+	t.Helper()
+	f := &fakeSourceManager{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/sources" {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"sources": f.sources})
+			return
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+	client, err := sourcemanager.NewClient(srv.URL, sourcemanager.NewStaticTokenSource("test"))
+	require.NoError(t, err)
+	return f, client
+}
+
+func newPinTestManager(t *testing.T, smClient *sourcemanager.Client) (*Manager, *fakeStreamDiscovery) {
+	t.Helper()
+	server := miniredis.RunT(t)
+	// The client is deliberately never closed: a discovery that starts a poller
+	// keeps its cross-platform subscription for the process lifetime (see
+	// subscribeToPlatformEvents), and closing the client under that goroutine
+	// makes it read a nil message.
+	rdb := redis.NewClient(&redis.Options{Addr: server.Addr()})
+
+	logger := zap.NewNop()
+	m := NewManager(nil, smClient, NewRepository(rdb, logger), nil, nil, nil, rdb, nil, logger, nil, nil, nil)
+	fake := &fakeStreamDiscovery{notLive: make(map[string]bool)}
+	m.discovery = fake
+	m.jitter = func() time.Duration { return 0 }
+	t.Cleanup(func() { stopEverything(m) })
+	return m, fake
+}
+
+func stopEverything(m *Manager) {
+	m.mu.Lock()
+	pollers := m.pollers
+	m.pollers = make(map[string]*poller.Poller)
+	m.activeStreams = make(map[string]*Stream)
+	for ch, state := range m.discovering {
+		state.CancelFunc()
+		delete(m.discovering, ch)
+	}
+	m.mu.Unlock()
+	for _, p := range pollers {
+		p.Stop()
+	}
+}
+
+func reserveDiscovery(t *testing.T, m *Manager, channelID, pin string) (*DiscoveryState, context.Context, context.CancelFunc) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	state := &DiscoveryState{
+		ChannelID:        channelID,
+		OverlayID:        "overlay-1",
+		PinnedVideoID:    pin,
+		StartedAt:        time.Now(),
+		CancelFunc:       cancel,
+		ResetBackoffChan: make(chan struct{}, 1),
+	}
+	m.mu.Lock()
+	m.discovering[channelID] = state
+	m.mu.Unlock()
+	return state, ctx, cancel
+}
+
+func runDiscoveryLoop(m *Manager, ctx context.Context, state *DiscoveryState) {
+	m.wg.Add(1)
+	m.discoveryLoop(ctx, state)
+}
+
+func injectRunningPoller(m *Manager, channelID, videoID string) {
+	p := poller.NewPoller(nil, "", channelID, zap.NewNop(), nil)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pollers[videoID] = p
+	m.activeStreams[videoID] = &Stream{VideoID: videoID, ChannelID: channelID, OverlayID: "overlay-1"}
+}
+
+func polledVideos(m *Manager, channelID string) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var ids []string
+	for id, s := range m.activeStreams {
+		if s.ChannelID == channelID {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func discoveryStateFor(m *Manager, channelID string) *DiscoveryState {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.discovering[channelID]
+}
+
+func TestDiscoveryLoop_PinTriedBeforeBrowse(t *testing.T) {
+	m, fake := newPinTestManager(t, nil)
+	fake.liveVideo = "browseVid01"
+	state, ctx, _ := reserveDiscovery(t, m, "UCpin", "pinnedVid01")
+
+	runDiscoveryLoop(m, ctx, state)
+
+	assert.Equal(t, []string{"continuation:pinnedVid01"}, fake.Calls(),
+		"a pollable pin must be started without browsing the channel")
+	assert.Equal(t, []string{"pinnedVid01"}, polledVideos(m, "UCpin"))
+	assert.Nil(t, discoveryStateFor(m, "UCpin"), "a started pin releases the discovery reservation")
+}
+
+func TestDiscoveryLoop_PinFailureFallsBackToBrowse(t *testing.T) {
+	m, fake := newPinTestManager(t, nil)
+	fake.liveVideo = "browseVid01"
+	fake.setNotLive("pinnedVid01", true)
+	state, ctx, _ := reserveDiscovery(t, m, "UCpin", "pinnedVid01")
+
+	runDiscoveryLoop(m, ctx, state)
+
+	assert.Equal(t, []string{"continuation:pinnedVid01", "browse", "continuation:browseVid01"}, fake.Calls(),
+		"a pin that cannot be polled falls back to the browse within the same attempt")
+	assert.Equal(t, []string{"browseVid01"}, polledVideos(m, "UCpin"))
+}
+
+func TestDiscoveryLoop_PinCachedBeforeStart(t *testing.T) {
+	m, fake := newPinTestManager(t, nil)
+	state, ctx, cancel := reserveDiscovery(t, m, "UCpin", "pinnedVid01")
+
+	var mappingAtStart string
+	fake.setNotLive("pinnedVid01", true)
+	fake.onCall = func(call string) {
+		switch call {
+		case "continuation:pinnedVid01":
+			mappingAtStart, _ = m.repository.GetChannelVideoMapping(context.Background(), "UCpin")
+		case "browse":
+			cancel()
+		}
+	}
+
+	runDiscoveryLoop(m, ctx, state)
+
+	assert.Equal(t, "pinnedVid01", mappingAtStart,
+		"the pin must be cached before startPoller so other replicas see its leader key")
+	mapping, err := m.repository.GetChannelVideoMapping(context.Background(), "UCpin")
+	require.NoError(t, err)
+	assert.Equal(t, "pinnedVid01", mapping)
+}
+
+func TestSyncSources_MixedPinsStable(t *testing.T) {
+	sm, smClient := newFakeSourceManager(t)
+	m, fake := newPinTestManager(t, smClient)
+	fake.setNotLive("pinnedVidB1", true)
+	fake.setNotLive("pinnedVidC1", true)
+
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	unpinned := &sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-a", ChannelID: "UCmixed", IsActive: true, CreatedAt: t0}
+	pinned := &sourcemanager.ActiveSource{ID: "b", OverlayID: "overlay-b", ChannelID: "UCmixed", StreamID: "pinnedVidB1", IsActive: true, CreatedAt: t0.Add(time.Hour)}
+	laterPin := &sourcemanager.ActiveSource{ID: "c", OverlayID: "overlay-c", ChannelID: "UCmixed", StreamID: "pinnedVidC1", IsActive: true, CreatedAt: t0.Add(2 * time.Hour)}
+	// source-manager serves its registry in Go map order, so each sync sees a different order.
+	orders := [][]*sourcemanager.ActiveSource{
+		{unpinned, pinned, laterPin},
+		{laterPin, pinned, unpinned},
+		{pinned, unpinned, laterPin},
+		{laterPin, unpinned, pinned},
+		{pinned, laterPin, unpinned},
+	}
+
+	var first *DiscoveryState
+	for i, order := range orders {
+		sm.set(order...)
+		m.syncSources(context.Background())
+
+		state := discoveryStateFor(m, "UCmixed")
+		require.NotNil(t, state, "sync %d: discovery must be running", i+1)
+		if first == nil {
+			first = state
+		}
+		assert.Same(t, first, state, "sync %d: an unchanged source set must not restart discovery", i+1)
+		assert.Equal(t, "pinnedVidB1", state.PinnedVideoID, "sync %d: pin is the earliest non-empty stream_id", i+1)
+		assert.Equal(t, "overlay-a", state.OverlayID, "sync %d: the earliest source supplies the overlay", i+1)
+		m.mu.RLock()
+		assert.Equal(t, "pinnedVidB1", m.pins["UCmixed"], "sync %d", i+1)
+		m.mu.RUnlock()
+	}
+}
+
+func TestSyncSources_PinProbeReplacesOtherVideo(t *testing.T) {
+	const channelID = "UCprobe"
+	const pin = "pinnedVid01"
+	setup := func(t *testing.T) (*Manager, *fakeStreamDiscovery) {
+		sm, smClient := newFakeSourceManager(t)
+		sm.set(&sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-1", ChannelID: channelID, StreamID: pin, IsActive: true})
+		m, fake := newPinTestManager(t, smClient)
+		// Browse fell back to another video while the pin was not yet live.
+		m.mu.Lock()
+		m.pins[channelID] = pin
+		m.mu.Unlock()
+		injectRunningPoller(m, channelID, "otherVid001")
+		return m, fake
+	}
+
+	t.Run("probe failure keeps the running video and is throttled", func(t *testing.T) {
+		m, fake := setup(t)
+		fake.setNotLive(pin, true)
+
+		m.syncSources(context.Background())
+		m.wg.Wait()
+		assert.Equal(t, []string{"continuation:" + pin}, fake.Calls())
+		assert.Equal(t, []string{"otherVid001"}, polledVideos(m, channelID))
+
+		m.syncSources(context.Background())
+		m.wg.Wait()
+		assert.Equal(t, []string{"continuation:" + pin}, fake.Calls(), "a second sync within 60s must not probe again")
+		assert.Equal(t, []string{"otherVid001"}, polledVideos(m, channelID))
+	})
+
+	t.Run("probe success restarts the channel on the pin", func(t *testing.T) {
+		m, fake := setup(t)
+
+		m.syncSources(context.Background())
+
+		require.Eventually(t, func() bool {
+			got := polledVideos(m, channelID)
+			return len(got) == 1 && got[0] == pin
+		}, 5*time.Second, 10*time.Millisecond, "channel must be restarted on the pin")
+		assert.Equal(t, []string{"continuation:" + pin, "continuation:" + pin}, fake.Calls(),
+			"probe, then the pin start; no browse")
+	})
+}
+
+func TestSyncSources_PinChangeRestartsDiscovery(t *testing.T) {
+	const channelID = "UCchange"
+	const pin = "pinnedVid01"
+	sm, smClient := newFakeSourceManager(t)
+	m, fake := newPinTestManager(t, smClient)
+	fake.setNotLive(pin, true)
+
+	sm.set(&sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-1", ChannelID: channelID, IsActive: true})
+	m.syncSources(context.Background())
+	before := discoveryStateFor(m, channelID)
+	require.NotNil(t, before)
+	assert.Empty(t, before.PinnedVideoID)
+
+	sm.set(&sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-1", ChannelID: channelID, StreamID: pin, IsActive: true})
+	m.syncSources(context.Background())
+	after := discoveryStateFor(m, channelID)
+	require.NotNil(t, after)
+	assert.NotSame(t, before, after, "a pin change must replace the running discovery")
+	assert.Equal(t, pin, after.PinnedVideoID)
+
+	m.stopChannel(channelID, true)
+	m.wg.Wait()
 }
