@@ -281,6 +281,8 @@ export interface YouTubeSourceConfig {
   stream_match?: string
   /** Pinned video id for a stream the channel page does not list (e.g. unlisted). */
   stream_id?: string
+  /** Premium opt-in: read this owned channel through the YouTube Data API. */
+  official_api?: boolean
   [key: string]: unknown
 }
 

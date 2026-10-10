@@ -403,6 +403,18 @@ export const overlayEditor = {
     clear: 'Clear link',
     saveFailed: 'Could not save the stream link. Please try again.',
   },
+  // Premium per-source opt-in: the channel is read through the owner's own
+  // YouTube connection (Data API), which sees unlisted and members-only streams.
+  officialApi: {
+    label: 'Official YouTube API',
+    description:
+      'Reads unlisted and members-only streams through your own YouTube connection. Only works for a channel you own and have connected to All-Chat.',
+    // Follows the <PremiumUpsellLink /> element, so it opens with a space.
+    upsellSuffix: ' to read unlisted and members-only streams through the official API.',
+    lapsed:
+      'Your premium has ended, so this channel is read without the official API until you upgrade again. You can still switch it off.',
+    saveFailed: 'Could not change the official API setting. Please try again.',
+  },
   // Relaying All-Chat messages back out to a Discord channel.
   relay: {
     loopFilter: 'Loop filter: active — Discord messages are never relayed back to Discord.',
@@ -893,6 +905,8 @@ export const overlayEditor = {
     streamSelectionSaveFailed: 'Failed to save stream selection',
     streamLinkSaved: 'Stream link saved',
     streamLinkCleared: 'Stream link cleared',
+    officialApiEnabled: 'Official YouTube API switched on',
+    officialApiDisabled: 'Official YouTube API switched off',
     relaySaved: 'Relay settings saved',
     relaySaveFailed: 'Failed to save relay settings',
     engagementSaved: 'Engagement settings saved',

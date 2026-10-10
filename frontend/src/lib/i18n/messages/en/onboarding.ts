@@ -86,6 +86,9 @@ export const onboarding = {
     streamSelectionTitle: 'YouTube stream selection',
     streamSelectionBody:
       'Pick exactly which broadcast an overlay listens to, per YouTube source in Sources. (Premium)',
+    youtubeOfficialApiTitle: 'Unlisted and members-only YouTube streams',
+    youtubeOfficialApiBody:
+      'Switch on Official YouTube API on a YouTube source in Sources, and your own channel is read through your YouTube connection: unlisted and members-only streams are found automatically. (Premium)',
     bubbleColorsTitle: 'Differently-coloured bubbles',
     bubbleColorsBody:
       'Give each platform its own bubble colour, or cycle a palette down the feed, under Bubble colors in Appearance. Free.',
