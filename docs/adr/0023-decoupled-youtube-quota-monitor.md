@@ -1,7 +1,7 @@
 # ADR-0023: Decoupled YouTube Quota Monitor
 
 **Date**: 2026-06-22
-**Status**: ✅ Accepted
+**Status**: ✅ Accepted (amended by ADR-0065: the quota listener runs again, for opted-in premium channels only)
 **Deciders**: Infrastructure Lead, Platform Team
 
 ---
