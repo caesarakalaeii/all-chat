@@ -104,8 +104,8 @@ Each service has a detailed README:
 - [emote-service](./services/emote-service/README.md) - 7TV, BTTV, FFZ emote APIs
 - [twitch-listener](./services/twitch-listener/README.md) - IRC client, channel management
 - [twitch-eventsub-listener](./services/twitch-eventsub-listener/README.md) - EventSub webhooks (channel points, moderation)
-- [youtube-listener](./services/youtube-listener/README.md) - HTTP polling, quota tracking
-- [youtube-listener-innertube](./services/youtube-listener-innertube/README.md) - InnerTube API polling (quota-free chat ingestion; optional subscriber-alert polling spends accounted Data API units)
+- [youtube-listener](./services/youtube-listener/README.md) - Data API/gRPC chat for premium official-API mode only: opted-in, owner-verified channels (unlisted + members-only streams), claimed away from innertube (ADR-0065)
+- [youtube-listener-innertube](./services/youtube-listener-innertube/README.md) - InnerTube API polling (quota-free chat ingestion for every unclaimed channel, pinned stream links for unlisted streams; optional subscriber-alert polling spends accounted Data API units)
 - [youtube-quota-monitor](./services/youtube-quota-monitor/README.md) - Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023)
 - [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
