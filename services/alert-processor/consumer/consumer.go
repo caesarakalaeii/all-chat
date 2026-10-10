@@ -39,10 +39,8 @@ const (
 	// same stream at-least-once without seeing each other's PELs.
 	ConsumerGroup = "alert-processors"
 
-	// ReadCount is how many messages to read in one batch.
 	ReadCount = 100
 
-	// ReadBlockTime is how long to block waiting for messages.
 	ReadBlockTime = 5 * time.Second
 
 	// claimMinIdle is how long an entry must sit in this group's PEL before
