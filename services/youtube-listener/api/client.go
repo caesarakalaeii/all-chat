@@ -108,150 +108,122 @@ func (c *Client) logAPICall(ctx context.Context, endpoint string, units int, aud
 	c.quotaTracker.LogAPICall(ctx, endpoint, units, audit)
 }
 
-// GetLiveStreams fetches active live streams for a channel
-// Costs 100 units for search + 1 unit per video found
-// Uses reserve-confirm-rollback pattern for accurate quota tracking
-func (c *Client) GetLiveStreams(ctx context.Context, channelID string, audit *quota.AuditContext) ([]*models.YouTubeStream, error) {
-	const searchCost = quota.QuotaCostSearch
+// GetActiveBroadcasts lists the token owner's live broadcasts on channelID (ADR-0065).
+// liveBroadcasts.list with broadcastStatus=active sees what search.list cannot: unlisted,
+// members-only and persistent "Stream now" broadcasts (broadcastType=all). It is scoped to the
+// authenticated user, so a token for a brand account manager can return other channels'
+// broadcasts; those are dropped. Costs QuotaCostLiveBroadcasts, reserve-confirm-rollback.
+func (c *Client) GetActiveBroadcasts(ctx context.Context, channelID string, audit *quota.AuditContext) ([]*models.YouTubeStream, error) {
+	const cost = quota.QuotaCostLiveBroadcasts
 	if audit == nil {
 		audit = &quota.AuditContext{ChannelID: channelID}
 	} else if audit.ChannelID == "" {
 		audit.ChannelID = channelID
 	}
 
-	var searchReservationID string
+	var reservationID string
 	var err error
 	if c.quotaTracker != nil {
-		searchReservationID, err = c.quotaTracker.ReserveQuota(ctx, searchCost)
+		reservationID, err = c.quotaTracker.ReserveQuota(ctx, cost)
 		if err != nil {
-			return nil, fmt.Errorf("insufficient quota for search: %w", err)
+			return nil, fmt.Errorf("insufficient quota for liveBroadcasts.list: %w", err)
 		}
 	}
 
-	call := c.service.Search.List([]string{"id", "snippet"}).
-		ChannelId(channelID).
-		EventType("live").
-		Type("video").
-		MaxResults(5)
-
-	response, apiErr := call.Do()
+	response, apiErr := c.service.LiveBroadcasts.List([]string{"id", "snippet", "status"}).
+		BroadcastStatus("active").
+		BroadcastType("all").
+		Context(ctx).
+		Do()
 
 	chargedUnits := 0
-	if c.quotaTracker != nil && searchReservationID != "" {
+	if c.quotaTracker != nil && reservationID != "" {
 		if shouldChargeQuota(apiErr) {
-			if confirmErr := c.quotaTracker.ConfirmReservation(ctx, searchReservationID, searchCost); confirmErr != nil {
-				c.logger.Warn("Failed to confirm search quota reservation", zap.Error(confirmErr))
+			if confirmErr := c.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
+				c.logger.Warn("Failed to confirm liveBroadcasts quota reservation", zap.Error(confirmErr))
 			} else {
-				chargedUnits = searchCost
+				chargedUnits = cost
 			}
-		} else {
-			if rollbackErr := c.quotaTracker.RollbackReservation(ctx, searchReservationID, searchCost); rollbackErr != nil {
-				c.logger.Warn("Failed to rollback search quota reservation", zap.Error(rollbackErr))
-			}
+		} else if rollbackErr := c.quotaTracker.RollbackReservation(ctx, reservationID, cost); rollbackErr != nil {
+			c.logger.Warn("Failed to rollback liveBroadcasts quota reservation", zap.Error(rollbackErr))
 		}
 	}
-	c.logAPICall(ctx, "Search.List", chargedUnits, audit)
+	c.logAPICall(ctx, "LiveBroadcasts.List", chargedUnits, audit)
 
 	if apiErr != nil {
-		c.logger.Error("Failed to fetch live streams",
+		c.logger.Error("Failed to list active broadcasts",
 			zap.String("channel_id", channelID),
 			zap.Bool("charged_quota", shouldChargeQuota(apiErr)),
 			zap.Error(apiErr),
 		)
-		return nil, fmt.Errorf("failed to fetch live streams: %w", apiErr)
+		return nil, fmt.Errorf("failed to list active broadcasts: %w", apiErr)
 	}
 
 	streams := make([]*models.YouTubeStream, 0, len(response.Items))
-
 	for _, item := range response.Items {
-		if item.Id == nil || item.Id.VideoId == "" {
+		if item.Id == "" || item.Snippet == nil || item.Snippet.ChannelId != channelID || item.Snippet.LiveChatId == "" {
 			continue
 		}
-
-		videoID := item.Id.VideoId
-		const videoCost = quota.QuotaCostVideos
-
-		// Reserve quota for videos.list
-		var videoReservationID string
-		if c.quotaTracker != nil {
-			videoReservationID, err = c.quotaTracker.ReserveQuota(ctx, videoCost)
-			if err != nil {
-				c.logger.Warn("Insufficient quota for videos.list, stopping enumeration",
-					zap.String("video_id", videoID),
-				)
-				break
-			}
-		}
-
-		// Make videos.list call
-		videoCall := c.service.Videos.List([]string{"liveStreamingDetails", "snippet"}).Id(videoID)
-		videoResponse, videoErr := videoCall.Do()
-
-		// Confirm or rollback videos.list quota
-		videoAudit := &quota.AuditContext{
-			ChannelID: channelID,
-			VideoID:   videoID,
-			OverlayID: audit.OverlayID,
-		}
-		videoChargedUnits := 0
-		if c.quotaTracker != nil && videoReservationID != "" {
-			if shouldChargeQuota(videoErr) {
-				if confirmErr := c.quotaTracker.ConfirmReservation(ctx, videoReservationID, videoCost); confirmErr != nil {
-					c.logger.Warn("Failed to confirm video quota reservation", zap.Error(confirmErr))
-				} else {
-					videoChargedUnits = videoCost
-				}
-			} else {
-				if rollbackErr := c.quotaTracker.RollbackReservation(ctx, videoReservationID, videoCost); rollbackErr != nil {
-					c.logger.Warn("Failed to rollback video quota reservation", zap.Error(rollbackErr))
-				}
-			}
-		}
-		c.logAPICall(ctx, "Videos.List", videoChargedUnits, videoAudit)
-
-		if videoErr != nil {
-			c.logger.Warn("Failed to get video details",
-				zap.String("video_id", videoID),
-				zap.Bool("charged_quota", shouldChargeQuota(videoErr)),
-				zap.Error(videoErr),
-			)
-			continue
-		}
-
-		if len(videoResponse.Items) == 0 {
-			continue
-		}
-
-		video := videoResponse.Items[0]
-		if video.LiveStreamingDetails == nil || video.LiveStreamingDetails.ActiveLiveChatId == "" {
-			c.logger.Debug("No active live chat for video",
-				zap.String("video_id", videoID),
-			)
-			continue
-		}
-
-		stream := &models.YouTubeStream{
-			StreamID:        videoID,
+		now := time.Now()
+		streams = append(streams, &models.YouTubeStream{
+			StreamID:        item.Id,
+			VideoID:         item.Id,
 			ChannelID:       channelID,
-			ChannelName:     video.Snippet.ChannelTitle,
-			LiveChatID:      video.LiveStreamingDetails.ActiveLiveChatId,
+			Title:           item.Snippet.Title,
+			LiveChatID:      item.Snippet.LiveChatId,
 			IsLive:          true,
-			PollingInterval: 5000, // Default 5 seconds, will be updated from API
-			NextPageToken:   "",
-			LastPolledAt:    time.Time{},
-			CreatedAt:       time.Now(),
-			UpdatedAt:       time.Now(),
-		}
-
-		streams = append(streams, stream)
+			PollingInterval: 5000,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+		})
 	}
 
-	c.logger.Info("Fetched live streams",
+	c.logger.Info("Listed active broadcasts",
 		zap.String("channel_id", channelID),
 		zap.Int("count", len(streams)),
 	)
 
 	return streams, nil
+}
+
+// TokenChannelID returns the channel the client's OAuth token belongs to (channels.list
+// mine=true). A youtube_oauth_tokens row can be filed under any channel id, so this is the
+// only proof that a token actually owns a channel. Costs QuotaCostChannels.
+func (c *Client) TokenChannelID(ctx context.Context) (string, error) {
+	const cost = quota.QuotaCostChannels
+
+	var reservationID string
+	var err error
+	if c.quotaTracker != nil {
+		reservationID, err = c.quotaTracker.ReserveQuota(ctx, cost)
+		if err != nil {
+			return "", fmt.Errorf("insufficient quota for channels.list: %w", err)
+		}
+	}
+
+	response, apiErr := c.service.Channels.List([]string{"id"}).Mine(true).Context(ctx).Do()
+
+	chargedUnits := 0
+	if c.quotaTracker != nil && reservationID != "" {
+		if shouldChargeQuota(apiErr) {
+			if confirmErr := c.quotaTracker.ConfirmReservation(ctx, reservationID, cost); confirmErr != nil {
+				c.logger.Warn("Failed to confirm channels quota reservation", zap.Error(confirmErr))
+			} else {
+				chargedUnits = cost
+			}
+		} else if rollbackErr := c.quotaTracker.RollbackReservation(ctx, reservationID, cost); rollbackErr != nil {
+			c.logger.Warn("Failed to rollback channels quota reservation", zap.Error(rollbackErr))
+		}
+	}
+	c.logAPICall(ctx, "Channels.List", chargedUnits, &quota.AuditContext{})
+
+	if apiErr != nil {
+		return "", fmt.Errorf("failed to resolve token channel: %w", apiErr)
+	}
+	if len(response.Items) == 0 || response.Items[0].Id == "" {
+		return "", errors.New("token has no YouTube channel")
+	}
+	return response.Items[0].Id, nil
 }
 
 // GetChatMessages fetches messages from a live chat using streamList.

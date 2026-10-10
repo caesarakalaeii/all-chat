@@ -44,38 +44,37 @@ type RequestType string
 const (
 	RequestTypePolling   RequestType = "polling"
 	RequestTypeDiscovery RequestType = "discovery"
-	RequestTypeSearch    RequestType = "search"
 )
 
 // DecisionReason explains why a request was allowed or denied
 type DecisionReason string
 
 const (
-	ReasonAllowed                DecisionReason = "allowed"
-	ReasonGlobalQuotaDepleted    DecisionReason = "global_quota_depleted"
-	ReasonGlobalQuotaExhausted   DecisionReason = "global_quota_exhausted"
-	ReasonGlobalQuotaCritical    DecisionReason = "global_quota_critical"
-	ReasonGlobalQuotaDegraded    DecisionReason = "global_quota_degraded"
-	ReasonChannelQuotaExceeded   DecisionReason = "channel_quota_exceeded"
-	ReasonLowPriorityBlocked     DecisionReason = "low_priority_blocked"
-	ReasonDiscoveryDisabled      DecisionReason = "discovery_disabled"
+	ReasonAllowed              DecisionReason = "allowed"
+	ReasonGlobalQuotaDepleted  DecisionReason = "global_quota_depleted"
+	ReasonGlobalQuotaExhausted DecisionReason = "global_quota_exhausted"
+	ReasonGlobalQuotaCritical  DecisionReason = "global_quota_critical"
+	ReasonGlobalQuotaDegraded  DecisionReason = "global_quota_degraded"
+	ReasonChannelQuotaExceeded DecisionReason = "channel_quota_exceeded"
+	ReasonLowPriorityBlocked   DecisionReason = "low_priority_blocked"
+	ReasonDiscoveryDisabled    DecisionReason = "discovery_disabled"
 )
 
 // RequestDecision represents the result of a quota check
 type RequestDecision struct {
-	Allowed       bool
-	Reason        DecisionReason
-	GlobalState   QuotaState
-	ChannelUsage  int
-	ChannelLimit  int
-	RetryAfter    *time.Duration // Optional: how long to wait before retry
+	Allowed      bool
+	Reason       DecisionReason
+	GlobalState  QuotaState
+	ChannelUsage int
+	ChannelLimit int
+	RetryAfter   *time.Duration // Optional: how long to wait before retry
 }
 
 // Coordinator unifies quota decisions from global and per-channel trackers
 type Coordinator struct {
-	globalTracker   *Tracker
+	globalTracker     *Tracker
 	perChannelTracker *PerChannelTracker
-	logger          *zap.Logger
+	logger            *zap.Logger
 }
 
 // NewCoordinator creates a new quota coordinator
@@ -85,9 +84,9 @@ func NewCoordinator(
 	logger *zap.Logger,
 ) *Coordinator {
 	return &Coordinator{
-		globalTracker:   globalTracker,
+		globalTracker:     globalTracker,
 		perChannelTracker: perChannelTracker,
-		logger:          logger,
+		logger:            logger,
 	}
 }
 
@@ -140,7 +139,7 @@ func (c *Coordinator) CanMakeRequest(
 
 	case QuotaStateCritical:
 		// In CRITICAL state, block all discovery
-		if requestType == RequestTypeDiscovery || requestType == RequestTypeSearch {
+		if requestType == RequestTypeDiscovery {
 			c.logger.Debug("Request denied - quota critical, discovery disabled",
 				zap.String("channel_id", channelID),
 				zap.String("request_type", string(requestType)),
@@ -170,7 +169,7 @@ func (c *Coordinator) CanMakeRequest(
 
 	case QuotaStateDegraded:
 		// In DEGRADED state, block low-priority discovery
-		if (requestType == RequestTypeDiscovery || requestType == RequestTypeSearch) && priority == PriorityLow {
+		if requestType == RequestTypeDiscovery && priority == PriorityLow {
 			c.logger.Debug("Request denied - quota degraded, low-priority discovery blocked",
 				zap.String("channel_id", channelID),
 				zap.String("request_type", string(requestType)),

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/youtube-listener/metrics"
+	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"go.uber.org/zap"
 )
 
@@ -58,7 +59,7 @@ type CircuitBreaker struct {
 	// Configuration
 	failureThreshold    int           // Open circuit after N consecutive failures (default: 5, was 3)
 	successThreshold    int           // Close circuit after N consecutive successes in half-open (default: 2)
-	openDuration        time.Duration // How long to keep circuit open (default: 10 minutes, was 30)
+	openDuration        time.Duration // How long to keep circuit open (default: maxDetectionBackoff)
 	halfOpenMaxAttempts int           // Max attempts in half-open state (default: 3)
 }
 
@@ -68,8 +69,12 @@ func NewCircuitBreaker(channelID string, logger *zap.Logger, ytMetrics *metrics.
 	// CHANGED FROM 3 to 5: Allow more failures before opening circuit
 	failureThreshold := getEnvAsIntCB("CIRCUIT_BREAKER_FAILURE_THRESHOLD", 5)
 
-	// CHANGED FROM 30 to 10: Recover 3x faster (10min vs 30min)
-	openDurationMinutes := getEnvAsIntCB("CIRCUIT_BREAKER_OPEN_DURATION_MINUTES", 10)
+	// Capped like the detection backoff (maxDetectionBackoff): only offline results open it. An
+	// env override is clamped too, so it can neither bring back a long blind window nor drop the wait.
+	openDuration := time.Duration(getEnvAsIntCB("CIRCUIT_BREAKER_OPEN_DURATION_MINUTES", int(maxDetectionBackoff/time.Minute))) * time.Minute
+	if openDuration <= 0 || openDuration > maxDetectionBackoff {
+		openDuration = maxDetectionBackoff
+	}
 
 	successThreshold := getEnvAsIntCB("CIRCUIT_BREAKER_SUCCESS_THRESHOLD", 2)
 	halfOpenMaxAttempts := getEnvAsIntCB("CIRCUIT_BREAKER_HALF_OPEN_MAX_ATTEMPTS", 3)
@@ -81,7 +86,7 @@ func NewCircuitBreaker(channelID string, logger *zap.Logger, ytMetrics *metrics.
 		state:               CircuitClosed,
 		failureThreshold:    failureThreshold,
 		successThreshold:    successThreshold,
-		openDuration:        time.Duration(openDurationMinutes) * time.Minute,
+		openDuration:        openDuration,
 		halfOpenMaxAttempts: halfOpenMaxAttempts,
 		lastStateChange:     time.Now(),
 	}
@@ -220,7 +225,7 @@ func (cb *CircuitBreaker) RecordFailure() {
 			cb.state = CircuitOpen
 			cb.lastStateChange = time.Now()
 
-			quotaSaved := cb.failureCount * 100 // 100 units per Search.List
+			quotaSaved := cb.failureCount * quota.QuotaCostLiveBroadcasts // one discovery call per offline result
 
 			cb.logger.Warn("Circuit breaker opened - channel appears offline",
 				zap.String("channel_id", cb.channelID),
@@ -284,7 +289,7 @@ func (cb *CircuitBreaker) GetStats() map[string]interface{} {
 		"success_count":        cb.successCount,
 		"last_check":           cb.lastCheckTime.Format(time.RFC3339),
 		"last_state_change":    cb.lastStateChange.Format(time.RFC3339),
-		"quota_saved":          cb.failureCount * 100, // 100 units per blocked Search.List
+		"quota_saved":          cb.failureCount * quota.QuotaCostLiveBroadcasts, // one discovery call per offline result
 	}
 
 	if cb.state == CircuitOpen {

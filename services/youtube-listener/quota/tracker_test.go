@@ -293,5 +293,4 @@ func TestQuotaCosts(t *testing.T) {
 	// Verify quota cost constants
 	assert.Equal(t, 5, QuotaCostLiveChatMessages)
 	assert.Equal(t, 1, QuotaCostVideos)
-	assert.Equal(t, 100, QuotaCostSearch)
 }
