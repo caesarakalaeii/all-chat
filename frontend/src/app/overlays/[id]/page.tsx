@@ -1712,6 +1712,38 @@ function AddSourceForm({
         </Dialog.Content>
       </Dialog.Root>
 
+      <Dialog.Root
+        open={tiktokDialogOpen}
+        onOpenChange={(open) => {
+          setTiktokDialogOpen(open)
+          if (!open) setTiktokUsername('')
+        }}
+      >
+        <Dialog.Content>
+          <Dialog.Title>{t('overlayEditor.addSource.tiktokTitle')}</Dialog.Title>
+          <Dialog.Description>{t('overlayEditor.addSource.tiktokBody')}</Dialog.Description>
+          <form onSubmit={handleTikTokSubmit} className="mt-3">
+            <Input
+              value={tiktokUsername}
+              onChange={(e) => setTiktokUsername(e.target.value)}
+              placeholder={t('overlayEditor.addSource.tiktokPlaceholder')}
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Dialog.Close
+                render={
+                  <Button variant="outline" type="button">
+                    {t('overlayEditor.addSource.cancel')}
+                  </Button>
+                }
+              />
+              <Button type="submit" disabled={isAdding || !tiktokUsername.trim()}>
+                {isAdding ? t('overlayEditor.addSource.adding') : t('overlayEditor.addSource.add')}
+              </Button>
+            </div>
+          </form>
+        </Dialog.Content>
+      </Dialog.Root>
+
       {/* No-OAuth platform input dialog — Owncast asks for the instance's base
           URL, GoodGame/Picarto for a channel name. Kept beside the
           TikTok dialog rather than merged into it so TikTok's copy stays its
