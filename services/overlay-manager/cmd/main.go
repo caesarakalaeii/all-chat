@@ -217,6 +217,7 @@ func main() {
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo, seventvResolver, bubbleColorsGate{gates: gateCache, db: dbPool})
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient, bm, tokenCipher)
 	sourcesHandler.SetPlatformGate(platformSourceGate{gates: gateCache, db: dbPool})
+	sourcesHandler.SetStreamSelectionGate(premiumKeyGate{gates: gateCache, db: dbPool, key: featuregates.GateStreamSelection})
 
 	// Discord source guard (ADR-0048): a Discord source is acted on by the SHARED bot, so
 	// Discord authorizes the bot rather than the caller and will not refuse a channel the
@@ -445,6 +446,24 @@ type platformSourceGate struct {
 func (g platformSourceGate) PlatformSourceAllowed(ctx context.Context, userID, platform string) (bool, error) {
 	key, gated := featuregates.RolloutPlatformGateKey(platform)
 	if !gated || g.gates == nil || !g.gates.IsPremium(key) {
+		return true, nil
+	}
+	var isPremium bool
+	err := g.db.QueryRow(ctx, "SELECT is_premium FROM users WHERE id = $1", userID).Scan(&isPremium)
+	return isPremium, err
+}
+
+// premiumKeyGate is the plain ADR-0008 decision for one gate key: open while the key is
+// free, otherwise users.is_premium. The other gates above predate it and carry extra
+// rules (per-platform keys) or a different method name for their handler's interface.
+type premiumKeyGate struct {
+	gates *featuregates.FeatureGateCache
+	db    *pgxpool.Pool
+	key   string
+}
+
+func (g premiumKeyGate) Allowed(ctx context.Context, userID string) (bool, error) {
+	if g.gates == nil || !g.gates.IsPremium(g.key) {
 		return true, nil
 	}
 	var isPremium bool

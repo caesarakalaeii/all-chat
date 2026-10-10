@@ -77,6 +77,7 @@ type SourcesHandler struct {
 	discordChannels discordChannelGuildResolver
 	discordGuilds   discordGuildOwnership
 	platformGate    PlatformSourceGate
+	streamSelection streamSelectionGate
 
 	// adminTokenCopy files the caller's own platform token under a channel added by link.
 	// A field so tests can observe who gets a copy without a database.
@@ -124,6 +125,54 @@ func (h *SourcesHandler) platformSourceAllowed(ctx context.Context, userID, plat
 		return true, nil
 	}
 	return h.platformGate.PlatformSourceAllowed(ctx, userID, platform)
+}
+
+// streamSelectionGate decides whether a user may choose a YouTube stream selection
+// strategy other than the free default (gate stream_selection, migration 045). Errors fail
+// closed at the call site.
+type streamSelectionGate interface {
+	Allowed(ctx context.Context, userID string) (bool, error)
+}
+
+// SetStreamSelectionGate wires the stream_selection premium check. Unset (direct struct
+// construction) reads as open, like the platform gate.
+func (h *SourcesHandler) SetStreamSelectionGate(g streamSelectionGate) {
+	h.streamSelection = g
+}
+
+// checkStreamSelection refuses a premium stream selection the caller is not entitled to.
+// The PATCH body is the whole config, so only a strategy or match term that differs from
+// stored is checked: a lapsed user keeps what they set and can still save other settings,
+// but cannot set or retune a premium strategy. stored is nil at create time. Returns
+// (0, nil) when allowed.
+func (h *SourcesHandler) checkStreamSelection(ctx context.Context, userID string, stored, requested map[string]interface{}) (int, gin.H) {
+	strategy, _ := requested["stream_select"].(string)
+	if strategy == "" || strategy == "first_found" || h.streamSelection == nil {
+		return 0, nil
+	}
+	storedStrategy, _ := stored["stream_select"].(string)
+	match, _ := requested["stream_match"].(string)
+	storedMatch, _ := stored["stream_match"].(string)
+	usesMatch := strategy == "title_match" || strategy == "title_match_all"
+	if strategy == storedStrategy && (!usesMatch || match == storedMatch) {
+		return 0, nil
+	}
+
+	allowed, err := h.streamSelection.Allowed(ctx, userID)
+	if err != nil {
+		h.logger.Error("Failed to check stream_selection gate",
+			zap.String("user_id", userID), zap.Error(err))
+		return http.StatusServiceUnavailable, gin.H{"error": "could not verify premium status, please try again later"}
+	}
+	if !allowed {
+		// Same body as shared/middleware.RequirePremium, so the frontend's upgrade handling applies.
+		return http.StatusForbidden, gin.H{
+			"error":       "Premium feature required",
+			"message":     "This is a premium feature. Upgrade your account to access this functionality.",
+			"upgrade_url": "/upgrade",
+		}
+	}
+	return 0, nil
 }
 
 // discordChannelEntry is the JSON value stored at discord:channels:{channel_id}.
@@ -828,6 +877,13 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		}
 	}
 
+	if req.Platform == "youtube" {
+		if status, body := h.checkStreamSelection(c.Request.Context(), userID.(string), nil, req.Config); status != 0 {
+			c.JSON(status, body)
+			return
+		}
+	}
+
 	var channelHandle *string
 	if req.ChannelHandle != "" {
 		channelHandle = &req.ChannelHandle
@@ -1018,6 +1074,13 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "stream_match is required when stream_select uses title matching"})
 				return
 			}
+		}
+	}
+
+	if source.Platform == "youtube" {
+		if status, body := h.checkStreamSelection(c.Request.Context(), userID.(string), source.Config, req.Config); status != 0 {
+			c.JSON(status, body)
+			return
 		}
 	}
 
