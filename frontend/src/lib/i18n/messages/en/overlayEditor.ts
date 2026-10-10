@@ -389,6 +389,20 @@ export const overlayEditor = {
     allLabel: 'All streams',
     allDescription: 'Monitors all concurrent live streams simultaneously',
   },
+  // A pasted link pins one YouTube video. Unlisted streams are readable by id
+  // but never listed on the channel page, so discovery alone cannot find them.
+  streamLink: {
+    label: 'Stream link',
+    description:
+      'Paste the link or video ID of an unlisted stream. Unlisted streams never show up on the channel page, so All-Chat cannot find them on its own.',
+    placeholder: 'e.g. https://youtu.be/dQw4w9WgXcQ',
+    currentPin: 'Pinned stream: {videoId}',
+    notPinned: 'No stream pinned. All-Chat follows what the channel page shows as live.',
+    save: 'Save link',
+    saving: 'Saving…',
+    clear: 'Clear link',
+    saveFailed: 'Could not save the stream link. Please try again.',
+  },
   // Relaying All-Chat messages back out to a Discord channel.
   relay: {
     loopFilter: 'Loop filter: active — Discord messages are never relayed back to Discord.',
@@ -877,6 +891,8 @@ export const overlayEditor = {
     eventSettingsSaveFailed: 'Failed to save event settings',
     streamSelectionSaved: 'Stream selection saved',
     streamSelectionSaveFailed: 'Failed to save stream selection',
+    streamLinkSaved: 'Stream link saved',
+    streamLinkCleared: 'Stream link cleared',
     relaySaved: 'Relay settings saved',
     relaySaveFailed: 'Failed to save relay settings',
     engagementSaved: 'Engagement settings saved',
