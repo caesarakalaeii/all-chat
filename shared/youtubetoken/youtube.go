@@ -195,10 +195,12 @@ func (s *YouTubeSource) Resolve(ctx context.Context, userID, channelID string) (
 }
 
 // ResolveByChannel returns the decrypted YouTube credential for a channel, without a
-// user context. The listener services have a channel id and no acting user; the
-// per-channel youtube_oauth_tokens row IS the channel owner's own credential (Google
-// issued it for that channel's account), so any row keyed on the channel proves the
-// link. Multiple users linking the same channel carry equivalent rows; the newest
+// user context. The listener services have a channel id and no acting user; a per-channel
+// youtube_oauth_tokens row is normally the channel owner's own credential (Google issued it
+// for that channel's account). The exception is overlay-manager's admin add-by-link path,
+// which files an admin's token under a channel they added, and before that was limited to
+// admin sessions it did so for any user. Multiple users linking the same channel carry
+// equivalent rows; the newest
 // write wins, which also means this read sees the freshest access token after the
 // token-refresh-service's write-back.
 func (s *YouTubeSource) ResolveByChannel(ctx context.Context, channelID string) (*YouTubeCredential, error) {
@@ -318,8 +320,9 @@ var ErrOwnerChannelUnverified = errors.New("tokens: user cannot be shown to cont
 // belongs to a YouTube-login account and says nothing about WHICH channel — matched against any
 // channel id it would "verify" control of channels the user merely added as a read-only source, so
 // as an anchor it would assert exactly what it cannot see. Only the per-channel
-// youtube_oauth_tokens row is evidence, and it is good evidence: it exists because Google issued a
-// token for that channel's own account.
+// youtube_oauth_tokens row is evidence: it normally exists because Google issued a token for
+// that channel's own account. Rows filed by overlay-manager's add-by-link copy are the
+// exception (admin sessions only since that path was restricted; any user before).
 //
 // Like the other anchors it proves control only — no scope predicate, no token read.
 func (s *YouTubeSource) OwnerYouTubeAnchor(ctx context.Context, ownerUserID, channelID string) error {
