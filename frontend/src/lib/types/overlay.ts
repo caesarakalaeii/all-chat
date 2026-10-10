@@ -279,6 +279,8 @@ export type StreamSelectionStrategy =
 export interface YouTubeSourceConfig {
   stream_select?: StreamSelectionStrategy
   stream_match?: string
+  /** Pinned video id for a stream the channel page does not list (e.g. unlisted). */
+  stream_id?: string
   [key: string]: unknown
 }
 

@@ -94,7 +94,7 @@ export const guides = {
     emotesBody:
       '7TV, BTTV and FFZ emotes render in the overlay next to native Twitch and YouTube emotes. There is nothing to set up for them.',
     limitYoutube:
-      'YouTube chat works for public streams that are live. Unlisted, private and scheduled streams are not picked up.',
+      'YouTube chat works for public live streams on its own. For an unlisted stream, paste its link into the source settings. Private and members-only streams are not picked up.',
     limitTiktokReadOnly:
       'You cannot reply to or moderate TikTok chat from All-Chat. TikTok provides no API for either.',
     limitRetention:
@@ -215,7 +215,7 @@ export const guides = {
     limitTiktok:
       'TikTok is the platform most likely to drop out for a short time. The {guide} explains why.',
     limitYoutube:
-      'YouTube chat works for public streams that are live. Unlisted, private and scheduled streams are not picked up.',
+      'YouTube chat works for public live streams on its own. For an unlisted stream, paste its link into the source settings. Private and members-only streams are not picked up.',
     compareNote:
       'Choosing between tools? The {compare} lists what Streamlabs, SE.Live, Social Stream Ninja, SleepyChat and Restream Chat offer, with sources.',
     compareNoteLinkText: 'comparison page',

@@ -62,6 +62,26 @@ defaults to "Top chat" (chattype=4), which `forceChatTypeAll` flips to
 chattype=1. The viewSelector "Live chat" sub-menu token is **not** usable
 directly — `get_live_chat` rejects it with HTTP 400.
 
+### Pinned streams (unlisted)
+
+Discovery browses the channel's `/streams` tab, which never lists unlisted streams.
+A source can therefore pin a video: `config.stream_id`, set through the stream link
+field in the overlay editor (overlay-manager checks that the video belongs to the
+source's channel). source-manager serves it as `stream_id`.
+
+- Every discovery attempt tries the pinned video first, then falls back to the
+  channel browse in the same attempt, so a stale pin never hides a public stream.
+  A live pin wins outright: with a multi-stream strategy (`all`, `title_match_all`)
+  only the pinned stream is polled while it is live.
+- When several sources share a channel, the earliest-created source with a pin wins;
+  `syncSources` sorts sources by creation time because source-manager returns them in
+  map order.
+- A pin change restarts the channel on the next sync. source-manager refreshes its
+  registry every 30s and this service syncs every 30s, so a new pin takes effect within
+  about a minute.
+- A channel that fell back to another video while the pin was not live yet re-checks
+  the pin at most once a minute and moves onto it once it is pollable.
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
