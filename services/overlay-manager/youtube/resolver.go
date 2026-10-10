@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -43,6 +44,7 @@ var (
 	channelURLPattern = regexp.MustCompile(`youtube\.com/channel/([a-zA-Z0-9_-]+)`)
 	handlePattern     = regexp.MustCompile(`youtube\.com/@([a-zA-Z0-9_.-]+)`)
 	channelIDPattern  = regexp.MustCompile(`^UC[a-zA-Z0-9_-]{22}$`)
+	videoIDPattern    = regexp.MustCompile(`^[a-zA-Z0-9_-]{11}$`)
 )
 
 const (
@@ -114,6 +116,50 @@ func (r *Resolver) ResolveToChannelID(ctx context.Context, input string) (string
 	}
 
 	return "", fmt.Errorf("unable to parse YouTube input: %s", input)
+}
+
+// ParseVideoID extracts the 11-character video id from a pasted stream link: a bare id,
+// youtube.com/watch?v=<id> (www./m./no scheme, any query order), youtu.be/<id> or
+// youtube.com/live/<id>. The host is matched exactly, so lookalike and suffix hosts and
+// channel, handle and playlist URLs are all rejected.
+func ParseVideoID(input string) (string, bool) {
+	input = strings.TrimSpace(input)
+	if videoIDPattern.MatchString(input) {
+		return input, true
+	}
+
+	if !strings.Contains(input, "://") {
+		input = "https://" + input
+	}
+	u, err := url.Parse(input)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.User != nil {
+		return "", false
+	}
+
+	host := strings.ToLower(u.Hostname())
+	host = strings.TrimPrefix(host, "www.")
+	host = strings.TrimPrefix(host, "m.")
+	path := strings.TrimSuffix(u.Path, "/")
+
+	var id string
+	switch {
+	case host == "youtu.be":
+		id = strings.TrimPrefix(path, "/")
+	case host == "youtube.com" && path == "/watch":
+		id = u.Query().Get("v")
+	case host == "youtube.com" && strings.HasPrefix(path, "/live/"):
+		id = strings.TrimPrefix(path, "/live/")
+	}
+	if !videoIDPattern.MatchString(id) {
+		return "", false
+	}
+	return id, true
+}
+
+// VideoChannelID returns the channel id that uploaded videoID. oEmbed answers for
+// unlisted videos too, which is what lets a pinned unlisted stream be verified.
+func (r *Resolver) VideoChannelID(ctx context.Context, videoID string) (string, error) {
+	return r.resolveVideoToChannelID(ctx, videoID)
 }
 
 // resolveHandleToChannelID resolves a YouTube @handle to a channel ID via the
