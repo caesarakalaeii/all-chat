@@ -69,7 +69,7 @@ const FREE_AND_PREMIUM = `The merged chat overlay is free for every platform abo
 
 Premium is funded through Patreon and covers: moderation from the chat monitor, delegated moderators, text-to-speech with ElevenLabs voices (you bring your own ElevenLabs API key), YouTube stream selection, shared chat between overlays, starting polls and predictions, and viewer flairs. The current list is at ${SITE_URL}/upgrade.`
 
-const LIMITS = `- YouTube: only public streams that are live right now. Unlisted, private and scheduled streams do not work.
+const LIMITS = `- YouTube: public live streams are found automatically. An unlisted stream works once its link is pasted into the source's settings. Private and members-only streams do not work.
 - TikTok is the platform most likely to see short interruptions when TikTok changes its web player.
 - TikTok has no moderation or send API, so neither works for TikTok. Sending messages from the chat monitor works for Twitch, YouTube and Kick.
 - Chat messages are deleted after about an hour. All-Chat is not a chat archive.
