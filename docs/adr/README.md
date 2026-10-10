@@ -720,6 +720,14 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: Beta testers gain a translation surface without touching git; the catalog stays the single source of truth; graduating the gate opens contribution to all authenticated users with no deploy.
 **→ Read**: [0063-localization-contribution.md](./0063-localization-contribution.md)
 
+### ADR-0064: Event alerts platform — alert overlay kinds, a separate chat:raw consumer, and presigned-upload alert media
+
+**Status**: Accepted (2026-10-01)
+**Problem**: Event data already flows through `chat:raw` as event-typed messages (Twitch/YouTube/TikTok listeners), but nothing routes it to a non-chat rendering surface, keeps event history, or holds streamer-uploaded alert media — and the chat pipeline must not grow a second job.
+**Decision**: Three new overlay kinds (`overlays.overlay_type` 'alerts'/'goal'/'list', default 'chat'); a separate **alert-processor** consuming `chat:raw` with its own consumer group `alert-processors`, normalizing via the message-processor's own normalizers (one-direction import) and routing to alert-capable overlays — persist to `alert_events`, publish to `overlay:{id}:alerts`, score `list` leaderboards — with idempotency as a first-class contract (deterministic UUIDv5 alert ids + ON CONFLICT DO NOTHING for history, per-alert SET NX claim inside one atomic Lua script for boards, ACK only after persist+publish); alert media in single-node MinIO (public-read behind `media.allch.at`, presigned direct uploads, unguessable `{user_id}/{uuid}/{filename}` keys).
+**Impact**: Alert features land without touching listeners or the chat pipeline; a broken alert-processor degrades to "no alerts", never "no chat"; redelivery can animate an alert twice (accepted, cosmetic) but never double-writes history or double-counts a board; single-node MinIO defers distribution/replication as follow-ups.
+**→ Read**: [0064-event-alerts-platform.md](./0064-event-alerts-platform.md)
+
 ---
 
 
