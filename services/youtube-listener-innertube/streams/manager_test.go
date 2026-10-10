@@ -829,3 +829,126 @@ func TestSyncSources_PinChangeRestartsDiscovery(t *testing.T) {
 	m.stopChannel(channelID, true)
 	m.wg.Wait()
 }
+
+// fakeLeadershipClient grants every claim, or refuses every one when refuse is
+// set (another replica holds the lease), and records releases.
+type fakeLeadershipClient struct {
+	refuse   bool
+	mu       sync.Mutex
+	released []string
+}
+
+func (f *fakeLeadershipClient) ClaimLeadership(context.Context, string, string, string) (bool, error) {
+	return !f.refuse, nil
+}
+func (f *fakeLeadershipClient) RenewLeadership(context.Context, string, string, string) (bool, error) {
+	return true, nil
+}
+func (f *fakeLeadershipClient) ReleaseLeadership(_ context.Context, _, streamID, _ string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.released = append(f.released, streamID)
+	return nil
+}
+func (f *fakeLeadershipClient) RegisterPeer(context.Context, string, string) (int, error) {
+	return 1, nil
+}
+func (f *fakeLeadershipClient) Released() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.released...)
+}
+
+func TestDiscoveryLoop_PinLeadershipHeldStops(t *testing.T) {
+	m, fake := newPinTestManager(t, nil)
+	m.leader = sourcemanager.NewLeadershipCoordinator("youtube", &fakeLeadershipClient{refuse: true}, time.Hour, zap.NewNop())
+	t.Cleanup(m.leader.Stop)
+	state, ctx, cancel := reserveDiscovery(t, m, "UCheld", "pinnedVid01")
+	// Bounds the run should the loop fall through to the browse.
+	fake.onCall = func(call string) {
+		if call == "browse" {
+			cancel()
+		}
+	}
+
+	runDiscoveryLoop(m, ctx, state)
+
+	assert.Empty(t, fake.Calls(), "a pin another replica polls must not be browsed for")
+	assert.Nil(t, discoveryStateFor(m, "UCheld"), "the discovery reservation must be released")
+	assert.ErrorIs(t, ctx.Err(), context.Canceled, "the discovery context must be cancelled to end its event subscription")
+}
+
+func TestSyncSources_PinChangeWhileDiscoveringKeepsCache(t *testing.T) {
+	const channelID = "UCdiscover"
+	const pin = "pinnedVid01"
+	const otherVideo = "otherVid001"
+	ctx := context.Background()
+	sm, smClient := newFakeSourceManager(t)
+	m, _ := newPinTestManager(t, smClient)
+	m.leader = sourcemanager.NewLeadershipCoordinator("youtube", &fakeLeadershipClient{refuse: true}, time.Hour, zap.NewNop())
+	t.Cleanup(m.leader.Stop)
+
+	sm.set(&sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-1", ChannelID: channelID, IsActive: true})
+	m.syncSources(ctx)
+	before := discoveryStateFor(m, channelID)
+	require.NotNil(t, before)
+
+	// Another replica's poller wrote these while this one was still discovering.
+	require.NoError(t, m.repository.SetChannelVideoMapping(ctx, channelID, otherVideo))
+	require.NoError(t, m.repository.SetStreamState(ctx, channelID, otherVideo, "overlay-1", "chat-1"))
+
+	// jitter runs right after the restarted discovery is reserved and before it
+	// reads or writes any cached key, so it sees what the restart itself left.
+	var restarted *DiscoveryState
+	var mappingAtRestart string
+	var stateAtRestart int64
+	m.jitter = func() time.Duration {
+		restarted = discoveryStateFor(m, channelID)
+		mappingAtRestart, _ = m.repository.GetChannelVideoMapping(ctx, channelID)
+		stateAtRestart, _ = m.redisClient.Exists(ctx, "youtube:stream:state:"+channelID).Result()
+		return 0
+	}
+	sm.set(&sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-1", ChannelID: channelID, StreamID: pin, IsActive: true})
+	m.syncSources(ctx)
+
+	require.NotNil(t, restarted, "a pin change must restart discovery")
+	assert.NotSame(t, before, restarted)
+	assert.Equal(t, pin, restarted.PinnedVideoID)
+	assert.Equal(t, otherVideo, mappingAtRestart, "a replica that was only discovering must not evict another replica's video mapping")
+	assert.EqualValues(t, 1, stateAtRestart, "a replica that was only discovering must not delete another replica's stream-state")
+
+	require.Eventually(t, func() bool { return discoveryStateFor(m, channelID) == nil },
+		5*time.Second, 10*time.Millisecond, "the pin is held by the other replica, so discovery stops")
+	m.wg.Wait()
+	exists, err := m.redisClient.Exists(ctx, "youtube:stream:state:"+channelID).Result()
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, exists)
+}
+
+func TestSyncSources_PinChangeToPolledVideoKeepsPoller(t *testing.T) {
+	const channelID = "UCpolled"
+	const pin = "pinnedVid01"
+	ctx := context.Background()
+	sm, smClient := newFakeSourceManager(t)
+	m, fake := newPinTestManager(t, smClient)
+	// The browse already found the video the overlay owner then pins.
+	injectRunningPoller(m, channelID, pin)
+	m.mu.RLock()
+	running := m.pollers[pin]
+	m.mu.RUnlock()
+	require.NoError(t, m.repository.SetChannelVideoMapping(ctx, channelID, pin))
+
+	sm.set(&sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-1", ChannelID: channelID, StreamID: pin, IsActive: true})
+	m.syncSources(ctx)
+
+	assert.Equal(t, []string{pin}, polledVideos(m, channelID))
+	m.mu.RLock()
+	assert.Same(t, running, m.pollers[pin], "pinning the polled video must not restart its poller")
+	assert.Equal(t, pin, m.pins[channelID])
+	m.mu.RUnlock()
+	assert.Nil(t, discoveryStateFor(m, channelID))
+	assert.Empty(t, fake.Calls(), "no probe and no discovery for a pin that is already polled")
+	mapping, err := m.repository.GetChannelVideoMapping(ctx, channelID)
+	require.NoError(t, err)
+	assert.Equal(t, pin, mapping)
+}
