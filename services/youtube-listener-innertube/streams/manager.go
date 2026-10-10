@@ -34,6 +34,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/status"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/subscribers"
 	"github.com/caesar/all-chat/shared/sourcemanager"
+	"github.com/caesar/all-chat/shared/youtubeclaim"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -106,6 +107,8 @@ type Manager struct {
 	statusPublisher  *status.Publisher
 	batchDetector    *deletion.BatchDetector  // Batch deletion detector for cleanup
 	deletionBuffer   *deletion.DeletionBuffer // Deletion event buffer for cleanup
+	// claims lists channels the Data API listener serves (ADR-0065); nil = none.
+	claims *youtubeclaim.ClaimStore
 
 	// subscriberRunner starts/stops the per-channel subscriber poll loop on the
 	// same lifecycle boundaries as the chat poller. nil = subscriber alerts
@@ -162,6 +165,10 @@ func NewManager(
 	batchDetector *deletion.BatchDetector,
 	deletionBuffer *deletion.DeletionBuffer,
 ) *Manager {
+	var claims *youtubeclaim.ClaimStore
+	if redisClient != nil {
+		claims = youtubeclaim.NewClaimStore(redisClient)
+	}
 	return &Manager{
 		leader:                   leader,
 		smClient:                 smClient,
@@ -176,6 +183,7 @@ func NewManager(
 		statusPublisher:          status.NewPublisher(redisClient, logger),
 		batchDetector:            batchDetector,
 		deletionBuffer:           deletionBuffer,
+		claims:                   claims,
 		activeStreams:            make(map[string]*Stream),
 		pollers:                  make(map[string]*poller.Poller),
 		discovering:              make(map[string]*DiscoveryState),
@@ -229,8 +237,11 @@ func (m *Manager) OnOverlayConnected(overlayID string, sources []Source) {
 	m.connectedOverlays[overlayID] = time.Now()
 	m.mu.Unlock()
 
-	// Start async discovery for each YouTube source
+	// Start async discovery for each YouTube source the Data API listener does not serve
 	for _, source := range sources {
+		if m.channelClaimed(source.ChannelID) {
+			continue
+		}
 		m.startAsyncDiscovery(source.ChannelID, overlayID, DiscoveryOpts{PinnedVideoID: source.PinnedVideoID})
 	}
 }
@@ -1130,7 +1141,8 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 // on the youtube:control channel) to recover immediately.
 //
 // It stops every poller this pod runs for the channel, cancels any in-progress
-// discovery, clears the cached video mapping + stream-state + give-up marker, then
+// discovery, clears the give-up marker and, unless the channel is claimed by the
+// official-API listener, the cached video mapping + stream-state, then
 // kicks an immediate sync so a fresh discovery picks up the current live stream (or
 // correctly reports offline). Safe to run on every pod: only the leader holds the
 // poller, the Redis deletes are idempotent, and leadership election serialises who
@@ -1141,7 +1153,9 @@ func (m *Manager) ForceRediscoverChannel(_ context.Context, channelID, overlayID
 		zap.String("overlay_id", overlayID),
 	)
 
-	m.stopChannel(channelID, true)
+	// A claimed channel's stream-state belongs to the Data API listener; the sync
+	// below leaves the channel to it.
+	m.stopChannel(channelID, !m.channelClaimed(channelID))
 
 	// Kick an immediate sync — the canonical "discover now" path (mirrors
 	// UpdateDemandedChannels). It re-reads the source's stream_select strategy from
@@ -1356,6 +1370,12 @@ func (m *Manager) syncSources(ctx context.Context) {
 		return
 	}
 
+	// Read before anything acts on a channel: a claimed channel must never reach
+	// the pin-change restart below, whose stopChannel would delete the stream-state
+	// the Data API listener now writes.
+	claimed := m.claimedChannels(ctx)
+	m.releaseClaimedChannels(claimed)
+
 	// Rebalance leadership leases before acquiring new ones.
 	// Released video IDs will have their pollers stopped below.
 	if m.leader != nil {
@@ -1423,6 +1443,10 @@ func (m *Manager) syncSources(ctx context.Context) {
 			}
 			info.OverlayIDs = append(info.OverlayIDs, source.OverlayID)
 		}
+	}
+
+	for channelID := range claimed {
+		delete(channelOverlays, channelID)
 	}
 
 	// Filter by demand: only process channels with active overlay demand
@@ -1532,6 +1556,66 @@ func (m *Manager) syncSources(ctx context.Context) {
 	}
 }
 
+// claimedChannels returns the channels the Data API listener serves. A Redis
+// error yields none: innertube keeps serving every channel rather than dropping
+// chat it cannot prove someone else is reading.
+func (m *Manager) claimedChannels(ctx context.Context) map[string]struct{} {
+	if m.claims == nil {
+		return nil
+	}
+	claimed, err := m.claims.ClaimedChannels(ctx)
+	if err != nil {
+		m.logger.Warn("Failed to read official-API claims, serving all channels", zap.Error(err))
+		return nil
+	}
+	return claimed
+}
+
+// channelClaimed is the single-key form of claimedChannels for paths that start
+// work on one channel; it fails open the same way.
+func (m *Manager) channelClaimed(channelID string) bool {
+	if m.claims == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	claimed, err := m.claims.IsClaimed(ctx, channelID)
+	if err != nil {
+		m.logger.Warn("Failed to read official-API claim, serving channel",
+			zap.String("channel_id", channelID), zap.Error(err))
+		return false
+	}
+	return claimed
+}
+
+// releaseClaimedChannels stops what this pod polls or discovers on claimed
+// channels. Leases are released so the Data API listener can take the video;
+// the cached keys are left alone because that listener owns them now.
+func (m *Manager) releaseClaimedChannels(claimed map[string]struct{}) {
+	if len(claimed) == 0 {
+		return
+	}
+	m.mu.RLock()
+	var running []string
+	for _, stream := range m.activeStreams {
+		if _, ok := claimed[stream.ChannelID]; ok && !slices.Contains(running, stream.ChannelID) {
+			running = append(running, stream.ChannelID)
+		}
+	}
+	for channelID := range m.discovering {
+		if _, ok := claimed[channelID]; ok && !slices.Contains(running, channelID) {
+			running = append(running, channelID)
+		}
+	}
+	m.mu.RUnlock()
+
+	for _, channelID := range running {
+		m.logger.Info("Channel claimed by the official-API listener, stopping innertube",
+			zap.String("channel_id", channelID))
+		m.stopChannel(channelID, false)
+	}
+}
+
 // pinProbeInterval bounds how often a pinned channel that fell back to another
 // video re-checks its pin: one watch-page fetch per channel per minute.
 const pinProbeInterval = 60 * time.Second
@@ -1563,14 +1647,15 @@ func (m *Manager) probePin(ctx context.Context, channelID, overlayID string, opt
 		}
 
 		// A sync may have moved the pin, or a restart may already poll it, while
-		// the probe was in flight; either way there is nothing left to replace.
+		// the probe was in flight; either way there is nothing left to replace. A
+		// claim taken meanwhile hands the channel to the Data API listener.
 		m.mu.RLock()
 		stale := m.pins[channelID] != pin
 		if stream, ok := m.activeStreams[pin]; ok && stream.ChannelID == channelID {
 			stale = true
 		}
 		m.mu.RUnlock()
-		if stale {
+		if stale || m.channelClaimed(channelID) {
 			return
 		}
 

@@ -22,14 +22,17 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/caesar/all-chat/services/youtube-listener-innertube/innertube"
 	"github.com/caesar/all-chat/services/youtube-listener-innertube/poller"
 	"github.com/caesar/all-chat/shared/sourcemanager"
+	"github.com/caesar/all-chat/shared/youtubeclaim"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -830,6 +833,30 @@ func TestSyncSources_PinChangeRestartsDiscovery(t *testing.T) {
 	m.wg.Wait()
 }
 
+func TestSyncSources_ClaimedChannelNotDiscovered(t *testing.T) {
+	const channelID = "UCclaimed"
+	sm, smClient := newFakeSourceManager(t)
+	m, fake := newPinTestManager(t, smClient)
+	sm.set(&sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-1", ChannelID: channelID, StreamID: "pinnedVid01", IsActive: true})
+	require.NoError(t, youtubeclaim.NewClaimStore(m.redisClient).Claim(context.Background(), channelID, "owner"))
+
+	m.syncSources(context.Background())
+
+	assert.Nil(t, discoveryStateFor(m, channelID), "a channel claimed by the Data API listener must not be discovered")
+	assert.Empty(t, fake.Calls())
+}
+
+// noopChatClient satisfies poller.ClientInterface for a poller that is never started.
+type noopChatClient struct{}
+
+func (noopChatClient) GetLiveChatReplay(context.Context, string, string) (*innertube.LiveChatResponse, error) {
+	return nil, errors.New("not used")
+}
+func (noopChatClient) ExtractContinuation(*innertube.LiveChatResponse) string { return "" }
+func (noopChatClient) GetPollInterval(*innertube.LiveChatResponse) time.Duration {
+	return time.Second
+}
+
 // fakeLeadershipClient grants every claim, or refuses every one when refuse is
 // set (another replica holds the lease), and records releases.
 type fakeLeadershipClient struct {
@@ -857,6 +884,66 @@ func (f *fakeLeadershipClient) Released() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.released...)
+}
+
+func TestSyncSources_ClaimStopsRunningPoller(t *testing.T) {
+	const channelID = "UCclaimed"
+	const videoID = "liveVideo01"
+	ctx := context.Background()
+	sm, smClient := newFakeSourceManager(t)
+	m, _ := newPinTestManager(t, smClient)
+	sm.set(&sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-1", ChannelID: channelID, IsActive: true})
+
+	lc := &fakeLeadershipClient{}
+	m.leader = sourcemanager.NewLeadershipCoordinator("youtube", lc, time.Hour, zap.NewNop())
+	t.Cleanup(m.leader.Stop)
+	held, err := m.leader.EnsureLeadership(ctx, videoID, nil)
+	require.NoError(t, err)
+	require.True(t, held)
+
+	p := poller.NewPoller(noopChatClient{}, "", channelID, zap.NewNop(), nil)
+	m.mu.Lock()
+	m.pollers[videoID] = p
+	m.activeStreams[videoID] = &Stream{VideoID: videoID, ChannelID: channelID, OverlayID: "overlay-1"}
+	m.mu.Unlock()
+	require.NoError(t, m.repository.SetChannelVideoMapping(ctx, channelID, videoID))
+	require.NoError(t, m.repository.SetStreamState(ctx, channelID, videoID, "overlay-1", "chat-1"))
+
+	m.syncSources(ctx)
+	require.Equal(t, []string{videoID}, polledVideos(m, channelID), "an unclaimed channel keeps polling")
+
+	require.NoError(t, youtubeclaim.NewClaimStore(m.redisClient).Claim(ctx, channelID, "owner"))
+	m.syncSources(ctx)
+
+	assert.Empty(t, polledVideos(m, channelID), "a claimed channel's poller must be removed")
+	assert.Nil(t, discoveryStateFor(m, channelID), "a claimed channel must not be rediscovered")
+	assert.Zero(t, m.leader.LeaseCount())
+	require.Eventually(t, func() bool {
+		return slices.Contains(lc.Released(), videoID)
+	}, 2*time.Second, 10*time.Millisecond, "the video lease must be released so the Data API listener can take it")
+
+	exists, err := m.redisClient.Exists(ctx, "youtube:stream:state:"+channelID).Result()
+	require.NoError(t, err)
+	assert.EqualValues(t, 1, exists, "the stream-state key belongs to the claiming listener now")
+}
+
+func TestChannelClaimed_ReadsClaimStore(t *testing.T) {
+	m, _ := newPinTestManager(t, nil)
+	// The store sits on its own server so a read that bypasses it sees no claim.
+	claimServer := miniredis.RunT(t)
+	claimClient := redis.NewClient(&redis.Options{Addr: claimServer.Addr(), MaxRetries: -1})
+	t.Cleanup(func() { _ = claimClient.Close() })
+	m.claims = youtubeclaim.NewClaimStore(claimClient)
+	require.NoError(t, m.claims.Claim(context.Background(), "UCclaimed", "owner"))
+
+	assert.True(t, m.channelClaimed("UCclaimed"))
+	assert.False(t, m.channelClaimed("UCfree"))
+
+	claimServer.Close()
+	assert.False(t, m.channelClaimed("UCclaimed"), "an unreadable claim store fails open, like claimedChannels")
+
+	m.claims = nil
+	assert.False(t, m.channelClaimed("UCclaimed"))
 }
 
 func TestDiscoveryLoop_PinLeadershipHeldStops(t *testing.T) {
