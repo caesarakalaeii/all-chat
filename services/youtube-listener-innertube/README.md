@@ -71,6 +71,8 @@ source's channel). source-manager serves it as `stream_id`.
 
 - Every discovery attempt tries the pinned video first, then falls back to the
   channel browse in the same attempt, so a stale pin never hides a public stream.
+  A live pin wins outright: with a multi-stream strategy (`all`, `title_match_all`)
+  only the pinned stream is polled while it is live.
 - When several sources share a channel, the earliest-created source with a pin wins;
   `syncSources` sorts sources by creation time because source-manager returns them in
   map order.

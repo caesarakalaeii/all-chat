@@ -189,10 +189,19 @@ Authorization: Bearer <jwt-token>
 #   is_own_channel    — the requesting user owns this channel and can re-consent to migrate it
 #                       (true for Twitch-login owners and ADR-0016 linked-credential owners)
 
-# Activate/deactivate source
+# Update a source's config (the body replaces the whole config object)
 PATCH /api/v1/overlays/:overlay_id/sources/:source_id
 Authorization: Bearer <jwt-token>
-Body: { "is_active": false }
+Body: { "config": { ... } }
+# YouTube keys:
+#   stream_select / stream_match — stream selection strategy, validated on every save. Any
+#                  strategy but first_found needs premium (gate stream_selection) when it, or a
+#                  title strategy's match term, changes, on create and PATCH: 403 with
+#                  upgrade_url otherwise, 503 if premium status cannot be read.
+#   stream_id    — pinned stream for unlisted streams: a watch, youtu.be or /live/ link or an
+#                  11-character id, stored as the id. "" removes it. Only checked when it differs
+#                  from the stored value: 400 if unparsable, 422 if oEmbed attributes the video to
+#                  another channel or cannot verify it. Free.
 
 # Delete source
 DELETE /api/v1/overlays/:overlay_id/sources/:source_id

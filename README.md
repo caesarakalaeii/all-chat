@@ -159,7 +159,7 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 
 > YouTube has two listener modes: the official **YouTube Data API** (quota-tracked with reserve-confirm-rollback) and an **InnerTube poller** that costs zero quota. Both are production-ready.
 >
-> **Note:** Only public, currently live YouTube streams are supported. Unlisted streams, private streams, and scheduled (upcoming) streams do not work. Stream discovery relies on YouTube's public search API (`search.list` with `eventType=live`), which only returns streams that are both public and actively broadcasting.
+> **Note:** The InnerTube poller finds public, currently live streams on its own. For an unlisted stream, paste its link into the source's stream link field; it is free. Private and members-only streams do not work.
 >
 > **TikTok:** TikTok has no public API for LIVE chat. Every tool that shows TikTok LIVE chat, All-Chat included, reads it the way TikTok's own web player does. All-Chat signs those connections with its own open-source signing service ([`tiktok-signer`](./services/tiktok-signer/README.md), [ADR-0052](./docs/adr/0052-retiring-euler-stream-for-tiktok-signing.md)); no third-party sign server is involved. It tracked TikTok's 2026-09-09 move to browser-grade session checks the same week. Premium rooms get a second delivery path when the main connection is refused ([ADR-0064](./docs/adr/0064-tiktok-transport-tiers-by-entitlement.md)). The limit: TikTok is the platform most likely to see short interruptions when TikTok changes its web player.
 
