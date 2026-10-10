@@ -169,7 +169,6 @@ func (c *Consumer) reclaimLoop(ctx context.Context) {
 	}
 }
 
-// readAndProcess reads one batch of new entries and processes each.
 func (c *Consumer) readAndProcess(ctx context.Context) error {
 	streams, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 		Group:    ConsumerGroup,
