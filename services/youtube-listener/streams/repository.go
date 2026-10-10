@@ -39,118 +39,60 @@ func NewRepository(db *pgxpool.Pool, logger *zap.Logger) *Repository {
 	}
 }
 
-// GetActiveSources returns all active YouTube sources that should be monitored
-func (r *Repository) GetActiveSources(ctx context.Context) ([]*models.StreamSource, error) {
+// GetEligibleSources returns the YouTube sources opted into official-API mode (ADR-0065) whose
+// owner may currently use it: the overlay is active, the owner is not banned, the owner holds a
+// token row for the channel, and either the youtube_official_api gate is free or the owner is
+// premium. Rows are ordered by channel, then source age, so the earliest opt-in on a channel is
+// tried first as its owner.
+//
+// The token row does NOT prove ownership: overlay-manager's add-by-link path copies tokens under
+// channel ids their owner never authorized (for every user before it was limited to admin
+// sessions). Callers must verify the owner (owner_verify.go) before acting on a row.
+// ocs.is_active is deliberately not a predicate: both YouTube listeners write it, so filtering
+// on it would let innertube's state decide this listener's eligibility.
+func (r *Repository) GetEligibleSources(ctx context.Context, gateFree bool) ([]*models.StreamSource, error) {
 	query := `
-		SELECT DISTINCT
-			ocs.overlay_id,
-			ocs.channel_id
+		SELECT ocs.overlay_id, ocs.channel_id, o.user_id
 		FROM overlay_chat_sources ocs
 		JOIN overlays o ON ocs.overlay_id = o.id
-		WHERE o.is_active = true
-		  AND ocs.is_active = true
-		  AND ocs.platform = 'youtube'
-		ORDER BY ocs.channel_id
-	`
-
-	rows, err := r.db.Query(ctx, query)
-	if err != nil {
-		r.logger.Error("Failed to query active YouTube sources", zap.Error(err))
-		return nil, fmt.Errorf("failed to query active sources: %w", err)
-	}
-	defer rows.Close()
-
-	sources := make([]*models.StreamSource, 0)
-
-	for rows.Next() {
-		var source models.StreamSource
-		if err := rows.Scan(&source.OverlayID, &source.ChannelID); err != nil {
-			r.logger.Error("Failed to scan stream source", zap.Error(err))
-			continue
-		}
-		sources = append(sources, &source)
-	}
-
-	if err := rows.Err(); err != nil {
-		r.logger.Error("Error iterating stream sources", zap.Error(err))
-		return nil, fmt.Errorf("error iterating sources: %w", err)
-	}
-
-	r.logger.Debug("Fetched active YouTube sources",
-		zap.Int("count", len(sources)),
-	)
-
-	return sources, nil
-}
-
-// GetAllSources gets ALL YouTube sources (including inactive) for token validation
-func (r *Repository) GetAllSources(ctx context.Context) ([]*models.StreamSource, error) {
-	query := `
-		SELECT DISTINCT
-			ocs.overlay_id,
-			ocs.channel_id
-		FROM overlay_chat_sources ocs
-		JOIN overlays o ON ocs.overlay_id = o.id
-		WHERE o.is_active = true
-		  AND ocs.platform = 'youtube'
-		ORDER BY ocs.channel_id
-	`
-
-	rows, err := r.db.Query(ctx, query)
-	if err != nil {
-		r.logger.Error("Failed to query YouTube sources", zap.Error(err))
-		return nil, fmt.Errorf("failed to query sources: %w", err)
-	}
-	defer rows.Close()
-
-	sources := make([]*models.StreamSource, 0)
-
-	for rows.Next() {
-		var source models.StreamSource
-		if err := rows.Scan(&source.OverlayID, &source.ChannelID); err != nil {
-			r.logger.Error("Failed to scan stream source", zap.Error(err))
-			continue
-		}
-		sources = append(sources, &source)
-	}
-
-	if err := rows.Err(); err != nil {
-		r.logger.Error("Error iterating stream sources", zap.Error(err))
-		return nil, fmt.Errorf("error iterating sources: %w", err)
-	}
-
-	r.logger.Debug("Fetched all YouTube sources",
-		zap.Int("count", len(sources)),
-	)
-
-	return sources, nil
-}
-
-// GetUserIDForChannel gets the user ID associated with a YouTube channel
-// This is needed to retrieve OAuth tokens
-func (r *Repository) GetUserIDForChannel(ctx context.Context, channelID string) (string, error) {
-	query := `
-		SELECT DISTINCT u.id
-		FROM users u
-		JOIN overlays o ON u.id = o.user_id
-		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
+		JOIN users u ON o.user_id = u.id
 		WHERE ocs.platform = 'youtube'
-		  AND ocs.channel_id = $1
 		  AND o.is_active = true
-		LIMIT 1
+		  AND u.is_banned = false
+		  AND ocs.config->>'official_api' = 'true'
+		  AND EXISTS (
+			SELECT 1 FROM youtube_oauth_tokens t
+			WHERE t.user_id = o.user_id AND t.channel_id = ocs.channel_id
+		  )
+		  AND ($1::boolean OR u.is_premium)
+		ORDER BY ocs.channel_id, ocs.created_at, ocs.id
 	`
 
-	var userID string
-	err := r.db.QueryRow(ctx, query, channelID).Scan(&userID)
+	rows, err := r.db.Query(ctx, query, gateFree)
 	if err != nil {
-		r.logger.Error("Failed to get user ID for channel",
-			zap.String("channel_id", channelID),
-			zap.Error(err),
-		)
-		return "", fmt.Errorf("failed to get user ID: %w", err)
+		r.logger.Error("Failed to query eligible YouTube sources", zap.Error(err))
+		return nil, fmt.Errorf("failed to query eligible sources: %w", err)
+	}
+	defer rows.Close()
+
+	sources := make([]*models.StreamSource, 0)
+	for rows.Next() {
+		var source models.StreamSource
+		if err := rows.Scan(&source.OverlayID, &source.ChannelID, &source.OwnerUserID); err != nil {
+			return nil, fmt.Errorf("failed to scan eligible source: %w", err)
+		}
+		sources = append(sources, &source)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating eligible sources: %w", err)
 	}
 
-	return userID, nil
+	r.logger.Debug("Fetched eligible YouTube sources",
+		zap.Int("count", len(sources)),
+		zap.Bool("gate_free", gateFree),
+	)
+
+	return sources, nil
 }
 
 // UpdateStreamHistory updates the stream history when live status changes

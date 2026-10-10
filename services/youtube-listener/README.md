@@ -1,14 +1,47 @@
 # YouTube Listener
 
-YouTube Live Chat API polling service for All-Chat platform.
+YouTube Data API chat listener (gRPC `liveChatMessages.streamList`) for premium official-API mode.
 
 ## Overview
 
-The YouTube Listener service polls YouTube Live Chat API for configured channels, parses messages, and publishes them to Redis Streams for processing. It implements:
+This listener serves only YouTube sources that opted into official-API mode
+(`config.official_api: true`, premium gate `youtube_official_api`, ADR-0065). Every other
+YouTube channel is served by [youtube-listener-innertube](../youtube-listener-innertube/README.md),
+which spends no quota. The official API is used where InnerTube cannot help: unlisted streams
+that are not listed on the channel page and members-only chat, which only the channel owner's
+own credentials can read.
 
-- YouTube OAuth 2.0 authentication per streamer
-- Live stream discovery and monitoring
-- Adaptive polling intervals (respects API's pollingIntervalMillis)
+### Which channels it serves
+
+A source is eligible when it opted in, its overlay is active, its owner is not banned, the owner
+holds a `youtube_oauth_tokens` row for the channel, and the owner is premium (or the gate is
+free). Eligibility is re-read on every round, so a lapsed subscription falls back to InnerTube
+while the opt-in stays stored.
+
+A token row is not proof of ownership: overlay-manager's add-by-link path files a copy of an
+admin's token under the channel added, and did so for every user before it was limited to admin
+sessions. Each owner is therefore verified with `channels.list(mine=true)` on
+the stored token (cached six hours, one unit per check), and only a token whose own channel is
+the source's channel is used.
+
+### Claims and handover
+
+Every 60 seconds the global-sync leader writes `youtube:official:claim:{channelID}` (TTL 3
+minutes, `shared/youtubeclaim`) for each verified channel whose opted-in owner has an overlay
+connected (an overlay inside the 90s disconnect debounce still counts), and `syncStreams` serves
+only claimed channels; a replica that does not hold the global-sync lease serves nothing. innertube
+skips claimed channels and stops what it polls on them. A claim is released when the channel stops
+qualifying, when the owner's overlay disconnects, while the global quota state is Critical or
+worse, when a sync hits a token or auth error on the owner's credentials (the ownership verdict is
+forgotten too, so the next round re-verifies), and when the replica shuts down. A crashed listener
+lets the TTL expire. Either way InnerTube takes the channel back on its next sync.
+
+It implements:
+
+- Per-streamer OAuth (the owner's `youtube.readonly` token)
+- Live broadcast discovery with `liveBroadcasts.list broadcastStatus=active broadcastType=all`,
+  which returns unlisted, members-only and "Stream now" broadcasts
+- gRPC server streaming of chat
 - API quota tracking and alerting
 - Message normalization to unified format
 
@@ -31,7 +64,7 @@ Redis Streams (chat:raw)
 ```
 
 **Leader Election Strategy:**
-- **Global Sync Leader**: Only one replica performs expensive stream discovery (100 units/search)
+- **Global Sync Leader**: Only one replica performs broadcast discovery and refreshes claims
   - Uses Redis lock with stream ID: `"global-sync"`
   - Checked before periodic sync, PostgreSQL LISTEN events, and overlay connections
   - Prevents quota waste when running multiple replicas (e.g., 3 replicas = 66% quota savings)
@@ -54,10 +87,17 @@ Redis Streams (chat:raw)
 ### Environment Variables
 
 ```bash
-# YouTube OAuth (required)
+# YouTube OAuth (required): the same OAuth client that minted the youtube_oauth_tokens rows
 YOUTUBE_CLIENT_ID=xxx.apps.googleusercontent.com
 YOUTUBE_CLIENT_SECRET=GOCSPX-xxxxx
-YOUTUBE_REDIRECT_URL=http://localhost:8080/api/v1/auth/youtube/callback
+FRONTEND_URL=http://localhost:3000       # OAuth redirect URL is derived from it
+
+# Token encryption (required): the same key chain as auth-service and token-refresh-service.
+# TOKEN_ENCRYPTION_KEY_V1 is required; V2.. as rotated; the legacy keys below are read
+# as decryption fallbacks when set.
+TOKEN_ENCRYPTION_KEY_V1=<key, same value as auth-service>
+# TOKEN_ENCRYPTION_KEY=<legacy key>
+# YOUTUBE_TOKEN_ENCRYPTION_KEY=<legacy key>
 
 # Database (required)
 DATABASE_HOST=localhost
@@ -69,16 +109,21 @@ DATABASE_PASSWORD=allchat_dev_password
 # Redis (required)
 REDIS_HOST=localhost
 REDIS_PORT=6379
+# REDIS_PASSWORD=
 
-# Source Manager (leader election)
+# Source Manager (leader election). Required in any multi-replica deployment: without the
+# secret coordination is disabled, and every replica claims and polls every channel.
 SOURCE_MANAGER_URL=http://localhost:8088
 SOURCE_MANAGER_SECRET=dev-service-secret
 
 # Service configuration
 PORT=8086
 LOG_LEVEL=info
-POLLING_INTERVAL_MS=2000          # Default if API doesn't specify
-QUOTA_LIMIT_DAILY=1009000         # Daily API quota limit
+QUOTA_LIMIT_DAILY=1009000         # Daily API quota limit (keep the shared default)
+# youtube-quota-monitor owns quota:alerts (ADR-0023); set false in deployments that run it,
+# or every listener replica posts each quota transition again.
+QUOTA_NOTIFIER_ENABLED=false
+# CIRCUIT_BREAKER_OPEN_DURATION_MINUTES is clamped to 1; leave it unset.
 ```
 
 ## Database Schema
@@ -154,9 +199,11 @@ GET /status
 
 ### API Costs (Quota Units)
 
-- `search.list` (find live streams): **100 units**
+- `liveBroadcasts.list` (find the owner's active broadcasts): **1 unit** (estimate: not stated on the
+  method's page; `QuotaCostLiveBroadcasts` in `quota/tracker.go`)
+- `channels.list mine=true` (owner verification, cached 6h): **1 unit** (estimate, `QuotaCostChannels`)
 - `videos.list` (get stream details): **1 unit**
-- `liveChatMessages.streamList` (fetch messages): **5 units** per request
+- `liveChatMessages.streamList` (fetch messages): **5 units** per stream connection
 
 ## Quota Tracking System
 
@@ -252,8 +299,10 @@ GET /quota/channels/:channel_id
 
 1. **Discovery**: Check channels for live streams
    - Uses cached video ID first (1 unit lightweight check)
-   - Falls back to full search if cache miss (100 units)
-   - Exponential backoff when no stream found (30s → 10 min)
+   - Falls back to `liveBroadcasts.list` on the owner's token if the cache misses (1 unit)
+   - Backoff when no stream is found is capped at one minute (`maxDetectionBackoff`: detection
+     interval, negative cache and circuit-breaker open window), so a go-live is seen within about
+     a minute while innertube is kept off the claimed channel
 
 2. **Polling**: Poll each live stream's chat at API-recommended interval
    - Typical: 2-5 seconds based on `pollingIntervalMillis`
@@ -436,7 +485,7 @@ SELECT cleanup_stale_quota_reservations();
 
 1. **Quota**: Request increase to 1,000,000 units/day
 2. **Leader Election**: 
-   - **Global Sync Leader**: Only one replica performs stream discovery (100 units per search) to avoid quota waste
+   - **Global Sync Leader**: Only one replica performs broadcast discovery and refreshes claims
    - **Per-Stream Leader**: Prevents duplicate chat message polling across replicas
    - Both use Source Manager for distributed leadership coordination
 3. **Token Management**: Monitor token refresh success rate

@@ -37,8 +37,11 @@ type YouTubeStream struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// StreamSource represents an active YouTube channel to monitor
+// StreamSource is an overlay source eligible for official-API mode (ADR-0065).
 type StreamSource struct {
 	OverlayID string // UUID of the overlay
 	ChannelID string // YouTube channel ID
+	// OwnerUserID is the opting-in overlay owner whose token serves the channel. Eligibility
+	// only proves a token row exists; ownership is proven separately (streams/owner_verify.go).
+	OwnerUserID string
 }

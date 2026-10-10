@@ -125,9 +125,9 @@ func (h *DetectionHandler) ListAllChannelStates(c *gin.Context) {
 	response := gin.H{
 		"channels": filtered,
 		"summary": gin.H{
-			"total":          len(states),
-			"filtered":       len(filtered),
-			"quota_budget":   h.quotaBudget.GetBudgetSummary(),
+			"total":        len(states),
+			"filtered":     len(filtered),
+			"quota_budget": h.quotaBudget.GetBudgetSummary(),
 			"global_quota": gin.H{
 				"state":      h.quotaTracker.GetState(),
 				"remaining":  h.quotaTracker.GetRemainingQuota(),
@@ -206,21 +206,21 @@ func (h *DetectionHandler) ForceChannelDetection(c *gin.Context) {
 		return
 	}
 
-	// Record manual operation in quota budget (100 units for full detection)
+	// Record manual operation in quota budget (one liveBroadcasts.list discovery call)
 	if h.quotaBudget != nil {
-		h.quotaBudget.RecordManualOperation(ctx, 100, fmt.Sprintf("force_detection:%s", channelID))
+		h.quotaBudget.RecordManualOperation(ctx, quota.QuotaCostLiveBroadcasts, fmt.Sprintf("force_detection:%s", channelID))
 	}
 
 	h.logger.Info("Manually forced channel detection",
 		zap.String("channel_id", channelID),
 		zap.String("action", "admin_force_detection"),
-		zap.Int("quota_used", 100),
+		zap.Int("quota_used", quota.QuotaCostLiveBroadcasts),
 	)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":    "Detection triggered successfully (bypassed quota budget)",
 		"channel_id": channelID,
-		"quota_used": 100,
+		"quota_used": quota.QuotaCostLiveBroadcasts,
 		"timestamp":  time.Now().Format(time.RFC3339),
 		"warning":    "Manual operation counted against manual quota reserve",
 	})
