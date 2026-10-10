@@ -147,7 +147,7 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 | Platform | How it works | What you get |
 |----------|-------------|--------------|
 | **Twitch** | IRC + EventSub webhooks | Chat, emotes (native + 7TV/BTTV/FFZ), chat GIFs, badges, colors, channel points, raids, follows, chat notices (watch streaks, announcements, charity donations) |
-| **YouTube** | HTTP polling + InnerTube API | Chat, Super Chat, member badges, multi-stream selection (public, currently live streams only) |
+| **YouTube** | HTTP polling + InnerTube API | Chat, Super Chat, member badges, multi-stream selection among public live streams; unlisted streams by pasting the stream link |
 | **Kick** | Pusher WebSocket | Chat, emotes, badges, message deletion |
 | **TikTok** | Reads LIVE chat the way TikTok's own web player does; All-Chat maintains its own open-source signing service | Chat, gifts, follows and likes; add a channel by username |
 | **Discord** | Bot gateway + webhook relay | Channel chat relay to overlay |
