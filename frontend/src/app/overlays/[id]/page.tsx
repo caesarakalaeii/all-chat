@@ -98,6 +98,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/ui/dialog'
 import { PlatformBadge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
+import { YouTubeOfficialApiToggle } from '@/components/overlay/YouTubeOfficialApiToggle'
 import { YouTubeStreamLinkField } from '@/components/overlay/YouTubeStreamLinkField'
 import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge'
 import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal'
@@ -732,6 +733,15 @@ function StreamSelectionPanel({
         <Separator />
 
         <YouTubeStreamLinkField source={source} overlayId={overlayId} onSaved={onSaved} />
+
+        <Separator />
+
+        <YouTubeOfficialApiToggle
+          source={source}
+          overlayId={overlayId}
+          isPremium={isPremium}
+          onSaved={onSaved}
+        />
       </div>
     </Card>
   )
