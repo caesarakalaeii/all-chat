@@ -193,15 +193,18 @@ Authorization: Bearer <jwt-token>
 PATCH /api/v1/overlays/:overlay_id/sources/:source_id
 Authorization: Bearer <jwt-token>
 Body: { "config": { ... } }
-# YouTube keys:
-#   stream_select / stream_match — stream selection strategy, validated on every save. Any
-#                  strategy but first_found needs premium (gate stream_selection) when it, or a
-#                  title strategy's match term, changes, on create and PATCH: 403 with
-#                  upgrade_url otherwise, 503 if premium status cannot be read.
+# YouTube keys (ADR-0065). stream_id and official_api are only checked when their value differs
+# from the stored one; stream_select / stream_match are validated on every save:
+#   stream_select / stream_match — stream selection strategy. Any strategy but first_found
+#                  needs premium (gate stream_selection) when it, or a title strategy's match
+#                  term, changes, on create and PATCH: 403 with upgrade_url otherwise, 503 if
+#                  premium status cannot be read.
 #   stream_id    — pinned stream for unlisted streams: a watch, youtu.be or /live/ link or an
-#                  11-character id, stored as the id. "" removes it. Only checked when it differs
-#                  from the stored value: 400 if unparsable, 422 if oEmbed attributes the video to
-#                  another channel or cannot verify it. Free.
+#                  11-character id, stored as the id. "" removes it. 400 if unparsable, 422 if
+#                  oEmbed attributes the video to another channel or cannot verify it. Free.
+#   official_api — true hands the channel to youtube-listener (premium gate
+#                  youtube_official_api): 403 when not premium, 409 when the caller has no
+#                  YouTube connection for the channel. Turning it off is never checked.
 
 # Delete source
 DELETE /api/v1/overlays/:overlay_id/sources/:source_id

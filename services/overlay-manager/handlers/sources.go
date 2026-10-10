@@ -32,6 +32,7 @@ import (
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
+	"github.com/caesar/all-chat/shared/youtubetoken"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -86,6 +87,10 @@ type SourcesHandler struct {
 
 	// Nil means a changed YouTube stream pin cannot be verified, and saving one fails closed.
 	youtubeVideos youtubeVideoChannels
+
+	// Nil means turning on config.official_api cannot be checked, and doing so fails closed.
+	youtubeOfficialGate   youtubeOfficialAPIGate
+	youtubeOfficialAnchor youtubeOwnerAnchor
 }
 
 // SetDiscordGuard wires the Discord source guard. Injected separately from the constructor
@@ -109,14 +114,86 @@ func (h *SourcesHandler) SetYouTubeVideoResolver(r youtubeVideoChannels) {
 	h.youtubeVideos = r
 }
 
+// youtubeOfficialAPIGate decides whether a user may turn on the official YouTube API mode
+// (featuregates.GateYouTubeOfficialAPI): gate free, or the user is premium.
+type youtubeOfficialAPIGate interface {
+	Allowed(ctx context.Context, userID string) (bool, error)
+}
+
+// youtubeOwnerAnchor is satisfied by *youtubetoken.YouTubeSource. It only says the user has
+// connected this channel; the Data API listener proves ownership itself before claiming it,
+// so this check exists to fail early with an actionable message, not to authorize.
+type youtubeOwnerAnchor interface {
+	OwnerYouTubeAnchor(ctx context.Context, userID, channelID string) error
+}
+
+// SetYouTubeOfficialAPI wires the checks for turning on config.official_api.
+func (h *SourcesHandler) SetYouTubeOfficialAPI(gate youtubeOfficialAPIGate, anchor youtubeOwnerAnchor) {
+	h.youtubeOfficialGate = gate
+	h.youtubeOfficialAnchor = anchor
+}
+
 // normalizeYouTubeConfig validates the YouTube keys of a config about to be stored, and
 // rewrites them into their stored form in place. stored is the config currently on the
 // source (nil at create time). The PATCH body is the whole config, so only keys whose
 // value differs from stored are checked: a settings save that carries an untouched value
-// must neither cost a lookup nor fail on one. Returns (0, "") when allowed, or an HTTP
-// status plus message.
-func (h *SourcesHandler) normalizeYouTubeConfig(ctx context.Context, userID, channelID string, stored, requested map[string]interface{}) (int, string) {
-	return h.normalizeYouTubeStreamPin(ctx, userID, channelID, stored, requested)
+// must neither cost a lookup nor fail on one. Returns (0, nil) when allowed, or an HTTP
+// status plus the JSON body to send.
+func (h *SourcesHandler) normalizeYouTubeConfig(ctx context.Context, userID, channelID string, stored, requested map[string]interface{}) (int, gin.H) {
+	if status, body := h.checkYouTubeOfficialAPI(ctx, userID, channelID, stored, requested); status != 0 {
+		return status, body
+	}
+	if status, msg := h.normalizeYouTubeStreamPin(ctx, userID, channelID, stored, requested); status != 0 {
+		return status, gin.H{"error": msg}
+	}
+	return 0, nil
+}
+
+// checkYouTubeOfficialAPI guards config.official_api, the premium opt-in that hands an owned
+// channel to the Data API listener. Only turning it on is checked: a stored opt-in survives
+// a lapsed subscription (the listener falls back to innertube by itself), so a later save
+// carrying it unchanged, or turning it off, must always go through.
+func (h *SourcesHandler) checkYouTubeOfficialAPI(ctx context.Context, userID, channelID string, stored, requested map[string]interface{}) (int, gin.H) {
+	raw, present := requested["official_api"]
+	if !present {
+		return 0, nil
+	}
+	enable, ok := raw.(bool)
+	if !ok {
+		return http.StatusBadRequest, gin.H{"error": "official_api must be true or false"}
+	}
+	if wasEnabled, _ := stored["official_api"].(bool); !enable || wasEnabled {
+		return 0, nil
+	}
+
+	if h.youtubeOfficialGate == nil || h.youtubeOfficialAnchor == nil {
+		h.logger.Error("YouTube official API checks unconfigured — refusing opt-in",
+			zap.String("user_id", userID))
+		return http.StatusServiceUnavailable, gin.H{"error": "the official YouTube API mode is unavailable, please try again later"}
+	}
+	allowed, err := h.youtubeOfficialGate.Allowed(ctx, userID)
+	if err != nil {
+		h.logger.Error("Failed to check YouTube official API gate",
+			zap.String("user_id", userID), zap.Error(err))
+		return http.StatusServiceUnavailable, gin.H{"error": "the official YouTube API mode is unavailable, please try again later"}
+	}
+	if !allowed {
+		// Same body as shared/middleware.RequirePremium, so the frontend's upgrade handling applies.
+		return http.StatusForbidden, gin.H{
+			"error":       "Premium feature required",
+			"message":     "This is a premium feature. Upgrade your account to access this functionality.",
+			"upgrade_url": "/upgrade",
+		}
+	}
+	if err := h.youtubeOfficialAnchor.OwnerYouTubeAnchor(ctx, userID, channelID); err != nil {
+		if errors.Is(err, youtubetoken.ErrOwnerChannelUnverified) {
+			return http.StatusConflict, gin.H{"error": "connect this YouTube channel first"}
+		}
+		h.logger.Error("Failed to check YouTube channel anchor",
+			zap.String("user_id", userID), zap.String("channel_id", channelID), zap.Error(err))
+		return http.StatusServiceUnavailable, gin.H{"error": "the official YouTube API mode is unavailable, please try again later"}
+	}
+	return 0, nil
 }
 
 // normalizeYouTubeStreamPin handles config.stream_id, the pinned video innertube polls
@@ -956,8 +1033,8 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 			c.JSON(status, body)
 			return
 		}
-		if status, msg := h.normalizeYouTubeConfig(c.Request.Context(), userID.(string), channelID, nil, req.Config); status != 0 {
-			c.JSON(status, gin.H{"error": msg})
+		if status, body := h.normalizeYouTubeConfig(c.Request.Context(), userID.(string), channelID, nil, req.Config); status != 0 {
+			c.JSON(status, body)
 			return
 		}
 	}
@@ -1160,8 +1237,8 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 			c.JSON(status, body)
 			return
 		}
-		if status, msg := h.normalizeYouTubeConfig(c.Request.Context(), userID.(string), source.ChannelID, source.Config, req.Config); status != 0 {
-			c.JSON(status, gin.H{"error": msg})
+		if status, body := h.normalizeYouTubeConfig(c.Request.Context(), userID.(string), source.ChannelID, source.Config, req.Config); status != 0 {
+			c.JSON(status, body)
 			return
 		}
 	}

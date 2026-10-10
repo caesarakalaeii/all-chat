@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
+	"github.com/caesar/all-chat/shared/youtubetoken"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
@@ -391,12 +392,13 @@ func TestPatchYouTubeConfig_UnverifiableLink422(t *testing.T) {
 	assert.Equal(t, 1, videos.calls)
 }
 
-// Without its collaborators wired, the handler must refuse to store a new pin rather
-// than accept it unchecked.
+// Without its collaborators wired, the handler must refuse to store a new pin or turn
+// official-API mode on rather than accept either unchecked.
 func TestPatchYouTubeConfig_UnwiredFailsClosed(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for name, config := range map[string]map[string]interface{}{
-		"new pin": {"stream_id": pinVideo},
+		"new pin":         {"stream_id": pinVideo},
+		"official_api on": {"official_api": true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			updated := false
@@ -428,4 +430,153 @@ func TestPatchYouTubeConfig_UnwiredFailsClosed(t *testing.T) {
 			assert.False(t, updated)
 		})
 	}
+}
+
+// fakeOfficialAPI stands in for both the premium gate and the channel anchor, counting
+// calls so a test can prove a save that does not turn the mode on checks nothing.
+type fakeOfficialAPI struct {
+	allowed     bool
+	anchorErr   error
+	gateCalls   int
+	anchorCalls int
+}
+
+func (f *fakeOfficialAPI) Allowed(_ context.Context, _ string) (bool, error) {
+	f.gateCalls++
+	return f.allowed, nil
+}
+
+func (f *fakeOfficialAPI) OwnerYouTubeAnchor(_ context.Context, _, _ string) error {
+	f.anchorCalls++
+	return f.anchorErr
+}
+
+func patchOfficialAPI(t *testing.T, official *fakeOfficialAPI, stored, config map[string]interface{}) pinPatchResult {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+
+	var res pinPatchResult
+	h := buildPatchHandler(
+		&mockSourceRepositoryWithConfig{
+			getByIDFunc: func(_ context.Context, id string) (*models.ChatSource, error) {
+				return &models.ChatSource{
+					ID:        id,
+					OverlayID: "overlay-id",
+					Platform:  "youtube",
+					ChannelID: pinSourceChannel,
+					Config:    stored,
+				}, nil
+			},
+			updateConfigFunc: func(_ context.Context, _ string, cfg map[string]interface{}) error {
+				res.updated = true
+				res.saved = cfg
+				return nil
+			},
+		},
+		&mockOverlayRepository{
+			getByIDAndUserIDFunc: func(_ context.Context, id, userID string) (*models.Overlay, error) {
+				return &models.Overlay{ID: id, UserID: userID, Name: "Test"}, nil
+			},
+		},
+	)
+	h.SetYouTubeOfficialAPI(official, official)
+
+	bodyBytes, err := json.Marshal(map[string]interface{}{"config": config})
+	assert.NoError(t, err)
+	res.w = httptest.NewRecorder()
+	req, _ := http.NewRequest("PATCH", "/overlays/overlay-id/sources/source-id", bytes.NewBuffer(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	setupPatchRouter(h).ServeHTTP(res.w, req)
+	return res
+}
+
+func TestPatchOfficialAPI_PremiumOK(t *testing.T) {
+	official := &fakeOfficialAPI{allowed: true}
+	res := patchOfficialAPI(t, official,
+		map[string]interface{}{"stream_select": "first_found"},
+		map[string]interface{}{"stream_select": "first_found", "official_api": true},
+	)
+
+	assert.Equal(t, http.StatusOK, res.w.Code, res.w.Body.String())
+	assert.True(t, res.updated)
+	assert.Equal(t, true, res.saved["official_api"])
+	assert.Equal(t, 1, official.gateCalls)
+	assert.Equal(t, 1, official.anchorCalls)
+}
+
+func TestPatchOfficialAPI_NonPremium403(t *testing.T) {
+	official := &fakeOfficialAPI{allowed: false}
+	res := patchOfficialAPI(t, official,
+		map[string]interface{}{"official_api": false},
+		map[string]interface{}{"official_api": true},
+	)
+
+	assert.Equal(t, http.StatusForbidden, res.w.Code, res.w.Body.String())
+	assert.False(t, res.updated)
+	var body map[string]interface{}
+	assert.NoError(t, json.Unmarshal(res.w.Body.Bytes(), &body))
+	assert.Equal(t, "Premium feature required", body["error"])
+	assert.Equal(t, "/upgrade", body["upgrade_url"])
+	assert.NotEmpty(t, body["message"])
+	assert.Equal(t, 0, official.anchorCalls)
+}
+
+// The gate fake answers for the whole decision: a gate flipped to free reports allowed
+// for a non-premium caller, and the handler must not second-guess it with its own lookup.
+func TestPatchOfficialAPI_GateFreeNonPremiumOK(t *testing.T) {
+	official := &fakeOfficialAPI{allowed: true}
+	res := patchOfficialAPI(t, official,
+		map[string]interface{}{},
+		map[string]interface{}{"official_api": true},
+	)
+
+	assert.Equal(t, http.StatusOK, res.w.Code, res.w.Body.String())
+	assert.True(t, res.updated)
+	assert.Equal(t, true, res.saved["official_api"])
+	assert.Equal(t, 1, official.gateCalls)
+	assert.Equal(t, 1, official.anchorCalls)
+}
+
+func TestPatchOfficialAPI_Unanchored409(t *testing.T) {
+	official := &fakeOfficialAPI{allowed: true, anchorErr: youtubetoken.ErrOwnerChannelUnverified}
+	res := patchOfficialAPI(t, official,
+		map[string]interface{}{},
+		map[string]interface{}{"official_api": true},
+	)
+
+	assert.Equal(t, http.StatusConflict, res.w.Code, res.w.Body.String())
+	assert.False(t, res.updated)
+	assert.Contains(t, res.w.Body.String(), "connect this YouTube channel first")
+}
+
+func TestPatchOfficialAPI_DisableAlwaysOK(t *testing.T) {
+	official := &fakeOfficialAPI{allowed: false, anchorErr: youtubetoken.ErrOwnerChannelUnverified}
+	res := patchOfficialAPI(t, official,
+		map[string]interface{}{"official_api": true},
+		map[string]interface{}{"official_api": false},
+	)
+
+	assert.Equal(t, http.StatusOK, res.w.Code, res.w.Body.String())
+	assert.True(t, res.updated)
+	assert.Equal(t, false, res.saved["official_api"])
+	assert.Equal(t, 0, official.gateCalls)
+	assert.Equal(t, 0, official.anchorCalls)
+}
+
+// After premium lapses the stored opt-in stays (the listener hands the channel back to
+// innertube on its own). The frontend PATCHes the whole config, so an unrelated save
+// carries the flag along and must neither be refused nor drop it.
+func TestPatchOfficialAPI_LapsedKeepsFlagOnOtherSave(t *testing.T) {
+	official := &fakeOfficialAPI{allowed: false, anchorErr: youtubetoken.ErrOwnerChannelUnverified}
+	res := patchOfficialAPI(t, official,
+		map[string]interface{}{"official_api": true, "stream_select": "first_found"},
+		map[string]interface{}{"official_api": true, "stream_select": "most_viewers"},
+	)
+
+	assert.Equal(t, http.StatusOK, res.w.Code, res.w.Body.String())
+	assert.True(t, res.updated)
+	assert.Equal(t, true, res.saved["official_api"])
+	assert.Equal(t, "most_viewers", res.saved["stream_select"])
+	assert.Equal(t, 0, official.gateCalls)
+	assert.Equal(t, 0, official.anchorCalls)
 }
