@@ -376,3 +376,56 @@ func TestPatchYouTubePin_UnchangedPinNoLookup(t *testing.T) {
 	assert.Equal(t, "most_viewers", res.saved["stream_select"])
 	assert.Equal(t, 0, videos.calls)
 }
+
+func TestPatchYouTubeConfig_UnverifiableLink422(t *testing.T) {
+	// oEmbed refusing the video (private, embedding disabled, outage) must not store an
+	// unchecked pin.
+	videos := &fakeYouTubeVideoChannels{err: errors.New("oembed returned status 401")}
+	res := patchYouTubePin(t, videos,
+		map[string]interface{}{},
+		map[string]interface{}{"stream_id": pinVideo},
+	)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, res.w.Code, res.w.Body.String())
+	assert.False(t, res.updated)
+	assert.Equal(t, 1, videos.calls)
+}
+
+// Without its collaborators wired, the handler must refuse to store a new pin rather
+// than accept it unchecked.
+func TestPatchYouTubeConfig_UnwiredFailsClosed(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for name, config := range map[string]map[string]interface{}{
+		"new pin": {"stream_id": pinVideo},
+	} {
+		t.Run(name, func(t *testing.T) {
+			updated := false
+			h := buildPatchHandler(
+				&mockSourceRepositoryWithConfig{
+					getByIDFunc: func(_ context.Context, id string) (*models.ChatSource, error) {
+						return &models.ChatSource{ID: id, OverlayID: "overlay-id", Platform: "youtube", ChannelID: pinSourceChannel}, nil
+					},
+					updateConfigFunc: func(context.Context, string, map[string]interface{}) error {
+						updated = true
+						return nil
+					},
+				},
+				&mockOverlayRepository{
+					getByIDAndUserIDFunc: func(_ context.Context, id, userID string) (*models.Overlay, error) {
+						return &models.Overlay{ID: id, UserID: userID, Name: "Test"}, nil
+					},
+				},
+			)
+
+			bodyBytes, err := json.Marshal(map[string]interface{}{"config": config})
+			assert.NoError(t, err)
+			w := httptest.NewRecorder()
+			req, _ := http.NewRequest("PATCH", "/overlays/overlay-id/sources/source-id", bytes.NewBuffer(bodyBytes))
+			req.Header.Set("Content-Type", "application/json")
+			setupPatchRouter(h).ServeHTTP(w, req)
+
+			assert.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
+			assert.False(t, updated)
+		})
+	}
+}
