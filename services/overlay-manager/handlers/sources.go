@@ -30,6 +30,7 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -76,6 +77,10 @@ type SourcesHandler struct {
 	discordChannels discordChannelGuildResolver
 	discordGuilds   discordGuildOwnership
 	platformGate    PlatformSourceGate
+
+	// adminTokenCopy files the caller's own platform token under a channel added by link.
+	// A field so tests can observe who gets a copy without a database.
+	adminTokenCopy func(ctx context.Context, platform, adminUserID, channelID string) error
 }
 
 // SetDiscordGuard wires the Discord source guard. Injected separately from the constructor
@@ -134,7 +139,7 @@ type discordChannelEntry struct {
 // cipher is used to encrypt kick_oauth_tokens on write (D-16); may be nil when
 // TOKEN_ENCRYPTION_KEY_V1 is not configured (tokens stored as plaintext with encryption_version=0).
 func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepository, db *pgxpool.Pool, logger *zap.Logger, redisClient redis.Cmdable, bm *metrics.BusinessMetrics, cipher *encryption.MultiKeyEncryptor) *SourcesHandler {
-	return &SourcesHandler{
+	h := &SourcesHandler{
 		sourceRepo:   sourceRepo,
 		overlayRepo:  overlayRepo,
 		db:           db,
@@ -144,6 +149,23 @@ func NewSourcesHandler(sourceRepo SourceRepository, overlayRepo OverlayRepositor
 		cipher:       cipher,
 		platformGate: OpenPlatformSourceGate{},
 	}
+	h.adminTokenCopy = h.copyAdminToken
+	return h
+}
+
+// copyAdminToken dispatches the per-platform copy. Without a database there is nothing to
+// copy from, which is not an error for the request.
+func (h *SourcesHandler) copyAdminToken(ctx context.Context, platform, adminUserID, channelID string) error {
+	if h.db == nil {
+		return nil
+	}
+	switch platform {
+	case "youtube":
+		return h.copyYouTubeTokenForChannel(ctx, adminUserID, channelID)
+	case "kick":
+		return h.copyKickTokenForChannel(ctx, adminUserID, channelID)
+	}
+	return nil
 }
 
 // discordConfigChannelKeys are the config fields that name a Discord channel All-Chat will
@@ -851,42 +873,20 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		h.setDiscordChannelRegistry(c.Request.Context(), inboundChannelID, overlayID, source.ID)
 	}
 
-	// CRITICAL: For YouTube sources added manually, copy admin's OAuth token
-	// This allows admins to add YouTube channels by link without OAuth flow
-	// The admin's token will be used to poll the new channel
-	if req.Platform == "youtube" && h.db != nil {
-		if err := h.copyYouTubeTokenForChannel(c.Request.Context(), userID.(string), channelID); err != nil {
-			// Log error but don't fail the request - source was created successfully
-			// Admin will need to authenticate via OAuth if token copy fails
-			h.logger.Warn("Failed to copy YouTube token for new channel",
+	// A copied row labels a credential Google or Kick issued for the caller's own account as
+	// another channel's, and youtube_oauth_tokens rows are read as proof that a user controls a
+	// channel (shared/youtubetoken OwnerYouTubeAnchor). Any user could reach this route, so the
+	// copy is limited to the admin sessions it was written for. An impersonation token carries
+	// the admin role but the target's user id, so it would file the target's token instead.
+	isAdminSelf := middleware.IsAdminSession(c) && c.GetString("impersonated_by") == ""
+	if (req.Platform == "youtube" || req.Platform == "kick") && h.adminTokenCopy != nil && isAdminSelf {
+		if err := h.adminTokenCopy(c.Request.Context(), req.Platform, userID.(string), channelID); err != nil {
+			// The source exists either way; without the copy the admin authenticates via OAuth.
+			h.logger.Warn("Failed to copy admin token for new channel",
+				zap.String("platform", req.Platform),
 				zap.String("user_id", userID.(string)),
 				zap.String("channel_id", channelID),
 				zap.Error(err),
-			)
-		} else {
-			h.logger.Info("Successfully copied YouTube token for manual channel addition",
-				zap.String("user_id", userID.(string)),
-				zap.String("channel_id", channelID),
-			)
-		}
-	}
-
-	// CRITICAL: For Kick sources added manually, copy admin's OAuth token
-	// This allows admins to add Kick channels without OAuth flow
-	// The admin's token will be used to connect to the new channel
-	if req.Platform == "kick" && h.db != nil {
-		if err := h.copyKickTokenForChannel(c.Request.Context(), userID.(string), channelID); err != nil {
-			// Log error but don't fail the request - source was created successfully
-			// Admin will need to authenticate via OAuth if token copy fails
-			h.logger.Warn("Failed to copy Kick token for new channel",
-				zap.String("user_id", userID.(string)),
-				zap.String("channel_id", channelID),
-				zap.Error(err),
-			)
-		} else {
-			h.logger.Info("Successfully copied Kick token for manual channel addition",
-				zap.String("user_id", userID.(string)),
-				zap.String("channel_id", channelID),
 			)
 		}
 	}

@@ -181,6 +181,22 @@ func JWTAuthWithRevocation(kc *auth.KeyChain, rdb redis.UniversalClient) gin.Han
 	}
 }
 
+// IsAdminSession reports whether the request is a signed-in session (not a personal access
+// token, ADR-0051) whose JWT carries the admin role. Must run after JWTAuth.
+func IsAdminSession(c *gin.Context) bool {
+	if c.GetString(CtxAuthMethod) == AuthMethodAPIToken {
+		return false
+	}
+	roles, _ := c.Get("roles")
+	list, _ := roles.([]string)
+	for _, role := range list {
+		if role == "admin" {
+			return true
+		}
+	}
+	return false
+}
+
 // AdminOnly middleware checks if the authenticated user has admin role
 // Must be used after JWTAuth middleware.
 //
@@ -212,8 +228,7 @@ func AdminOnly() gin.HandlerFunc {
 			return
 		}
 
-		roles, ok := rolesInterface.([]string)
-		if !ok {
+		if _, ok := rolesInterface.([]string); !ok {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error": "Invalid roles format",
 			})
@@ -221,16 +236,7 @@ func AdminOnly() gin.HandlerFunc {
 			return
 		}
 
-		// Check if user has admin role
-		hasAdmin := false
-		for _, role := range roles {
-			if role == "admin" {
-				hasAdmin = true
-				break
-			}
-		}
-
-		if !hasAdmin {
+		if !IsAdminSession(c) {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error": "Admin access required",
 			})
