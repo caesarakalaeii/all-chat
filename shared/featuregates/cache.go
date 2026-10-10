@@ -47,6 +47,7 @@ const (
 	// GateStreamSelection is the feature key for YouTube stream selection strategy.
 	// Allows premium users to choose how the innertube listener picks among
 	// multiple concurrent live streams (most viewers, title match, etc.).
+	// overlay-manager enforces it when a source's stream_select is set or changed.
 	GateStreamSelection = "stream_selection"
 
 	// GateModeration is the feature key for cross-platform chat moderation
