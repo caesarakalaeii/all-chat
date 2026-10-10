@@ -31,7 +31,7 @@
 
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import OverlayEditorPage from '@/app/overlays/[id]/page'
@@ -42,6 +42,7 @@ const api = vi.hoisted(() => ({
   getSources: vi.fn(),
   getConfig: vi.fn(),
   getTTSConfig: vi.fn(),
+  addSource: vi.fn(),
 }))
 
 vi.mock('@/lib/api/overlays', async () => {
@@ -253,5 +254,41 @@ describe('overlay editor OBS and dock URLs', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Copy dock URL' }))
 
     expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/overlay/o1/view?dock=1`)
+  })
+})
+
+/**
+ * TikTok has no OAuth step, so its connect button opens a username dialog
+ * instead of redirecting. That dialog once went missing while the button kept
+ * flipping its open state, leaving a button that did nothing.
+ */
+describe('overlay editor TikTok source', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    api.get.mockResolvedValue({ id: 'o1', name: 'Main overlay', is_public_for_viewers: false })
+    api.getSources.mockResolvedValue([])
+    api.getConfig.mockResolvedValue({ display_settings: {} })
+    api.getTTSConfig.mockResolvedValue({})
+    api.addSource.mockResolvedValue({ id: 's1', platform: 'tiktok', channel_id: 'creator' })
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+  })
+
+  it('opens the username dialog and adds the source without the leading @', async () => {
+    await renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Sources' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect TikTok' }))
+
+    const dialog = await screen.findByRole('dialog', { name: 'Connect TikTok' })
+    fireEvent.change(screen.getByPlaceholderText('@username'), { target: { value: '@creator' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    await waitFor(() =>
+      expect(api.addSource).toHaveBeenCalledWith('o1', { platform: 'tiktok', channel_id: 'creator' })
+    )
+    await waitFor(() => expect(dialog).not.toBeInTheDocument())
   })
 })
