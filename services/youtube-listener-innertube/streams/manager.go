@@ -1473,7 +1473,9 @@ func (m *Manager) syncSources(ctx context.Context) {
 				zap.String("channel_id", channelID),
 				zap.String("pinned_video_id", info.PinnedVideoID),
 			)
-			m.stopChannel(channelID, true)
+			// Only a poller here makes the cached keys this replica's: a replica that
+			// was discovering may be racing another replica's live poller for them.
+			m.stopChannel(channelID, isPolling)
 			isPolling, isDiscovering = false, false
 		}
 
