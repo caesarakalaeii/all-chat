@@ -20,7 +20,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -44,10 +45,19 @@ var errLeadershipHeld = errors.New("leadership held by another instance")
 
 // Source represents a YouTube source configuration from source-manager
 type Source struct {
-	ChannelID    string
-	OverlayID    string
-	StreamSelect string // Stream selection strategy (e.g. "most_viewers")
-	StreamMatch  string // Match term for title_match strategy
+	ChannelID     string
+	OverlayID     string
+	StreamSelect  string // Stream selection strategy (e.g. "most_viewers")
+	StreamMatch   string // Match term for title_match strategy
+	PinnedVideoID string // config.stream_id: a video polled directly, e.g. an unlisted stream
+}
+
+// streamDiscovery is the part of *innertube.Discovery the manager drives. It is an
+// interface so discovery and pin handling can be exercised without YouTube.
+type streamDiscovery interface {
+	DiscoverLiveStream(ctx context.Context, channelID, strategy, matchTerm string) (string, error)
+	DiscoverAllLiveStreams(ctx context.Context, channelID, titleFilter string) ([]string, error)
+	poller.ContinuationRefresher
 }
 
 // Stream represents an active YouTube stream being polled
@@ -69,6 +79,7 @@ type DiscoveryState struct {
 	OverlayID        string
 	StreamSelect     string // Stream selection strategy
 	StreamMatch      string // Match term for title_match
+	PinnedVideoID    string // Tried before the channel browse on every attempt
 	StartedAt        time.Time
 	Attempts         int
 	CancelFunc       context.CancelFunc
@@ -85,7 +96,7 @@ type Manager struct {
 	leader           *sourcemanager.LeadershipCoordinator
 	smClient         *sourcemanager.Client // Source manager client for querying active sources
 	repository       *Repository
-	discovery        *innertube.Discovery
+	discovery        streamDiscovery
 	publisher        *publisher.StreamPublisher
 	client           *innertube.Client
 	redisClient      *redis.Client
@@ -107,6 +118,14 @@ type Manager struct {
 	discovering              map[string]*DiscoveryState     // channelID → discovery state
 	connectedOverlays        map[string]time.Time           // overlay_id → connection_time
 	channelConnectedOverlays map[string]map[string]struct{} // channel_id → overlay_ids
+	// pins is the last pinned video id syncSources saw per channel; a change
+	// restarts the channel, because source-manager carries no change events.
+	pins map[string]string
+	// pinProbedAt throttles probing a pin while the channel polls another video.
+	pinProbedAt map[string]time.Time
+
+	// jitter overrides the discovery start spread; nil = random 0-5s.
+	jitter func() time.Duration
 
 	// Demand-driven gating (Phase 5 gap closure)
 	demandMu         sync.RWMutex
@@ -162,6 +181,8 @@ func NewManager(
 		discovering:              make(map[string]*DiscoveryState),
 		connectedOverlays:        make(map[string]time.Time),
 		channelConnectedOverlays: make(map[string]map[string]struct{}),
+		pins:                     make(map[string]string),
+		pinProbedAt:              make(map[string]time.Time),
 		gaveUpDiscovery:          make(map[string]bool),
 		demandStopTimers:         make(map[string]*time.Timer),
 		stopChan:                 make(chan struct{}),
@@ -210,7 +231,7 @@ func (m *Manager) OnOverlayConnected(overlayID string, sources []Source) {
 
 	// Start async discovery for each YouTube source
 	for _, source := range sources {
-		m.startAsyncDiscovery(source.ChannelID, overlayID, DiscoveryOpts{})
+		m.startAsyncDiscovery(source.ChannelID, overlayID, DiscoveryOpts{PinnedVideoID: source.PinnedVideoID})
 	}
 }
 
@@ -246,8 +267,9 @@ func (m *Manager) OnOverlayDisconnected(overlayID string) {
 
 // DiscoveryOpts holds optional parameters for stream discovery.
 type DiscoveryOpts struct {
-	StreamSelect string // Stream selection strategy (e.g. "most_viewers")
-	StreamMatch  string // Match term for title_match strategy
+	StreamSelect  string // Stream selection strategy (e.g. "most_viewers")
+	StreamMatch   string // Match term for title_match strategy
+	PinnedVideoID string // Video tried before the channel browse
 }
 
 // startAsyncDiscovery starts background discovery for a channel
@@ -269,6 +291,7 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts Discover
 		OverlayID:        overlayID,
 		StreamSelect:     streamSelect,
 		StreamMatch:      streamMatch,
+		PinnedVideoID:    opts.PinnedVideoID,
 		StartedAt:        time.Now(),
 		Attempts:         0,
 		CancelFunc:       cancel,
@@ -302,7 +325,10 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts Discover
 
 	// Jitter to avoid thundering-herd on YouTube watch page when many channels start simultaneously
 	// (e.g. pod restart with 20+ channels). Random 0-5s spread reduces 429 rate limiting.
-	jitter := time.Duration(rand.Intn(5000)) * time.Millisecond
+	jitter := time.Duration(rand.IntN(5000)) * time.Millisecond
+	if m.jitter != nil {
+		jitter = m.jitter()
+	}
 	time.Sleep(jitter)
 
 	// Check Redis cache first
@@ -436,6 +462,36 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			zap.Int("attempt", state.Attempts),
 			zap.String("strategy", state.StreamSelect),
 		)
+
+		// A pinned video is polled by id because the channel browse never lists an
+		// unlisted stream. It is cached before startPoller so a non-leader replica's
+		// syncSources finds its leader key and stays out of discovery.
+		if pin := state.PinnedVideoID; pin != "" {
+			if err := m.repository.SetChannelVideoMapping(ctx, state.ChannelID, pin); err != nil {
+				m.logger.Warn("Failed to cache pinned video ID",
+					zap.String("channel_id", state.ChannelID),
+					zap.String("video_id", pin),
+					zap.Error(err),
+				)
+			}
+			err := m.startPoller(ctx, state.ChannelID, pin, state.OverlayID)
+			if err == nil {
+				m.cleanupDiscoveryState(state)
+				return
+			}
+			if errors.Is(err, errLeadershipHeld) {
+				// No poller is bound to ctx here, so cancelling it only ends the
+				// cross-platform subscription another replica has no use for.
+				m.cleanupDiscoveryState(state)
+				state.CancelFunc()
+				return
+			}
+			m.logger.Info("Pinned video not pollable, falling back to channel browse",
+				zap.String("channel_id", state.ChannelID),
+				zap.String("video_id", pin),
+				zap.Error(err),
+			)
+		}
 
 		// discoveryErr captures why this attempt failed so the backoff warning can
 		// surface it. Without this, schema regressions (e.g. YouTube replacing
@@ -1073,50 +1129,57 @@ func (m *Manager) stopPollerAfterDebounce(channelID string, delay time.Duration)
 // overlay owner triggers this from the /view monitor (moderation-service publishes
 // on the youtube:control channel) to recover immediately.
 //
-// It stops any poller this pod runs for the channel, cancels any in-progress
+// It stops every poller this pod runs for the channel, cancels any in-progress
 // discovery, clears the cached video mapping + stream-state + give-up marker, then
 // kicks an immediate sync so a fresh discovery picks up the current live stream (or
 // correctly reports offline). Safe to run on every pod: only the leader holds the
 // poller, the Redis deletes are idempotent, and leadership election serialises who
 // re-polls. overlayID is informational (logging only).
-func (m *Manager) ForceRediscoverChannel(ctx context.Context, channelID, overlayID string) {
+func (m *Manager) ForceRediscoverChannel(_ context.Context, channelID, overlayID string) {
 	m.logger.Info("Forced rediscovery requested",
 		zap.String("channel_id", channelID),
 		zap.String("overlay_id", overlayID),
 	)
 
+	m.stopChannel(channelID, true)
+
+	// Kick an immediate sync — the canonical "discover now" path (mirrors
+	// UpdateDemandedChannels). It re-reads the source's stream_select strategy from
+	// source-manager and starts a fresh poller for the current live stream.
+	go m.syncSources(context.Background())
+}
+
+// stopChannel tears down everything this pod runs for a channel so the next
+// startAsyncDiscovery starts from scratch: every poller (a multi-stream strategy
+// runs several) and its lease, the discovery loop and its reservation, and the
+// give-up marker. Unlike stopPollerAfterDebounce it leaves the source active,
+// because the channel is meant to come straight back.
+//
+// clearCache also evicts the cached video mapping, so discovery cannot re-select
+// the old video, and the stream-state, so a streamer send no longer targets its
+// chat. Pass false when another listener owns the channel and those keys with it.
+func (m *Manager) stopChannel(channelID string, clearCache bool) {
 	m.mu.Lock()
-	// Stop the poller this pod runs for the channel, if any (mirrors the teardown in
-	// stopPollerAfterDebounce, minus the source-deactivation — we want it to come back).
+	stopped := false
 	for videoID, stream := range m.activeStreams {
 		if stream.ChannelID != channelID {
 			continue
 		}
 		if p, exists := m.pollers[videoID]; exists {
-			m.logger.Info("Stopping poller for forced rediscovery",
+			m.logger.Info("Stopping poller for channel restart",
 				zap.String("channel_id", channelID),
 				zap.String("video_id", videoID),
 			)
 			p.Stop()
 			delete(m.pollers, videoID)
-			delete(m.activeStreams, videoID)
-			if m.leader != nil {
-				m.leader.Release(videoID)
-			}
-			if m.batchDetector != nil {
-				if err := m.batchDetector.Cleanup(channelID); err != nil {
-					m.logger.Warn("Failed to cleanup batch detector during forced rediscovery",
-						zap.String("channel_id", channelID), zap.Error(err))
-				}
-			}
-			if m.deletionBuffer != nil {
-				m.deletionBuffer.Cleanup(channelID)
-			}
 		}
-		break
+		delete(m.activeStreams, videoID)
+		if m.leader != nil {
+			m.leader.Release(videoID)
+		}
+		stopped = true
 	}
-	// Cancel any in-progress discovery loop and drop its slot so the kick below can
-	// start fresh (startAsyncDiscovery bails while m.discovering[channelID] is set).
+	// startAsyncDiscovery bails while m.discovering[channelID] is set.
 	if state, ok := m.discovering[channelID]; ok {
 		if state.CancelFunc != nil {
 			state.CancelFunc()
@@ -1125,26 +1188,34 @@ func (m *Manager) ForceRediscoverChannel(ctx context.Context, channelID, overlay
 	}
 	m.mu.Unlock()
 
-	// Clear the give-up marker so a channel parked after maxDiscoveryDuration polls again.
+	if stopped {
+		if m.batchDetector != nil {
+			if err := m.batchDetector.Cleanup(channelID); err != nil {
+				m.logger.Warn("Failed to cleanup batch detector during channel restart",
+					zap.String("channel_id", channelID), zap.Error(err))
+			}
+		}
+		if m.deletionBuffer != nil {
+			m.deletionBuffer.Cleanup(channelID)
+		}
+	}
+
 	m.gaveUpMu.Lock()
 	delete(m.gaveUpDiscovery, channelID)
 	m.gaveUpMu.Unlock()
 
-	// Evict the cached video mapping + stream-state so discovery can't immediately
-	// re-select the dead video and a streamer send no longer targets a dead chat.
+	if !clearCache {
+		return
+	}
+	ctx := context.Background()
 	if err := m.repository.DeleteChannelVideoMapping(ctx, channelID); err != nil {
-		m.logger.Warn("Failed to clear channel video mapping during forced rediscovery",
+		m.logger.Warn("Failed to clear channel video mapping during channel restart",
 			zap.String("channel_id", channelID), zap.Error(err))
 	}
 	if err := m.repository.DeleteStreamState(ctx, channelID); err != nil {
-		m.logger.Warn("Failed to clear stream state during forced rediscovery",
+		m.logger.Warn("Failed to clear stream state during channel restart",
 			zap.String("channel_id", channelID), zap.Error(err))
 	}
-
-	// Kick an immediate sync — the canonical "discover now" path (mirrors
-	// UpdateDemandedChannels). It re-reads the source's stream_select strategy from
-	// source-manager and starts a fresh poller for the current live stream.
-	go m.syncSources(context.Background())
 }
 
 // handleLeadershipLoss handles loss of leadership for a stream
@@ -1315,12 +1386,24 @@ func (m *Manager) syncSources(ctx context.Context) {
 		zap.Int("source_count", len(sources)),
 	)
 
+	// source-manager serves its registry in map order. Without a stable order the
+	// "first source wins" rules below would flip between syncs, and a flipping
+	// pin would restart the channel every 30s.
+	slices.SortFunc(sources, func(a, b *sourcemanager.ActiveSource) int {
+		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+
 	// channelSourceInfo carries per-channel overlay IDs and stream selection config.
-	// When multiple overlays share a channel, the first source's strategy is used.
+	// When multiple overlays share a channel, the earliest source's strategy is used
+	// and the pin is the earliest non-empty stream_id.
 	type channelSourceInfo struct {
-		OverlayIDs   []string
-		StreamSelect string
-		StreamMatch  string
+		OverlayIDs    []string
+		StreamSelect  string
+		StreamMatch   string
+		PinnedVideoID string
 	}
 
 	// Group sources by channel to handle multiple overlays for same channel
@@ -1334,6 +1417,9 @@ func (m *Manager) syncSources(ctx context.Context) {
 					StreamMatch:  source.StreamMatch,
 				}
 				channelOverlays[source.ChannelID] = info
+			}
+			if info.PinnedVideoID == "" {
+				info.PinnedVideoID = source.StreamID
 			}
 			info.OverlayIDs = append(info.OverlayIDs, source.OverlayID)
 		}
@@ -1357,19 +1443,44 @@ func (m *Manager) syncSources(ctx context.Context) {
 
 	// For each channel, ensure we have a poller or discovery in progress
 	for channelID, info := range channelOverlays {
-		m.mu.RLock()
+		opts := DiscoveryOpts{
+			StreamSelect:  info.StreamSelect,
+			StreamMatch:   info.StreamMatch,
+			PinnedVideoID: info.PinnedVideoID,
+		}
+
+		m.mu.Lock()
 		// Check if we're already discovering or polling this channel
 		_, isDiscovering := m.discovering[channelID]
-		isPolling := false
-		for _, stream := range m.activeStreams {
+		var polled []string
+		for videoID, stream := range m.activeStreams {
 			if stream.ChannelID == channelID {
-				isPolling = true
-				break
+				polled = append(polled, videoID)
 			}
 		}
-		m.mu.RUnlock()
+		pinChanged := m.pins[channelID] != info.PinnedVideoID
+		if pinChanged {
+			m.pins[channelID] = info.PinnedVideoID
+		}
+		m.mu.Unlock()
+		isPolling := len(polled) > 0
+		pinPolled := info.PinnedVideoID != "" && slices.Contains(polled, info.PinnedVideoID)
+
+		// Pinning the video already being polled needs no restart, and a restart
+		// would race the async lease release of the poller it replaces.
+		if pinChanged && !pinPolled && (isPolling || isDiscovering || m.hasDiscoveryGivenUp(channelID)) {
+			m.logger.Info("Pinned video changed, restarting channel",
+				zap.String("channel_id", channelID),
+				zap.String("pinned_video_id", info.PinnedVideoID),
+			)
+			m.stopChannel(channelID, true)
+			isPolling, isDiscovering = false, false
+		}
 
 		if isPolling {
+			if info.PinnedVideoID != "" && !pinPolled {
+				m.probePin(ctx, channelID, info.OverlayIDs[0], opts)
+			}
 			// Heartbeat: keep ocs.is_active = true in the DB while we are actively polling.
 			// This ensures (a) new overlay sources added while the poller is already running
 			// get activated, and (b) the cleanup job doesn't mark sources stale after 24 h.
@@ -1411,14 +1522,63 @@ func (m *Manager) syncSources(ctx context.Context) {
 					zap.String("channel_id", channelID),
 					zap.Strings("overlay_ids", info.OverlayIDs),
 					zap.String("stream_select", info.StreamSelect),
+					zap.String("pinned_video_id", info.PinnedVideoID),
 				)
-				m.startAsyncDiscovery(channelID, info.OverlayIDs[0], DiscoveryOpts{
-					StreamSelect: info.StreamSelect,
-					StreamMatch:  info.StreamMatch,
-				})
+				m.startAsyncDiscovery(channelID, info.OverlayIDs[0], opts)
 			}
 		}
 	}
+}
+
+// pinProbeInterval bounds how often a pinned channel that fell back to another
+// video re-checks its pin: one watch-page fetch per channel per minute.
+const pinProbeInterval = 60 * time.Second
+
+// probePin checks, off the sync path, whether the pin of a channel that is
+// polling some other video has become pollable — the browse fell back while the
+// pin was upcoming or rate-limited. If it has, the channel is restarted, and its
+// discovery starts the pin first.
+func (m *Manager) probePin(ctx context.Context, channelID, overlayID string, opts DiscoveryOpts) {
+	pin := opts.PinnedVideoID
+	m.mu.Lock()
+	if last, ok := m.pinProbedAt[channelID]; ok && time.Since(last) < pinProbeInterval {
+		m.mu.Unlock()
+		return
+	}
+	m.pinProbedAt[channelID] = time.Now()
+	m.mu.Unlock()
+
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		if _, _, err := m.discovery.GetInitialContinuation(ctx, pin, channelID); err != nil {
+			m.logger.Debug("Pinned video still not pollable",
+				zap.String("channel_id", channelID),
+				zap.String("video_id", pin),
+				zap.Error(err),
+			)
+			return
+		}
+
+		// A sync may have moved the pin, or a restart may already poll it, while
+		// the probe was in flight; either way there is nothing left to replace.
+		m.mu.RLock()
+		stale := m.pins[channelID] != pin
+		if stream, ok := m.activeStreams[pin]; ok && stream.ChannelID == channelID {
+			stale = true
+		}
+		m.mu.RUnlock()
+		if stale {
+			return
+		}
+
+		m.logger.Info("Pinned video is pollable, moving channel onto it",
+			zap.String("channel_id", channelID),
+			zap.String("video_id", pin),
+		)
+		m.stopChannel(channelID, true)
+		m.startAsyncDiscovery(channelID, overlayID, opts)
+	}()
 }
 
 // demandStopDebounce is how long we wait after demand-loss before actually
