@@ -720,6 +720,14 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: Beta testers gain a translation surface without touching git; the catalog stays the single source of truth; graduating the gate opens contribution to all authenticated users with no deploy.
 **→ Read**: [0063-localization-contribution.md](./0063-localization-contribution.md)
 
+### ADR-0065: Unlisted and members-only YouTube streams: pinned links and a premium official-API listener
+
+**Status**: Accepted (2026-10-10)
+**Problem**: innertube finds a channel's live stream by browsing the channel page, which never lists unlisted streams, and it polls anonymously, so members-only chat is unreadable. ADR-0023/0025 had decided against bringing the quota-based Data API listener back.
+**Decision**: A pinned stream link (`config.stream_id`) for every user, tried by innertube on every discovery attempt before the browse. For premium streamers, an opt-in `config.official_api` (gate `youtube_official_api`, migration 102) routes an owned channel to the revived `youtube-listener`: ownership proven with `channels.list(mine=true)`, discovery with `liveBroadcasts.list broadcastStatus=active`, chat over gRPC `streamList`. The listener claims the channel with a TTL key (ADR-0015 pattern); innertube skips claimed channels and resumes when the claim lapses (premium lost, token revoked, quota Critical, listener down).
+**Impact**: Unlisted streams work for free; members-only chat works for premium streamers; quota is spent only on opted-in channels. The listener's Deployment has to be re-added in the deployment repo before Part B does anything.
+**→ Read**: [0065-premium-official-youtube-api-listener.md](./0065-premium-official-youtube-api-listener.md)
+
 ---
 
 
@@ -853,8 +861,8 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Last Updated**: 2026-09-15
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search)
+**Last Updated**: 2026-10-10
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim)
 
 **Most Referenced**:
 

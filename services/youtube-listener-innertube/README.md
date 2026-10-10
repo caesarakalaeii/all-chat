@@ -82,6 +82,18 @@ source's channel). source-manager serves it as `stream_id`.
 - A channel that fell back to another video while the pin was not live yet re-checks
   the pin at most once a minute and moves onto it once it is pollable.
 
+### Channels claimed by the official-API listener
+
+A channel in premium official-API mode is served by `youtube-listener` (ADR-0065), which
+holds `youtube:official:claim:{channelID}` while it serves it. Every sync reads the claim
+set first: claimed channels are not discovered, and anything this pod still polls or
+discovers on them is stopped and its `leader:youtube:{video}` lease released.
+`youtube:stream:state:{ch}` is left alone because the claiming listener writes it now, and the
+cached video mapping is kept so this service can resume quickly when the claim lapses. A Redis
+error while reading claims counts as "no claims", so this service keeps serving every channel.
+When a claim lapses (premium lost, owner's overlay disconnected, token rejected, quota
+Critical, listener down), the next sync discovers the channel again.
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |

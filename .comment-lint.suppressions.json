@@ -266,9 +266,6 @@
   "services/youtube-listener-innertube/streams/repository_test.go": {
     "restate": 3
   },
-  "services/youtube-listener/api/client.go": {
-    "restate": 1
-  },
   "services/youtube-listener/api/grpc_client.go": {
     "restate": 1
   },
@@ -296,11 +293,8 @@
   "services/youtube-listener/quota/coordinator.go": {
     "restate": 3
   },
-  "services/youtube-listener/streams/detection.go": {
-    "restate": 5
-  },
   "services/youtube-listener/streams/manager.go": {
-    "restate": 8
+    "restate": 7
   },
   "services/youtube-listener/streams/poller.go": {
     "restate": 1

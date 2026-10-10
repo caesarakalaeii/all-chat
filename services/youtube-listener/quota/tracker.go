@@ -39,13 +39,19 @@ const (
 	// QuotaCostVideos is the quota cost for videos.list (1 unit)
 	QuotaCostVideos = 1
 
-	// QuotaCostSearch is the quota cost for search.list (100 units)
-	QuotaCostSearch = 100
+	// QuotaCostLiveBroadcasts is the quota cost for liveBroadcasts.list, the owner-token
+	// discovery call of official-API mode (ADR-0065). The API reference does not state it;
+	// 1 unit matches every other list method, so treat it as an estimate to re-check.
+	QuotaCostLiveBroadcasts = 1
+
+	// QuotaCostChannels is the quota cost for channels.list (mine=true), used to prove that a
+	// stored token belongs to the channel it is filed under. Same 1-unit estimate.
+	QuotaCostChannels = 1
 
 	// Default state thresholds (as percentages)
-	DefaultHealthyThreshold   = 70.0 // 0-70%: HEALTHY
-	DefaultDegradedThreshold  = 85.0 // 70-85%: DEGRADED
-	DefaultCriticalThreshold  = 95.0 // 85-95%: CRITICAL
+	DefaultHealthyThreshold   = 70.0  // 0-70%: HEALTHY
+	DefaultDegradedThreshold  = 85.0  // 70-85%: DEGRADED
+	DefaultCriticalThreshold  = 95.0  // 85-95%: CRITICAL
 	DefaultExhaustedThreshold = 100.0 // 95-100%: EXHAUSTED
 	// 100%+: DEPLETED
 )
@@ -96,11 +102,11 @@ type Tracker struct {
 	dailyLimit int
 	notifier   Notifier
 
-	mu          sync.RWMutex
-	usageToday  int
-	currentDate string
-	currentState QuotaState
-	lastStateTransition time.Time
+	mu                    sync.RWMutex
+	usageToday            int
+	currentDate           string
+	currentState          QuotaState
+	lastStateTransition   time.Time
 	lastNotifiedThreshold float64 // Last 5% threshold that triggered a notification
 
 	// State thresholds (configurable)
@@ -135,19 +141,19 @@ func NewTracker(db *pgxpool.Pool, dailyLimit int, logger *zap.Logger, m *metrics
 	)
 
 	return &Tracker{
-		db:         db,
-		logger:     logger,
-		metrics:    m,
-		dailyLimit: dailyLimit,
-		currentState: QuotaStateHealthy,
-		lastStateTransition: time.Now(),
+		db:                    db,
+		logger:                logger,
+		metrics:               m,
+		dailyLimit:            dailyLimit,
+		currentState:          QuotaStateHealthy,
+		lastStateTransition:   time.Now(),
 		lastNotifiedThreshold: 0.0,
-		healthyThreshold:   healthyThreshold,
-		degradedThreshold:  degradedThreshold,
-		criticalThreshold:  criticalThreshold,
-		exhaustedThreshold: exhaustedThreshold,
-		emergencyThreshold: emergencyThreshold,
-		stopChan:   make(chan struct{}),
+		healthyThreshold:      healthyThreshold,
+		degradedThreshold:     degradedThreshold,
+		criticalThreshold:     criticalThreshold,
+		exhaustedThreshold:    exhaustedThreshold,
+		emergencyThreshold:    emergencyThreshold,
+		stopChan:              make(chan struct{}),
 	}
 }
 
@@ -603,7 +609,7 @@ func (t *Tracker) recordUsageWithRetry(ctx context.Context, units int, maxRetrie
 			case <-ctx.Done():
 				return fmt.Errorf("context cancelled during retry: %w", ctx.Err())
 			case <-time.After(backoff):
-				backoff *= 2  // Exponential backoff: 100ms, 200ms, 400ms
+				backoff *= 2 // Exponential backoff: 100ms, 200ms, 400ms
 			}
 		}
 	}

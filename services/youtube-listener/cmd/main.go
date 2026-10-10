@@ -39,10 +39,12 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/streams"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/encryption"
+	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/tracing"
+	"github.com/caesar/all-chat/shared/youtubeclaim"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -246,10 +248,18 @@ func main() {
 	// Initialize status publisher for platform connection status
 	statusPublisher := status.NewPublisher(redisClient, log)
 
+	// The youtube_official_api gate is re-read on every claim/sync round; unknown keys read as
+	// premium, so a missing seed row fails closed to premium-only.
+	gateCache := featuregates.NewFeatureGateCache(db, redisClient, log)
+	if err := gateCache.Start(ctx); err != nil {
+		log.Fatal("Failed to start feature gate cache", zap.Error(err))
+	}
+	gateFree := func() bool { return !gateCache.IsPremium(featuregates.GateYouTubeOfficialAPI) }
+
 	// Initialize stream manager
 	streamRepo := streams.NewRepository(db, log)
 	dbConnWrapper := &dbConnWrapper{pool: db}
-	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, ll.LeadershipCoordinator(), quotaTracker, perChannelQuotaTracker, redisClient, ytMetrics, statusPublisher, log)
+	streamManager := streams.NewManager(streamRepo, oauthManager, messageHandler, dbConnWrapper, ll.LeadershipCoordinator(), quotaTracker, perChannelQuotaTracker, redisClient, ytMetrics, statusPublisher, youtubeclaim.NewClaimStore(redisClient), gateFree, log)
 
 	// Start stream manager
 	if err := streamManager.Start(ctx); err != nil {

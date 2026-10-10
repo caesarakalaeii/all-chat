@@ -396,6 +396,14 @@ export function OnboardingChecklist({
                 </li>
                 <li>
                   <span className="font-medium text-text">
+                    {t('onboarding.extras.youtubeOfficialApiTitle')}
+                  </span>
+                  <p className="text-xs text-text-sub">
+                    {t('onboarding.extras.youtubeOfficialApiBody')}
+                  </p>
+                </li>
+                <li>
+                  <span className="font-medium text-text">
                     {t('onboarding.extras.bubbleColorsTitle')}
                   </span>
                   {/* Listed here but NOT in app/upgrade/page.tsx, for the same reason as

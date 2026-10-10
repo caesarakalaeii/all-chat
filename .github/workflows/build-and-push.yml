@@ -346,10 +346,10 @@ jobs:
           - twitch-listener
           - twitch-eventsub-listener
           - youtube-listener
-          # The InnerTube listener is the YouTube path that actually runs in
-          # production (the quota-based youtube-listener above is not deployed), so
-          # it must be tested here. It was missing from this matrix while its
-          # undeployed sibling was covered.
+          # The InnerTube listener serves every YouTube channel that is not claimed
+          # by the official-API listener above (ADR-0065), so it must be tested here.
+          # The official-API listener is not deployed yet; its Deployment lands in
+          # the deployment repo separately.
           - youtube-listener-innertube
           - youtube-quota-monitor
           - kick-listener

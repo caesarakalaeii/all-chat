@@ -113,6 +113,14 @@ const (
 	// early_access=FALSE to graduate it to all authenticated users. The
 	// English catalog is never gated — every user already reads English.
 	GateLocalizationContribution = "localization_contribution"
+
+	// GateYouTubeOfficialAPI is the feature key for the per-source official YouTube API
+	// mode (ADR-0065): an owned channel opted in via config.official_api is served by the
+	// Data API listener, which sees unlisted and members-only broadcasts innertube cannot.
+	// Seeded is_premium=TRUE (migration 102) because every claimed channel spends Data API
+	// quota. The listener re-evaluates it each sync round, so a lapse or a gate flip drops
+	// the channel back to innertube while the stored opt-in stays.
+	GateYouTubeOfficialAPI = "youtube_official_api"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate

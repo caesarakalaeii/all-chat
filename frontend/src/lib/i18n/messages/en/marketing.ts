@@ -380,6 +380,9 @@ export const marketing = {
     streamSelectionTitle: 'YouTube stream selection',
     streamSelectionBody:
       'Pick exactly which YouTube broadcast an overlay listens to instead of relying on auto-detection.',
+    youtubeOfficialApiTitle: 'Unlisted and members-only YouTube streams',
+    youtubeOfficialApiBody:
+      "Read your own channel through YouTube's official API with your own connection, so unlisted and members-only streams are found automatically, with no link to paste.",
     sharedChatTitle: 'Shared chat',
     sharedChatBody: 'Combine several channels into one shared conversation across your overlays.',
     flairsTitle: 'Viewer flairs',

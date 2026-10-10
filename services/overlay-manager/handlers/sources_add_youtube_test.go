@@ -58,3 +58,33 @@ func TestAddYouTubeSource_ForeignPin422(t *testing.T) {
 	assert.False(t, created)
 	assert.Equal(t, 1, videos.calls)
 }
+
+func TestAddYouTubeSource_OfficialAPINonPremium403(t *testing.T) {
+	created := false
+	h := gateTestHandler(nil)
+	h.sourceRepo = &mockSourceRepository{
+		createFunc: func(_ context.Context, _ *models.ChatSource) error {
+			created = true
+			return nil
+		},
+	}
+	official := &fakeOfficialAPI{allowed: false}
+	h.SetYouTubeOfficialAPI(official, official)
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/overlays/:id/sources", func(c *gin.Context) {
+		c.Set("user_id", "user-1")
+		h.HandleAddSource(c)
+	})
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/overlays/ov-1/sources", strings.NewReader(
+		`{"platform":"youtube","channel_id":"`+pinSourceChannel+`","config":{"official_api":true}}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), `"upgrade_url":"/upgrade"`)
+	assert.False(t, created)
+	assert.Equal(t, 1, official.gateCalls)
+}

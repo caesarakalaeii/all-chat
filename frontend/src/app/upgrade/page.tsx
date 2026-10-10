@@ -16,7 +16,16 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Check, MessagesSquare, Radio, ShieldCheck, Sparkles, Users, Volume2 } from 'lucide-react'
+import {
+  BadgeCheck,
+  Check,
+  MessagesSquare,
+  Radio,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  Volume2,
+} from 'lucide-react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
 import { cn } from '@/lib/utils'
@@ -51,6 +60,7 @@ const features = [
   { icon: Users, messageStem: 'moderators' },
   { icon: Volume2, messageStem: 'tts' },
   { icon: Radio, messageStem: 'streamSelection' },
+  { icon: BadgeCheck, messageStem: 'youtubeOfficialApi' },
   { icon: MessagesSquare, messageStem: 'sharedChat' },
   { icon: Sparkles, messageStem: 'flairs' },
 ] as const satisfies ReadonlyArray<PremiumFeature>

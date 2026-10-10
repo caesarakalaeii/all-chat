@@ -1,7 +1,7 @@
 # ADR-0025: InnerTube Listener Caches activeLiveChatId for Streamer Sends
 
 **Date**: 2026-06-22
-**Status**: ✅ Accepted
+**Status**: ✅ Accepted (amended by ADR-0065: opted-in premium channels are served by the quota listener again)
 **Deciders**: Caesar
 
 ## Context and Problem Statement

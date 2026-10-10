@@ -34,8 +34,10 @@ vi.mock('@/lib/stores/auth-store', () => ({
 import { trackEvent } from '@/lib/analytics'
 import { useOnboardingStore } from '@/lib/stores/onboarding-store'
 import { OnboardingChecklist } from '@/components/onboarding/OnboardingChecklist'
+import { getTranslations } from '@/lib/i18n'
 
 const mockTrack = vi.mocked(trackEvent)
+const t = getTranslations()
 
 /** Only the `onboarding_step_viewed` events, in order, with their step id. */
 function viewedSteps(): string[] {
@@ -123,5 +125,19 @@ describe('OnboardingChecklist derived completions', () => {
       <OnboardingChecklist surface="dashboard" overlayCount={1} sourceCount={1} />
     )
     expect(getByText('2 of 4 steps done')).toBeInTheDocument()
+  })
+})
+
+describe('OnboardingChecklist optional extras', () => {
+  it('lists the official YouTube API mode among the premium extras', () => {
+    useOnboardingStore.setState({
+      status: 'active',
+      sessionSteps: { obsCopied: true, extrasDone: false },
+    })
+    const { getByText } = render(
+      <OnboardingChecklist surface="editor" sourceCount={1} themeId="neon" overlayCount={1} />
+    )
+    expect(getByText(t('onboarding.extras.youtubeOfficialApiTitle'))).toBeInTheDocument()
+    expect(getByText(t('onboarding.extras.youtubeOfficialApiBody'))).toBeInTheDocument()
   })
 })

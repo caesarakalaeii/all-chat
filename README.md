@@ -147,7 +147,7 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 | Platform | How it works | What you get |
 |----------|-------------|--------------|
 | **Twitch** | IRC + EventSub webhooks | Chat, emotes (native + 7TV/BTTV/FFZ), chat GIFs, badges, colors, channel points, raids, follows, chat notices (watch streaks, announcements, charity donations) |
-| **YouTube** | HTTP polling + InnerTube API | Chat, Super Chat, member badges, multi-stream selection among public live streams; unlisted streams by pasting the stream link |
+| **YouTube** | HTTP polling + InnerTube API; official Data API (gRPC) for premium channels | Chat, Super Chat, member badges, multi-stream selection among public live streams; unlisted streams by pasting the stream link; members-only chat through the streamer's own YouTube account (premium) |
 | **Kick** | Pusher WebSocket | Chat, emotes, badges, message deletion |
 | **TikTok** | Reads LIVE chat the way TikTok's own web player does; All-Chat maintains its own open-source signing service | Chat, gifts, follows and likes; add a channel by username |
 | **Discord** | Bot gateway + webhook relay | Channel chat relay to overlay |
@@ -157,9 +157,9 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 | **Facebook** *(beta)* | Graph API polling + moderation | Live-video comments from your Facebook Page; delete/hide comments and ban/unban viewers |
 | **Instagram** *(beta)* | Graph API live_comments polling | Live comments from your Instagram professional account's broadcasts |
 
-> YouTube has two listener modes: the official **YouTube Data API** (quota-tracked with reserve-confirm-rollback) and an **InnerTube poller** that costs zero quota. Both are production-ready.
+> YouTube has two listeners. The **InnerTube poller** serves every channel and costs zero quota. The official **YouTube Data API** listener (quota-tracked with reserve-confirm-rollback) serves only channels whose owner opted into premium official-API mode ([ADR-0065](./docs/adr/0065-premium-official-youtube-api-listener.md)).
 >
-> **Note:** The InnerTube poller finds public, currently live streams on its own. For an unlisted stream, paste its link into the source's stream link field; it is free. Private and members-only streams do not work.
+> **Note:** The InnerTube poller finds public, currently live streams on its own. For an unlisted stream, paste its link into the source's stream link field; it is free. Members-only chat on a channel you own needs your own YouTube account and is available through premium official-API mode. Other channels' private and members-only streams do not work.
 >
 > **TikTok:** TikTok has no public API for LIVE chat. Every tool that shows TikTok LIVE chat, All-Chat included, reads it the way TikTok's own web player does. All-Chat signs those connections with its own open-source signing service ([`tiktok-signer`](./services/tiktok-signer/README.md), [ADR-0052](./docs/adr/0052-retiring-euler-stream-for-tiktok-signing.md)); no third-party sign server is involved. It tracked TikTok's 2026-09-09 move to browser-grade session checks the same week. Premium rooms get a second delivery path when the main connection is refused ([ADR-0064](./docs/adr/0064-tiktok-transport-tiers-by-entitlement.md)). The limit: TikTok is the platform most likely to see short interruptions when TikTok changes its web player.
 
@@ -215,7 +215,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `emote-service` | 7TV, BTTV, FFZ, and native emote resolution |
 | `twitch-listener` | Twitch IRC chat ingestion (⚠️ deprecated, ADR-0026 — migrating to `twitch-eventsub-listener`) |
 | `twitch-eventsub-listener` | Twitch EventSub webhooks (channel points, moderation, raids) |
-| `youtube-listener` | YouTube Data API polling with quota tracking |
+| `youtube-listener` | YouTube Data API/gRPC chat for channels in premium official-API mode (ADR-0065) |
 | `youtube-listener-innertube` | YouTube InnerTube API polling (zero quota cost) |
 | `youtube-quota-monitor` | Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023) |
 | `kick-listener` | Kick chat via Pusher WebSocket |
