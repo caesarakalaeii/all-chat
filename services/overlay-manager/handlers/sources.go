@@ -28,6 +28,7 @@ import (
 
 	"github.com/caesar/all-chat/services/overlay-manager/clients"
 	"github.com/caesar/all-chat/services/overlay-manager/models"
+	"github.com/caesar/all-chat/services/overlay-manager/youtube"
 	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/caesar/all-chat/shared/middleware"
@@ -82,6 +83,9 @@ type SourcesHandler struct {
 	// adminTokenCopy files the caller's own platform token under a channel added by link.
 	// A field so tests can observe who gets a copy without a database.
 	adminTokenCopy func(ctx context.Context, platform, adminUserID, channelID string) error
+
+	// Nil means a changed YouTube stream pin cannot be verified, and saving one fails closed.
+	youtubeVideos youtubeVideoChannels
 }
 
 // SetDiscordGuard wires the Discord source guard. Injected separately from the constructor
@@ -90,6 +94,76 @@ type SourcesHandler struct {
 func (h *SourcesHandler) SetDiscordGuard(channels discordChannelGuildResolver, guilds discordGuildOwnership) {
 	h.discordChannels = channels
 	h.discordGuilds = guilds
+}
+
+// youtubeVideoChannels reports which channel uploaded a YouTube video. A pinned stream
+// id is only stored when its uploader is the source's own channel; otherwise a source
+// named after one channel would relay another channel's chat.
+type youtubeVideoChannels interface {
+	VideoChannelID(ctx context.Context, videoID string) (string, error)
+}
+
+// SetYouTubeVideoResolver wires the stream-pin ownership check. A setter rather than a
+// constructor argument because main builds the resolver after this handler.
+func (h *SourcesHandler) SetYouTubeVideoResolver(r youtubeVideoChannels) {
+	h.youtubeVideos = r
+}
+
+// normalizeYouTubeConfig validates the YouTube keys of a config about to be stored, and
+// rewrites them into their stored form in place. stored is the config currently on the
+// source (nil at create time). The PATCH body is the whole config, so only keys whose
+// value differs from stored are checked: a settings save that carries an untouched value
+// must neither cost a lookup nor fail on one. Returns (0, "") when allowed, or an HTTP
+// status plus message.
+func (h *SourcesHandler) normalizeYouTubeConfig(ctx context.Context, userID, channelID string, stored, requested map[string]interface{}) (int, string) {
+	return h.normalizeYouTubeStreamPin(ctx, userID, channelID, stored, requested)
+}
+
+// normalizeYouTubeStreamPin handles config.stream_id, the pinned video innertube polls
+// directly (unlisted streams never appear in the channel's /streams tab). Pinning is free;
+// the only check is that the video belongs to the source's own channel.
+func (h *SourcesHandler) normalizeYouTubeStreamPin(ctx context.Context, userID, channelID string, stored, requested map[string]interface{}) (int, string) {
+	raw, present := requested["stream_id"]
+	if !present {
+		return 0, ""
+	}
+	input, ok := raw.(string)
+	if !ok {
+		return http.StatusBadRequest, "stream_id must be a YouTube stream link or video id"
+	}
+	storedID, _ := stored["stream_id"].(string)
+	if input == storedID && storedID != "" {
+		return 0, ""
+	}
+	if strings.TrimSpace(input) == "" {
+		delete(requested, "stream_id")
+		return 0, ""
+	}
+
+	videoID, ok := youtube.ParseVideoID(input)
+	if !ok {
+		return http.StatusBadRequest, "not a YouTube stream link: paste a youtube.com/watch, youtu.be or youtube.com/live link"
+	}
+	requested["stream_id"] = videoID
+	if videoID == storedID {
+		return 0, ""
+	}
+
+	if h.youtubeVideos == nil {
+		h.logger.Error("YouTube stream pin resolver unconfigured — refusing pin",
+			zap.String("user_id", userID))
+		return http.StatusServiceUnavailable, "YouTube stream link validation is unavailable, please try again later"
+	}
+	owner, err := h.youtubeVideos.VideoChannelID(ctx, videoID)
+	if err != nil {
+		h.logger.Warn("Failed to resolve pinned YouTube video channel",
+			zap.String("video_id", videoID), zap.Error(err))
+		return http.StatusUnprocessableEntity, "could not verify this stream link"
+	}
+	if owner != channelID {
+		return http.StatusUnprocessableEntity, "this stream belongs to a different YouTube channel than this source"
+	}
+	return 0, ""
 }
 
 // PlatformSourceGate decides whether a user may add a source on a rollout
@@ -882,6 +956,10 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 			c.JSON(status, body)
 			return
 		}
+		if status, msg := h.normalizeYouTubeConfig(c.Request.Context(), userID.(string), channelID, nil, req.Config); status != 0 {
+			c.JSON(status, gin.H{"error": msg})
+			return
+		}
 	}
 
 	var channelHandle *string
@@ -1080,6 +1158,10 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 	if source.Platform == "youtube" {
 		if status, body := h.checkStreamSelection(c.Request.Context(), userID.(string), source.Config, req.Config); status != 0 {
 			c.JSON(status, body)
+			return
+		}
+		if status, msg := h.normalizeYouTubeConfig(c.Request.Context(), userID.(string), source.ChannelID, source.Config, req.Config); status != 0 {
+			c.JSON(status, gin.H{"error": msg})
 			return
 		}
 	}

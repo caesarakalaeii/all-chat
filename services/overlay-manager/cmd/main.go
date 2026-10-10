@@ -258,6 +258,7 @@ func main() {
 	// Initialize resolver with quota tracking
 	youtubeResolver := youtube.NewResolver(youtubeAPIKey, youtubeQuotaClient, log)
 	youtubeHandler := handlers.NewYouTubeHandler(youtubeResolver, log)
+	sourcesHandler.SetYouTubeVideoResolver(youtubeResolver)
 
 	// Setup Gin router
 	if config.GinMode == "release" {

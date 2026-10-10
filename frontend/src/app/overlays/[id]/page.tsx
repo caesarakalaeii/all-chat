@@ -97,6 +97,8 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog } from '@/components/ui/dialog'
 import { PlatformBadge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { YouTubeStreamLinkField } from '@/components/overlay/YouTubeStreamLinkField'
 import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge'
 import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal'
 import { cn } from '@/lib/utils'
@@ -726,6 +728,10 @@ function StreamSelectionPanel({
         >
           {saving ? 'Saving…' : 'Save'}
         </Button>
+
+        <Separator />
+
+        <YouTubeStreamLinkField source={source} overlayId={overlayId} onSaved={onSaved} />
       </div>
     </Card>
   )
