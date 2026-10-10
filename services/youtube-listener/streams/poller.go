@@ -47,19 +47,22 @@ type ConnectionChecker interface {
 
 // Poller polls a YouTube live stream for chat messages
 type Poller struct {
-	stream         *models.YouTubeStream
-	apiClient      *api.Client
-	parser         *api.Parser
-	messageHandler MessageHandler
-	logger         *zap.Logger
-	ytMetrics      *metrics.YouTubeMetrics
-	tokenStore     *TokenStore
+	stream          *models.YouTubeStream
+	apiClient       *api.Client
+	parser          *api.Parser
+	messageHandler  MessageHandler
+	logger          *zap.Logger
+	ytMetrics       *metrics.YouTubeMetrics
+	tokenStore      *TokenStore
 	statusPublisher *status.Publisher
 
 	// Connection-aware polling (prevents quota waste when overlay disconnected)
 	connectionChecker ConnectionChecker
 	overlayID         string
 	channelID         string
+
+	// onOwnerRejected is told when the owner token is rejected; the poller exits instead of retrying.
+	onOwnerRejected func(error)
 
 	mu                sync.RWMutex
 	stopChan          chan struct{}
@@ -120,6 +123,11 @@ func (p *Poller) SetConnectionChecker(checker ConnectionChecker, channelID, over
 	p.connectionChecker = checker
 	p.overlayID = overlayID
 	p.channelID = channelID
+}
+
+// SetOwnerRejectedHandler sets what the poller calls once the owner token behind it is rejected.
+func (p *Poller) SetOwnerRejectedHandler(handler func(error)) {
+	p.onOwnerRejected = handler
 }
 
 // Start begins polling the stream
@@ -335,6 +343,20 @@ func (p *Poller) pollLoop(ctx context.Context) {
 			if err != nil {
 				p.ytMetrics.StreamErrors.WithLabelValues(p.stream.ChannelID, p.stream.StreamID, classifyStreamError(err)).Inc()
 			}
+		}
+
+		if err != nil && pollerOwnerRejected(err) {
+			p.logger.Warn("Owner token rejected while polling, stopping poller",
+				zap.String("stream_id", p.stream.StreamID),
+				zap.String("channel_id", p.channelID),
+				zap.Error(err),
+			)
+			if p.onOwnerRejected != nil {
+				// Not called inline: the handler takes the manager lock, which Stop and
+				// cleanupInactivePollers hold while waiting for this loop to exit.
+				go p.onOwnerRejected(err)
+			}
+			return
 		}
 
 		if err != nil {

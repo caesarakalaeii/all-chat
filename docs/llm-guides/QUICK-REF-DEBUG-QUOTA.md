@@ -322,8 +322,8 @@ HEALTHY (0-70%)
 
 **Automatic Behaviors**:
 - **HEALTHY → DEGRADED**: Slow polling intervals by 50%
-- **DEGRADED → CRITICAL**: Slow polling intervals by 100%, prioritize channels
-- **CRITICAL → EXHAUSTED**: Stop new `search.list` calls (100 units each)
+- **DEGRADED → CRITICAL**: Slow polling intervals by 100%, prioritize channels; the listener releases every official-API claim, so InnerTube serves those channels until quota recovers (ADR-0065)
+- **CRITICAL → EXHAUSTED**: Stop new discovery calls
 - **EXHAUSTED → DEPLETED**: Stop all API calls
 - **Midnight PT**: Automatic reset to HEALTHY
 
@@ -337,19 +337,17 @@ HEALTHY (0-70%)
 
 | Operation | Cost | Frequency | Daily Impact |
 |-----------|------|-----------|--------------|
-| `search.list` (find live streams) | 100 units | Per channel check | 100-400 units/channel/day |
+| `liveBroadcasts.list` (owner's active broadcasts, official-API mode) | 1 unit (estimate) | Per opted-in channel check | up to ~2,900 units/channel/day while its overlay is connected |
+| `channels.list mine=true` (owner verification) | 1 unit (estimate) | Every 6h per owner | ~4 units/owner/day |
 | `videos.list` (stream details) | 1 unit | Per stream discovery | 1 unit/stream start |
-| `liveChatMessages.list` (fetch messages) | 5 units | Every 2-5 seconds | ~2,000 units/stream/hour |
+| `liveChatMessages.streamList` (fetch messages, gRPC) | 5 units | Per stream connection | 5 units/reconnect |
 
-**Example Quota Usage**:
-- **10 active streams** polled at 3-second intervals for 8 hours:
-  - Messages: 10 × (8 hours × 1200 calls/hour) × 5 units = **480,000 units** ❌ EXCEEDS LIMIT
-- **1 active stream** polled at 3-second intervals for 6 hours:
-  - Messages: 1 × (6 hours × 1200 calls/hour) × 5 units = **36,000 units** ❌ EXCEEDS LIMIT
-- **Realistic usage** with optimizations:
-  - Stream discovery: 10 channels × 100 units = 1,000 units
-  - Chat polling: 2-3 concurrent streams × 2-hour average × (varies by chat activity) = 1,000-2,000 units
-  - **Total: 2,000-3,000 units/day** ✅ Within 10,000 limit
+**Example Quota Usage** (official-API mode only serves opted-in premium channels, ADR-0065):
+- **Discovery**: at most one check a minute while the owner's overlay is connected and the channel is
+  offline, each a `liveBroadcasts.list` (1 unit) plus at most one cached-video `videos.list` (1 unit):
+  roughly 1,440 to 2,900 units per channel per day.
+- **Chat**: 5 units per `streamList` connection (gRPC server streaming), not per message batch.
+- **10 opted-in channels**, overlays open all day: below ~30,000 units/day, against a 1,009,000 limit.
 
 **Quota Waste Elimination** (~9,000 units/day savings):
 - Stop on exhaustion (not retry every 5 min): 1,440 units/day saved

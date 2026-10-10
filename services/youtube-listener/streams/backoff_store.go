@@ -159,17 +159,15 @@ func (s *BackoffStore) ClearBackoff(ctx context.Context, channelID string) error
 	return nil
 }
 
-// calculateNegativeCacheTTL returns appropriate TTL based on consecutive offline checks
-// Reduced TTL values to allow faster recovery when channels go live
+// maxDetectionBackoff bounds every gate in front of discovery: detection backoff, negative cache
+// and circuit breaker. Discovery is one liveBroadcasts.list unit (ADR-0065) while a claim keeps
+// innertube off the channel, so a longer wait would only make a go-live's chat start late.
+const maxDetectionBackoff = time.Minute
+
+// calculateNegativeCacheTTL caches a channel as offline from its second offline check on.
 func (s *BackoffStore) calculateNegativeCacheTTL(consecutiveOffline int) time.Duration {
-	switch {
-	case consecutiveOffline < 2:
+	if consecutiveOffline < 2 {
 		return 0 // No caching for first offline
-	case consecutiveOffline < 4:
-		return 2 * time.Minute // Was 5 min → now 2 min
-	case consecutiveOffline < 7:
-		return 5 * time.Minute // Was 15 min → now 5 min
-	default:
-		return 10 * time.Minute // Was 30 min → now 10 min
 	}
+	return maxDetectionBackoff
 }

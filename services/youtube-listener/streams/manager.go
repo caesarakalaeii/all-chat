@@ -32,6 +32,7 @@ import (
 	"github.com/caesar/all-chat/services/youtube-listener/quota"
 	"github.com/caesar/all-chat/services/youtube-listener/status"
 	"github.com/caesar/all-chat/shared/sourcemanager"
+	"github.com/caesar/all-chat/shared/youtubeclaim"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -56,6 +57,21 @@ type Manager struct {
 	quotaCoordinator *quota.Coordinator
 	ytMetrics        *metrics.YouTubeMetrics
 	statusPublisher  *status.Publisher
+
+	// Official-API mode (ADR-0065): only opted-in, eligible channels with a verified owner are
+	// served, and only while claimed so innertube skips them. gateFree reports whether the
+	// youtube_official_api gate is open and is re-read on every round, so a flip needs no restart.
+	eligibility eligibleSourceLister
+	verifier    ownerVerifier
+	claims      *youtubeclaim.ClaimStore
+	gateFree    func() bool
+	quotaState  func() quota.QuotaState
+	claimMu     sync.RWMutex
+	claimed     map[string]string // channelID -> verified owner user id, latest round
+	// dropSeq numbers dropOwner calls and droppedAt records the latest per userID|channelID, so a
+	// claim round can tell that a verdict it read was forgotten before it stored the claim.
+	dropSeq   uint64
+	droppedAt map[string]uint64
 
 	mu            sync.RWMutex
 	activeStreams map[string]*models.YouTubeStream // streamID -> stream
@@ -92,6 +108,13 @@ type Manager struct {
 	wg           sync.WaitGroup
 	dbConn       DBConnInterface // For PostgreSQL LISTEN
 
+	// cancelRun ends the context every Start goroutine runs on. Closing stopChan alone does not
+	// reach a goroutine parked inside a call such as WaitForNotification.
+	cancelRun context.CancelFunc
+	// claimsDone is closed when claimsLoop returns. Stop waits on it rather than on wg, so the
+	// claims are released even while another goroutine is still unwinding.
+	claimsDone chan struct{}
+
 	// Global sync leadership (prevents multiple replicas from doing expensive discovery)
 	// Safe to share the same LeadershipCoordinator because stream IDs are globally unique
 	// ("global-sync" will never conflict with actual video IDs which are alphanumeric)
@@ -113,16 +136,16 @@ type Manager struct {
 
 // ChannelDetectionState represents the detection state for a channel
 type ChannelDetectionState struct {
-	ChannelID            string                 `json:"channel_id"`
-	BackoffState         *BackoffState          `json:"backoff_state,omitempty"`
-	CircuitBreakerState  map[string]interface{} `json:"circuit_breaker_state,omitempty"`
-	ConnectedOverlays    int                    `json:"connected_overlays"`
-	HasActivePoller      bool                   `json:"has_active_poller"`
-	Priority             string                 `json:"priority,omitempty"`
-	DetectionsToday      int                    `json:"detections_today,omitempty"`
-	QuotaCap             int                    `json:"quota_cap,omitempty"`
-	RiskLevel            string                 `json:"risk_level"` // high/medium/low
-	RecommendedAction    string                 `json:"recommended_action,omitempty"`
+	ChannelID           string                 `json:"channel_id"`
+	BackoffState        *BackoffState          `json:"backoff_state,omitempty"`
+	CircuitBreakerState map[string]interface{} `json:"circuit_breaker_state,omitempty"`
+	ConnectedOverlays   int                    `json:"connected_overlays"`
+	HasActivePoller     bool                   `json:"has_active_poller"`
+	Priority            string                 `json:"priority,omitempty"`
+	DetectionsToday     int                    `json:"detections_today,omitempty"`
+	QuotaCap            int                    `json:"quota_cap,omitempty"`
+	RiskLevel           string                 `json:"risk_level"` // high/medium/low
+	RecommendedAction   string                 `json:"recommended_action,omitempty"`
 }
 
 // DBConnInterface allows getting a raw pgxpool.Pool for LISTEN
@@ -142,6 +165,8 @@ func NewManager(
 	redisClient *redis.Client,
 	ytMetrics *metrics.YouTubeMetrics,
 	statusPublisher *status.Publisher,
+	claims *youtubeclaim.ClaimStore,
+	gateFree func() bool,
 	logger *zap.Logger,
 ) *Manager {
 	// Get disconnect debounce delay from environment variable, default to 90 seconds
@@ -176,6 +201,12 @@ func NewManager(
 		redisClient:                 redisClient,
 		ytMetrics:                   ytMetrics,
 		statusPublisher:             statusPublisher,
+		eligibility:                 repository,
+		verifier:                    newTokenOwnerVerifier(oauthManager, quotaTracker, logger),
+		claims:                      claims,
+		gateFree:                    gateFree,
+		quotaState:                  quotaCoordinator.GetGlobalState,
+		claimed:                     make(map[string]string),
 		activeStreams:               make(map[string]*models.YouTubeStream),
 		pollers:                     make(map[string]*Poller),
 		connectedOverlays:           make(map[string]time.Time),
@@ -187,19 +218,20 @@ func NewManager(
 		streamStateStore:            streamStateStore,
 		circuitBreakers:             make(map[string]*CircuitBreaker), // Circuit breakers for offline channels
 		baseDetectionInterval:       1 * time.Minute,                  // Start checking every 1m
-		maxDetectionInterval:        10 * time.Minute,                 // Max 10 minutes between checks
+		maxDetectionInterval:        maxDetectionBackoff,
 		syncInterval:                30 * time.Second,
 		stopChan:                    make(chan struct{}),
 		syncLeader:                  leader,           // Use same coordinator for global sync leadership
 		syncLeaderStreamID:          "global-sync",    // Constant stream ID for global sync leadership
-		notificationDebounceDelay:   30 * time.Second, // Debounce notifications (YouTube API is expensive: 100 units per search)
-		connectionSyncDebounceDelay: 5 * time.Second,  // Debounce overlay connections (saves 100+ units on rapid connections)
+		notificationDebounceDelay:   30 * time.Second, // Debounce notifications (each sync can spend a discovery call per channel)
+		connectionSyncDebounceDelay: 5 * time.Second,  // Debounce overlay connections (batches rapid connects into one sync)
 	}
 }
 
 // Start begins managing streams and PostgreSQL LISTEN
 func (m *Manager) Start(ctx context.Context) error {
 	m.logger.Info("Starting stream manager")
+	ctx = m.beginRun(ctx)
 
 	// Load existing overlay connections from Redis
 	if err := m.loadExistingConnections(ctx); err != nil {
@@ -223,6 +255,9 @@ func (m *Manager) Start(ctx context.Context) error {
 	m.wg.Add(1)
 	go m.periodicSync(ctx)
 
+	m.claimsDone = make(chan struct{})
+	go m.claimsLoop(ctx)
+
 	// Start PostgreSQL LISTEN for instant notifications
 	m.wg.Add(1)
 	go m.listenForChanges(ctx)
@@ -232,6 +267,13 @@ func (m *Manager) Start(ctx context.Context) error {
 	go m.listenForOverlayConnections(ctx)
 
 	return nil
+}
+
+// beginRun derives the context the Start goroutines run on; Stop cancels it.
+func (m *Manager) beginRun(ctx context.Context) context.Context {
+	runCtx, cancel := context.WithCancel(ctx)
+	m.cancelRun = cancel
+	return runCtx
 }
 
 // UpdateDemandedChannels receives the set of channel IDs that currently have overlay demand.
@@ -272,8 +314,10 @@ func (m *Manager) isChannelDemanded(channelID string) bool {
 func (m *Manager) Stop() {
 	m.logger.Info("Stopping stream manager")
 
-	// Signal stop
 	close(m.stopChan)
+	if m.cancelRun != nil {
+		m.cancelRun()
+	}
 
 	// Clear debounce timer
 	m.notificationMu.Lock()
@@ -293,7 +337,17 @@ func (m *Manager) Stop() {
 	m.pollers = make(map[string]*Poller)
 	m.mu.Unlock()
 
-	// Wait for goroutines
+	// Once claimsLoop is gone nothing re-claims behind releaseClaims. The other goroutines may
+	// still be unwinding and must not hold the claims until the TTL.
+	if m.claimsDone != nil {
+		<-m.claimsDone
+	}
+	m.releaseClaims()
+
+	// The global-sync lease goes only after the claims: a successor that took it earlier could
+	// claim channels whose keys releaseClaims would then delete under it.
+	m.syncLeader.Release(m.syncLeaderStreamID)
+
 	m.wg.Wait()
 
 	if m.leader != nil {
@@ -304,7 +358,7 @@ func (m *Manager) Stop() {
 }
 
 // debounceConnectionSync debounces overlay connection events to batch expensive syncs
-// This prevents wasting 100+ quota units when multiple overlays connect rapidly
+// This avoids one sync per overlay when multiple overlays connect rapidly
 func (m *Manager) debounceConnectionSync(ctx context.Context) {
 	m.connectionSyncMu.Lock()
 	defer m.connectionSyncMu.Unlock()
@@ -330,7 +384,7 @@ func (m *Manager) debounceConnectionSync(ctx context.Context) {
 		m.logger.Info("Processing batched overlay connections (quota optimization)",
 			zap.Int("connection_count", count),
 			zap.Duration("debounce_delay", m.connectionSyncDebounceDelay),
-			zap.Int("quota_saved_estimate", (count-1)*100), // Each avoided sync saves ~100 units
+			zap.Int("quota_saved_estimate", (count-1)*quota.QuotaCostLiveBroadcasts), // Each avoided sync saves a discovery call
 		)
 
 		// Try to acquire global sync leadership
@@ -388,12 +442,9 @@ func (m *Manager) periodicSync(ctx context.Context) {
 				m.logger.Error("Failed to sync streams", zap.Error(err))
 			}
 		case <-m.stopChan:
-			// Release global sync leadership on shutdown
-			if m.syncLeader != nil {
-				m.syncLeader.Release(m.syncLeaderStreamID)
-				// Note: Ignoring error on shutdown - lock will expire naturally (10s TTL)
-				// and failure to release is not critical during graceful shutdown
-			}
+			// Stop releases the global-sync lease, after the claims.
+			return
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -420,11 +471,18 @@ func (m *Manager) listenForChanges(ctx context.Context) {
 
 			// Acquire connection and LISTEN
 			if err := m.listenAndWait(ctx, pool); err != nil {
+				if ctx.Err() != nil {
+					// Stop cancelled the wait; this is shutdown, not a LISTEN failure.
+					return
+				}
 				m.logger.Warn("PostgreSQL LISTEN error, will retry",
 					zap.Error(err),
 					zap.Duration("retry_in", 5*time.Second),
 				)
-				time.Sleep(5 * time.Second)
+				select {
+				case <-time.After(5 * time.Second):
+				case <-ctx.Done():
+				}
 			}
 		}
 	}
@@ -535,144 +593,27 @@ func isYoutubeNotification(payload string) bool {
 	return p.Platform == "" || p.Platform == "youtube"
 }
 
-// syncStreams fetches active sources and starts/stops pollers as needed
+// syncStreams starts pollers for claimed channels and stops the rest. Only rows of a channel's
+// verified owner (as chosen by refreshClaims) are processed, so a channel released to innertube
+// is left alone here instead of flapping its status between the two listeners.
 func (m *Manager) syncStreams(ctx context.Context) error {
 	m.logger.Debug("Syncing streams from database")
 
-	// Get active sources from database
-	sources, err := m.repository.GetActiveSources(ctx)
+	sources, err := m.eligibility.GetEligibleSources(ctx, m.gateFree())
 	if err != nil {
-		return fmt.Errorf("failed to get active sources: %w", err)
+		return fmt.Errorf("failed to get eligible sources: %w", err)
 	}
 
-	// Also get ALL sources (including inactive) for token validation
-	allSources, err := m.repository.GetAllSources(ctx)
-	if err != nil {
-		m.logger.Warn("Failed to get all sources for token validation", zap.Error(err))
-		// Continue with active sources only
-	}
-
-	// Filter sources to only those with connected overlays
-	m.connMu.RLock()
-	connectedSources := make([]*models.StreamSource, 0)
-	for _, source := range sources {
-		if _, connected := m.connectedOverlays[source.OverlayID]; connected {
-			connectedSources = append(connectedSources, source)
-		}
-	}
-
-	// Check ALL sources with connected overlays for token issues (including inactive)
-	inactiveSourcesWithConnection := make([]*models.StreamSource, 0)
-	if allSources != nil {
-		for _, source := range allSources {
-			if _, connected := m.connectedOverlays[source.OverlayID]; connected {
-				// Check if this source is NOT in the active sources list
-				isInActive := false
-				for _, activeSource := range connectedSources {
-					if activeSource.ChannelID == source.ChannelID && activeSource.OverlayID == source.OverlayID {
-						isInActive = true
-						break
-					}
-				}
-				if !isInActive {
-					inactiveSourcesWithConnection = append(inactiveSourcesWithConnection, source)
-				}
-			}
-		}
-	}
-	m.connMu.RUnlock()
-
-	m.logger.Info("Filtered YouTube sources by overlay connections",
-		zap.Int("total_sources", len(sources)),
-		zap.Int("connected_sources", len(connectedSources)),
-		zap.Int("inactive_sources_with_connection", len(inactiveSourcesWithConnection)),
-		zap.Int("connected_overlays", len(m.connectedOverlays)),
-	)
-
-	// Group connected sources by channel ID
-	channelSources := make(map[string][]*models.StreamSource)
-	channelConnectedOverlays := make(map[string]map[string]struct{})
-	for _, source := range connectedSources {
-		channelSources[source.ChannelID] = append(channelSources[source.ChannelID], source)
-		if _, exists := channelConnectedOverlays[source.ChannelID]; !exists {
-			channelConnectedOverlays[source.ChannelID] = make(map[string]struct{})
-		}
-		channelConnectedOverlays[source.ChannelID][source.OverlayID] = struct{}{}
-	}
-
+	channelSources, channelConnectedOverlays := m.claimedChannelSources(sources)
 	m.connMu.Lock()
 	m.channelConnectedOverlays = channelConnectedOverlays
+	connectedOverlayCount := len(m.connectedOverlays)
 	m.connMu.Unlock()
 
-	m.logger.Info("Found active YouTube channels with connected overlays",
+	m.logger.Info("Found claimed YouTube channels with connected overlays",
+		zap.Int("eligible_sources", len(sources)),
 		zap.Int("channel_count", len(channelSources)),
-		zap.Int("source_count", len(connectedSources)),
-	)
-
-	// Validate tokens for inactive sources with connected overlays
-	// This ensures users see status/warnings for sources that can't activate due to token issues
-	for _, source := range inactiveSourcesWithConnection {
-		userID, err := m.repository.GetUserIDForChannel(ctx, source.ChannelID)
-		if err != nil {
-			m.logger.Warn("Failed to get user ID for inactive source token validation",
-				zap.String("channel_id", source.ChannelID),
-				zap.Error(err),
-			)
-			continue
-		}
-
-		// Try to create YouTube service - this will validate the token
-		_, _, err = m.oauthManager.CreateYouTubeService(ctx, userID, source.ChannelID)
-		if err != nil {
-			// Token validation failed - publish offline status
-			m.logger.Info("Inactive source has invalid OAuth token",
-				zap.String("channel_id", source.ChannelID),
-				zap.String("overlay_id", source.OverlayID),
-				zap.Error(err),
-			)
-
-			// Publish offline status with error message
-			if m.statusPublisher != nil {
-				_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
-					Platform:     "youtube",
-					ChannelID:    source.ChannelID,
-					Status:       "offline",
-					ErrorMessage: fmt.Sprintf("OAuth token error: %v", err),
-				})
-			}
-		} else {
-			// Token is valid! Add to channelSources for livestream detection
-			m.logger.Info("Inactive source has valid OAuth token, will attempt livestream detection",
-				zap.String("channel_id", source.ChannelID),
-				zap.String("overlay_id", source.OverlayID),
-			)
-
-			// NOTE: Don't publish "Searching..." status here - it gets published every sync cycle
-			// even when detection is blocked by backoff. Status is published in syncChannel()
-			// when detection actually runs.
-
-			// Add to channel sources map for detection in the main loop
-			if channelSources[source.ChannelID] == nil {
-				channelSources[source.ChannelID] = make([]*models.StreamSource, 0)
-			}
-			channelSources[source.ChannelID] = append(channelSources[source.ChannelID], source)
-
-			// CRITICAL: Also add to channelConnectedOverlays for poller connection check
-			// Without this, poller thinks overlay is disconnected and stops immediately!
-			if _, exists := channelConnectedOverlays[source.ChannelID]; !exists {
-				channelConnectedOverlays[source.ChannelID] = make(map[string]struct{})
-			}
-			channelConnectedOverlays[source.ChannelID][source.OverlayID] = struct{}{}
-		}
-	}
-
-	// Update the global connection map to include inactive sources we're processing
-	m.connMu.Lock()
-	m.channelConnectedOverlays = channelConnectedOverlays
-	m.connMu.Unlock()
-
-	m.logger.Info("Channel sources after inactive validation",
-		zap.Int("channel_count", len(channelSources)),
+		zap.Int("connected_overlays", connectedOverlayCount),
 	)
 
 	// Filter by demand: only process channels with active overlay demand
@@ -699,14 +640,14 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		)
 
 		// CRITICAL OPTIMIZATION: Skip expensive discovery if poller already running
-		// This prevents wasting 100 quota units on redundant searches
+		// This saves a discovery call on every sync while the stream runs
 		m.mu.RLock()
 		hasActivePoller := false
 		for streamID := range m.pollers {
 			stream := m.activeStreams[streamID]
 			if stream != nil && stream.ChannelID == channelID {
 				hasActivePoller = true
-				m.logger.Debug("Skipping discovery for channel with active poller (saved 100 quota units)",
+				m.logger.Debug("Skipping discovery for channel with active poller",
 					zap.String("channel_id", channelID),
 					zap.String("stream_id", streamID),
 				)
@@ -730,7 +671,7 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 		// OPTIMIZATION: If source is already ACTIVE with cached stream state, just start poller
 		// No need for expensive detection - we already know the stream_id
 		if cachedStream, err := m.streamStateStore.LoadStreamState(ctx, channelID); err == nil && cachedStream != nil {
-			m.logger.Info("Found cached stream state, starting poller without detection (saved 100 quota units)",
+			m.logger.Info("Found cached stream state, starting poller without detection",
 				zap.String("channel_id", channelID),
 				zap.String("stream_id", cachedStream.StreamID),
 			)
@@ -798,22 +739,14 @@ func (m *Manager) syncStreams(ctx context.Context) error {
 	return nil
 }
 
-// syncChannel checks for live streams on a channel and starts pollers
-// Uses a two-tier approach: lightweight status check (1 unit) for cached videos,
-// full search (100 units) only when needed
+// syncChannel resumes or discovers the channel's live broadcasts and starts pollers. Cached
+// videos get a 1-unit status check; discovery is one owner-token liveBroadcasts.list call.
+// sources are the verified owner's rows, so their OwnerUserID is whose token is used.
 func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*models.StreamSource) error {
-	// Get user ID for OAuth
-	userID, err := m.repository.GetUserIDForChannel(ctx, channelID)
-	if err != nil {
-		// Mark source as inactive - can't get OAuth
-		if setErr := m.repository.SetSourceActive(ctx, channelID, false); setErr != nil {
-			m.logger.Error("Failed to mark source inactive after OAuth error",
-				zap.String("channel_id", channelID),
-				zap.Error(setErr),
-			)
-		}
-		return fmt.Errorf("failed to get user ID: %w", err)
+	if len(sources) == 0 {
+		return fmt.Errorf("no eligible source for channel %s", channelID)
 	}
+	userID := sources[0].OwnerUserID
 
 	// Ensure quota record exists before any quota operations
 	// This prevents "no rows" errors in GetChannelQuota() calls
@@ -826,17 +759,12 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		// Don't fail - continue and let downstream handle it
 	}
 
-	// Create YouTube service with OAuth
+	// Token failure is reported to the channel's overlays but not written to
+	// overlay_chat_sources.is_active: that flag spans every overlay of the channel and is
+	// shared with innertube, which may well be serving it. A rejected token sends the claim back
+	// to innertube at once (dropOwner); a token-store or token-endpoint failure is retried instead.
 	service, httpClient, err := m.oauthManager.CreateYouTubeService(ctx, userID, channelID)
 	if err != nil {
-		// Mark source as inactive - OAuth failed
-		if setErr := m.repository.SetSourceActive(ctx, channelID, false); setErr != nil {
-			m.logger.Error("Failed to mark source inactive after OAuth creation error",
-				zap.String("channel_id", channelID),
-				zap.Error(setErr),
-			)
-		}
-
 		// Publish offline status with error message
 		if m.statusPublisher != nil {
 			_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
@@ -847,6 +775,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 			})
 		}
 
+		m.dropOwner(ctx, channelID, userID, err)
 		return fmt.Errorf("failed to create YouTube service: %w", err)
 	}
 
@@ -857,25 +786,23 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	// Get token source for gRPC authentication
 	oauth2TokenSource, err := m.oauthManager.CreateTokenSource(ctx, userID, channelID)
 	if err != nil {
-		m.logger.Warn("Failed to create token source for gRPC, will use HTTP fallback",
+		// No HTTP fallback: if the token was rejected the claim is gone, and serving the channel
+		// anyway would double it with innertube.
+		m.dropOwner(ctx, channelID, userID, err)
+		return fmt.Errorf("failed to create token source: %w", err)
+	}
+	grpcTokenSource := grpcoauth.TokenSource{TokenSource: ownerTokenSource{oauth2TokenSource}}
+	grpcClient, err := api.NewGRPCStreamClient(ctx, grpcTokenSource, m.quotaTracker, m.logger)
+	if err != nil {
+		m.logger.Warn("Failed to create gRPC streaming client, will fallback to HTTP",
 			zap.String("channel_id", channelID),
 			zap.Error(err),
 		)
 	} else {
-		// Wrap oauth2.TokenSource in gRPC credentials
-		grpcTokenSource := grpcoauth.TokenSource{TokenSource: oauth2TokenSource}
-		grpcClient, err := api.NewGRPCStreamClient(ctx, grpcTokenSource, m.quotaTracker, m.logger)
-		if err != nil {
-			m.logger.Warn("Failed to create gRPC streaming client, will fallback to HTTP",
-				zap.String("channel_id", channelID),
-				zap.Error(err),
-			)
-		} else {
-			apiClient.SetGRPCClient(grpcClient)
-			m.logger.Info("gRPC streaming enabled for channel",
-				zap.String("channel_id", channelID),
-			)
-		}
+		apiClient.SetGRPCClient(grpcClient)
+		m.logger.Info("gRPC streaming enabled for channel",
+			zap.String("channel_id", channelID),
+		)
 	}
 
 	overlayID := ""
@@ -914,7 +841,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 			}
 
 			// Start poller immediately
-			if err := m.startPoller(ctx, stream, apiClient); err != nil {
+			if err := m.startPoller(ctx, stream, apiClient, userID); err != nil {
 				m.logger.Error("Failed to start poller from stream state",
 					zap.String("stream_id", streamState.StreamID),
 					zap.Error(err),
@@ -963,7 +890,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		})
 		if statusErr == nil {
 			if statusResult.IsLive && statusResult.LiveChatID != "" {
-				m.logger.Info("Cached video is live, using lightweight check (saved 100 quota units - no GetVideoDetails needed)",
+				m.logger.Info("Cached video is live, skipping broadcast discovery",
 					zap.String("channel_id", channelID),
 					zap.String("video_id", cachedVideoID),
 				)
@@ -981,7 +908,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 					}
 					stream.StreamID = cachedVideoID
 
-					if err := m.startPoller(ctx, stream, apiClient); err != nil {
+					if err := m.startPoller(ctx, stream, apiClient, userID); err != nil {
 						m.logger.Error("Failed to start poller for cached video",
 							zap.String("stream_id", cachedVideoID),
 							zap.Error(err),
@@ -1010,8 +937,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		}
 	}
 
-	// CIRCUIT BREAKER: Check if we should attempt expensive channel discovery
-	// This prevents wasting quota (100 units per search) on channels that are offline
+	// CIRCUIT BREAKER: back off discovery on channels that keep turning up offline
 	circuitBreaker := m.getOrCreateCircuitBreaker(channelID)
 	canAttempt, reason := circuitBreaker.CanAttemptDiscovery()
 
@@ -1034,9 +960,9 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		return fmt.Errorf("circuit breaker open: %s", reason)
 	}
 
-	// Publish status indicating search is about to start
+	// Publish status indicating discovery is about to start
 	if m.statusPublisher != nil {
-		estimatedSearch := time.Now().Add(5 * time.Second) // Search API call takes ~1-5 seconds
+		estimatedSearch := time.Now().Add(5 * time.Second)
 		_ = m.statusPublisher.PublishStatus(ctx, status.StatusMessage{
 			Platform:     "youtube",
 			ChannelID:    channelID,
@@ -1046,18 +972,17 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		})
 	}
 
-	// Fallback to full search (expensive: 100 units)
-	// This is discovery, so use normal priority (can be blocked in degraded/critical states)
+	// Discovery uses normal priority, so the coordinator can block it in degraded/critical states
 	searchDecision := m.quotaCoordinator.CanMakeRequest(
 		ctx,
 		channelID,
-		quota.RequestTypeSearch,
+		quota.RequestTypeDiscovery,
 		quota.PriorityNormal,
-		quota.QuotaCostSearch,
+		quota.QuotaCostLiveBroadcasts,
 	)
 
 	if !searchDecision.Allowed {
-		m.logger.Warn("Quota check denied for full stream search",
+		m.logger.Warn("Quota check denied for broadcast discovery",
 			zap.String("channel_id", channelID),
 			zap.String("reason", string(searchDecision.Reason)),
 			zap.String("global_state", string(searchDecision.GlobalState)),
@@ -1094,24 +1019,17 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 		return fmt.Errorf("quota check failed: %s", searchDecision.Reason)
 	}
 
-	m.logger.Debug("Performing full live stream search",
+	m.logger.Debug("Listing active broadcasts",
 		zap.String("channel_id", channelID),
 	)
 
-	// Get live streams for channel
-	liveStreams, err := apiClient.GetLiveStreams(ctx, channelID, &quota.AuditContext{
+	liveStreams, err := apiClient.GetActiveBroadcasts(ctx, channelID, &quota.AuditContext{
 		ChannelID: channelID,
 		OverlayID: overlayID,
 	})
 	if err != nil {
-		// Mark source as inactive - API call failed
-		if setErr := m.repository.SetSourceActive(ctx, channelID, false); setErr != nil {
-			m.logger.Error("Failed to mark source inactive after API error",
-				zap.String("channel_id", channelID),
-				zap.Error(setErr),
-			)
-		}
-		return fmt.Errorf("failed to get live streams: %w", err)
+		m.dropOwner(ctx, channelID, userID, err)
+		return fmt.Errorf("failed to list active broadcasts: %w", err)
 	}
 
 	if len(liveStreams) == 0 {
@@ -1135,10 +1053,8 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 			})
 		}
 
-		// Don't deactivate sources when no stream is found
-		// The channel might go live later, and we already have exponential backoff
-		// Sources should only be deactivated on hard errors (OAuth, API failures)
-		// or when explicitly removed by users
+		// Don't deactivate sources when no stream is found: the channel might go live later,
+		// and exponential backoff already bounds the cost of looking
 		return nil
 	}
 
@@ -1175,7 +1091,7 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 			stream.OverlayID = sources[0].OverlayID
 		}
 
-		if err := m.startPoller(ctx, stream, apiClient); err != nil {
+		if err := m.startPoller(ctx, stream, apiClient, userID); err != nil {
 			m.logger.Error("Failed to start poller",
 				zap.String("stream_id", stream.StreamID),
 				zap.Error(err),
@@ -1187,8 +1103,9 @@ func (m *Manager) syncChannel(ctx context.Context, channelID string, sources []*
 	return nil
 }
 
-// startPoller starts a poller for a stream (if not already running)
-func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream, apiClient *api.Client) error {
+// startPoller starts a poller for a stream (if not already running). ownerUserID is whose token
+// apiClient carries, the owner handed back to innertube if that token is rejected mid-stream.
+func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream, apiClient *api.Client, ownerUserID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -1247,13 +1164,7 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 		zap.String("channel_name", stream.ChannelName),
 	)
 
-	// Create and start poller
-	poller := NewPoller(stream, apiClient, m.ytMetrics, m.logger, m.tokenStore, m.statusPublisher)
-	poller.SetMessageHandler(m.messageHandler)
-
-	// Set connection checker for connection-aware polling
-	// This prevents wasting quota (5 units per poll) when overlay disconnects
-	poller.SetConnectionChecker(m, stream.ChannelID, stream.OverlayID)
+	poller := m.newPoller(stream, apiClient, ownerUserID)
 
 	if err := poller.Start(ctx); err != nil {
 		if m.leader != nil {
@@ -1300,6 +1211,35 @@ func (m *Manager) startPoller(ctx context.Context, stream *models.YouTubeStream,
 	}
 
 	return nil
+}
+
+func (m *Manager) newPoller(stream *models.YouTubeStream, apiClient *api.Client, ownerUserID string) *Poller {
+	poller := NewPoller(stream, apiClient, m.ytMetrics, m.logger, m.tokenStore, m.statusPublisher)
+	poller.SetMessageHandler(m.messageHandler)
+	// Connection-aware polling stops spending quota once no overlay is watching.
+	poller.SetConnectionChecker(m, stream.ChannelID, stream.OverlayID)
+	streamID, channelID := stream.StreamID, stream.ChannelID
+	poller.SetOwnerRejectedHandler(func(cause error) {
+		m.retireRejectedPoller(poller, streamID, channelID, ownerUserID, cause)
+	})
+	return poller
+}
+
+// retireRejectedPoller hands the channel of a poller whose owner token was rejected back to
+// innertube. syncStreams makes no API call for a channel with a running poller, and the stream-state
+// fast path starts one without any, so a token revoked mid-stream is only ever seen here.
+func (m *Manager) retireRejectedPoller(poller *Poller, streamID, channelID, ownerUserID string, cause error) {
+	m.mu.Lock()
+	if m.pollers[streamID] == poller {
+		delete(m.pollers, streamID)
+		delete(m.activeStreams, streamID)
+		m.releaseLeadership(streamID)
+	}
+	m.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	m.dropOwner(ctx, channelID, ownerUserID, cause)
 }
 
 // cleanupInactivePollers stops pollers for channels that are no longer active
@@ -1665,7 +1605,6 @@ func (m *Manager) handleOverlayConnected(ctx context.Context, overlayID string) 
 	)
 
 	// OPTIMIZATION: Debounce rapid overlay connections to batch syncs
-	// Saves 100+ quota units when multiple overlays connect quickly
 	m.debounceConnectionSync(ctx)
 }
 
@@ -2146,7 +2085,7 @@ func (m *Manager) ResetAllCircuitBreakers() {
 // GetChannelDetectionState returns the detection state for a specific channel
 func (m *Manager) GetChannelDetectionState(channelID string) (*ChannelDetectionState, error) {
 	ctx := context.Background()
-	
+
 	// Load backoff state
 	backoffState, err := m.backoffStore.LoadBackoffState(ctx, channelID)
 	if err != nil {
@@ -2191,7 +2130,7 @@ func (m *Manager) GetChannelDetectionState(channelID string) (*ChannelDetectionS
 	// Determine risk level
 	riskLevel := "low"
 	recommendedAction := ""
-	
+
 	if backoffState != nil && connectedOverlays > 0 {
 		backoffMinutes := backoffState.CurrentInterval.Minutes()
 		if backoffMinutes > 5 {
