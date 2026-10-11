@@ -190,6 +190,11 @@ interface TabEntry {
    * carries. Refreshed only when a NEW non-empty wsUrl is recorded, so it
    * always describes the served URL's age. */
   capturedAt: number;
+  /** When this page was first registered for the room. A warm live page's
+   * renderer grows for as long as it stays open (~1.2 GB after 25 h,
+   * measured 2026-10-11), so this, not capturedAt, is the age TabRecycler
+   * bounds. A same-page re-capture keeps it. */
+  openedAt: number;
 }
 
 /** Profile class of a lane: primary rooms and canary rooms never share a jar. */
@@ -551,6 +556,36 @@ export class ViewerPool {
     return this.tabs.has(username);
   }
 
+  /** When the room's registered page was opened; undefined without a tab. */
+  tabOpenedAt(username: string): number | undefined {
+    return this.tabs.get(username)?.openedAt;
+  }
+
+  /**
+   * Replace a room's warm tab with a capture on a fresh page, then close
+   * the old page. The old tab keeps serving until the new capture
+   * registers, and a failed capture leaves it registered: attemptOnLane
+   * only unregisters the page it captured on. A fresh page that opened no
+   * webcast socket would trade a servable session for an unservable one,
+   * so the old registration is restored and the fresh page closed.
+   * Throws when the capture fails or the fresh page opened no socket.
+   */
+  async recycleTab(username: string): Promise<void> {
+    const old = this.tabs.get(username);
+    if (!old) return;
+    const oldLane = this.roomLane.get(username);
+    const capture = await this.captureRoom(username, { freshPage: true });
+    const fresh = this.tabs.get(username);
+    if (!fresh || fresh.page === old.page) return;
+    if (capture.wsUrl === '' && old.wsUrl !== '' && !old.page.isClosed()) {
+      this.tabs.set(username, old);
+      if (oldLane !== undefined) this.roomLane.set(username, oldLane);
+      void fresh.page.close().catch(() => undefined);
+      throw new Error('recycle capture opened no webcast socket; kept the old tab');
+    }
+    void old.page.close().catch(() => undefined);
+  }
+
   /**
    * Run a callback with a fresh page on the first available lane's browser
    * (warm-curator discovery: one navigation of the public live feed, no
@@ -591,7 +626,7 @@ export class ViewerPool {
    */
   async captureRoom(
     username: string,
-    { timeoutMs = 180_000 }: { timeoutMs?: number } = {}
+    { timeoutMs = 180_000, freshPage = false }: { timeoutMs?: number; freshPage?: boolean } = {}
   ): Promise<RoomCapture> {
     this.evictIdleTabs();
     const attempts = Math.max(1, this.options.maxLaneAttempts);
@@ -630,7 +665,8 @@ export class ViewerPool {
       // have served. The listener's TIKTOK_SIGNER_TIMEOUT_MS (180s default)
       // still bounds the overall call.
       Math.max(90_000, Math.floor(timeoutMs / attempts)),
-      overallStart
+      overallStart,
+      { freshPage }
     ).promise.then(
       (capture: RoomCapture) => ({ ok: true as const, capture }),
       (error: Error) => ({ ok: false as const, error })
@@ -670,7 +706,8 @@ export class ViewerPool {
     const racers = racing.map((lane) => {
       const { promise, cancel } = this.attemptOnLane(username, lane, remaining, raceStart, {
         registerCancel: (fn) => cancels.push(fn),
-        claim
+        claim,
+        freshPage
       });
       return promise.then(
         (capture) => ({ lane, capture }),
@@ -925,6 +962,8 @@ export class ViewerPool {
        * register. Undefined for the solo first attempt.
        */
       claim?: { winner: boolean };
+      /** Never reuse the room's registered page (TabRecycler). */
+      freshPage?: boolean;
     } = {}
   ): { promise: Promise<RoomCapture>; cancel: () => void } {
     const { promise, resolve, reject } = Promise.withResolvers<RoomCapture>();
@@ -996,7 +1035,7 @@ export class ViewerPool {
         // room (skips the domain bootstrap); the browser only launches when
         // a brand-new page is needed.
         const existing =
-          this.roomLane.get(username) === laneKey(lane.host, lane.klass)
+          !options.freshPage && this.roomLane.get(username) === laneKey(lane.host, lane.klass)
             ? this.tabs.get(username)
             : undefined;
         const prewarmed = existing ? undefined : await this.takePrewarmedTab(lane);
@@ -1099,7 +1138,8 @@ export class ViewerPool {
               lastUsed: Date.now(),
               wsUrl: kept,
               roomId,
-              capturedAt: stamp
+              capturedAt: stamp,
+              openedAt: samePage ? previous.openedAt : Date.now()
             });
             this.roomLane.set(username, laneKey(lane.host, lane.klass));
             this.refillPrewarm(lane);
