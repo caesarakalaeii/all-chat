@@ -42,7 +42,8 @@
  *  - WS connects flag the shared session by burst rate (~15/hour observed):
  *    a per-pod rolling-hour connect budget paces flap storms. Per-pod, not
  *    per-room: the session's flag budget is shared by all rooms and all
- *    pods leasing it.
+ *    pods leasing it. A sign that gets no lease never dials, so it gives
+ *    its slot back: a signer outage must not drain the budget.
  *  - The lane-pin pre-sign re-enters sign() with a fixed
  *    `userAgent: 'ws-pin'` marker; it is a local cache hit, not a WS dial,
  *    and never consumes connect budget.
@@ -127,8 +128,8 @@ export class PureNodeSigner implements WebcastSigner {
     // (index.ts): it rides the cached lease and must survive an exhausted
     // connect budget — it is not a WS dial.
     const isPreSign = request.userAgent === 'ws-pin';
+    const now = Date.now();
     if (!isPreSign) {
-      const now = Date.now();
       this.pruneWindow(this.wsConnectHours, now);
       if (this.wsConnectHours.length >= this.maxWsConnectsPerHour) {
         throw new SignatureFailure(
@@ -141,8 +142,18 @@ export class PureNodeSigner implements WebcastSigner {
       this.wsConnectHours.push(now);
     }
 
-    const lease = await this.currentLease();
-    return this.synthesize(request, lease);
+    try {
+      const lease = await this.currentLease();
+      return this.synthesize(request, lease);
+    } catch (error) {
+      // The slot is reserved before the await so concurrent signs cannot
+      // all pass the check; released here because nothing was dialled.
+      if (!isPreSign) {
+        const slot = this.wsConnectHours.lastIndexOf(now);
+        if (slot >= 0) this.wsConnectHours.splice(slot, 1);
+      }
+      throw error;
+    }
   }
 
   /**

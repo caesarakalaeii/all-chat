@@ -281,6 +281,34 @@ describe('PureNodeSigner WS-connect budget', () => {
       vi.useRealTimers();
     }
   });
+
+  it('a sign that gets no lease gives its connect slot back', async () => {
+    const impl = vi.fn();
+    // A signer outage (2026-10-10): every lease fetch answers 503
+    // no_warm_session, and nothing is dialled.
+    for (let i = 0; i < 12; i++) {
+      impl.mockResolvedValueOnce({
+        statusCode: 503,
+        headers: {},
+        body: { text: async () => JSON.stringify({ error: 'no_warm_session' }) }
+      });
+    }
+    impl.mockResolvedValue({
+      statusCode: 200,
+      headers: {},
+      body: { text: async () => JSON.stringify(leaseResponse()) }
+    });
+    const signer = new PureNodeSigner({ baseUrl: 'http://signer', fetchImpl: impl as never });
+
+    for (let i = 0; i < 12; i++) {
+      await expect(signer.sign(signRequest({ roomId: String(i) }))).rejects.toThrow(/no session lease/);
+    }
+    // Once the signer recovers, the full hourly budget is still there.
+    for (let i = 0; i < 12; i++) {
+      await signer.sign(signRequest({ roomId: `r${i}` }));
+    }
+    await expect(signer.sign(signRequest({ roomId: 'over' }))).rejects.toThrow(/WS connect budget exhausted/);
+  });
 });
 
 describe('PureNodeSigner budget refusal classification', () => {
