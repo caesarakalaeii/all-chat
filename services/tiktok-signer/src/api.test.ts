@@ -296,6 +296,19 @@ describe('GET /v1/session', () => {
     });
   });
 
+  it('leases a room added to the warm set after startup (the curator path)', async () => {
+    // The seed room is offline and tab-less; only the curator's room is
+    // warm. A startup copy of the list never saw it (2026-10-10 outage).
+    const { viewer } = stubbedViewer({ leases: { curated: lease() }, hasTabs: { curated: true } });
+    const warmRooms = new Set(['seed']);
+    await withServer({ viewer, warmRooms, warmRoomIsLive: async () => false }, async (base) => {
+      warmRooms.add('curated');
+      const res = await getJson(base, '/v1/session');
+      expect(res.status).toBe(200);
+      expect(res.body.wsUrl).toBe('wss://webcast-ws.example/ws');
+    });
+  });
+
   it('skips a warm-but-empty lease and serves the next room', async () => {
     const { viewer } = stubbedViewer({
       leases: { rooma: lease({ wsUrl: '' }), roomb: lease() }

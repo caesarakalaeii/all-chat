@@ -199,7 +199,7 @@ const relay = viewer
   ? new RelayHub((username) => { viewer.pinTab(username); }, { logger })
   : undefined;
 
-const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, warmRooms: [...warmRoomSet], logger });
+const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, warmRooms: warmRoomSet, logger });
 
 server.listen(PORT, () => {
   logger.info('tiktok-signer listening', { port: PORT });
