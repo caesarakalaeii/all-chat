@@ -24,6 +24,7 @@
  * FAQ), it is read from there so the two cannot drift apart.
  */
 
+import { POSTS } from '@/content/blog'
 import {
   DISCORD_INVITE_URL,
   EXTENSION_CHROME_URL,
@@ -82,6 +83,10 @@ const LINKS = `## Guides
 - [TikTok LIVE chat overlay](${SITE_URL}/tiktok-live-chat-overlay): how TikTok LIVE chat is read, and its limits
 - [Multistream chat](${SITE_URL}/multistream-chat): one chat for Twitch, YouTube, Kick, TikTok and Discord at once
 - [Compare](${SITE_URL}/compare): All-Chat next to other multistream chat tools
+
+## Blog
+
+${POSTS.map(({ meta }) => `- [${meta.title}](${SITE_URL}/blog/${meta.slug}): ${meta.description}`).join('\n')}
 
 ## Docs
 

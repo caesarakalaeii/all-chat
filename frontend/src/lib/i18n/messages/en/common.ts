@@ -205,4 +205,9 @@ export const common = {
     cancelButton: 'Cancel',
     continueButton: 'I Understand, Continue',
   },
+  // The breadcrumb trail on the public guides and the blog.
+  breadcrumb: {
+    label: 'Breadcrumb',
+    home: 'Home',
+  },
 } as const
