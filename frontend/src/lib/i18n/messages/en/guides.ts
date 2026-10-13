@@ -174,6 +174,7 @@ export const guides = {
       'On 2026-09-09 TikTok began requiring browser-grade sessions for live chat data. All-Chat tracked the change the same week; the updates are recorded in the same ADR.',
     approachFallback:
       'Rooms on {premium} accounts get a second delivery path when TikTok refuses the primary connection.',
+    approachStory: 'How All-Chat got there, outages included, is written up in {post}.',
     limitInterruptions:
       'TikTok is the platform most likely to see short interruptions. When TikTok changes its web player, every tool that reads TikTok LIVE chat has to adapt, All-Chat included. Twitch, YouTube, Kick and Discord chat in the same overlay keep running while that happens.',
     limitReadOnly:
