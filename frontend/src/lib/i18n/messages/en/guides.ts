@@ -31,8 +31,6 @@
 
 export const guides = {
   shared: {
-    breadcrumbLabel: 'Breadcrumb',
-    breadcrumbHome: 'Home',
     eyebrow: 'Guide',
     ctaHeading: 'Set it up',
     ctaBody:

@@ -17,6 +17,7 @@
  */
 
 import type { MetadataRoute } from 'next'
+import { POSTS } from '@/content/blog'
 
 // No lastModified: stamping every URL with the request time on every fetch is
 // a value crawlers learn to ignore, which also discards it on the day a page
@@ -72,6 +73,18 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'monthly',
       priority: 0.7,
     },
+    {
+      url: `${baseUrl}/blog`,
+      changeFrequency: 'weekly',
+      priority: 0.6,
+    },
+    // A post's date is a real per-page date, so it does get lastModified.
+    ...POSTS.map(({ meta }) => ({
+      url: `${baseUrl}/blog/${meta.slug}`,
+      lastModified: meta.date,
+      changeFrequency: 'yearly' as const,
+      priority: 0.6,
+    })),
     {
       url: `${baseUrl}/legal/privacy`,
       changeFrequency: 'monthly',
