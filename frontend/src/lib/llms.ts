@@ -78,6 +78,7 @@ const LIMITS = `- YouTube: public live streams are found automatically. An unlis
 
 const LINKS = `## Guides
 
+- [All guides](${SITE_URL}/guides): the table of contents for the guides below
 - [OBS chat overlay](${SITE_URL}/obs-chat-overlay): add merged chat to OBS as a Browser Source
 - [OBS chat dock](${SITE_URL}/obs-chat-dock): put the chat monitor into an OBS custom browser dock
 - [TikTok LIVE chat overlay](${SITE_URL}/tiktok-live-chat-overlay): how TikTok LIVE chat is read, and its limits

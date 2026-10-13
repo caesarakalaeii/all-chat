@@ -18,7 +18,8 @@
 
 /**
  * The public search-intent guides: /obs-chat-overlay, /obs-chat-dock,
- * /tiktok-live-chat-overlay, /multistream-chat and /compare.
+ * /tiktok-live-chat-overlay, /multistream-chat and /compare, plus their table
+ * of contents at /guides.
  *
  * Each page keeps its own metaTitle/metaDescription here rather than in
  * `metadata`, so a guide and its search snippet are edited together.
@@ -46,6 +47,17 @@ export const guides = {
     linkTiktok: 'TikTok LIVE chat in OBS',
     linkMultistream: 'Multistream chat',
     linkCompare: 'Comparison with other chat tools',
+  },
+  // The /guides table of contents. Each entry's summary is that guide's own
+  // metaDescription (GUIDES in components/guides/GuidePage.tsx).
+  index: {
+    metaTitle: 'Guides: OBS chat overlay, chat dock, TikTok LIVE chat and multistream chat',
+    metaDescription:
+      'Step-by-step guides for All-Chat: put merged chat in OBS, dock it inside OBS, show TikTok LIVE chat, merge multistream chat, and compare chat tools.',
+    breadcrumb: 'Guides',
+    heading: 'Guides',
+    intro:
+      'How to get merged Twitch, YouTube, Kick, TikTok and Discord chat into OBS, and how All-Chat compares with other chat tools.',
   },
   obsOverlay: {
     metaTitle: 'OBS Chat Overlay for Twitch, YouTube, Kick and TikTok',
