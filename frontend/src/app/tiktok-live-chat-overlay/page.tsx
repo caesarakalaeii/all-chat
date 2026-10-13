@@ -18,6 +18,7 @@
 
 import Link from 'next/link'
 import { GuidePage, StepList, howToLd, type GuideStep } from '@/components/guides/GuidePage'
+import { meta as signServerPost } from '@/content/blog/tiktok-live-chat-without-a-sign-server'
 import { getTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 
@@ -101,6 +102,11 @@ export default function TiktokLiveChatOverlayPage() {
           <li>
             {interpolateElements(t('guides.tiktok.approachFallback'), {
               premium: <Link href="/upgrade">{t('guides.shared.premiumLinkText')}</Link>,
+            })}
+          </li>
+          <li>
+            {interpolateElements(t('guides.tiktok.approachStory'), {
+              post: <Link href={`/blog/${signServerPost.slug}`}>{signServerPost.title}</Link>,
             })}
           </li>
         </ul>
