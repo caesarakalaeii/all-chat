@@ -175,5 +175,10 @@ export default defineConfig([
     // Storybook axe gate covers src/stories/** for accessibility.
     'src/stories/**',
     'src/**/__tests__/**',
+    // Blog posts are authored, dated English prose, not UI copy: they stay out
+    // of the catalog so the /translate tool never offers them. The blog's
+    // chrome (src/app/blog, src/components/blog) is still linted.
+    // See src/content/blog/index.ts.
+    'src/content/blog/**',
   ]),
 ])

@@ -114,7 +114,7 @@ export function GuidePage({
   structuredData = [],
   children,
 }: GuidePageProps) {
-  const home = t('guides.shared.breadcrumbHome')
+  const home = t('common.breadcrumb.home')
   const breadcrumbLd = {
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
@@ -133,7 +133,7 @@ export function GuidePage({
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-4xl px-4 py-12">
         <div className="lanes-panel p-8 md:p-12">
-          <nav aria-label={t('guides.shared.breadcrumbLabel')} className="mb-6">
+          <nav aria-label={t('common.breadcrumb.label')} className="mb-6">
             <ol className="text-dim flex flex-wrap items-center gap-2 text-xs">
               <li className="flex items-center gap-2">
                 <Link href="/" className="underline underline-offset-2">

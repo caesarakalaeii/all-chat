@@ -36,6 +36,7 @@
 import { a11y } from './a11y'
 import { admin } from './admin'
 import { auth } from './auth'
+import { blog } from './blog'
 import { common } from './common'
 import { dashboard } from './dashboard'
 import { docs } from './docs'
@@ -56,6 +57,7 @@ export const enMessages = {
   a11y,
   admin,
   auth,
+  blog,
   common,
   dashboard,
   docs,
