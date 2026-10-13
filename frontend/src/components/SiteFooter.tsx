@@ -53,7 +53,7 @@ export function SiteFooter() {
     <footer
       className={cn(
         spaceMono.className,
-        'space-y-2 border-t border-border pt-12 pb-12 text-center text-sm text-text-sub'
+        'space-y-2 border-t border-border px-4 pt-12 pb-12 text-center text-sm text-text-sub'
       )}
     >
       <p>{t('marketing.footer.tagline')}</p>
@@ -97,6 +97,18 @@ export function SiteFooter() {
           {t('marketing.footer.api')}
         </Link>
         <span aria-hidden="true">&bull;</span>
+        <Link href="/guides" className={linkClass}>
+          {t('marketing.footer.guides')}
+        </Link>
+        <span aria-hidden="true">&bull;</span>
+        <Link href="/blog" className={linkClass}>
+          {t('marketing.footer.blog')}
+        </Link>
+      </p>
+      {/* pt-2: the links are 16px tall, so the two rows need 8px more than
+          space-y-2 gives for every link to keep the 24px target spacing
+          WCAG 2.5.8 asks for. */}
+      <p className="flex flex-wrap items-center justify-center gap-3 pt-2 text-xs">
         <Link href="/legal/privacy" className={linkClass}>
           {t('marketing.footer.privacy')}
         </Link>
@@ -107,30 +119,6 @@ export function SiteFooter() {
         <span aria-hidden="true">&bull;</span>
         <Link href="/legal/impressum" className={linkClass}>
           {t('marketing.footer.impressum')}
-        </Link>
-      </p>
-      {/* pt-2: the links are 16px tall, so the two rows need 8px more than
-          space-y-2 gives for every link to keep the 24px target spacing
-          WCAG 2.5.8 asks for. */}
-      <p className="flex flex-wrap items-center justify-center gap-3 pt-2 text-xs">
-        <Link href="/obs-chat-overlay" className={linkClass}>
-          {t('marketing.footer.obsOverlay')}
-        </Link>
-        <span aria-hidden="true">&bull;</span>
-        <Link href="/obs-chat-dock" className={linkClass}>
-          {t('marketing.footer.obsDock')}
-        </Link>
-        <span aria-hidden="true">&bull;</span>
-        <Link href="/tiktok-live-chat-overlay" className={linkClass}>
-          {t('marketing.footer.tiktokLiveChat')}
-        </Link>
-        <span aria-hidden="true">&bull;</span>
-        <Link href="/multistream-chat" className={linkClass}>
-          {t('marketing.footer.multistreamChat')}
-        </Link>
-        <span aria-hidden="true">&bull;</span>
-        <Link href="/compare" className={linkClass}>
-          {t('marketing.footer.compare')}
         </Link>
       </p>
     </footer>

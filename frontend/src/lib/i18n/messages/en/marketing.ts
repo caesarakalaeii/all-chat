@@ -314,14 +314,11 @@ export const marketing = {
     discord: 'Discord',
     docs: 'Docs',
     api: 'API',
+    guides: 'Guides',
+    blog: 'Blog',
     privacy: 'Privacy Policy',
     terms: 'Terms of Service',
     impressum: 'Impressum',
-    obsOverlay: 'OBS chat overlay',
-    obsDock: 'OBS chat dock',
-    tiktokLiveChat: 'TikTok LIVE chat',
-    multistreamChat: 'Multistream chat',
-    compare: 'Compare',
   },
   // Rendered twice: by FaqSection, and verbatim into the FAQPage JSON-LD on the
   // home route. Google requires the structured text to match the visible

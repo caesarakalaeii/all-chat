@@ -17,15 +17,16 @@
  */
 
 /**
- * Shared shell for /blog and /blog/<slug>, in the guides' visual language.
- * Server component, so the breadcrumb JSON-LD lands in the initial HTML.
+ * Shared shell for the public content pages: the guides, /guides, /blog and
+ * /blog/<slug>. Server component, so the breadcrumb JSON-LD lands in the
+ * initial HTML.
  */
 
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { AppNav } from '@/components/AppNav'
 import { JsonLd } from '@/components/JsonLd'
-import { formatDateTime, getTranslations } from '@/lib/i18n'
+import { getTranslations } from '@/lib/i18n'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { cn } from '@/lib/utils'
 
@@ -34,27 +35,19 @@ const t = getTranslations()
 
 export const SITE_URL = 'https://allch.at'
 
-// A post date is a calendar day, not an instant: pin UTC so a server in
-// another zone cannot render the day before.
-const POST_DATE: Intl.DateTimeFormatOptions = { dateStyle: 'long', timeZone: 'UTC' }
-
-export function formatPostDate(date: string): string {
-  return formatDateTime(new Date(`${date}T00:00:00Z`), POST_DATE)
-}
-
 interface Crumb {
   name: string
   path: string
 }
 
-interface BlogShellProps {
+interface PublicPageShellProps {
   /** Trail after Home; the last entry is the current page. */
   crumbs: readonly Crumb[]
   structuredData?: readonly Record<string, unknown>[]
   children: ReactNode
 }
 
-export function BlogShell({ crumbs, structuredData = [], children }: BlogShellProps) {
+export function PublicPageShell({ crumbs, structuredData = [], children }: PublicPageShellProps) {
   const home = t('common.breadcrumb.home')
   const breadcrumbLd = {
     '@context': 'https://schema.org',
