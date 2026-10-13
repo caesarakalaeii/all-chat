@@ -19,8 +19,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { BlogShell, SITE_URL, formatPostDate } from '@/components/blog/BlogShell'
-import { POSTS, findPost } from '@/content/blog'
+import { PublicPageShell, SITE_URL } from '@/components/PublicPageShell'
+import { POSTS, findPost, formatPostDate } from '@/content/blog'
 import { getTranslations } from '@/lib/i18n'
 
 // getTranslations, not useTranslations: this is a Server Component.
@@ -72,7 +72,7 @@ export default async function BlogPostPage({ params }: PostPageProps) {
   }
 
   return (
-    <BlogShell
+    <PublicPageShell
       crumbs={[
         { name: t('blog.breadcrumb'), path: '/blog' },
         { name: meta.title, path },
@@ -102,6 +102,6 @@ export default async function BlogPostPage({ params }: PostPageProps) {
           {t('blog.backToIndex')}
         </Link>
       </nav>
-    </BlogShell>
+    </PublicPageShell>
   )
 }

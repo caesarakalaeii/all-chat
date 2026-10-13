@@ -17,8 +17,8 @@
  */
 
 import Link from 'next/link'
-import { BlogShell, formatPostDate } from '@/components/blog/BlogShell'
-import { POSTS } from '@/content/blog'
+import { PublicPageShell } from '@/components/PublicPageShell'
+import { POSTS, formatPostDate } from '@/content/blog'
 import { getTranslations } from '@/lib/i18n'
 
 // getTranslations, not useTranslations: this is a Server Component.
@@ -32,7 +32,7 @@ export const metadata = {
 
 export default function BlogIndexPage() {
   return (
-    <BlogShell crumbs={[{ name: t('blog.breadcrumb'), path: '/blog' }]}>
+    <PublicPageShell crumbs={[{ name: t('blog.breadcrumb'), path: '/blog' }]}>
       <header className="mb-8 space-y-2">
         <p className="mono-label text-xs">{t('blog.eyebrow')}</p>
         <h1 className="text-3xl">{t('blog.heading')}</h1>
@@ -59,6 +59,6 @@ export default function BlogIndexPage() {
           ))}
         </ul>
       </section>
-    </BlogShell>
+    </PublicPageShell>
   )
 }

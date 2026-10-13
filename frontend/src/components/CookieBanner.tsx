@@ -87,6 +87,7 @@ const LANES_ROUTE_PREFIXES = [
   '/compare',
   '/dashboard',
   '/docs',
+  '/guides',
   '/legal',
   '/multistream-chat',
   '/obs-chat-dock',
