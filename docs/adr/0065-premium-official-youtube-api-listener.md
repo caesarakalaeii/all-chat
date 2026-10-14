@@ -98,8 +98,9 @@ is authoritative:
   `services/youtube-listener-innertube/streams/manager.go`, `services/youtube-listener/`
   (`streams/`, `api/client.go`), `shared/youtubeclaim/`, `shared/featuregates/cache.go`,
   `migrations/102_youtube_official_api_gate.sql`, the YouTube source settings in the overlay editor.
-- **Deployment**: the listener's Deployment has to be re-added in the deployment repository. Until
-  it runs, no claims exist and InnerTube serves every channel.
+- **Deployment**: the listener runs as `youtube-listener-official` (2 replicas) in the `allchat`
+  namespace, re-added in caesar-deployment #147 on 2026-10-10. Without opted-in channels it
+  claims nothing and InnerTube serves every channel.
 
 ## Related Decisions
 
