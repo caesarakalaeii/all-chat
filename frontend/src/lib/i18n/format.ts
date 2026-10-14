@@ -60,6 +60,30 @@ export function formatNumber(value: number, locale: Locale = DEFAULT_LOCALE): st
   return numberFormatter(locale).format(value)
 }
 
+const currencyFormatters = new Map<string, Intl.NumberFormat>()
+
+/**
+ * `currency` is an ISO 4217 code. A code Intl rejects renders as "12.34 XYZ"
+ * rather than throwing, since it comes from platform payloads.
+ */
+export function formatCurrency(
+  value: number,
+  currency: string,
+  locale: Locale = DEFAULT_LOCALE
+): string {
+  const cacheKey = `${locale}|${currency}`
+  let formatter = currencyFormatters.get(cacheKey)
+  if (!formatter) {
+    try {
+      formatter = new Intl.NumberFormat(locale, { style: 'currency', currency })
+    } catch {
+      return `${formatNumber(value, locale)} ${currency}`
+    }
+    currencyFormatters.set(cacheKey, formatter)
+  }
+  return formatter.format(value)
+}
+
 /** `value` is a Date or epoch milliseconds. */
 export function formatDateTime(
   value: Date | number,

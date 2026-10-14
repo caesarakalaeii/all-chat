@@ -87,7 +87,6 @@ type LeaderboardEntry struct {
 	DisplayName string                 `json:"display_name"`
 	AvatarURL   string                 `json:"avatar_url"`
 	Platform    string                 `json:"platform"`
-	Count       int                    `json:"count,omitempty"`
 	TotalValue  float64                `json:"total_value,omitempty"`
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }

@@ -378,7 +378,6 @@ export interface LeaderboardEntry {
   display_name: string
   avatar_url: string
   platform: string
-  count?: number
   total_value?: number
   metadata?: Record<string, any>
 }

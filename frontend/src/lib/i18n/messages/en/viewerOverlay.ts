@@ -217,6 +217,21 @@ export const viewerOverlay = {
     topSuperChats: 'Top Super Chats',
     newFollowers: 'New Followers',
 
+    // Leaderboard totals, in the unit each event is counted in. English-only
+    // pluralisation, so one key per form.
+    valueBitsOne: '{count} bit',
+    valueBitsMany: '{count} bits',
+    valueMonthsOne: '{count} month',
+    valueMonthsMany: '{count} months',
+    valueViewersOne: '{count} viewer',
+    valueViewersMany: '{count} viewers',
+    valuePointsOne: '{count} point',
+    valuePointsMany: '{count} points',
+    valueGiftsOne: '{count} gift',
+    valueGiftsMany: '{count} gifts',
+    valueDiamondsOne: '{count} diamond',
+    valueDiamondsMany: '{count} diamonds',
+
     nowPlaying: 'Now Playing',
     clipViews: '{views} views',
     clipCounter: 'Clip {index}/{total}',
