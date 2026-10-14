@@ -318,6 +318,35 @@ func TestNormalizeEvent_TwitchBitsBadgeTierIsNotACheer(t *testing.T) {
 	assert.Equal(t, 20, unified.Event.Duration)
 }
 
+// Regression: the "bits" branch read EventData["badge_tier"] (left over from IRC's bitsbadgetier),
+// but channel.cheer publishes the amount as EventData["bits"]. Every cheer was valued at 0, so the
+// credits roll scored cheerers 0, viewer points awarded nothing and every cheer tiered low.
+func TestNormalizeEvent_TwitchCheerValueIsTheBitsCheered(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	unified, err := normalizer.NormalizeEvent(&models.RawChatMessage{
+		MessageID: "test-msg-cheer",
+		Platform:  "twitch",
+		ChannelID: "streamer",
+		Username:  "viewer",
+		Text:      "Cheer500 nice",
+		Timestamp: time.Now(),
+		EventType: "bits",
+		// handleCheer's payload after the chat:raw JSON round-trip (ints arrive as float64).
+		EventData: map[string]interface{}{
+			"bits":                float64(500),
+			"is_anonymous":        false,
+			"eventsub_message_id": "msg-1",
+		},
+	}, "overlay-1")
+	require.NoError(t, err)
+
+	require.NotNil(t, unified.Event.Value)
+	assert.Equal(t, float64(500), unified.Event.Value.Amount)
+	assert.Equal(t, "500 bits", unified.Event.Value.DisplayText)
+	assert.Equal(t, "medium", unified.Event.Tier)
+}
+
 // A Power-up is bits spent, so it tiers like a cheer of the same size, and its pill names the
 // Power-up rather than repeating the bits count (rendered separately from metadata).
 func TestNormalizeEvent_TwitchPowerUp(t *testing.T) {

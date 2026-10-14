@@ -519,17 +519,12 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 		}
 
 	case "bits":
-		badgeTier := 0
-		if b, ok := raw.EventData["badge_tier"].(int); ok {
-			badgeTier = b
-		} else if b, ok := raw.EventData["badge_tier"].(float64); ok {
-			badgeTier = int(b)
-		}
-
+		// Cheers from channel.cheer carry the amount in EventData["bits"].
+		bits := eventDataInt(raw.EventData, "bits")
 		eventValue = &models.EventValue{
-			Amount:      float64(badgeTier),
+			Amount:      float64(bits),
 			Currency:    "bits",
-			DisplayText: fmt.Sprintf("%d bits", badgeTier),
+			DisplayText: fmt.Sprintf("%d bits", bits),
 		}
 
 	case "channel_points":
