@@ -125,7 +125,7 @@ func mapEventTypeToColumn(platform, eventType string) string {
 		case "gift_subscription", "mystery_gift", "gift_paid_upgrade", "anon_gift_paid_upgrade",
 			"prime_paid_upgrade", "pay_it_forward":
 			return "enable_twitch_gift_subs"
-		case "bits", "bits_badge_tier":
+		case "bits", "bits_badge_tier", "power_up":
 			return "enable_twitch_bits"
 		case "raid", "unraid":
 			return "enable_twitch_raids"

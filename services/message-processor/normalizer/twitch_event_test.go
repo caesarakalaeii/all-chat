@@ -318,6 +318,51 @@ func TestNormalizeEvent_TwitchBitsBadgeTierIsNotACheer(t *testing.T) {
 	assert.Equal(t, 20, unified.Event.Duration)
 }
 
+// A Power-up is bits spent, so it tiers like a cheer of the same size, and its pill names the
+// Power-up rather than repeating the bits count (rendered separately from metadata).
+func TestNormalizeEvent_TwitchPowerUp(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+
+	tests := []struct {
+		powerUpType string
+		name        string
+		bits        float64
+		wantText    string
+		wantTier    string
+	}{
+		{"celebration", "", 1000, "On-Screen Celebration", "high"},
+		{"message_effect", "", 100, "Message Effect", "medium"},
+		{"gigantify_an_emote", "Kappa", 50, "Gigantified Kappa", "low"},
+		{"gigantify_an_emote", "", 50, "Gigantified Emote", "low"},
+		{"custom", "Spin the Wheel", 300, "Spin the Wheel", "medium"},
+		{"custom", "", 300, "Custom Power-up", "medium"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.wantText, func(t *testing.T) {
+			unified, err := normalizer.NormalizeEvent(&models.RawChatMessage{
+				MessageID: "test-msg-power-up",
+				Platform:  "twitch",
+				ChannelID: "streamer",
+				Username:  "viewer",
+				Timestamp: time.Now(),
+				EventType: "power_up",
+				EventData: map[string]interface{}{
+					"bits":          tt.bits, // float64, as after the chat:raw JSON round-trip
+					"power_up_type": tt.powerUpType,
+					"power_up_name": tt.name,
+				},
+			}, "overlay-1")
+			require.NoError(t, err)
+
+			assert.Equal(t, "power_up", unified.Event.Type)
+			require.NotNil(t, unified.Event.Value)
+			assert.Equal(t, tt.wantText, unified.Event.Value.DisplayText)
+			assert.Equal(t, tt.bits, unified.Event.Value.Amount)
+			assert.Equal(t, tt.wantTier, unified.Event.Tier)
+		})
+	}
+}
+
 func TestFormatThousands(t *testing.T) {
 	tests := []struct {
 		in   int

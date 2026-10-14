@@ -79,6 +79,8 @@ export function EventContent({ message }: { message: ChatMessage }) {
         return '📣'
       case 'bits_badge_tier':
         return '🏅'
+      case 'power_up':
+        return '⚡'
       case 'unraid':
         return '🛑'
       case 'modiversary':
@@ -145,6 +147,8 @@ export function EventContent({ message }: { message: ChatMessage }) {
         // Deliberately not "Bits Cheered!" — a lifetime badge threshold was crossed, no bits
         // were cheered in this moment.
         return 'Bits Badge Unlocked!'
+      case 'power_up':
+        return 'Power-up Used!'
       case 'unraid':
         return 'Raid Cancelled'
       case 'modiversary':

@@ -316,7 +316,7 @@ export const EDITOR_SECTIONS: EditorSection[] = [
       { label: 'Super Chat', keywords: 'event superchat donation youtube show hide' },
       { label: 'Subscriptions', keywords: 'event sub resub show hide' },
       { label: 'Raids', keywords: 'event raid host show hide' },
-      { label: 'Bits', keywords: 'event cheer bits show hide' },
+      { label: 'Bits', keywords: 'event cheer bits power-up celebration show hide' },
       { label: 'Membership Gift', keywords: 'event gift sub show hide' },
       { label: 'Size modifier', keywords: 'event scale boost bigger' },
     ],

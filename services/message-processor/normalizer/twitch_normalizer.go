@@ -569,6 +569,16 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 			DisplayText: fmt.Sprintf("%s-bit badge", formatThousands(tier)),
 		}
 
+	case "power_up":
+		// Bits spent on a Power-up. The pill names the Power-up; the bits count is rendered from
+		// EventData["bits"] as metadata, so it is not repeated in the pill.
+		bits := eventDataInt(raw.EventData, "bits")
+		eventValue = &models.EventValue{
+			Amount:      float64(bits),
+			Currency:    "bits",
+			DisplayText: powerUpDisplayText(raw.EventData),
+		}
+
 	case "modiversary":
 		months := eventDataInt(raw.EventData, "months")
 		eventValue = &models.EventValue{
@@ -673,6 +683,30 @@ func formatThousands(n int) string {
 		b.WriteString(s[i : i+3])
 	}
 	return b.String()
+}
+
+// powerUpDisplayText names a Power-up the way Twitch labels it in the Bits menu.
+func powerUpDisplayText(data map[string]interface{}) string {
+	powerUpType, _ := data["power_up_type"].(string)
+	name, _ := data["power_up_name"].(string)
+	switch powerUpType {
+	case "celebration":
+		return "On-Screen Celebration"
+	case "message_effect":
+		return "Message Effect"
+	case "gigantify_an_emote":
+		if name != "" {
+			return "Gigantified " + name
+		}
+		return "Gigantified Emote"
+	case "custom":
+		if name != "" {
+			return name
+		}
+		return "Custom Power-up"
+	default:
+		return "Power-up"
+	}
 }
 
 // eventDataInt reads a numeric EventData field. Values survive a JSON round-trip through the

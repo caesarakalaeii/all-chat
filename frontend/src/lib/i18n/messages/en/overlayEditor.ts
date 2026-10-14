@@ -819,7 +819,7 @@ export const overlayEditor = {
     twitchGiftSubsLabel: 'Gift Subscriptions',
     twitchGiftSubsDescription: 'Gift subs and mystery gift bombs',
     twitchBitsLabel: 'Bits / Cheers',
-    twitchBitsDescription: 'Bits cheered in chat',
+    twitchBitsDescription: 'Bits cheered in chat and Bits Power-ups, like On-Screen Celebrations',
     twitchRaidsLabel: 'Raids',
     twitchRaidsDescription: 'Incoming raids from other channels',
     twitchChannelPointsLabel: 'Channel Points',
