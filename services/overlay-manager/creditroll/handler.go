@@ -573,6 +573,9 @@ func (h *Handler) getLeaderboardEntries(ctx context.Context, sessionID string, c
 		if displayText, ok := member["display_text"].(string); ok {
 			entry.Metadata["display_text"] = displayText
 		}
+		if pointsName, ok := member["points_name"].(string); ok && pointsName != "" {
+			entry.Metadata["points_name"] = pointsName
+		}
 
 		entries = append(entries, entry)
 	}

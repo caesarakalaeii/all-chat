@@ -35,6 +35,7 @@ The Twitch EventSub Listener connects to Twitch's EventSub WebSocket API to rece
 - ✅ `channel.channel_points_custom_reward_redemption.add` - Channel point redemptions
 - ✅ `channel.subscribe` / `channel.subscription.gift` / `channel.subscription.message` - Subscriptions, gifts, resubs
 - ✅ `channel.cheer`, `channel.raid`, `channel.follow` - Bits, raids, follows
+- ✅ `channel.bits.use` - **Bits Power-ups** (On-Screen Celebrations, Message Effects, Gigantified Emotes, custom Power-ups) as event `power_up`, with `power_up_type` and the bits spent. Cheers on this subscription are skipped because `channel.cheer` already delivers them. Message Effect and Gigantified Emote text is left off the event since it also arrives as a chat message. Same `bits:read` grant as cheers; rides the `enable_twitch_bits` toggle. Twitch sends nothing when the streamer uses a Power-up for free on their own channel.
 - ✅ `stream.online` / `stream.offline` - Stream lifecycle (cross-platform discovery + credits)
 - ✅ `channel.chat.message` - **Chat reading** (demand-gated; see below)
 - ✅ `channel.chat.notification` - **Chat notices** (watch streaks, announcements, and other "events that appear in chat"; see below)

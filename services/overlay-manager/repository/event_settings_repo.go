@@ -65,6 +65,7 @@ func (r *EventSettingsRepository) GetByOverlayID(ctx context.Context, overlayID 
 		       enable_tiktok_treasure_chests,
 		       enable_token_warnings,
 		       tiktok_like_aggregation_window_seconds, event_display_duration_multiplier,
+		       twitch_channel_points_name,
 		       created_at, updated_at
 		FROM overlay_event_settings
 		WHERE overlay_id = $1
@@ -102,8 +103,9 @@ func (r *EventSettingsRepository) Update(ctx context.Context, settings *models.E
 		    enable_token_warnings = $22,
 		    tiktok_like_aggregation_window_seconds = $23,
 		    event_display_duration_multiplier = $24,
+		    twitch_channel_points_name = $25,
 		    updated_at = NOW()
-		WHERE overlay_id = $25
+		WHERE overlay_id = $26
 		RETURNING id, overlay_id,
 		          enable_twitch_subs, enable_twitch_resubs, enable_twitch_gift_subs,
 		          enable_twitch_bits, enable_twitch_raids, enable_twitch_channel_points,
@@ -115,6 +117,7 @@ func (r *EventSettingsRepository) Update(ctx context.Context, settings *models.E
 		          enable_tiktok_treasure_chests,
 		          enable_token_warnings,
 		          tiktok_like_aggregation_window_seconds, event_display_duration_multiplier,
+		          twitch_channel_points_name,
 		          created_at, updated_at
 	`
 
@@ -143,6 +146,7 @@ func (r *EventSettingsRepository) Update(ctx context.Context, settings *models.E
 		settings.EnableTokenWarnings,
 		settings.TikTokLikeAggregationWindowSeconds,
 		settings.EventDisplayDurationMultiplier,
+		settings.TwitchChannelPointsName,
 		settings.OverlayID,
 	)
 
@@ -186,6 +190,7 @@ func scanEventSettings(row pgx.Row) (*models.EventSettings, error) {
 		&settings.EnableTokenWarnings,
 		&settings.TikTokLikeAggregationWindowSeconds,
 		&settings.EventDisplayDurationMultiplier,
+		&settings.TwitchChannelPointsName,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
 	)

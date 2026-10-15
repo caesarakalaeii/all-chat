@@ -45,6 +45,7 @@ interface EventSettings {
   enable_twitch_channel_points: boolean
   enable_twitch_follows: boolean
   enable_twitch_watch_streaks: boolean
+  twitch_channel_points_name: string
   // YouTube
   enable_youtube_super_chat: boolean
   enable_youtube_super_sticker: boolean
@@ -216,6 +217,45 @@ function NumberInput({
   )
 }
 
+function TextInput({
+  label,
+  description,
+  value,
+  placeholder,
+  maxLength,
+  onChange,
+}: {
+  label: string
+  description: string
+  value: string
+  placeholder: string
+  maxLength: number
+  onChange: (value: string) => void
+}) {
+  const inputId = useId()
+  const descriptionId = useId()
+  return (
+    <div className="border-b border-white/20 py-3 last:border-0">
+      <label htmlFor={inputId} className="mb-0.5 block text-sm font-medium">
+        {label}
+      </label>
+      <p id={descriptionId} className="text-sub mb-2 text-xs">
+        {description}
+      </p>
+      <Input
+        id={inputId}
+        type="text"
+        value={value}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        aria-describedby={descriptionId}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-64"
+      />
+    </div>
+  )
+}
+
 export default function EventSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const t = useTranslations()
@@ -241,7 +281,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
       .finally(() => setLoading(false))
   }, [id, user, router, t])
 
-  const update = (key: keyof EventSettings, value: boolean | number) => {
+  const update = (key: keyof EventSettings, value: boolean | number | string) => {
     if (!settings) return
     setSettings({ ...settings, [key]: value })
   }
@@ -384,6 +424,18 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                       onChange={(v) => update(key, v)}
                     />
                   ))}
+                  <TextInput
+                    label={t('overlayEditor.eventSettings.twitchChannelPointsNameLabel')}
+                    description={t(
+                      'overlayEditor.eventSettings.twitchChannelPointsNameDescription'
+                    )}
+                    value={settings.twitch_channel_points_name}
+                    placeholder={t(
+                      'overlayEditor.eventSettings.twitchChannelPointsNamePlaceholder'
+                    )}
+                    maxLength={50}
+                    onChange={(v) => update('twitch_channel_points_name', v)}
+                  />
                 </div>
               )}
 

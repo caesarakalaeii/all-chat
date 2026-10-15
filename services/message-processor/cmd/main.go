@@ -468,6 +468,17 @@ func main() {
 				processorMetrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "normalized_event", "success")
 				processorMetrics.StageDuration.WithLabelValues("message-processor", rawMsg.Platform, "event_normalization").Observe(time.Since(startNormalize).Seconds())
 
+				if rawMsg.Platform == "twitch" && rawMsg.EventType == "channel_points" {
+					pointsName, nameErr := eventFilter.ChannelPointsName(ctx, overlay.OverlayID)
+					if nameErr != nil {
+						log.Warn("Failed to load channel points name, using default",
+							zap.String("overlay_id", overlay.OverlayID),
+							zap.Error(nameErr),
+						)
+					}
+					normalizer.ApplyChannelPointsName(unified, pointsName)
+				}
+
 				// Enrich events with user identity (avatars, badges)
 				// Some events have user-defined text (Super Chat, resubs, channel points with input)
 				// which may contain emotes, so we enrich those conditionally

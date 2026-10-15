@@ -173,6 +173,46 @@ type CheerEvent struct {
 	Bits                 int    `json:"bits"`
 }
 
+// BitsUseEvent represents any use of Bits on a channel.
+// subscription type: channel.bits.use (v1)
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-reference/#channel-bits-use-event
+type BitsUseEvent struct {
+	UserID               string             `json:"user_id"`
+	UserLogin            string             `json:"user_login"`
+	UserName             string             `json:"user_name"`
+	BroadcasterUserID    string             `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string             `json:"broadcaster_user_login"`
+	BroadcasterUserName  string             `json:"broadcaster_user_name"`
+	Bits                 int                `json:"bits"`
+	Type                 string             `json:"type"` // "cheer", "power_up", "custom_power_up"
+	Message              *BitsUseMessage    `json:"message,omitempty"`
+	PowerUp              *BitsPowerUp       `json:"power_up,omitempty"`
+	CustomPowerUp        *BitsCustomPowerUp `json:"custom_power_up,omitempty"`
+}
+
+// BitsUseMessage is the optional viewer message attached to a Bits use.
+type BitsUseMessage struct {
+	Text string `json:"text"`
+}
+
+// BitsPowerUp describes a built-in Power-up.
+type BitsPowerUp struct {
+	Type  string            `json:"type"` // "message_effect", "celebration", "gigantify_an_emote"
+	Emote *BitsPowerUpEmote `json:"emote,omitempty"`
+}
+
+// BitsPowerUpEmote is the emote a Power-up acted on (gigantify_an_emote).
+type BitsPowerUpEmote struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// BitsCustomPowerUp describes a streamer-defined Power-up.
+type BitsCustomPowerUp struct {
+	Title    string `json:"title"`
+	RewardID string `json:"reward_id"`
+}
+
 // FollowEvent represents a follow event
 // subscription type: channel.follow (v2)
 type FollowEvent struct {

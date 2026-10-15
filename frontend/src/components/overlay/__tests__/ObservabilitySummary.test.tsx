@@ -54,6 +54,7 @@ function eventSettings(over: Partial<EventSettings> = {}): EventSettings {
     enable_twitch_channel_points: false,
     enable_twitch_follows: false,
     enable_twitch_watch_streaks: true,
+    twitch_channel_points_name: '',
     enable_youtube_super_chat: false,
     enable_youtube_super_sticker: false,
     enable_youtube_members: false,

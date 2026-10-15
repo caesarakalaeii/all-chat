@@ -175,6 +175,12 @@ func (sm *SubscriptionManager) SubscribeToCheers(ctx context.Context, broadcaste
 	return sm.Subscribe(ctx, "channel.cheer", broadcasterID, "1")
 }
 
+// SubscribeToBitsUse creates a subscription for every Bits use. Only Power-ups are consumed from
+// it; cheers keep arriving on channel.cheer.
+func (sm *SubscriptionManager) SubscribeToBitsUse(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.Subscribe(ctx, "channel.bits.use", broadcasterID, "1")
+}
+
 // SubscribeToFollows creates a subscription for follow events
 func (sm *SubscriptionManager) SubscribeToFollows(ctx context.Context, broadcasterID string) (string, error) {
 	// Follows need special handling - requires moderator_user_id
