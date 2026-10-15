@@ -130,7 +130,7 @@ function poolInternals(pool: ViewerPool) {
       benchedUntil: number;
       consecutiveFailures: number;
     }>;
-    tabs: Map<string, { page: unknown; lastUsed: number; wsUrl: string; roomId: string; capturedAt: number }>;
+    tabs: Map<string, { page: unknown; lastUsed: number; wsUrl: string; roomId: string; capturedAt: number; openedAt: number }>;
     roomLane: Map<string, string>;
   };
 }
@@ -147,7 +147,8 @@ function seedTab(
     lastUsed: Date.now(),
     wsUrl,
     roomId: 'seed',
-    capturedAt: Date.now()
+    capturedAt: Date.now(),
+    openedAt: Date.now()
   });
   internals.roomLane.set(username, '|primary');
 }
@@ -529,6 +530,68 @@ describe('ViewerPool capture flow (fake pages)', () => {
     const capture = await pool.captureRoom('primaryroom', { timeoutMs: 20_000 });
     expect(capture.roomId).toBe('5');
     expect(internals.roomLane.get('primaryroom')).toBe('b:2|primary');
+    await pool.close();
+  });
+});
+
+describe('ViewerPool.recycleTab (fake pages)', () => {
+  const WS_OLD = 'wss://webcast-ws.example/old';
+  const WS_NEW = 'wss://webcast-ws.eu.tiktok.com/webcast/im/ws_proxy/ws_reuse_supplement/?x=2';
+  const FETCH = { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=9', status: 200, body: GOOD_BODY };
+
+  function poolWithOldTab() {
+    const pool = new ViewerPool({ userDataDir: '/tmp/x' });
+    const internals = poolInternals(pool);
+    const old = fakePage({ responses: [FETCH] });
+    seedTab(internals, 'room', old.page, WS_OLD);
+    internals.tabs.get('room')!.openedAt = Date.now() - 7 * 3_600_000;
+    return { pool, internals, old };
+  }
+
+  it('captures on a fresh page and closes the old one once the new tab serves', async () => {
+    const { pool, internals, old } = poolWithOldTab();
+    const fresh = fakePage({ wsCreated: [WS_NEW], responses: [FETCH] });
+    internals.lanes.get('|primary')!.prewarmed.push(fresh.page);
+
+    await pool.recycleTab('room');
+    // Re-using the old page would keep its grown renderer: it must not be navigated.
+    expect(old.navLog).toEqual([]);
+    expect(old.page.isClosed()).toBe(true);
+    expect(internals.tabs.get('room')?.page).toBe(fresh.page);
+    expect(internals.tabs.get('room')?.wsUrl).toBe(WS_NEW);
+    expect(Date.now() - pool.tabOpenedAt('room')!).toBeLessThan(60_000);
+    await pool.close();
+  });
+
+  it('keeps the old tab when the fresh page opens no webcast socket', async () => {
+    const { pool, internals, old } = poolWithOldTab();
+    const fresh = fakePage({ responses: [FETCH] });
+    internals.lanes.get('|primary')!.prewarmed.push(fresh.page);
+
+    await expect(pool.recycleTab('room')).rejects.toThrow(/no webcast socket/);
+    expect(internals.tabs.get('room')?.page).toBe(old.page);
+    expect(internals.tabs.get('room')?.wsUrl).toBe(WS_OLD);
+    expect(internals.roomLane.get('room')).toBe('|primary');
+    expect(old.page.isClosed()).toBe(false);
+    expect(fresh.page.isClosed()).toBe(true);
+    await pool.close();
+  });
+
+  it('keeps the old tab when the fresh capture fails', async () => {
+    const { pool, internals, old } = poolWithOldTab();
+    const zombie = fakePage({ livePlayerFoundAt: Number.MAX_SAFE_INTEGER });
+    internals.lanes.get('|primary')!.prewarmed.push(zombie.page);
+
+    vi.useFakeTimers();
+    const outcome = expect(pool.recycleTab('room')).rejects.toThrow(/live player not up/);
+    try {
+      await vi.advanceTimersByTimeAsync(15_100);
+      await outcome;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(internals.tabs.get('room')?.page).toBe(old.page);
+    expect(old.page.isClosed()).toBe(false);
     await pool.close();
   });
 });
