@@ -55,6 +55,9 @@ import { RelayHub, type RelayLogger, type RelayMessage } from './signing/relay.j
  * that was simply not streaming). On a fetch error the answer is TRUE —
  * a liveness-route outage must not make warm rooms uncapturable.
  */
+/** How long a warm room's liveness answer is reused by the lease path. */
+const LIVENESS_CACHE_MS = 60_000;
+
 export async function warmRoomIsLive(username: string, fetchImpl: typeof undiciRequest = undiciRequest): Promise<boolean> {
   try {
     const response = await fetchImpl(
@@ -462,6 +465,12 @@ export interface ServerOptions {
    */
   warmRoomIsLive?: (username: string) => Promise<boolean>;
   /**
+   * Called once per lease resolution that found nothing to serve. index.ts
+   * nudges the warm-room curator with it, so an all-offline warm list is
+   * re-curated within minutes instead of at the next 30-minute tick.
+   */
+  onNoSession?: () => void;
+  /**
    * Warm rooms (SIGNER_WARM_ROOMS): the classic rooms whose captured WS
    * sessions GET /v1/session leases. Empty disables the endpoint. Read on
    * every request: index.ts passes the live set the warm-room curator adds
@@ -493,6 +502,21 @@ export function createServer(options: ServerOptions): http.Server {
   const canaryRooms = options.canaryRooms ?? new Set<string>();
   const warmRooms = options.warmRooms ?? [];
   const authToken = readAuthToken();
+  // Liveness answers are cached for LIVENESS_CACHE_MS: every lease request
+  // probed every tab-less warm room, and a burst of retrying listeners
+  // turned that into hundreds of api-live calls a minute.
+  const probe = options.warmRoomIsLive ?? warmRoomIsLive;
+  const liveness = new Map<string, { live: boolean; at: number }>();
+  const isLive = async (room: string): Promise<boolean> => {
+    const hit = liveness.get(room);
+    if (hit && Date.now() - hit.at < LIVENESS_CACHE_MS) return hit.live;
+    const live = await probe(room);
+    liveness.set(room, { live, at: Date.now() });
+    return live;
+  };
+  // Concurrent lease requests share one resolution: two requests racing
+  // the same cold capture doubled the failures that rotate a lane profile.
+  let leaseInFlight: Promise<LeaseResolution> | undefined;
 
   const server = http.createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -594,7 +618,28 @@ export function createServer(options: ServerOptions): http.Server {
         res.end(JSON.stringify({ error: 'viewer mode not enabled' }));
         return;
       }
-      await handleSessionLease(res, viewer, rooms, captureBreaker, relay, options.warmRoomIsLive);
+      if (!leaseInFlight) {
+        leaseInFlight = resolveSessionLease(viewer, rooms, captureBreaker, relay, isLive).finally(() => {
+          leaseInFlight = undefined;
+        });
+        void leaseInFlight.then((result) => {
+          if (!result.lease) options.onNoSession?.();
+        });
+      }
+      const result = await leaseInFlight;
+      leaseOutcome(result.outcome);
+      if (result.lease) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result.lease));
+        return;
+      }
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          error: 'no_warm_session',
+          ...(result.lastError ? { message: result.lastError } : {})
+        })
+      );
       return;
     }
 
@@ -747,6 +792,13 @@ async function handleRelayStream(
   res.on('close', cleanup);
 }
 
+/** One lease resolution, shared by every request that joined it. */
+interface LeaseResolution {
+  lease?: SessionLease;
+  outcome: 'success' | 'captured' | 'no_session';
+  lastError?: string;
+}
+
 /**
  * GET /v1/session: serve the shared WS session (warm lease, or capture a
  * tab-less room). Deterministic four-phase flow — the phases and their
@@ -761,14 +813,13 @@ async function handleRelayStream(
  * misconfigured warm room; the actual control is SIGNER_WARM_ROOMS listing
  * classic, verified-live rooms only (README).
  */
-async function handleSessionLease(
-  res: http.ServerResponse,
+async function resolveSessionLease(
   viewer: ViewerPool,
   warmRooms: string[],
   breaker: CaptureBreaker,
   relay: RelayHub | undefined,
-  isLive: (username: string) => Promise<boolean> = warmRoomIsLive
-): Promise<void> {
+  isLive: (username: string) => Promise<boolean>
+): Promise<LeaseResolution> {
   interface RoomOutcome {
     room: string;
     lease: SessionLease | undefined;
@@ -779,12 +830,7 @@ async function handleSessionLease(
   for (const room of warmRooms) {
     const lease = await viewer.sessionLease(room);
     outcomes.push({ room, lease });
-    if (lease && lease.wsUrl !== '') {
-      leaseOutcome('success');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(lease));
-      return;
-    }
+    if (lease && lease.wsUrl !== '') return { lease, outcome: 'success' };
   }
 
   // A thrown capture or a resolved-but-empty one moves to the next
@@ -807,10 +853,7 @@ async function handleSessionLease(
         }
         breaker.recordSuccess(room);
         const lease = await viewer.sessionLease(room);
-        if (lease && lease.wsUrl !== '') {
-          leaseOutcome('captured');
-          return lease;
-        }
+        if (lease && lease.wsUrl !== '') return lease;
       } catch (error) {
         breaker.recordFailure(room);
         leaseOutcome('capture_failed');
@@ -821,11 +864,7 @@ async function handleSessionLease(
   };
 
   const captured = await captureCandidates(warmRooms);
-  if (captured) {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(captured));
-    return;
-  }
+  if (captured) return { lease: captured, outcome: 'captured' };
 
   // Close the tabs whose warm lease could not serve (dead page or empty
   // wsUrl) — unless a relay subscriber is attached — then cold-capture
@@ -840,20 +879,9 @@ async function handleSessionLease(
     if (viewer.closeTab(room)) dropped.push(room);
   }
   const recovered = dropped.length > 0 ? await captureCandidates(dropped) : undefined;
-  if (recovered) {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(recovered));
-    return;
-  }
+  if (recovered) return { lease: recovered, outcome: 'captured' };
 
   // No servable lease. Retryable: the breaker paces the rooms, closed
   // tabs re-capture cold, dead entries were cleared.
-  leaseOutcome('no_session');
-  res.writeHead(503, { 'Content-Type': 'application/json' });
-  res.end(
-    JSON.stringify({
-      error: 'no_warm_session',
-      ...(lastError ? { message: lastError } : {})
-    })
-  );
+  return { outcome: 'no_session', lastError };
 }
