@@ -304,6 +304,166 @@ func TestNormalizeEvent_TikTokTreasureChest_MissingCoins(t *testing.T) {
 	assert.Equal(t, false, unified.Event.IsUpdate)
 }
 
+func TestNormalizeEvent_TikTokSubscription(t *testing.T) {
+	normalizer := NewTikTokNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "tt-msg-10",
+		Platform:  "tiktok",
+		ChannelID: "creator",
+		UserID:    "user",
+		Username:  "NewSubscriber",
+		Text:      "",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "tiktok_subscription",
+		EventData: map[string]interface{}{
+			"sub_month": 3,
+		},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-tt-10")
+	require.NoError(t, err)
+
+	assert.Equal(t, "tiktok_subscription", unified.Event.Type)
+	assert.Equal(t, float64(3), unified.Event.Value.Amount)
+	assert.Equal(t, "months", unified.Event.Value.Currency)
+	assert.Equal(t, "3 months", unified.Event.Value.DisplayText)
+}
+
+// Like the Twitch channel.subscribe payload, a subscription with unresolved
+// tenure must not render a "0 months" suffix on the overlay.
+func TestNormalizeEvent_TikTokSubscription_ZeroMonths(t *testing.T) {
+	normalizer := NewTikTokNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "tt-msg-11",
+		Platform:  "tiktok",
+		ChannelID: "creator",
+		UserID:    "user",
+		Username:  "NewSubscriber",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "tiktok_subscription",
+		EventData: map[string]interface{}{},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-tt-11")
+	require.NoError(t, err)
+
+	assert.Equal(t, "New subscriber", unified.Event.Value.DisplayText)
+	assert.NotContains(t, unified.Event.Value.DisplayText, "0 month")
+}
+
+// Production messages arrive as JSON over Redis Streams, so sub_month decodes
+// to float64 there.
+func TestNormalizeEvent_TikTokSubscription_JSONFloatMonths(t *testing.T) {
+	normalizer := NewTikTokNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "tt-msg-12",
+		Platform:  "tiktok",
+		ChannelID: "creator",
+		UserID:    "user",
+		Username:  "NewSubscriber",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "tiktok_subscription",
+		EventData: map[string]interface{}{
+			"sub_month": float64(12),
+		},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-tt-12")
+	require.NoError(t, err)
+
+	assert.Equal(t, float64(12), unified.Event.Value.Amount)
+	assert.Equal(t, "12 months", unified.Event.Value.DisplayText)
+}
+
+func TestNormalizeEvent_TikTokSuperFanJoin(t *testing.T) {
+	normalizer := NewTikTokNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "tt-msg-13",
+		Platform:  "tiktok",
+		ChannelID: "creator",
+		UserID:    "user",
+		Username:  "BigFan",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "super_fan_join",
+		EventData: map[string]interface{}{},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-tt-13")
+	require.NoError(t, err)
+
+	assert.Equal(t, "super_fan_join", unified.Event.Type)
+	assert.Equal(t, "New Super Fan", unified.Event.Value.DisplayText)
+	assert.Equal(t, "", unified.Event.AggregationID)
+	assert.Equal(t, false, unified.Event.IsUpdate)
+}
+
+func TestNormalizeEvent_TikTokSuperFanBox(t *testing.T) {
+	normalizer := NewTikTokNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "tt-msg-14",
+		Platform:  "tiktok",
+		ChannelID: "creator",
+		UserID:    "user",
+		Username:  "BigFan",
+		Text:      "Sent a Super Fan chest",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "super_fan_box",
+		EventData: map[string]interface{}{
+			"coins":    150,
+			"can_open": 1,
+		},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-tt-14")
+	require.NoError(t, err)
+
+	assert.Equal(t, "super_fan_box", unified.Event.Type)
+	assert.Equal(t, float64(150), unified.Event.Value.Amount)
+	assert.Equal(t, "coins", unified.Event.Value.Currency)
+	assert.Equal(t, "150 coins", unified.Event.Value.DisplayText)
+	// 100-999 coins = medium tier
+	assert.Equal(t, "medium", unified.Event.Tier)
+	// can_open is carried through untouched for the frontend
+	assert.Equal(t, 1, unified.Event.Metadata["can_open"])
+}
+
+func TestNormalizeEvent_TikTokQuestion(t *testing.T) {
+	normalizer := NewTikTokNormalizer()
+
+	raw := &models.RawChatMessage{
+		MessageID: "tt-msg-15",
+		Platform:  "tiktok",
+		ChannelID: "creator",
+		UserID:    "user",
+		Username:  "CuriousViewer",
+		Text:      "What is your setup?",
+		Timestamp: time.Now(),
+		Tags:      map[string]string{},
+		EventType: "question",
+		EventData: map[string]interface{}{
+			"question_id": "7123456789",
+		},
+	}
+
+	unified, err := normalizer.NormalizeEvent(raw, "overlay-tt-15")
+	require.NoError(t, err)
+
+	assert.Equal(t, "question", unified.Event.Type)
+	// The question itself is the message text; the value only labels the event.
+	assert.Equal(t, "What is your setup?", unified.Message.Text)
+	assert.Equal(t, "7123456789", unified.Event.Metadata["question_id"])
+}
+
 func TestPluralize(t *testing.T) {
 	tests := []struct {
 		count    int

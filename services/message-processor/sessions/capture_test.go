@@ -216,3 +216,184 @@ func TestStoreEvent_SessionCounterIncremented(t *testing.T) {
 	count = mr.HGet(sessionKey, "event_count")
 	assert.Equal(t, "2", count)
 }
+
+// makeEvent is a generic event message builder; scores and categories are
+// asserted per test below.
+func makeEvent(eventType string, value *models.EventValue, metadata map[string]interface{}) *models.UnifiedChatMessage {
+	return &models.UnifiedChatMessage{
+		ID:        fmt.Sprintf("msg-%s-%d", eventType, time.Now().UnixNano()),
+		OverlayID: "overlay-events",
+		Platform:  "tiktok",
+		User: models.UserInfo{
+			ID:          "user-tt",
+			DisplayName: "TikTok User",
+		},
+		Timestamp: time.Now(),
+		Event: &models.EventInfo{
+			Type:     eventType,
+			Value:    value,
+			Metadata: metadata,
+		},
+	}
+}
+
+func TestStoreEvent_NewCategories(t *testing.T) {
+	tests := []struct {
+		name      string
+		event     *models.UnifiedChatMessage
+		category  string
+		wantScore float64
+	}{
+		{
+			name: "tiktok_subscription lands in subs",
+			event: makeEvent("tiktok_subscription", &models.EventValue{
+				Amount: 3, Currency: "months", DisplayText: "3 months",
+			}, nil),
+			category:  "subs",
+			wantScore: 3,
+		},
+		{
+			name:      "super_fan_join lands in memberships and scores 1",
+			event:     makeEvent("super_fan_join", &models.EventValue{Amount: 1, Currency: "super_fan"}, nil),
+			category:  "memberships",
+			wantScore: 1,
+		},
+		{
+			name: "super_fan_box lands in treasure_chests",
+			event: makeEvent("super_fan_box", &models.EventValue{
+				Amount: 150, Currency: "coins", DisplayText: "150 coins",
+			}, nil),
+			category:  "treasure_chests",
+			wantScore: 150,
+		},
+		{
+			name:      "share lands in shares",
+			event:     makeEvent("share", &models.EventValue{Amount: 1, Currency: "share"}, nil),
+			category:  "shares",
+			wantScore: 1,
+		},
+		{
+			name: "power_up lands in bits",
+			event: makeEvent("power_up", &models.EventValue{
+				Amount: 500, Currency: "bits", DisplayText: "On-Screen Celebration",
+			}, nil),
+			category:  "bits",
+			wantScore: 500,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ec, mr := setupTestCapture(t)
+			ctx := context.Background()
+			const sessionID = "session-new-cats"
+			makeActiveSession(t, mr, "overlay-events", sessionID)
+
+			require.NoError(t, ec.CaptureIfActive(ctx, tt.event))
+
+			key := fmt.Sprintf("%s%s:%s", LeaderboardKeyPrefix, sessionID, tt.category)
+			members, err := mr.ZMembers(key)
+			require.NoError(t, err)
+			require.Len(t, members, 1)
+
+			score, err := mr.ZScore(key, members[0])
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantScore, score)
+		})
+	}
+}
+
+// like_aggregate publishes a running like_count every 5s; only the frame that
+// closes the window (window_end set) carries the true total, so intermediate
+// frames must not reach the likes leaderboard.
+func TestCaptureIfActive_LikeAggregateFinalFrameOnly(t *testing.T) {
+	ec, mr := setupTestCapture(t)
+	ctx := context.Background()
+	overlayID, sessionID := "overlay-events", "session-likes"
+	makeActiveSession(t, mr, overlayID, sessionID)
+
+	mid := makeEvent("like_aggregate", &models.EventValue{
+		Amount: 5, Currency: "likes", DisplayText: "5 likes",
+	}, map[string]interface{}{"aggregation_id": "agg-1", "window_end": nil, "is_update": false})
+	assert.NoError(t, ec.CaptureIfActive(ctx, mid))
+
+	final := makeEvent("like_aggregate", &models.EventValue{
+		Amount: 30, Currency: "likes", DisplayText: "30 likes",
+	}, map[string]interface{}{"aggregation_id": "agg-1", "window_end": "2026-10-15T00:00:00Z", "is_update": true})
+	assert.NoError(t, ec.CaptureIfActive(ctx, final))
+
+	key := fmt.Sprintf("%s%s:likes", LeaderboardKeyPrefix, sessionID)
+	score, _ := mr.ZScore(key, "tiktok:user-tt")
+	assert.Equal(t, float64(30), score)
+	members, _ := mr.ZMembers(key)
+	require.Len(t, members, 1, "only the window-final frame may be captured")
+}
+
+// Top Gifters ranks by estimated USD spend, but the displayed total stays the
+// native count in the accompanying raw hash.
+func TestStoreEvent_WeightedGiftScoreKeepsRawTotal(t *testing.T) {
+	ec, mr := setupTestCapture(t)
+	ctx := context.Background()
+	overlayID, sessionID := "overlay-gifts", "session-gifts"
+	makeActiveSession(t, mr, overlayID, sessionID)
+
+	// A 5-gift Tier 1 bomb scores 5 x 4.99 in the sorted set.
+	bomb := &models.UnifiedChatMessage{
+		ID:        "msg-bomb",
+		OverlayID: overlayID,
+		Platform:  "twitch",
+		User:      models.UserInfo{ID: "gifter", DisplayName: "Gifter"},
+		Timestamp: time.Now(),
+		Event: &models.EventInfo{
+			Type:     "mystery_gift",
+			Value:    &models.EventValue{Amount: 5, Currency: "gifts", DisplayText: "5 gift subs"},
+			Metadata: map[string]interface{}{"tier": "1000"},
+		},
+	}
+	require.NoError(t, ec.CaptureIfActive(ctx, bomb))
+
+	key := fmt.Sprintf("%s%s:gifts", LeaderboardKeyPrefix, sessionID)
+	score, err := mr.ZScore(key, "twitch:gifter")
+	require.NoError(t, err)
+	assert.InDelta(t, 5*4.99, score, 0.0001)
+
+	rawKey := fmt.Sprintf("%s%s:gifts", RawTotalKeyPrefix, sessionID)
+	raw := mr.HGet(rawKey, "twitch:gifter")
+	assert.Equal(t, "5", raw, "displayed total stays the native gift count")
+}
+
+func TestWeightedGiftScore_TiersAndPriorities(t *testing.T) {
+	assert.Equal(t, 24.99*3, weightedGiftScore(&models.EventInfo{
+		Type:     "mystery_gift",
+		Value:    mpEventValuePtr(3),
+		Metadata: map[string]interface{}{"tier": "3000"},
+	}))
+	// Unknown tier falls back to Tier 1 rather than scoring 0.
+	assert.Equal(t, 4.99*2, weightedGiftScore(&models.EventInfo{
+		Type:     "mystery_gift",
+		Value:    mpEventValuePtr(2),
+		Metadata: map[string]interface{}{},
+	}))
+	// YouTube membership gift uses the flat stand-in price.
+	assert.Equal(t, 4.99*2, weightedGiftScore(&models.EventInfo{
+		Type:  "membership_gift",
+		Value: mpEventValuePtr(2),
+	}))
+	// TikTok diamonds are priced as the coins a viewer bought, so 300 diamonds
+	// (about 3.90 USD) rank below a single 4.99 gift sub instead of far above it.
+	diamonds := weightedGiftScore(&models.EventInfo{
+		Type:  "gift",
+		Value: &models.EventValue{Amount: 300, Currency: "diamonds"},
+	})
+	assert.InDelta(t, 300*0.013, diamonds, 0.0001)
+	assert.Less(t, diamonds, giftSubPriceUSD["1000"])
+}
+
+func mpEventValue(amount int) models.EventValue {
+	return models.EventValue{Amount: float64(amount), Currency: "gifts"}
+}
+
+func mpEventValuePtr(amount int) *models.EventValue {
+	v := mpEventValue(amount)
+	return &v
+}

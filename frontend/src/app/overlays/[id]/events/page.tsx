@@ -62,6 +62,9 @@ interface EventSettings {
   enable_tiktok_follows: boolean
   enable_tiktok_shares: boolean
   enable_tiktok_treasure_chests: boolean
+  enable_tiktok_subscriptions: boolean
+  enable_tiktok_super_fans: boolean
+  enable_tiktok_questions: boolean
   // System
   enable_token_warnings: boolean
   // Settings
@@ -133,6 +136,9 @@ const EVENT_TOGGLES = {
     // delivered. Drop the caveat from tiktokTreasureChestsDescription once a
     // chest is confirmed end to end.
     { key: 'enable_tiktok_treasure_chests', messageStem: 'tiktokTreasureChests' },
+    { key: 'enable_tiktok_subscriptions', messageStem: 'tiktokSubscriptions' },
+    { key: 'enable_tiktok_super_fans', messageStem: 'tiktokSuperFans' },
+    { key: 'enable_tiktok_questions', messageStem: 'tiktokQuestions' },
   ],
 } as const satisfies Record<
   Exclude<Tab, 'global'>,

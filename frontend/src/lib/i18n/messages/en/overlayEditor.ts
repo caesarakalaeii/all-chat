@@ -728,9 +728,13 @@ export const overlayEditor = {
     eventGiftSubs: 'Gift Subs',
     eventBits: 'Bits/Cheers',
     eventRaids: 'Raids',
+    eventChannelPoints: 'Channel Points',
     eventSuperChats: 'Super Chats',
     eventMemberships: 'Memberships',
     eventFollows: 'Follows',
+    eventTreasureChests: 'Coin Chests',
+    eventShares: 'Shares',
+    eventLikes: 'Likes',
     leaderboardHeading: 'Leaderboard Settings',
     topNLabel: 'Top N Users per Category',
     topNHint: 'Show top 1-50 users in each leaderboard category',
@@ -864,6 +868,13 @@ export const overlayEditor = {
     // at the render site for what has and has not been observed.
     tiktokTreasureChestsDescription:
       'Treasure boxes of coins dropped by viewers. Best effort: TikTok does not reliably send these to third-party tools, so they may not appear.',
+    tiktokSubscriptionsLabel: 'Subscriptions',
+    tiktokSubscriptionsDescription:
+      'TikTok LIVE subscriptions, with how long the subscriber has been subscribed',
+    tiktokSuperFansLabel: 'Super Fans',
+    tiktokSuperFansDescription: 'Viewers becoming a Super Fan and Super Fan chests of coins',
+    tiktokQuestionsLabel: 'Questions',
+    tiktokQuestionsDescription: 'Questions asked in the LIVE Q&A board',
     advancedHeading: 'Advanced',
     likeWindowLabel: 'Like Aggregation Window (seconds)',
     likeWindowDescription: 'Likes are collected in this window to prevent spam',

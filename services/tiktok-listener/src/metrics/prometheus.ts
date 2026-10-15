@@ -235,7 +235,7 @@ export class PrometheusMetrics {
     this.envelopeFrames = new Counter({
       name: 'tiktok_envelope_frames_total',
       help: 'ENVELOPE frames by outcome (published, or the reason it was not)',
-      labelNames: ['outcome'], // published, super_fan_box, not_a_drop, no_chest_payload, duplicate, error
+      labelNames: ['outcome'], // published, published_super_fan_box, other_product, not_a_drop, no_chest_payload, duplicate, error
       registers: [this.registry]
     });
 

@@ -23,7 +23,7 @@ This service uses the **unofficial** [TikTok-Live-Connector](https://github.com/
 - ✅ **Message deduplication** (prevents replay on reconnect using native TikTok message IDs)
 - ✅ **Native timestamp preservation** (uses TikTok's original message timestamps)
 - ✅ Publishes to Redis Streams (`chat:raw`)
-- ✅ Audience events alongside chat: gifts, follows, shares, aggregated likes, and coin chests
+- ✅ Audience events alongside chat: gifts, follows, shares, aggregated likes, coin chests, TikTok LIVE subscriptions, Super Fan joins and chests, and Q&A questions (subscriber emote chat messages render with inline emote images)
 - ✅ Dynamic stream management (polls database for active channels)
 - ✅ Health check endpoints
 - ✅ Graceful shutdown handling
@@ -483,9 +483,11 @@ unrelated products, so a chest that never surfaced has more than one possible ca
 sum by (outcome) (tiktok_envelope_frames_total)
 ```
 
-`outcome` is one of `published`, `super_fan_box` (a Super Fan Box, not a chest), `not_a_drop`
-(the HIDE frame for a chest that expired or was fully claimed), `no_chest_payload` (an envelope
-announcing no chest — these must not render), `duplicate`, or `error`.
+`outcome` is one of `published` (a coin chest), `published_super_fan_box` (a Super Fan chest,
+which is its own event now, not a skipped frame), `other_product` (an envelope product that is
+neither of the two), `not_a_drop` (the HIDE frame for a chest that expired or was fully
+claimed), `no_chest_payload` (an envelope announcing no chest — these must not render),
+`duplicate`, or `error`.
 
 **If there is no log line and no counter movement at all, the frame never reached the service.**
 Check what TikTok is actually sending with:

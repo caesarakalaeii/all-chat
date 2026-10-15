@@ -265,6 +265,61 @@ func (n *TikTokNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 			Currency:    "coins",
 			DisplayText: fmt.Sprintf("%d coins", coins),
 		}
+
+	case "tiktok_subscription":
+		// WebcastSubNotifyMessage: sub_month is the subscriber's cumulative month
+		// count, 0 when TikTok cannot resolve it.
+		months := 0
+		if m, ok := raw.EventData["sub_month"].(int); ok {
+			months = m
+		} else if m, ok := raw.EventData["sub_month"].(float64); ok {
+			months = int(m)
+		}
+
+		// As with Twitch subs, the duration suffix is rendered only when we have
+		// real data — "0 months" tenure would be wrong, not just ugly.
+		displayText := "New subscriber"
+		if months > 0 {
+			displayText = fmt.Sprintf("%d month%s", months, pluralize(months))
+		}
+		eventValue = &models.EventValue{
+			Amount:      float64(months),
+			Currency:    "months",
+			DisplayText: displayText,
+		}
+
+	case "super_fan_join":
+		// Becoming a Super Fan carries no amount; the label gives the overlay's
+		// value pill something to say, and the credit roll shows no number for it.
+		eventValue = &models.EventValue{
+			Amount:      1,
+			Currency:    "super_fan",
+			DisplayText: "New Super Fan",
+		}
+
+	case "super_fan_box":
+		// A Super Fan chest is the ENVELOPE message with businessType
+		// SUPER_FAN_BOX — the same shape as treasure_chest, keyed on coins.
+		coins := 0
+		if c, ok := raw.EventData["coins"].(int); ok {
+			coins = c
+		} else if c, ok := raw.EventData["coins"].(float64); ok {
+			coins = int(c)
+		}
+
+		eventValue = &models.EventValue{
+			Amount:      float64(coins),
+			Currency:    "coins",
+			DisplayText: fmt.Sprintf("%d coins", coins),
+		}
+
+	case "question":
+		// The question itself is the message text, so there is no numeric value.
+		eventValue = &models.EventValue{
+			Amount:      1,
+			Currency:    "question",
+			DisplayText: "Asked a question",
+		}
 	}
 
 	// Classify event tier and duration

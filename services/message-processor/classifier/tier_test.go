@@ -292,6 +292,47 @@ func TestClassifyTikTokTreasureChest_NilValue(t *testing.T) {
 	assert.Equal(t, 10, duration)
 }
 
+func TestClassifyTikTokSubscription(t *testing.T) {
+	value := &models.EventValue{Amount: 24, Currency: "months"}
+	tier, duration := ClassifyEvent("tiktok", "tiktok_subscription", value)
+	assert.Equal(t, "high", tier)
+	assert.Equal(t, 35, duration)
+
+	value = &models.EventValue{Amount: 3, Currency: "months"}
+	tier, duration = ClassifyEvent("tiktok", "tiktok_subscription", value)
+	assert.Equal(t, "medium", tier)
+	assert.Equal(t, 15, duration)
+}
+
+func TestClassifyTikTokSuperFanJoin(t *testing.T) {
+	tier, duration := ClassifyEvent("tiktok", "super_fan_join", nil)
+	assert.Equal(t, "high", tier)
+	assert.Equal(t, 35, duration)
+}
+
+func TestClassifyTikTokSuperFanBox(t *testing.T) {
+	value := &models.EventValue{Amount: 1500, Currency: "coins"}
+	tier, duration := ClassifyEvent("tiktok", "super_fan_box", value)
+	assert.Equal(t, "high", tier)
+	assert.Equal(t, 35, duration)
+
+	value = &models.EventValue{Amount: 500, Currency: "coins"}
+	tier, duration = ClassifyEvent("tiktok", "super_fan_box", value)
+	assert.Equal(t, "medium", tier)
+	assert.Equal(t, 20, duration)
+
+	value = &models.EventValue{Amount: 10, Currency: "coins"}
+	tier, duration = ClassifyEvent("tiktok", "super_fan_box", value)
+	assert.Equal(t, "low", tier)
+	assert.Equal(t, 10, duration)
+}
+
+func TestClassifyTikTokQuestion(t *testing.T) {
+	tier, duration := ClassifyEvent("tiktok", "question", nil)
+	assert.Equal(t, "low", tier)
+	assert.Equal(t, 8, duration)
+}
+
 func TestClassifyUnknownPlatform(t *testing.T) {
 	tier, duration := ClassifyEvent("unknown", "event", nil)
 	assert.Equal(t, "medium", tier)

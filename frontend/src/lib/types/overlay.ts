@@ -151,6 +151,9 @@ export interface EventSettings {
   enable_tiktok_follows: boolean
   enable_tiktok_shares: boolean
   enable_tiktok_treasure_chests: boolean
+  enable_tiktok_subscriptions: boolean
+  enable_tiktok_super_fans: boolean
+  enable_tiktok_questions: boolean
   // System
   enable_token_warnings: boolean
   // Aggregation
@@ -359,6 +362,9 @@ export interface CreditRollConfig {
   include_super_chats: boolean
   include_memberships: boolean
   include_follows: boolean
+  include_treasure_chests: boolean
+  include_shares: boolean
+  include_likes: boolean
   leaderboard_top_n: number
   leaderboard_sort_by: 'value' | 'count'
   scroll_speed: number
@@ -392,6 +398,10 @@ export interface Leaderboards {
   follows?: LeaderboardEntry[]
   gifts?: LeaderboardEntry[]
   points?: LeaderboardEntry[]
+  memberships?: LeaderboardEntry[]
+  treasure_chests?: LeaderboardEntry[]
+  shares?: LeaderboardEntry[]
+  likes?: LeaderboardEntry[]
 }
 
 export interface Clip {

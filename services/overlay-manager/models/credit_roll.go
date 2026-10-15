@@ -27,15 +27,18 @@ type CreditRollConfig struct {
 	Enabled bool `json:"enabled" db:"enabled"`
 
 	// Event type filters
-	IncludeSubs          bool `json:"include_subs" db:"include_subs"`
-	IncludeResubs        bool `json:"include_resubs" db:"include_resubs"`
-	IncludeGiftSubs      bool `json:"include_gift_subs" db:"include_gift_subs"`
-	IncludeBits          bool `json:"include_bits" db:"include_bits"`
-	IncludeRaids         bool `json:"include_raids" db:"include_raids"`
-	IncludeChannelPoints bool `json:"include_channel_points" db:"include_channel_points"`
-	IncludeSuperChats    bool `json:"include_super_chats" db:"include_super_chats"`
-	IncludeMemberships   bool `json:"include_memberships" db:"include_memberships"`
-	IncludeFollows       bool `json:"include_follows" db:"include_follows"`
+	IncludeSubs           bool `json:"include_subs" db:"include_subs"`
+	IncludeResubs         bool `json:"include_resubs" db:"include_resubs"`
+	IncludeGiftSubs       bool `json:"include_gift_subs" db:"include_gift_subs"`
+	IncludeBits           bool `json:"include_bits" db:"include_bits"`
+	IncludeRaids          bool `json:"include_raids" db:"include_raids"`
+	IncludeChannelPoints  bool `json:"include_channel_points" db:"include_channel_points"`
+	IncludeSuperChats     bool `json:"include_super_chats" db:"include_super_chats"`
+	IncludeMemberships    bool `json:"include_memberships" db:"include_memberships"`
+	IncludeFollows        bool `json:"include_follows" db:"include_follows"`
+	IncludeTreasureChests bool `json:"include_treasure_chests" db:"include_treasure_chests"`
+	IncludeShares         bool `json:"include_shares" db:"include_shares"`
+	IncludeLikes          bool `json:"include_likes" db:"include_likes"`
 
 	// Leaderboard settings
 	LeaderboardTopN   int    `json:"leaderboard_top_n" db:"leaderboard_top_n"`
@@ -80,7 +83,9 @@ type StreamSession struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// LeaderboardEntry represents a single entry in a leaderboard
+// LeaderboardEntry represents a single entry in a leaderboard. TotalValue is the
+// native-unit total ("5 gifts", "300 diamonds"); the weighted spend USD used for
+// ranking stays in the sorted-set score and is not exposed.
 type LeaderboardEntry struct {
 	Rank        int                    `json:"rank"`
 	UserID      string                 `json:"user_id"`
@@ -93,13 +98,17 @@ type LeaderboardEntry struct {
 
 // Leaderboards contains all leaderboard categories
 type Leaderboards struct {
-	Subs       []LeaderboardEntry `json:"subs,omitempty"`
-	Bits       []LeaderboardEntry `json:"bits,omitempty"`
-	Raids      []LeaderboardEntry `json:"raids,omitempty"`
-	SuperChats []LeaderboardEntry `json:"super_chats,omitempty"`
-	Follows    []LeaderboardEntry `json:"follows,omitempty"`
-	Gifts      []LeaderboardEntry `json:"gifts,omitempty"`
-	Points     []LeaderboardEntry `json:"points,omitempty"`
+	Subs           []LeaderboardEntry `json:"subs,omitempty"`
+	Bits           []LeaderboardEntry `json:"bits,omitempty"`
+	Raids          []LeaderboardEntry `json:"raids,omitempty"`
+	SuperChats     []LeaderboardEntry `json:"super_chats,omitempty"`
+	Follows        []LeaderboardEntry `json:"follows,omitempty"`
+	Gifts          []LeaderboardEntry `json:"gifts,omitempty"`
+	Points         []LeaderboardEntry `json:"points,omitempty"`
+	Memberships    []LeaderboardEntry `json:"memberships,omitempty"`
+	TreasureChests []LeaderboardEntry `json:"treasure_chests,omitempty"`
+	Shares         []LeaderboardEntry `json:"shares,omitempty"`
+	Likes          []LeaderboardEntry `json:"likes,omitempty"`
 }
 
 // Clip represents a Twitch clip

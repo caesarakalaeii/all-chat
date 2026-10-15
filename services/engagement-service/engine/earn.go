@@ -32,18 +32,21 @@ type EarnAward struct {
 
 // PointsForEvent maps a normalized platform event to a points award using the
 // overlay's earn config. It handles the monetary/loyalty events that have a
-// configured multiplier — bits, USD donations (super chat / super sticker / kick
-// donation), subscriptions (by tier), and gift subscriptions (proportional to
-// count). Events without a configured earn rule (raid, follow, channel points,
-// likes) return ok=false and are ignored in v1 to avoid mis-attribution; chat and
-// watch points are awarded on separate signals, not here.
+// configured multiplier — bits and Bits Power-ups, USD donations (super chat /
+// super sticker / kick donation), subscriptions (by tier), and gift
+// subscriptions (proportional to count). Events without a configured earn rule
+// (raid, follow, channel points, likes) return ok=false and are ignored in v1 to
+// avoid mis-attribution; chat and watch points are awarded on separate signals,
+// not here.
 func PointsForEvent(cfg models.EarnConfig, ev *mpmodels.EventInfo) (EarnAward, bool) {
 	if ev == nil || !cfg.Enabled {
 		return EarnAward{}, false
 	}
 
 	switch ev.Type {
-	case "bits":
+	case "bits", "power_up":
+		// A Bits Power-up IS bits spent (EventValue.Amount carries the bits), so
+		// it pays through the same BitsMultiplier as a cheer.
 		amt := valueAmount(ev)
 		return awardIfPositive(scalePoints(amt, cfg.BitsMultiplier), "earn_bits")
 
@@ -52,7 +55,9 @@ func PointsForEvent(cfg models.EarnConfig, ev *mpmodels.EventInfo) (EarnAward, b
 		amt := valueAmount(ev)
 		return awardIfPositive(scalePoints(amt, cfg.USDMultiplier), "earn_donation")
 
-	case "subscription", "resubscription", "new_sponsor", "member_milestone":
+	case "subscription", "resubscription", "new_sponsor", "member_milestone", "tiktok_subscription":
+		// tiktok_subscription has no raw plan in its metadata, so subTier assigns
+		// the base tier — the same treatment a Kick sub already gets.
 		return awardIfPositive(subPoints(cfg, subTier(ev)), "earn_sub")
 
 	case "gift_subscription", "mystery_gift", "membership_gift":

@@ -148,7 +148,17 @@ const EVENT_TYPES_BY_PLATFORM = [
   {
     platformKey: 'common.platforms.tiktok',
     className: 'text-tiktok',
-    types: ['gift', 'like_aggregate', 'follow', 'share'],
+    types: [
+      'gift',
+      'like_aggregate',
+      'follow',
+      'share',
+      'treasure_chest',
+      'tiktok_subscription',
+      'super_fan_join',
+      'super_fan_box',
+      'question',
+    ],
   },
 ] as const satisfies readonly {
   platformKey: MessageKey

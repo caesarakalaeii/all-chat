@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -463,22 +464,55 @@ func (h *Handler) getOrRepairSession(ctx context.Context, overlayID string) (*mo
 	return nil, err
 }
 
-// aggregateLeaderboards retrieves and formats leaderboard data from Redis
+// aggregateLeaderboards retrieves and formats leaderboard data from Redis,
+// honouring the config's include_* toggles: a disabled category is skipped, not
+// merely emptied, so a toggle on the settings page actually hides its board.
+// include_subs and include_resubs share one captured board ("subs" — resubs are
+// ZINCRBYed into the same sorted set), so either flag shows it.
 func (h *Handler) aggregateLeaderboards(ctx context.Context, sessionID string, config *models.CreditRollConfig) (*models.Leaderboards, error) {
 	leaderboards := &models.Leaderboards{}
 
-	// Categories to aggregate
 	categories := map[string]*[]models.LeaderboardEntry{
-		"subs":        &leaderboards.Subs,
-		"bits":        &leaderboards.Bits,
-		"raids":       &leaderboards.Raids,
-		"super_chats": &leaderboards.SuperChats,
-		"follows":     &leaderboards.Follows,
-		"gifts":       &leaderboards.Gifts,
-		"points":      &leaderboards.Points,
+		"subs":            &leaderboards.Subs,
+		"bits":            &leaderboards.Bits,
+		"raids":           &leaderboards.Raids,
+		"super_chats":     &leaderboards.SuperChats,
+		"follows":         &leaderboards.Follows,
+		"gifts":           &leaderboards.Gifts,
+		"points":          &leaderboards.Points,
+		"memberships":     &leaderboards.Memberships,
+		"treasure_chests": &leaderboards.TreasureChests,
+		"shares":          &leaderboards.Shares,
+		"likes":           &leaderboards.Likes,
+	}
+
+	// enabled maps a captured Redis category to the toggles that show it.
+	enabled := map[string][]bool{
+		"subs":            {config.IncludeSubs, config.IncludeResubs},
+		"gifts":           {config.IncludeGiftSubs},
+		"bits":            {config.IncludeBits},
+		"raids":           {config.IncludeRaids},
+		"super_chats":     {config.IncludeSuperChats},
+		"memberships":     {config.IncludeMemberships},
+		"follows":         {config.IncludeFollows},
+		"points":          {config.IncludeChannelPoints},
+		"treasure_chests": {config.IncludeTreasureChests},
+		"shares":          {config.IncludeShares},
+		"likes":           {config.IncludeLikes},
 	}
 
 	for category, dest := range categories {
+		show := false
+		for _, on := range enabled[category] {
+			if on {
+				show = true
+				break
+			}
+		}
+		if !show {
+			continue
+		}
+
 		entries, err := h.getLeaderboardEntries(ctx, sessionID, category, config.LeaderboardTopN)
 		if err != nil {
 			h.logger.Warn("Failed to get leaderboard entries",
@@ -495,8 +529,16 @@ func (h *Handler) aggregateLeaderboards(ctx context.Context, sessionID string, c
 
 // getLeaderboardEntries retrieves entries for a specific category
 func (h *Handler) getLeaderboardEntries(ctx context.Context, sessionID string, category string, topN int) ([]models.LeaderboardEntry, error) {
+	// Where the sorted-set score is a weighted spend (gifts), the member's
+	// DISPLAYED total lives in the raw hash in the native unit; read it once and
+	// fall back to the score for members who predate it.
+	// Key layout is written by message-processor's sessions/capture.go; the meta and
+	// raw-total prefixes must stay in sync with MetadataKeyPrefix and RawTotalKeyPrefix there.
 	key := fmt.Sprintf("session:leaderboard:%s:%s", sessionID, category)
 	metaKey := fmt.Sprintf("session:leaderboard:meta:%s:%s", sessionID, category)
+	rawKey := fmt.Sprintf("session:leaderboard:raw:%s:%s", sessionID, category)
+
+	rawTotals, _ := h.redis.HGetAll(ctx, rawKey).Result()
 
 	// Get top N entries from sorted set (highest score first)
 	results, err := h.redis.ZRevRangeWithScores(ctx, key, 0, int64(topN-1)).Result()
@@ -547,13 +589,22 @@ func (h *Handler) getLeaderboardEntries(ctx context.Context, sessionID string, c
 			}
 		}
 
+		// Prefer the native-unit total over the weighted sorted-set score: the
+		// roll shows "5 gifts", not the USD used to rank them.
+		totalValue := result.Score
+		if raw, ok := rawTotals[memberStr]; ok {
+			if parsed, err := strconv.ParseFloat(raw, 64); err == nil {
+				totalValue = parsed
+			}
+		}
+
 		entry := models.LeaderboardEntry{
 			Rank:        rank + 1,
 			UserID:      getString(member, "user_id"),
 			DisplayName: getString(member, "display_name"),
 			AvatarURL:   getString(member, "avatar_url"),
 			Platform:    getString(member, "platform"),
-			TotalValue:  result.Score,
+			TotalValue:  totalValue,
 			Metadata:    make(map[string]interface{}),
 		}
 

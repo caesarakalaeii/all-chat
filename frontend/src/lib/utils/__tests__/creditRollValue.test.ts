@@ -67,6 +67,18 @@ describe('creditRollValue', () => {
     expect(creditRollValue(t, entry(1, 'gift'))).toBe('1 gift')
   })
 
+  it('renders the new board units natively', () => {
+    expect(creditRollValue(t, entry(150, 'coins'))).toBe('150 coins')
+    expect(creditRollValue(t, entry(250, 'likes'))).toBe('250 likes')
+    expect(creditRollValue(t, entry(1, 'share'))).toBe('1 share')
+  })
+
+  it('shows no number on the memberships board', () => {
+    // new_sponsor (1), super_fan_join (1) and member_milestone (months) sum to nothing readable.
+    expect(creditRollValue(t, entry(1, 'membership'))).toBe('')
+    expect(creditRollValue(t, entry(1, 'super_fan'))).toBe('')
+  })
+
   it('picks the unit per entry, since one leaderboard can mix platforms', () => {
     // Top Gifters: a Twitch gift sub next to a TikTok gift counted in diamonds.
     expect(creditRollValue(t, entry(2, 'gift'))).toBe('2 gifts')

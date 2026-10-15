@@ -1114,6 +1114,10 @@ flattening events into ordinary chat rows are in
 | `.event-type-follow` | TikTok follows | New followers |
 | `.event-type-like_aggregate` | TikTok like aggregation | Aggregated likes |
 | `.event-type-share` | TikTok shares | Stream shares |
+| `.event-type-tiktok_subscription` | TikTok LIVE subscriptions | LIVE sub events |
+| `.event-type-super_fan_join` | TikTok Super Fan joins | New Super Fans |
+| `.event-type-super_fan_box` | TikTok Super Fan chests | Super Fan chests of coins |
+| `.event-type-question` | TikTok LIVE Q&A questions | Question events |
 
 ### Event Tier Styling
 

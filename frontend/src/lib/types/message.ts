@@ -73,6 +73,10 @@ export type EventType =
   | 'like_aggregate'
   | 'share'
   | 'treasure_chest'
+  | 'tiktok_subscription'
+  | 'super_fan_join'
+  | 'super_fan_box'
+  | 'question'
   // System
   | 'token_expiration_warning'
   | 'source_permission_error'
