@@ -34,7 +34,8 @@ servers, this service does it on ours:
   `/webcast/im/fetch/` response the player itself receives, returning the same
   `{fetchResult, fetchResultCookieHeader}` contract the connector expects.
   Tabs stay open between captures (the page keeps the session warm on
-  TikTok's side) and are evicted after 5 minutes idle.
+  TikTok's side) and are evicted after 5 minutes idle (a once-a-minute
+  sweep, so an idle tab does not wait for the next capture).
 - Requires a **real rendering stack** — Xvfb was measured insufficient.
 
 > **X-Gnarly is deliberately not attached** (measured 2026-09-15):

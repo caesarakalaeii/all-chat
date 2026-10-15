@@ -287,6 +287,8 @@ export class ViewerPool {
   /** username -> compound lane key, so a room keeps its browser identity. */
   private readonly roomLane = new Map<string, string>();
   private roundRobin = 0;
+  /** Idle eviction on a clock: captures can be hours apart. */
+  private readonly sweep: ReturnType<typeof setInterval>;
   private readonly options: Required<
     Pick<ViewerPoolOptions, 'tabIdleMs' | 'proxyCooldownMs' | 'maxLaneAttempts'>
   > &
@@ -307,6 +309,8 @@ export class ViewerPool {
       this.addLane(host, 'primary');
       this.addLane(host, 'canary');
     });
+    this.sweep = setInterval(() => this.evictIdleTabs(), 60_000);
+    this.sweep.unref();
   }
 
   private addLane(host: string, klass: LaneClass): ProxyLane {
@@ -1257,6 +1261,7 @@ export class ViewerPool {
   }
 
   async close(): Promise<void> {
+    clearInterval(this.sweep);
     this.tabs.clear();
     this.roomLane.clear();
     for (const lane of this.lanes.values()) {
