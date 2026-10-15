@@ -51,6 +51,9 @@ const EVENT_TOGGLES = [
   { key: 'enable_tiktok_follows', messageStem: 'TiktokFollows' },
   { key: 'enable_tiktok_shares', messageStem: 'TiktokShares' },
   { key: 'enable_tiktok_treasure_chests', messageStem: 'TiktokTreasureChests' },
+  { key: 'enable_tiktok_subscriptions', messageStem: 'TiktokSubscriptions' },
+  { key: 'enable_tiktok_super_fans', messageStem: 'TiktokSuperFans' },
+  { key: 'enable_tiktok_questions', messageStem: 'TiktokQuestions' },
   { key: 'enable_token_warnings', messageStem: 'TokenWarnings' },
 ] as const satisfies ReadonlyArray<{ key: keyof EventSettings; messageStem: string }>
 

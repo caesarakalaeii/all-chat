@@ -5,7 +5,8 @@ Create custom themes for All-Chat end-of-stream credit rolls.
 ## What Are Credit Roll Themes?
 
 Credit roll themes customize the appearance of your end-of-stream credits display, including:
-- Leaderboards for subs, bits, raids, super chats, follows, and gifts
+- Leaderboards for subs, bits, raids, super chats, follows, gifts, memberships,
+  coin chests, shares, and likes
 - User rankings with avatars and platform badges
 - Clip showcases (if enabled)
 - Thank you messages

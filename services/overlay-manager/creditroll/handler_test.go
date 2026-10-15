@@ -20,10 +20,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/caesar/all-chat/services/overlay-manager/models"
@@ -421,8 +425,8 @@ func TestHandleGetCreditRoll_ActiveSession_ReturnsDuration(t *testing.T) {
 	}
 
 	// session_duration_seconds must reflect ~4 hours (14400s), not 0.
-	const minExpected = 4*60*60 - 60  // 4 hours minus 1 minute of tolerance
-	const maxExpected = 4*60*60 + 60  // 4 hours plus 1 minute of tolerance
+	const minExpected = 4*60*60 - 60 // 4 hours minus 1 minute of tolerance
+	const maxExpected = 4*60*60 + 60 // 4 hours plus 1 minute of tolerance
 	if resp.SessionDurationSeconds < minExpected || resp.SessionDurationSeconds > maxExpected {
 		t.Errorf("HandleGetCreditRoll() session_duration_seconds = %d, want ~%d (4 hours); "+
 			"this is the 'Duration: 0 minutes' bug: session_started_at=%s",
@@ -560,5 +564,100 @@ func TestHandleGetCreditRoll_ZombieHash_TreatedAsNoSession(t *testing.T) {
 	}
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("HandleGetCreditRoll() with zombie hash: got status %d, want %d", w.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestGetLeaderboardEntries_UsesRawTotalForGifts(t *testing.T) {
+	const sessionID = "session-raw"
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { rc.Close() })
+	h := &Handler{redis: rc, logger: zap.NewNop()}
+	mr.HSet(fmt.Sprintf("session:leaderboard:meta:%s:gifts", sessionID),
+		"twitch:u1", `{"user_id":"u1","display_name":"Gifter","platform":"twitch"}`)
+	_, _ = mr.ZAdd(fmt.Sprintf("session:leaderboard:%s:gifts", sessionID), 24.95, "twitch:u1")
+	mr.HSet(fmt.Sprintf("%s%s:gifts", "session:leaderboard:raw:", sessionID), "twitch:u1", "5")
+
+	entries, err := h.getLeaderboardEntries(context.Background(), sessionID, "gifts", 10)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, float64(5), entries[0].TotalValue, "displayed total must be the native gift count, not the USD score")
+}
+
+func pickBoard(boards *models.Leaderboards, name string) []models.LeaderboardEntry {
+	switch name {
+	case "Subs":
+		return boards.Subs
+	case "Gifts":
+		return boards.Gifts
+	case "Bits":
+		return boards.Bits
+	case "Memberships":
+		return boards.Memberships
+	case "Points":
+		return boards.Points
+	default:
+		return nil
+	}
+}
+
+func TestAggregateLeaderboards_EnforcesIncludeFlags(t *testing.T) {
+	seed := func(t *testing.T, mr *miniredis.Miniredis, sessionID string, cat string) {
+		t.Helper()
+		mr.HSet(fmt.Sprintf("session:leaderboard:meta:%s:%s", sessionID, cat),
+			"twitch:u1", `{"user_id":"u1","display_name":"Viewer","platform":"twitch"}`)
+		_, _ = mr.ZAdd(fmt.Sprintf("session:leaderboard:%s:%s", sessionID, cat), 1, "twitch:u1")
+	}
+
+	tests := []struct {
+		name    string
+		config  models.CreditRollConfig
+		seeds   []string
+		present []string
+		absent  []string
+	}{
+		{
+			name:    "all on",
+			config:  models.CreditRollConfig{IncludeSubs: true, IncludeGiftSubs: true, IncludeBits: true, IncludeMemberships: true},
+			seeds:   []string{"subs", "gifts", "memberships"},
+			present: []string{"Subs", "Gifts", "Memberships"},
+			absent:  []string{"Points"},
+		},
+		{
+			name:    "subs either flag shows the shared board",
+			config:  models.CreditRollConfig{IncludeResubs: true},
+			seeds:   []string{"subs", "gifts"},
+			present: []string{"Subs"},
+			absent:  []string{"Gifts"},
+		},
+		{
+			name:    "channel points opt-in is respected",
+			config:  models.CreditRollConfig{IncludeChannelPoints: true},
+			seeds:   []string{"points", "subs"},
+			present: []string{"Points"},
+			absent:  []string{"Subs"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mr := miniredis.RunT(t)
+			rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			t.Cleanup(func() { rc.Close() })
+			h := &Handler{redis: rc, logger: zap.NewNop()}
+			for _, cat := range tt.seeds {
+				seed(t, mr, "session-flags", cat)
+			}
+
+			boards, err := h.aggregateLeaderboards(context.Background(), "session-flags", &tt.config)
+			require.NoError(t, err)
+
+			for _, cat := range tt.present {
+				assert.NotEmpty(t, pickBoard(boards, cat), "%s should be present", cat)
+			}
+			for _, cat := range tt.absent {
+				assert.Empty(t, pickBoard(boards, cat), "%s must be hidden when disabled", cat)
+			}
+		})
 	}
 }

@@ -492,11 +492,13 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 		}
 
 	case "mystery_gift":
-		giftCount := 0
-		if g, ok := raw.EventData["gift_count"].(int); ok {
-			giftCount = g
-		} else if g, ok := raw.EventData["gift_count"].(float64); ok {
-			giftCount = int(g)
+		// EventSub channel.subscription.gift carries the bomb size as "total";
+		// the IRC submysterygift path still publishes "gift_count", so both
+		// shapes are read. Reading only the IRC key left every EventSub gift
+		// bomb valued at 0 subs.
+		giftCount := eventDataInt(raw.EventData, "total")
+		if giftCount == 0 {
+			giftCount = eventDataInt(raw.EventData, "gift_count")
 		}
 
 		eventValue = &models.EventValue{

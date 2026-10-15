@@ -42,6 +42,7 @@ func (r *CreditRollRepository) GetByOverlayID(ctx context.Context, overlayID str
 		       include_subs, include_resubs, include_gift_subs, include_bits,
 		       include_raids, include_channel_points, include_super_chats,
 		       include_memberships, include_follows,
+		       include_treasure_chests, include_shares, include_likes,
 		       leaderboard_top_n, leaderboard_sort_by,
 		       scroll_speed, display_duration_seconds, background_opacity, theme,
 		       clips_enabled, clips_max_count, clips_fallback_days, clips_muted,
@@ -57,6 +58,7 @@ func (r *CreditRollRepository) GetByOverlayID(ctx context.Context, overlayID str
 		&config.IncludeSubs, &config.IncludeResubs, &config.IncludeGiftSubs, &config.IncludeBits,
 		&config.IncludeRaids, &config.IncludeChannelPoints, &config.IncludeSuperChats,
 		&config.IncludeMemberships, &config.IncludeFollows,
+		&config.IncludeTreasureChests, &config.IncludeShares, &config.IncludeLikes,
 		&config.LeaderboardTopN, &config.LeaderboardSortBy,
 		&config.ScrollSpeed, &config.DisplayDurationSeconds, &config.BackgroundOpacity, &config.Theme,
 		&config.ClipsEnabled, &config.ClipsMaxCount, &config.ClipsFallbackDays, &config.ClipsMuted,
@@ -79,12 +81,13 @@ func (r *CreditRollRepository) Update(ctx context.Context, config *models.Credit
 		    include_subs = $2, include_resubs = $3, include_gift_subs = $4, include_bits = $5,
 		    include_raids = $6, include_channel_points = $7, include_super_chats = $8,
 		    include_memberships = $9, include_follows = $10,
-		    leaderboard_top_n = $11, leaderboard_sort_by = $12,
-		    scroll_speed = $13, display_duration_seconds = $14, background_opacity = $15, theme = $16,
-		    clips_enabled = $17, clips_max_count = $18, clips_fallback_days = $19, clips_muted = $20,
-		    custom_css = $21,
+		    include_treasure_chests = $11, include_shares = $12, include_likes = $13,
+		    leaderboard_top_n = $14, leaderboard_sort_by = $15,
+		    scroll_speed = $16, display_duration_seconds = $17, background_opacity = $18, theme = $19,
+		    clips_enabled = $20, clips_max_count = $21, clips_fallback_days = $22, clips_muted = $23,
+		    custom_css = $24,
 		    updated_at = NOW()
-		WHERE id = $22
+		WHERE id = $25
 	`
 
 	_, err := r.db.Exec(ctx, query,
@@ -92,6 +95,7 @@ func (r *CreditRollRepository) Update(ctx context.Context, config *models.Credit
 		config.IncludeSubs, config.IncludeResubs, config.IncludeGiftSubs, config.IncludeBits,
 		config.IncludeRaids, config.IncludeChannelPoints, config.IncludeSuperChats,
 		config.IncludeMemberships, config.IncludeFollows,
+		config.IncludeTreasureChests, config.IncludeShares, config.IncludeLikes,
 		config.LeaderboardTopN, config.LeaderboardSortBy,
 		config.ScrollSpeed, config.DisplayDurationSeconds, config.BackgroundOpacity, config.Theme,
 		config.ClipsEnabled, config.ClipsMaxCount, config.ClipsFallbackDays, config.ClipsMuted,

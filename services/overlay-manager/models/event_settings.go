@@ -63,6 +63,11 @@ type EventSettings struct {
 	// Coin chests (TikTok's treasure boxes) arrive on the ENVELOPE message; they fire once
 	// per viewer drop, hence a dedicated toggle alongside likes/gifts/follows/shares.
 	EnableTikTokTreasureChests bool `json:"enable_tiktok_treasure_chests" db:"enable_tiktok_treasure_chests"`
+	// TikTok LIVE subscriptions, Super Fans (join + chest) and LIVE Q&A questions
+	// are gated together in pairs where the events share a category.
+	EnableTikTokSubscriptions bool `json:"enable_tiktok_subscriptions" db:"enable_tiktok_subscriptions"`
+	EnableTikTokSuperFans     bool `json:"enable_tiktok_super_fans" db:"enable_tiktok_super_fans"`
+	EnableTikTokQuestions     bool `json:"enable_tiktok_questions" db:"enable_tiktok_questions"`
 
 	// System Events
 	EnableTokenWarnings bool `json:"enable_token_warnings" db:"enable_token_warnings"`

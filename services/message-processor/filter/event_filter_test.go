@@ -97,6 +97,10 @@ func TestMapEventTypeToColumn_TikTok(t *testing.T) {
 		{"follow", "enable_tiktok_follows"},
 		{"share", "enable_tiktok_shares"},
 		{"treasure_chest", "enable_tiktok_treasure_chests"},
+		{"tiktok_subscription", "enable_tiktok_subscriptions"},
+		{"super_fan_join", "enable_tiktok_super_fans"},
+		{"super_fan_box", "enable_tiktok_super_fans"},
+		{"question", "enable_tiktok_questions"},
 		{"unknown", ""},
 	}
 

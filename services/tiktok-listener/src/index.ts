@@ -104,6 +104,14 @@ import {
   isTikTokEnvelopeDrop,
   type TikTokEnvelopeData
 } from './events/envelope.js';
+import { isTikTokSuperFanBox, type TikTokSuperFanBoxFrame } from './events/superfan.js';
+import {
+  buildQuestionEvent,
+  buildSubscriptionEvent,
+  buildSuperFanBoxEvent,
+  buildSuperFanJoinEvent,
+  timestampFromCreateTime
+} from './events/publish-builders.js';
 
 // Environment variables
 const LOG_LEVEL = process.env.LOG_LEVEL || 'info';
@@ -403,6 +411,46 @@ interface TikTokLikeData {
 interface TikTokSocialData {
   common?: TikTokCommon;
   user?: TikTokUser;
+}
+
+// WebcastSubNotifyMessage. subMonth is an int64 serialized as string.
+interface TikTokSubNotifyData {
+  common?: TikTokCommon;
+  user?: TikTokUser;
+  subMonth?: string;
+  // Gifted-by-platform marker: set (together with giftSource=PLATFORM, 1)
+  // when TikTok community-gifted the sub rather than the user buying it.
+  isSend?: boolean;
+  giftSource?: number;
+}
+
+// WebcastBarrageMessage as the connector emits it for superFanJoin.
+interface TikTokBarrageData {
+  common?: TikTokCommon;
+  user?: TikTokUser;
+}
+
+// WebcastQuestionNewMessage: the question block inlines the asker.
+interface TikTokQuestionData {
+  common?: TikTokCommon;
+  data?: {
+    questionId?: string;
+    content?: string;
+    createTime?: string; // Unix ms string; the question block stamps its own time
+    user?: TikTokUser;
+  };
+}
+
+// WebcastEmoteChatMessage: subscriber emote-only bubbles. There is no text;
+// each entry is one emote the viewer sent.
+interface TikTokEmoteChatData {
+  common?: TikTokCommon;
+  user?: TikTokUser;
+  userIdentity?: TikTokUserIdentity;
+  emoteList?: Array<{
+    emoteId?: string;
+    image?: TikTokImageModel;
+  }>;
 }
 
 // Reads the TikTok @handle, falling back to the numeric id then a placeholder.
@@ -1385,7 +1433,31 @@ class TikTokListenerService {
       });
 
       connection.on(WebcastEvent.ENVELOPE, (data) => {
-        this.handleTreasureBox(username, overlayId, data);
+        this.handleEnvelope(username, overlayId, data);
+      });
+
+      connection.on(WebcastEvent.SUB_NOTIFY, (data) => {
+        this.handleSubscription(username, overlayId, data);
+      });
+
+      connection.on(WebcastEvent.SUPER_FAN_JOIN, (data) => {
+        this.handleSuperFanJoin(username, overlayId, data);
+      });
+
+      connection.on(WebcastEvent.SUPER_FAN_BOX, (data) => {
+        // The connector also falls through to ENVELOPE for this same frame;
+        // routing the box here and letting the envelope handler's own
+        // classification decide means one box publishes once, by dedup, not
+        // by trusting which event arrived.
+        this.handleEnvelope(username, overlayId, data);
+      });
+
+      connection.on(WebcastEvent.QUESTION_NEW, (data) => {
+        this.handleQuestion(username, overlayId, data);
+      });
+
+      connection.on(WebcastEvent.EMOTE, (data) => {
+        this.handleEmoteChatMessage(username, overlayId, data);
       });
 
       // Cast to EventEmitter for lifecycle events not in ClientEventMap
@@ -2140,7 +2212,7 @@ class TikTokListenerService {
     }
   }
 
-  private async handleTreasureBox(username: string, overlayId: string, data: TikTokEnvelopeData): Promise<void> {
+  private async handleEnvelope(username: string, overlayId: string, data: TikTokEnvelopeData): Promise<void> {
     try {
       this.heartbeatMonitor.recordMessage(username);
 
@@ -2157,10 +2229,19 @@ class TikTokListenerService {
         coins: data.envelopeInfo?.diamondCount
       });
 
-      // ENVELOPE also carries Super Fan Box (and other) frames; publishing those
-      // would show the streamer a coin chest nobody sent.
+      // The connector emits SUPER_FAN_BOX and then falls through to ENVELOPE for
+      // the same frame, and both registrations land in this one handler, so the
+      // classification decides the route — never which event name arrived. A
+      // Super Fan chest must yield exactly one super_fan_box and no treasure_chest.
+      if (isTikTokSuperFanBox(data)) {
+        await this.publishSuperFanBox(username, overlayId, data);
+        return;
+      }
+
+      // Every other non-chest envelope product (portals, merch drops, shells,
+      // fan-club boxes) shows the streamer a coin chest nobody sent.
       if (!isTikTokCoinChest(data)) {
-        this.metrics.recordEnvelopeFrame('super_fan_box');
+        this.metrics.recordEnvelopeFrame('other_product');
         logger.debug('Skipping non-chest ENVELOPE event', {
           username,
           business_type: data.envelopeInfo?.businessType
@@ -2168,6 +2249,81 @@ class TikTokListenerService {
         return;
       }
 
+      await this.publishTreasureChest(username, overlayId, data);
+    } catch (error) {
+      this.metrics.recordEnvelopeFrame('error');
+      logger.error('Failed to handle envelope event', { username, error });
+    }
+  }
+
+  private async publishSuperFanBox(username: string, overlayId: string, data: TikTokEnvelopeData): Promise<void> {
+    try {
+      // Sharing isTikTokEnvelopeDrop with the coin chest: the box also comes
+      // back as a HIDE frame when it expires, and republishing that would
+      // render the chest twice in the activity panel.
+      if (!isTikTokEnvelopeDrop(data)) {
+        this.metrics.recordEnvelopeFrame('not_a_drop');
+        logger.debug('Skipping non-drop Super Fan Box event', {
+          username,
+          display: data.display
+        });
+        return;
+      }
+
+      // A frame with no envelopeInfo carries no box; publishing one would render
+      // a phantom chest. Coins default to 0 rather than gating here, so a
+      // zero-value box still surfaces — the contract field is present either way.
+      if (!data.envelopeInfo) {
+        this.metrics.recordEnvelopeFrame('no_chest_payload');
+        logger.debug('Skipping Super Fan Box event with no envelope payload', { username });
+        return;
+      }
+      const envelope: TikTokSuperFanBoxFrame['envelopeInfo'] = data.envelopeInfo;
+
+      const msgId = data.common?.msgId;
+      const text = 'Sent a Super Fan chest';
+
+      // Same envelope-id dedup as the coin chest: every frame TikTok emits for
+      // one box — including the ENVELOPE fall-through this superFanBox handler
+      // shares the room with — collapses into a single publish.
+      const dedupKey = envelope.envelopeId ? `envelope:${envelope.envelopeId}` : msgId;
+      if (this.messageDeduplicator.isDuplicate(dedupKey, username, text)) {
+        this.metrics.recordEnvelopeFrame('duplicate');
+        logger.debug('Skipping duplicate Super Fan Box event', { msg_id: msgId, username });
+        return;
+      }
+
+      const rawMessage: RawChatMessage = {
+        ...buildSuperFanBoxEvent(username, overlayId, {
+          msgId,
+          createTime: data.common?.createTime,
+          coins: envelope.diamondCount,
+          canOpen: envelope.peopleCount,
+          senderId: envelope.sendUserId,
+          senderName: envelope.sendUserName,
+          senderAvatar: envelope.sendUserAvatar,
+          fallbackNowIso: new Date().toISOString()
+        }),
+        message_id: msgId || randomUUID()
+      };
+
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
+      this.metrics.recordEnvelopeFrame('published_super_fan_box');
+      logger.info('Published TikTok Super Fan Box event', {
+        username,
+        overlay_id: overlayId,
+        sender: envelope.sendUserId || 'unknown',
+        coins: envelope.diamondCount,
+        can_open: envelope.peopleCount
+      });
+    } catch (error) {
+      this.metrics.recordEnvelopeFrame('error');
+      logger.error('Failed to handle Super Fan Box event', { username, error });
+    }
+  }
+
+  private async publishTreasureChest(username: string, overlayId: string, data: TikTokEnvelopeData): Promise<void> {
+    try {
       // The same chest comes back as a HIDE frame when it expires or is fully
       // claimed; republishing that would render the drop twice in the activity
       // panel and the overlay.
@@ -2202,7 +2358,7 @@ class TikTokListenerService {
 
       const msgId = data.common?.msgId;
       const createTime = data.common?.createTime;
-      const timestamp = createTime ? new Date(parseInt(createTime)).toISOString() : new Date().toISOString();
+      const timestamp = timestampFromCreateTime(createTime, { fallbackNowIso: new Date().toISOString() });
 
       // Key dedup on the envelope's own id rather than the per-frame msgId, so
       // every frame TikTok emits for one chest — a replay after a reconnect, or
@@ -2253,6 +2409,155 @@ class TikTokListenerService {
     } catch (error) {
       this.metrics.recordEnvelopeFrame('error');
       logger.error('Failed to handle treasure chest event', { username, error });
+    }
+  }
+
+  private async handleSubscription(username: string, overlayId: string, data: TikTokSubNotifyData): Promise<void> {
+    try {
+      this.heartbeatMonitor.recordMessage(username);
+
+      const user = data.user;
+      const rawMessage: RawChatMessage = {
+        ...buildSubscriptionEvent(username, overlayId, tiktokUserHandle(user), user?.nickname || 'Anonymous', {
+          msgId: data.common?.msgId,
+          createTime: data.common?.createTime,
+          monthText: data.subMonth,
+          isSend: data.isSend,
+          giftSource: data.giftSource,
+          userAvatarUrl: tiktokAvatarUrl(user),
+          fallbackNowIso: new Date().toISOString()
+        }),
+        message_id: data.common?.msgId || randomUUID()
+      };
+
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
+      logger.debug('Published TikTok subscription event', {
+        username,
+        overlay_id: overlayId,
+        sub_month: rawMessage.event_data?.sub_month
+      });
+    } catch (error) {
+      logger.error('Failed to handle subscription event', { username, error });
+    }
+  }
+
+  private async handleSuperFanJoin(username: string, overlayId: string, data: TikTokBarrageData): Promise<void> {
+    try {
+      this.heartbeatMonitor.recordMessage(username);
+
+      const user = data.user;
+      const rawMessage: RawChatMessage = {
+        ...buildSuperFanJoinEvent(username, overlayId, tiktokUserHandle(user), user?.nickname || 'Anonymous', {
+          msgId: data.common?.msgId,
+          createTime: data.common?.createTime,
+          avatarUrl: tiktokAvatarUrl(user),
+          fallbackNowIso: new Date().toISOString()
+        }),
+        message_id: data.common?.msgId || randomUUID()
+      };
+
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
+      logger.debug('Published TikTok super fan join event', { username, overlay_id: overlayId });
+    } catch (error) {
+      logger.error('Failed to handle super fan join event', { username, error });
+    }
+  }
+
+  private async handleQuestion(username: string, overlayId: string, data: TikTokQuestionData): Promise<void> {
+    try {
+      this.heartbeatMonitor.recordMessage(username);
+
+      const question = data.data;
+      // A question frame can arrive with an empty question block; publishing
+      // that would render an empty card the asker never sent.
+      if (!question?.questionId && !question?.content) {
+        logger.debug('Skipping empty question event', { username, overlay_id: overlayId });
+        return;
+      }
+
+      const rawMessage: RawChatMessage = {
+        ...buildQuestionEvent(username, overlayId, {
+          msgId: data.common?.msgId,
+          createTime: question.createTime,
+          questionId: question.questionId,
+          questionText: question.content,
+          askerHandle: tiktokUserHandle(question.user),
+          askerName: question.user?.nickname,
+          askerAvatarUrl: tiktokAvatarUrl(question.user),
+          fallbackNowIso: new Date().toISOString()
+        }),
+        message_id: data.common?.msgId || randomUUID()
+      };
+
+      await this.redis.xAdd('chat:raw', '*', { data: JSON.stringify(rawMessage) }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
+      logger.debug('Published TikTok question event', { username, overlay_id: overlayId });
+    } catch (error) {
+      logger.error('Failed to handle question event', { username, error });
+    }
+  }
+
+  private async handleEmoteChatMessage(username: string, overlayId: string, data: TikTokEmoteChatData): Promise<void> {
+    try {
+      this.heartbeatMonitor.recordMessage(username);
+
+      const list = data.emoteList ?? [];
+      if (list.length === 0) {
+        return;
+      }
+
+      // Reuse the CHAT emote pipeline rather than inventing one: the text is
+      // rebuilt as "[emoteId]" tokens and each token's emote serialized to the
+      // emote_data tag through emote_dataTag, exactly as a native chat message
+      // with embedded emotes would carry them. The normalizer then extracts
+      // them from the tag into unified Emote entries with matcher positions.
+      const tokens = list.map((emote) => `[${emote.emoteId || 'emote'}]`);
+      const text = tokens.join(' ');
+      const views: TikTokChatEmoteView[] = list.map((emote, i) => ({
+        index: text.indexOf(tokens[i]),
+        emote: { emoteId: emote.emoteId, image: emote.image }
+      }));
+      const emoteTag = emotes.emote_dataTag(text, views);
+
+      const msgId = data.common?.msgId;
+      if (this.messageDeduplicator.isDuplicate(msgId, username, text)) {
+        logger.debug('Skipping duplicate emote message', { msg_id: msgId, username });
+        return;
+      }
+      this.heartbeatMonitor.noteSilentFailureHealing(username);
+
+      const rawMessage: RawChatMessage = {
+        message_id: msgId || randomUUID(),
+        platform: 'tiktok',
+        channel_id: username,
+        stream_id: undefined,
+        user_id: tiktokUserHandle(data.user),
+        username: data.user?.nickname || data.user?.displayId || 'Anonymous',
+        text,
+        timestamp: timestampFromCreateTime(data.common?.createTime, { fallbackNowIso: new Date().toISOString() }),
+        tags: {
+          overlay_id: overlayId,
+          user_unique_id: data.user?.displayId || '',
+          profile_picture_url: tiktokAvatarUrl(data.user),
+          is_follower: (data.userIdentity?.isFollowerOfAnchor ?? false).toString(),
+          is_subscriber: (data.userIdentity?.isSubscriberOfAnchor ?? false).toString(),
+          badge_level: '0',
+          native_msg_id: msgId || '',
+          native_create_time: data.common?.createTime || '',
+          ...emoteTag
+        }
+      };
+
+      await this.redis.xAdd('chat:raw', '*', {
+        data: JSON.stringify(rawMessage)
+      }, { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: 100000 } });
+
+      logger.debug('Published TikTok emote chat message', {
+        username,
+        overlay_id: overlayId,
+        emote_count: list.length
+      });
+    } catch (error) {
+      logger.error('Failed to handle emote chat message', { username, error });
     }
   }
 

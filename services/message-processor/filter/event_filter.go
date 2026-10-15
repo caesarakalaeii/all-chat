@@ -205,6 +205,12 @@ func mapEventTypeToColumn(platform, eventType string) string {
 			return "enable_tiktok_shares"
 		case "treasure_chest":
 			return "enable_tiktok_treasure_chests"
+		case "tiktok_subscription":
+			return "enable_tiktok_subscriptions"
+		case "super_fan_join", "super_fan_box":
+			return "enable_tiktok_super_fans"
+		case "question":
+			return "enable_tiktok_questions"
 		default:
 			return ""
 		}

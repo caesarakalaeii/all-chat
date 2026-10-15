@@ -50,6 +50,20 @@ const UNIT_KEYS: Record<string, UnitKeys> = {
     one: 'viewerOverlay.credits.valueDiamondsOne',
     many: 'viewerOverlay.credits.valueDiamondsMany',
   },
+  coins: {
+    one: 'viewerOverlay.credits.valueCoinsOne',
+    many: 'viewerOverlay.credits.valueCoinsMany',
+  },
+  likes: {
+    one: 'viewerOverlay.credits.valueLikesOne',
+    many: 'viewerOverlay.credits.valueLikesMany',
+  },
+  share: {
+    one: 'viewerOverlay.credits.valueSharesOne',
+    many: 'viewerOverlay.credits.valueSharesMany',
+  },
+  // Memberships has no unit on purpose: a YouTube new member and a TikTok Super
+  // Fan count as 1, a member milestone in months, so a summed total means nothing.
 }
 
 const ISO_CURRENCY = /^[A-Z]{3}$/
