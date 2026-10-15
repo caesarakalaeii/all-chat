@@ -216,6 +216,10 @@ export const viewerOverlay = {
     topRaiders: 'Top Raiders',
     topSuperChats: 'Top Super Chats',
     newFollowers: 'New Followers',
+    topMembers: 'Top Members',
+    topCoinChests: 'Top Coin Chests',
+    topSharers: 'Top Sharers',
+    topLikers: 'Top Likers',
 
     // Leaderboard totals, in the unit each event is counted in. English-only
     // pluralisation, so one key per form.
@@ -233,6 +237,12 @@ export const viewerOverlay = {
     valueGiftsMany: '{count} gifts',
     valueDiamondsOne: '{count} diamond',
     valueDiamondsMany: '{count} diamonds',
+    valueCoinsOne: '{count} coin',
+    valueCoinsMany: '{count} coins',
+    valueLikesOne: '{count} like',
+    valueLikesMany: '{count} likes',
+    valueSharesOne: '{count} share',
+    valueSharesMany: '{count} shares',
 
     nowPlaying: 'Now Playing',
     clipViews: '{views} views',
@@ -326,6 +336,9 @@ export const viewerOverlay = {
     eventTiktokFollows: 'TikTok Follows',
     eventTiktokShares: 'TikTok Shares',
     eventTiktokTreasureChests: 'TikTok Coin Chests',
+    eventTiktokSubscriptions: 'TikTok Subs',
+    eventTiktokSuperFans: 'TikTok Super Fans',
+    eventTiktokQuestions: 'TikTok Questions',
     eventTokenWarnings: 'Token Warnings',
   },
 

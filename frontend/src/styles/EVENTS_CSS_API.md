@@ -66,6 +66,10 @@ Applied alongside `.event-message` to identify the specific event type:
 | `.event-type-mystery_gift`             | Gift subscription bomb (multiple gifts at once)     |
 | `.event-type-follow`                   | New follow                                          |
 | `.event-type-like_aggregate`           | TikTok like count milestone                         |
+| `.event-type-tiktok_subscription`      | TikTok LIVE subscription                            |
+| `.event-type-super_fan_join`           | Viewer became a TikTok Super Fan                    |
+| `.event-type-super_fan_box`            | TikTok Super Fan chest of coins                     |
+| `.event-type-question`                 | TikTok LIVE Q&A question                            |
 | `.event-type-member`                   | YouTube membership                                  |
 | `.event-type-watch_streak`             | Twitch watch streak (carries the viewer's message)  |
 | `.event-type-announcement`             | Twitch `/announce` (carries the announcement body)  |

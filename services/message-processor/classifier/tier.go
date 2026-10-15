@@ -268,6 +268,34 @@ func classifyTikTokEvent(eventType string, value *models.EventValue) (tier strin
 			return "low", 10 // <100 coins
 		}
 
+	case "tiktok_subscription":
+		// TikTok LIVE subscriptions: tenure-based like YouTube member milestones.
+		if value != nil && value.Amount >= 24 {
+			return "high", 35 // 2+ years
+		} else if value != nil && value.Amount >= 12 {
+			return "high", 35 // 1+ year
+		} else {
+			return "medium", 15 // <12 months
+		}
+
+	case "super_fan_join":
+		// Super Fan status is a paid membership commitment.
+		return "high", 35
+
+	case "super_fan_box":
+		// Super Fan chests are coin drops: same thresholds as treasure_chest.
+		if value != nil && value.Amount >= 1000 {
+			return "high", 35 // 1000+ coins
+		} else if value != nil && value.Amount >= 100 {
+			return "medium", 20 // 100-999 coins
+		} else {
+			return "low", 10 // <100 coins
+		}
+
+	case "question":
+		// Q&A questions are conversational, not monetary.
+		return "low", 8
+
 	default:
 		return "medium", 15
 	}

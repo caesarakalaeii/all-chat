@@ -77,9 +77,13 @@ const CREDIT_EVENT_TYPES = [
   { key: 'include_gift_subs', messageStem: 'GiftSubs', icon: '🎁' },
   { key: 'include_bits', messageStem: 'Bits', icon: '💎' },
   { key: 'include_raids', messageStem: 'Raids', icon: '⚔️' },
+  { key: 'include_channel_points', messageStem: 'ChannelPoints', icon: '🎯' },
   { key: 'include_super_chats', messageStem: 'SuperChats', icon: '💰' },
   { key: 'include_memberships', messageStem: 'Memberships', icon: '👑' },
   { key: 'include_follows', messageStem: 'Follows', icon: '❤️' },
+  { key: 'include_treasure_chests', messageStem: 'TreasureChests', icon: '🪙' },
+  { key: 'include_shares', messageStem: 'Shares', icon: '🔗' },
+  { key: 'include_likes', messageStem: 'Likes', icon: '👍' },
 ] as const satisfies ReadonlyArray<{
   key: keyof CreditRollConfig
   messageStem: string
@@ -106,10 +110,13 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
     include_gift_subs: true,
     include_bits: true,
     include_raids: true,
-    include_channel_points: false,
+    include_channel_points: true,
     include_super_chats: true,
     include_memberships: true,
     include_follows: true,
+    include_treasure_chests: false,
+    include_shares: false,
+    include_likes: false,
     leaderboard_top_n: 10,
     leaderboard_sort_by: 'value',
     scroll_speed: 50,

@@ -376,6 +376,26 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
               creditData.leaderboards.follows,
               '❤️'
             )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topMembers'),
+              creditData.leaderboards.memberships,
+              '🌟'
+            )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topCoinChests'),
+              creditData.leaderboards.treasure_chests,
+              '🪙'
+            )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topSharers'),
+              creditData.leaderboards.shares,
+              '🔗'
+            )}
+            {renderLeaderboard(
+              t('viewerOverlay.credits.topLikers'),
+              creditData.leaderboards.likes,
+              '👍'
+            )}
           </div>
 
           {/* Now Playing Indicator */}

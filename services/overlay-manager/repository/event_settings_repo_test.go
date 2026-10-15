@@ -95,6 +95,36 @@ func TestEventSettingsSubscribersBackfillsExistingOverlays(t *testing.T) {
 		"existing overlays must come out of migration 098 with YouTube subscriber alerts enabled — the events never reached an overlay before, so enabling them is the fix")
 }
 
+// TestEventSettingsTikTokNewEventsBackfillsExistingOverlays is the same
+// production deploy shape for migration 104: an overlay created before the
+// three TikTok columns exist, the migration applied over it, then a read
+// through the real repository. The SELECT now names the new columns, so a
+// migration without NOT NULL DEFAULT TRUE would surface here as a failed Scan
+// on the existing row, and a missing default as false on first read.
+func TestEventSettingsTikTokNewEventsBackfillsExistingOverlays(t *testing.T) {
+	pool, cleanup := setupEventSettingsTestDB(t)
+	defer cleanup()
+
+	before, fromTikTokNewEvents := splitAtMigrations(t, loadUpMigrations(t), "104_tiktok_new_events_event_settings.sql")
+	runMigrations(t, pool, before)
+
+	overlayID := seedOverlayWithEventSettings(t, pool, "tiktok_new_events_backfill_canary")
+
+	runMigrations(t, pool, fromTikTokNewEvents)
+
+	repo := NewEventSettingsRepositoryFromPool(pool)
+	settings, err := repo.GetByOverlayID(context.Background(), overlayID)
+	require.NoError(t, err)
+	require.NotNil(t, settings)
+
+	assert.True(t, settings.EnableTikTokSubscriptions,
+		"existing overlays must come out of migration 104 with TikTok subscriptions enabled — the events never reached an overlay before, so enabling them is the fix")
+	assert.True(t, settings.EnableTikTokSuperFans,
+		"existing overlays must come out of migration 104 with TikTok Super Fan events enabled")
+	assert.True(t, settings.EnableTikTokQuestions,
+		"existing overlays must come out of migration 104 with TikTok questions enabled")
+}
+
 // TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned is the guard for
 // the placeholder renumbering that inserting a column into the middle of the
 // UPDATE requires (084 treasure chests, 098 YouTube subscribers): a shifted $N
@@ -137,6 +167,9 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 	settings.EnableTikTokFollows = false
 	settings.EnableTikTokShares = true
 	settings.EnableTikTokTreasureChests = false
+	settings.EnableTikTokSubscriptions = true
+	settings.EnableTikTokSuperFans = false
+	settings.EnableTikTokQuestions = true
 	settings.EnableTokenWarnings = true
 	settings.TikTokLikeAggregationWindowSeconds = 45
 	settings.EventDisplayDurationMultiplier = 2.5
@@ -172,13 +205,18 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 		&reloaded.EnableYouTubeSubscribers,
 		&reloaded.EnableKickSubs, &reloaded.EnableKickGifts,
 		&reloaded.EnableTikTokLikes, &reloaded.EnableTikTokGifts, &reloaded.EnableTikTokFollows,
-		&reloaded.EnableTikTokShares, &reloaded.EnableTikTokTreasureChests, &reloaded.EnableTokenWarnings,
+		&reloaded.EnableTikTokShares, &reloaded.EnableTikTokTreasureChests,
+		&reloaded.EnableTikTokSubscriptions, &reloaded.EnableTikTokSuperFans, &reloaded.EnableTikTokQuestions,
+		&reloaded.EnableTokenWarnings,
 	} {
 		*enable = true
 	}
 	require.NoError(t, repo.Update(ctx, reloaded))
 
 	reloaded.EnableTikTokTreasureChests = false
+	reloaded.EnableTikTokSubscriptions = false
+	reloaded.EnableTikTokSuperFans = false
+	reloaded.EnableTikTokQuestions = false
 	require.NoError(t, repo.Update(ctx, reloaded))
 
 	final, err := repo.GetByOverlayID(ctx, overlayID)
@@ -186,8 +224,8 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 	require.NotNil(t, final)
 
 	for column, enabled := range eventToggles(final) {
-		if column == "enable_tiktok_treasure_chests" {
-			assert.False(t, enabled, "disabling coin chests did not stick")
+		if column == "enable_tiktok_treasure_chests" || column == "enable_tiktok_subscriptions" ||
+			column == "enable_tiktok_super_fans" || column == "enable_tiktok_questions" {
 			continue
 		}
 		assert.True(t, enabled, "disabling coin chests also turned off %s", column)
@@ -220,6 +258,9 @@ func eventToggles(s *models.EventSettings) map[string]bool {
 		"enable_tiktok_follows":            s.EnableTikTokFollows,
 		"enable_tiktok_shares":             s.EnableTikTokShares,
 		"enable_tiktok_treasure_chests":    s.EnableTikTokTreasureChests,
+		"enable_tiktok_subscriptions":      s.EnableTikTokSubscriptions,
+		"enable_tiktok_super_fans":         s.EnableTikTokSuperFans,
+		"enable_tiktok_questions":          s.EnableTikTokQuestions,
 		"enable_token_warnings":            s.EnableTokenWarnings,
 	}
 }

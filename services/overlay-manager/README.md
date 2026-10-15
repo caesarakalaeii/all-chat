@@ -320,6 +320,8 @@ CREATE TABLE overlay_chat_sources (
 
 ### credit_roll_configs Table
 
+Each `include_*` column toggles one leaderboard category; `aggregateLeaderboards` skips disabled categories. `include_treasure_chests`, `include_shares` and `include_likes` were added (migration 105) as opt-in (default false) so existing credit rolls do not change when the new boards ship.
+
 ```sql
 CREATE TABLE credit_roll_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
