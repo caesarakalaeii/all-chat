@@ -335,6 +335,23 @@ func main() {
 				successCount++
 			}
 
+			// Bits Power-ups (celebrations, message effects, gigantified emotes, custom) - only
+			// delivered on channel.bits.use; same bits:read grant as cheers
+			if _, err := subscriptionMgr.SubscribeToBitsUse(ctx, broadcasterID); err != nil {
+				if strings.Contains(err.Error(), "subscription already exists") {
+					successCount++
+				} else if isScopeError(err) {
+					log.Info("Bits use event requires re-authentication with bits:read scope",
+						zap.String("broadcaster_id", broadcasterID))
+					scopeErrorCount++
+				} else {
+					log.Warn("Failed to subscribe to bits use", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				successCount++
+			}
+
 			// Follows - uses app access token with special condition
 			if _, err := subscriptionMgr.SubscribeToFollows(ctx, broadcasterID); err != nil {
 				if strings.Contains(err.Error(), "subscription already exists") {

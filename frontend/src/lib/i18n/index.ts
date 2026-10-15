@@ -71,6 +71,7 @@ export {
   DATE_ONLY,
   TIMESTAMP,
   TIME_ONLY,
+  formatCurrency,
   formatDate,
   formatDateTime,
   formatNumber,

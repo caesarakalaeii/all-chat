@@ -40,6 +40,7 @@ import clsx from 'clsx'
 import Script from 'next/script'
 import { type TFunction, formatDate, formatNumber, useTranslations } from '@/lib/i18n'
 import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay'
+import { creditRollValue } from '@/lib/utils/creditRollValue'
 
 // Decoration: the warning triangle sits above copy naming the failure, and the
 // film clapper and camera each precede a heading that says the same in words.
@@ -226,11 +227,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
                 <div className="text-xl font-semibold text-white">{entry.display_name}</div>
                 <div className="text-sm text-slate-400 capitalize">{entry.platform}</div>
               </div>
-              <div className="text-2xl font-bold text-white">
-                {entry.total_value !== undefined && entry.total_value > 0
-                  ? `$${entry.total_value.toFixed(2)}`
-                  : entry.count || ''}
-              </div>
+              <div className="text-2xl font-bold text-white">{creditRollValue(t, entry)}</div>
             </div>
           ))}
         </div>

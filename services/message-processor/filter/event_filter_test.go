@@ -43,6 +43,7 @@ func TestMapEventTypeToColumn_Twitch(t *testing.T) {
 		// conversions ride the gift-sub toggle; the rest are chat content, never toggleable.
 		{"watch_streak", "enable_twitch_watch_streaks"},
 		{"bits_badge_tier", "enable_twitch_bits"},
+		{"power_up", "enable_twitch_bits"},
 		{"gift_paid_upgrade", "enable_twitch_gift_subs"},
 		{"prime_paid_upgrade", "enable_twitch_gift_subs"},
 		{"pay_it_forward", "enable_twitch_gift_subs"},

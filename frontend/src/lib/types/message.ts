@@ -35,6 +35,9 @@ export type EventType =
   | 'raid'
   | 'channel_points'
   | 'ritual'
+  // Bits Power-ups (channel.bits.use): celebrations, message effects, gigantified
+  // emotes and custom Power-ups. metadata.power_up_type names which one.
+  | 'power_up'
   // Twitch chat notices (channel.chat.notification, ADR-0046). watch_streak and
   // announcement carry the chatter's own message text in message.text.
   | 'watch_streak'

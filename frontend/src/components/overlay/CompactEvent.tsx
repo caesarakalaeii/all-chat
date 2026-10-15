@@ -35,6 +35,7 @@ const EVENT_TITLE: Partial<Record<EventType, string>> = {
   watch_streak: 'Watch Streak',
   announcement: 'Announcement',
   bits_badge_tier: 'Bits Badge',
+  power_up: 'Power-up',
   unraid: 'Raid Cancelled',
   modiversary: 'Modiversary',
   charity_donation: 'Charity',

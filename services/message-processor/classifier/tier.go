@@ -67,8 +67,8 @@ func classifyTwitchEvent(eventType string, value *models.EventValue) (tier strin
 			return "medium", 20 // Small raid (<100 viewers)
 		}
 
-	case "bits":
-		// Bits: tier based on amount
+	case "bits", "power_up":
+		// Bits and Power-ups: tier based on bits spent
 		if value != nil && value.Amount >= 1000 {
 			return "high", 35 // 1000+ bits
 		} else if value != nil && value.Amount >= 100 {

@@ -18,6 +18,7 @@ package normalizer
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"strconv"
@@ -519,17 +520,12 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 		}
 
 	case "bits":
-		badgeTier := 0
-		if b, ok := raw.EventData["badge_tier"].(int); ok {
-			badgeTier = b
-		} else if b, ok := raw.EventData["badge_tier"].(float64); ok {
-			badgeTier = int(b)
-		}
-
+		// Cheers from channel.cheer carry the amount in EventData["bits"].
+		bits := eventDataInt(raw.EventData, "bits")
 		eventValue = &models.EventValue{
-			Amount:      float64(badgeTier),
+			Amount:      float64(bits),
 			Currency:    "bits",
-			DisplayText: fmt.Sprintf("%d bits", badgeTier),
+			DisplayText: fmt.Sprintf("%d bits", bits),
 		}
 
 	case "channel_points":
@@ -547,7 +543,7 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 		eventValue = &models.EventValue{
 			Amount:      float64(cost),
 			Currency:    "points",
-			DisplayText: fmt.Sprintf("%s (%d points)", title, cost),
+			DisplayText: channelPointsDisplayText(title, cost, "points"),
 		}
 
 	case "watch_streak":
@@ -567,6 +563,16 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 			Amount:      float64(tier),
 			Currency:    "bits_badge",
 			DisplayText: fmt.Sprintf("%s-bit badge", formatThousands(tier)),
+		}
+
+	case "power_up":
+		// Bits spent on a Power-up. The pill names the Power-up; the bits count is rendered from
+		// EventData["bits"] as metadata, so it is not repeated in the pill.
+		bits := eventDataInt(raw.EventData, "bits")
+		eventValue = &models.EventValue{
+			Amount:      float64(bits),
+			Currency:    "bits",
+			DisplayText: powerUpDisplayText(raw.EventData),
 		}
 
 	case "modiversary":
@@ -673,6 +679,54 @@ func formatThousands(n int) string {
 		b.WriteString(s[i : i+3])
 	}
 	return b.String()
+}
+
+// channelPointsDisplayText is the value pill of a redemption: "Hydrate (500 points)".
+func channelPointsDisplayText(title string, cost int, unit string) string {
+	return fmt.Sprintf("%s (%d %s)", title, cost, unit)
+}
+
+// ApplyChannelPointsName relabels a channel-points event with the name the streamer gives their
+// points ("Hydrate (500 Kappa Coins)") and records it as Event.Metadata["points_name"] for the
+// credit roll. Event.Metadata is the listener's EventData map, shared by every overlay the
+// message fans out to, so it is copied rather than written to.
+func ApplyChannelPointsName(msg *models.UnifiedChatMessage, name string) {
+	if name == "" || msg.Event == nil || msg.Event.Type != "channel_points" || msg.Event.Value == nil {
+		return
+	}
+	title, _ := msg.Event.Metadata["reward_title"].(string)
+	if title == "" {
+		title = "Reward"
+	}
+	metadata := make(map[string]interface{}, len(msg.Event.Metadata)+1)
+	maps.Copy(metadata, msg.Event.Metadata)
+	metadata["points_name"] = name
+	msg.Event.Metadata = metadata
+	msg.Event.Value.DisplayText = channelPointsDisplayText(title, int(msg.Event.Value.Amount), name)
+}
+
+// powerUpDisplayText names a Power-up the way Twitch labels it in the Bits menu.
+func powerUpDisplayText(data map[string]interface{}) string {
+	powerUpType, _ := data["power_up_type"].(string)
+	name, _ := data["power_up_name"].(string)
+	switch powerUpType {
+	case "celebration":
+		return "On-Screen Celebration"
+	case "message_effect":
+		return "Message Effect"
+	case "gigantify_an_emote":
+		if name != "" {
+			return "Gigantified " + name
+		}
+		return "Gigantified Emote"
+	case "custom":
+		if name != "" {
+			return name
+		}
+		return "Custom Power-up"
+	default:
+		return "Power-up"
+	}
 }
 
 // eventDataInt reads a numeric EventData field. Values survive a JSON round-trip through the

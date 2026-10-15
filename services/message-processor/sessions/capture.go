@@ -199,6 +199,9 @@ func (ec *EventCapture) storeEvent(ctx context.Context, sessionID string, msg *m
 		if viewerCount, ok := msg.Event.Metadata["viewer_count"].(int); ok {
 			meta["viewer_count"] = viewerCount
 		}
+		if pointsName, ok := msg.Event.Metadata["points_name"].(string); ok {
+			meta["points_name"] = pointsName
+		}
 	}
 
 	metaJSON, err := json.Marshal(meta)

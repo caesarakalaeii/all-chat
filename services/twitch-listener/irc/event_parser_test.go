@@ -51,7 +51,7 @@ func TestParseUserNotice_EventSubCoveredMsgIDsAreSkipped(t *testing.T) {
 	}
 }
 
-func TestParseUserNotice_Bits(t *testing.T) {
+func TestParseUserNotice_BitsBadgeTier(t *testing.T) {
 	parser := NewParser()
 
 	msg := twitch.UserNoticeMessage{
@@ -72,7 +72,7 @@ func TestParseUserNotice_Bits(t *testing.T) {
 	rawMsg, err := parser.ParseUserNotice(msg)
 	require.NoError(t, err)
 
-	assert.Equal(t, "bits", rawMsg.EventType)
+	assert.Equal(t, "bits_badge_tier", rawMsg.EventType)
 	assert.Equal(t, 10000, rawMsg.EventData["badge_tier"])
 }
 
@@ -155,7 +155,7 @@ func TestMapMsgIDToEventType(t *testing.T) {
 		{"submysterygift", "mystery_gift"},
 		{"raid", "raid"},
 		{"unraid", "unraid"},
-		{"bitsbadgetier", "bits"},
+		{"bitsbadgetier", "bits_badge_tier"},
 		{"ritual", "ritual"},
 		{"unknown", "unknown"},
 	}

@@ -121,6 +121,7 @@ const EVENT_TYPES_BY_PLATFORM = [
       'watch_streak',
       'announcement',
       'bits_badge_tier',
+      'power_up',
       'unraid',
       'modiversary',
       'charity_donation',

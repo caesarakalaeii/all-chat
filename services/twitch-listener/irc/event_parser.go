@@ -148,7 +148,8 @@ func mapMsgIDToEventType(msgID string) string {
 	case "ritual":
 		return "ritual"
 	case "bitsbadgetier":
-		return "bits"
+		// A badge unlock, not a cheer; same event type EventSub uses (ADR-0046).
+		return "bits_badge_tier"
 	default:
 		return "unknown"
 	}

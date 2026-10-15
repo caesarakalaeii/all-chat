@@ -133,6 +133,8 @@ export interface EventSettings {
   enable_twitch_channel_points: boolean
   enable_twitch_follows: boolean
   enable_twitch_watch_streaks: boolean
+  // What the streamer calls their channel points; '' means "points"
+  twitch_channel_points_name: string
   // YouTube
   enable_youtube_super_chat: boolean
   enable_youtube_super_sticker: boolean
@@ -378,7 +380,6 @@ export interface LeaderboardEntry {
   display_name: string
   avatar_url: string
   platform: string
-  count?: number
   total_value?: number
   metadata?: Record<string, any>
 }

@@ -520,6 +520,8 @@ func (h *Handler) routeEvent(ctx context.Context, subscriptionType string, event
 		return h.handleRaid(ctx, eventData)
 	case "channel.cheer":
 		return h.handleCheer(ctx, eventData, messageID)
+	case "channel.bits.use":
+		return h.handleBitsUse(ctx, eventData)
 	case "channel.follow":
 		return h.handleFollow(ctx, eventData)
 	case "channel.moderate":
@@ -854,6 +856,62 @@ func (h *Handler) handleCheer(ctx context.Context, eventData json.RawMessage, me
 	}
 
 	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// handleBitsUse publishes Power-up uses from channel.bits.use. Cheers also arrive here but are
+// skipped: channel.cheer already delivers them, and publishing both would double every cheer.
+func (h *Handler) handleBitsUse(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.BitsUseEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal channel.bits.use: %w", err)
+	}
+	rawMsg := buildPowerUp(&event)
+	if rawMsg == nil {
+		return nil
+	}
+	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// buildPowerUp maps a Power-up Bits use to a "power_up" event, or nil for anything else.
+//
+// Message effects and gigantified emotes also arrive as a chat message (channel.chat.message with
+// message_type power_ups_*), so their text is left off the event to keep the overlay from showing
+// it twice. Celebrations and custom Power-ups have no such chat line, so their message is kept.
+func buildPowerUp(e *eventsub.BitsUseEvent) *models.RawChatMessage {
+	var powerUpType, name string
+	switch {
+	case e.Type == "power_up" && e.PowerUp != nil:
+		powerUpType = e.PowerUp.Type
+		if e.PowerUp.Emote != nil {
+			name = e.PowerUp.Emote.Name
+		}
+	case e.Type == "custom_power_up" && e.CustomPowerUp != nil:
+		powerUpType = "custom"
+		name = e.CustomPowerUp.Title
+	default:
+		return nil
+	}
+
+	text := ""
+	if e.Message != nil && powerUpType != "message_effect" && powerUpType != "gigantify_an_emote" {
+		text = e.Message.Text
+	}
+
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: strings.ToLower(e.BroadcasterUserLogin),
+		UserID:    e.UserID,
+		Username:  strings.ToLower(e.UserLogin),
+		Text:      text,
+		Timestamp: time.Now().UTC(),
+		EventType: "power_up",
+		EventData: map[string]interface{}{
+			"bits":          e.Bits,
+			"power_up_type": powerUpType,
+			"power_up_name": name,
+		},
+	}
 }
 
 // handleFollow processes follow events

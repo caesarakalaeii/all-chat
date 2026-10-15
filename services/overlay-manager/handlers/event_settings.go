@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
@@ -111,6 +112,7 @@ func (h *EventSettingsHandler) HandleUpdateEventSettings(c *gin.Context) {
 	// Update settings (keep overlay_id and id from existing)
 	req.ID = settings.ID
 	req.OverlayID = settings.OverlayID
+	req.TwitchChannelPointsName = strings.TrimSpace(req.TwitchChannelPointsName)
 
 	// Update in database
 	if err := h.repo.Update(c.Request.Context(), &req); err != nil {

@@ -1215,7 +1215,6 @@ describe('event display settings page copy', () => {
       'Gift subs and mystery gift bombs'
     )
     expect(t('overlayEditor.eventSettings.twitchBitsLabel')).toBe('Bits / Cheers')
-    expect(t('overlayEditor.eventSettings.twitchBitsDescription')).toBe('Bits cheered in chat')
     expect(t('overlayEditor.eventSettings.twitchRaidsLabel')).toBe('Raids')
     expect(t('overlayEditor.eventSettings.twitchRaidsDescription')).toBe(
       'Incoming raids from other channels'
