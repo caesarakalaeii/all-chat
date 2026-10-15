@@ -592,7 +592,7 @@ export class ViewerPool {
 
   /**
    * Run a callback with a fresh page on the first available lane's browser
-   * (warm-curator discovery: one navigation of the public live feed, no
+   * (warm-curator discovery: one navigation of the public live feed (fonts allowed), no
    * im/fetch tap, no tab registration). The page carries the lane's UA,
    * request blocking and proxy auth, so the navigation reads exactly like
    * a capture's page to TikTok. Closes the page after; the lane keeps its
@@ -608,7 +608,9 @@ export class ViewerPool {
       } catch {
         continue;
       }
-      const page = await this.newLanePage(lane, browser);
+      // Fonts allowed: the /live feed renders zero room links without them
+      // (measured in-pod 2026-10-15: 0 links blocked, 33 allowed).
+      const page = await this.newLanePage(lane, browser, { allowFonts: true });
       try {
         return await run(page);
       } finally {
@@ -879,7 +881,11 @@ export class ViewerPool {
   }
 
   /** New page configured for this lane: UA, request blocking, proxy auth. */
-  private async newLanePage(lane: ProxyLane, browser: Browser): Promise<Page> {
+  private async newLanePage(
+    lane: ProxyLane,
+    browser: Browser,
+    { allowFonts = false }: { allowFonts?: boolean } = {}
+  ): Promise<Page> {
     const page = await browser.newPage();
     await page.setUserAgent(VIEWER_UA);
     // The tab must not stream the video: with a residential proxy wired
@@ -898,7 +904,7 @@ export class ViewerPool {
     await page.setRequestInterception(true);
     page.on('request', (request) => {
       const type = request.resourceType();
-      if (type === 'media' || type === 'font' || type === 'image') {
+      if (type === 'media' || (type === 'font' && !allowFonts) || type === 'image') {
         void request.abort().catch(() => undefined);
         return;
       }
