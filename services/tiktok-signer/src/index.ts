@@ -213,7 +213,7 @@ if (viewer && warmRoomSet.size > 0 && tabRecycleHours > 0) {
   }).start();
 }
 
-const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, warmRooms: warmRoomSet, logger });
+const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, warmRooms: warmRoomSet, onNoSession: () => { void curator?.nudge(); }, logger });
 
 server.listen(PORT, () => {
   logger.info('tiktok-signer listening', { port: PORT });

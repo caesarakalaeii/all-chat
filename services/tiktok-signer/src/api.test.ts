@@ -320,6 +320,53 @@ describe('GET /v1/session', () => {
     });
   });
 
+  it('shares one lease resolution between concurrent requests', async () => {
+    // 2026-10-15: parallel lease requests each cold-captured the same room
+    // (two captures of one room within 200ms), tripling the failures that
+    // rotated the lane profile three times in a minute.
+    const { viewer, calls } = stubbedViewer({
+      leases: {},
+      hasTabs: { rooma: false },
+      captures: { rooma: { lease: lease() } }
+    });
+    const capture = viewer.captureRoom.bind(viewer);
+    viewer.captureRoom = async (room: string) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return capture(room);
+    };
+    await withServer({ viewer, warmRooms: ['rooma'], warmRoomIsLive: async () => true }, async (base) => {
+      const results = await Promise.all([getJson(base, '/v1/session'), getJson(base, '/v1/session')]);
+      expect(results.map((r) => r.status)).toEqual([200, 200]);
+      expect(calls.captures).toEqual(['rooma']);
+    });
+  });
+
+  it('caches the liveness probe across lease requests', async () => {
+    const { viewer } = stubbedViewer({ leases: {}, hasTabs: { rooma: false } });
+    let probes = 0;
+    const warmRoomIsLive = async () => {
+      probes++;
+      return false;
+    };
+    await withServer({ viewer, warmRooms: ['rooma'], warmRoomIsLive }, async (base) => {
+      expect((await getJson(base, '/v1/session')).status).toBe(503);
+      expect((await getJson(base, '/v1/session')).status).toBe(503);
+    });
+    expect(probes).toBe(1);
+  });
+
+  it('nudges the curator when no lease can be served', async () => {
+    const { viewer } = stubbedViewer({ leases: {}, hasTabs: { rooma: false } });
+    let nudges = 0;
+    await withServer(
+      { viewer, warmRooms: ['rooma'], warmRoomIsLive: async () => false, onNoSession: () => nudges++ },
+      async (base) => {
+        expect((await getJson(base, '/v1/session')).status).toBe(503);
+      }
+    );
+    expect(nudges).toBe(1);
+  });
+
   it('captures a tab-less room when no warm lease serves', async () => {
     const { viewer, calls } = stubbedViewer({
       leases: {},
