@@ -32,10 +32,16 @@ import { formatDateTime } from '@/lib/i18n'
 import TiktokSignServer, {
   meta as tiktokSignServerMeta,
 } from './tiktok-live-chat-without-a-sign-server'
+import TwitchChatWentQuiet, {
+  meta as twitchChatWentQuietMeta,
+} from './twitch-chat-went-quiet-without-an-error'
 import type { BlogPost } from './types'
 
 /** Newest first. */
-export const POSTS: readonly BlogPost[] = [{ meta: tiktokSignServerMeta, Body: TiktokSignServer }]
+export const POSTS: readonly BlogPost[] = [
+  { meta: twitchChatWentQuietMeta, Body: TwitchChatWentQuiet },
+  { meta: tiktokSignServerMeta, Body: TiktokSignServer },
+]
 
 export function findPost(slug: string): BlogPost | undefined {
   return POSTS.find((p) => p.meta.slug === slug)
