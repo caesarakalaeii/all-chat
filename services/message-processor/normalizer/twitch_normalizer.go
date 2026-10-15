@@ -18,6 +18,7 @@ package normalizer
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"strconv"
@@ -542,7 +543,7 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 		eventValue = &models.EventValue{
 			Amount:      float64(cost),
 			Currency:    "points",
-			DisplayText: fmt.Sprintf("%s (%d points)", title, cost),
+			DisplayText: channelPointsDisplayText(title, cost, "points"),
 		}
 
 	case "watch_streak":
@@ -678,6 +679,30 @@ func formatThousands(n int) string {
 		b.WriteString(s[i : i+3])
 	}
 	return b.String()
+}
+
+// channelPointsDisplayText is the value pill of a redemption: "Hydrate (500 points)".
+func channelPointsDisplayText(title string, cost int, unit string) string {
+	return fmt.Sprintf("%s (%d %s)", title, cost, unit)
+}
+
+// ApplyChannelPointsName relabels a channel-points event with the name the streamer gives their
+// points ("Hydrate (500 Kappa Coins)") and records it as Event.Metadata["points_name"] for the
+// credit roll. Event.Metadata is the listener's EventData map, shared by every overlay the
+// message fans out to, so it is copied rather than written to.
+func ApplyChannelPointsName(msg *models.UnifiedChatMessage, name string) {
+	if name == "" || msg.Event == nil || msg.Event.Type != "channel_points" || msg.Event.Value == nil {
+		return
+	}
+	title, _ := msg.Event.Metadata["reward_title"].(string)
+	if title == "" {
+		title = "Reward"
+	}
+	metadata := make(map[string]interface{}, len(msg.Event.Metadata)+1)
+	maps.Copy(metadata, msg.Event.Metadata)
+	metadata["points_name"] = name
+	msg.Event.Metadata = metadata
+	msg.Event.Value.DisplayText = channelPointsDisplayText(title, int(msg.Event.Value.Amount), name)
 }
 
 // powerUpDisplayText names a Power-up the way Twitch labels it in the Bits menu.

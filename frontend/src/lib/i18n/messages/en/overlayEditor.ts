@@ -829,6 +829,10 @@ export const overlayEditor = {
     twitchWatchStreaksLabel: 'Watch Streaks',
     twitchWatchStreaksDescription:
       "Returning viewers' watch-streak milestones. Turning this off hides the milestone only — their chat message still shows",
+    twitchChannelPointsNameLabel: 'Channel Points Name',
+    twitchChannelPointsNameDescription:
+      'What you call your channel points, shown on redemptions and in the credit roll. Twitch does not share this name, so enter it here. Leave empty for "points"',
+    twitchChannelPointsNamePlaceholder: 'points',
     youtubeSuperChatLabel: 'Super Chat',
     youtubeSuperChatDescription: 'Paid Super Chat messages',
     youtubeSuperStickerLabel: 'Super Stickers',

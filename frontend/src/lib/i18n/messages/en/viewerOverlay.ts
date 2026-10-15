@@ -227,6 +227,8 @@ export const viewerOverlay = {
     valueViewersMany: '{count} viewers',
     valuePointsOne: '{count} point',
     valuePointsMany: '{count} points',
+    // A streamer-chosen name for their channel points ("Kappa Coins"), used as-is.
+    valuePointsNamed: '{count} {name}',
     valueGiftsOne: '{count} gift',
     valueGiftsMany: '{count} gifts',
     valueDiamondsOne: '{count} diamond',

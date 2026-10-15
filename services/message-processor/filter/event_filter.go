@@ -18,9 +18,11 @@ package filter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -108,6 +110,20 @@ func (f *EventFilter) IsEventEnabled(ctx context.Context, overlayID, platform, e
 	}
 
 	return enabled, nil
+}
+
+// ChannelPointsName returns what the streamer calls their Twitch channel points on this overlay,
+// or "" when unset (or the overlay has no settings row), meaning the default "points".
+func (f *EventFilter) ChannelPointsName(ctx context.Context, overlayID string) (string, error) {
+	var name string
+	err := f.db.QueryRow(ctx,
+		`SELECT twitch_channel_points_name FROM overlay_event_settings WHERE overlay_id = $1`,
+		overlayID,
+	).Scan(&name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	}
+	return name, err
 }
 
 // mapEventTypeToColumn converts a platform + event type to database column name

@@ -140,6 +140,7 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 	settings.EnableTokenWarnings = true
 	settings.TikTokLikeAggregationWindowSeconds = 45
 	settings.EventDisplayDurationMultiplier = 2.5
+	settings.TwitchChannelPointsName = "Kappa Coins"
 
 	// Snapshot the INTENDED values first: Update overwrites *settings from the
 	// RETURNING row, so comparing against it afterwards would compare the
@@ -150,6 +151,7 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 	assert.Equal(t, want, eventToggles(settings), "RETURNING row disagrees with the values that were written")
 	assert.Equal(t, 45, settings.TikTokLikeAggregationWindowSeconds)
 	assert.InDelta(t, 2.5, settings.EventDisplayDurationMultiplier, 0.0001)
+	assert.Equal(t, "Kappa Coins", settings.TwitchChannelPointsName)
 
 	reloaded, err := repo.GetByOverlayID(ctx, overlayID)
 	require.NoError(t, err)
@@ -157,6 +159,7 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 	assert.Equal(t, want, eventToggles(reloaded), "re-read row disagrees with the values that were written")
 	assert.Equal(t, 45, reloaded.TikTokLikeAggregationWindowSeconds)
 	assert.InDelta(t, 2.5, reloaded.EventDisplayDurationMultiplier, 0.0001)
+	assert.Equal(t, "Kappa Coins", reloaded.TwitchChannelPointsName)
 
 	// The product case: a streamer turns coin chests off on a busy overlay and
 	// nothing else may move with it.

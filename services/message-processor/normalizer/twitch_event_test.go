@@ -392,6 +392,35 @@ func TestNormalizeEvent_TwitchPowerUp(t *testing.T) {
 	}
 }
 
+// The streamer's name for their points replaces "points" in the redemption text, and is recorded
+// for the credit roll without leaking into the overlays the same raw message also fans out to.
+func TestApplyChannelPointsName(t *testing.T) {
+	normalizer := NewTwitchNormalizer()
+	raw := &models.RawChatMessage{
+		MessageID: "test-msg-points",
+		Platform:  "twitch",
+		ChannelID: "streamer",
+		Username:  "viewer",
+		Timestamp: time.Now(),
+		EventType: "channel_points",
+		EventData: map[string]interface{}{"reward_title": "Hydrate", "reward_cost": float64(500)},
+	}
+
+	named, err := normalizer.NormalizeEvent(raw, "overlay-named")
+	require.NoError(t, err)
+	ApplyChannelPointsName(named, "Kappa Coins")
+	assert.Equal(t, "Hydrate (500 Kappa Coins)", named.Event.Value.DisplayText)
+	assert.Equal(t, "Kappa Coins", named.Event.Metadata["points_name"])
+
+	// Same raw message, second overlay with no name set.
+	plain, err := normalizer.NormalizeEvent(raw, "overlay-plain")
+	require.NoError(t, err)
+	ApplyChannelPointsName(plain, "")
+	assert.Equal(t, "Hydrate (500 points)", plain.Event.Value.DisplayText)
+	assert.NotContains(t, plain.Event.Metadata, "points_name", "the first overlay's name leaked through the shared EventData map")
+	assert.NotContains(t, raw.EventData, "points_name")
+}
+
 func TestFormatThousands(t *testing.T) {
 	tests := []struct {
 		in   int

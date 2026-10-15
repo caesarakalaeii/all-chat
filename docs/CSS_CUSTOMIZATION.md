@@ -986,7 +986,7 @@ All-Chat supports displaying platform events (subscriptions, donations, raids, c
 ### What Are Events?
 
 Events are special messages that appear in your overlay when viewers:
-- **Twitch**: Subscribe, gift subs, raid, cheer bits, redeem channel points
+- **Twitch**: Subscribe, gift subs, raid, cheer bits, use Bits Power-ups, redeem channel points
 - **YouTube**: Send Super Chats, buy memberships, celebrate milestones
 - **TikTok**: Send gifts, follow, like, share
 - **Kick**: Subscribe, send gifts/donations
@@ -1103,6 +1103,7 @@ flattening events into ordinary chat rows are in
 | `.event-type-gift_subscription` | Twitch gift sub events | Gift subs and mystery gifts |
 | `.event-type-raid` | Twitch raid events | Incoming raids |
 | `.event-type-bits` | Twitch bits events | Bit cheers |
+| `.event-type-power_up` | Twitch Bits Power-ups | On-Screen Celebrations, Message Effects, Gigantified Emotes, custom Power-ups |
 | `.event-type-channel_points` | Twitch channel points | Point redemptions |
 | `.event-type-super_chat` | YouTube Super Chat | Paid messages |
 | `.event-type-super_sticker` | YouTube Super Stickers | Paid stickers |
@@ -1833,7 +1834,7 @@ Events can be configured per-overlay at `/overlays/{id}/events`:
 - Event display duration multiplier (0.1-5.0x)
 
 **Platform-Specific Controls:**
-- **Twitch**: Subs, resubs, gift subs, bits, raids, channel points
+- **Twitch**: Subs, resubs, gift subs, bits (incl. Power-ups), raids, channel points, and the name you give your channel points
 - **YouTube**: Super Chats, Super Stickers, members, milestones, gifts
 - **TikTok**: Gifts, follows, likes, shares
 - **Kick**: Coming soon

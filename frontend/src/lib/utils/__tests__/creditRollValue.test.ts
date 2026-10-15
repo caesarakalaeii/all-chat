@@ -47,6 +47,20 @@ describe('creditRollValue', () => {
     expect(creditRollValue(t, entry(5, 'gifts'))).toBe('5 gifts')
   })
 
+  it("uses the streamer's own name for their channel points", () => {
+    const named = {
+      ...entry(5000, 'points'),
+      metadata: { currency: 'points', points_name: 'Kappa Coins' },
+    }
+    expect(creditRollValue(t, named)).toBe('5,000 Kappa Coins')
+    // Only channel points are renamed, even if the field rides along on another entry.
+    const bits = {
+      ...entry(500, 'bits'),
+      metadata: { currency: 'bits', points_name: 'Kappa Coins' },
+    }
+    expect(creditRollValue(t, bits)).toBe('500 bits')
+  })
+
   it('uses the singular for exactly one', () => {
     expect(creditRollValue(t, entry(1, 'bits'))).toBe('1 bit')
     expect(creditRollValue(t, entry(1, 'months'))).toBe('1 month')

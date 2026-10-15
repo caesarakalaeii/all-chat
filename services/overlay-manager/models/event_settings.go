@@ -37,6 +37,9 @@ type EventSettings struct {
 	// Watch streaks arrive on channel.chat.notification and carry the viewer's own chat message
 	// (ADR-0046); they fire once per returning viewer per stream, hence a dedicated toggle.
 	EnableTwitchWatchStreaks bool `json:"enable_twitch_watch_streaks" db:"enable_twitch_watch_streaks"`
+	// What the streamer calls their channel points ("Kappa Coins"). Twitch exposes no API for
+	// it, so it is entered here; empty renders as "points".
+	TwitchChannelPointsName string `json:"twitch_channel_points_name" db:"twitch_channel_points_name" binding:"max=50"`
 
 	// YouTube Events
 	EnableYouTubeSuperChat        bool `json:"enable_youtube_super_chat" db:"enable_youtube_super_chat"`

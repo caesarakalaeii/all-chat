@@ -55,7 +55,8 @@ const UNIT_KEYS: Record<string, UnitKeys> = {
 const ISO_CURRENCY = /^[A-Z]{3}$/
 
 /**
- * A leaderboard entry's total in its own unit: "500 bits", "3 months", "€12.34".
+ * A leaderboard entry's total in its own unit: "500 bits", "3 months", "€12.34",
+ * or channel points under the streamer's own name ("5,000 Kappa Coins").
  * Only an ISO currency code renders as money. Empty when there is nothing
  * meaningful to show (no total yet, or a count-only event such as a follow).
  */
@@ -63,6 +64,13 @@ export function creditRollValue(t: TFunction, entry: LeaderboardEntry): string {
   const value = entry.total_value ?? 0
   if (value <= 0) return ''
   const currency = typeof entry.metadata?.currency === 'string' ? entry.metadata.currency : ''
+  const pointsName = entry.metadata?.points_name
+  if (currency === 'points' && typeof pointsName === 'string' && pointsName) {
+    return t('viewerOverlay.credits.valuePointsNamed', {
+      count: formatNumber(value),
+      name: pointsName,
+    })
+  }
   const unit = UNIT_KEYS[currency]
   if (unit) return t(value === 1 ? unit.one : unit.many, { count: formatNumber(value) })
   if (ISO_CURRENCY.test(currency)) return formatCurrency(value, currency)
