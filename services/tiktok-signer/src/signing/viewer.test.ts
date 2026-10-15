@@ -16,7 +16,7 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdirSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -338,6 +338,30 @@ describe('ViewerPool session lease accessors', () => {
     expect(internals.tabs.has('pinnedroom')).toBe(true);
     expect(internals.tabs.has('otherroom')).toBe(false);
     await pool.close();
+  });
+
+  it('evicts idle tabs on a timer, without waiting for a capture', async () => {
+    // Regression 2026-10-15: eviction ran only inside captureRoom, and the
+    // previous pod made three captures in 37h, so an idle tab could stay
+    // open on a live page (growing ~250 MB/h) until the next capture.
+    vi.useFakeTimers();
+    try {
+      const pool = new ViewerPool({ userDataDir: '/tmp/x', tabIdleMs: 5 * 60_000 });
+      const tabs = (pool as unknown as { tabs: Map<string, unknown> }).tabs;
+      tabs.set('idle', {
+        page: { close: async () => undefined },
+        lastUsed: Date.now() - 10 * 60_000,
+        wsUrl: '',
+        roomId: '1',
+        capturedAt: Date.now(),
+        openedAt: Date.now()
+      });
+      await vi.advanceTimersByTimeAsync(2 * 60_000);
+      expect(tabs.has('idle')).toBe(false);
+      await pool.close();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('findDualListedRooms returns the case-insensitive intersection', () => {

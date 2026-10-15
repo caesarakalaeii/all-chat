@@ -28,6 +28,7 @@ import { RelayHub } from './signing/relay.js';
 import { SigningSession } from './signing/session.js';
 import { ViewerPool, findDualListedRooms } from './signing/viewer.js';
 import { WarmCurator } from './signing/warm-curator.js';
+import { TabRecycler } from './signing/tab-recycler.js';
 import { fetchWebshareProxies } from './signing/webshare.js';
 // Stealth-plugin page hooks race lane/browser shutdown: rotateLaneProfile and
 // refreshProxies close the browser while the plugin's onPageCreated hook is
@@ -199,7 +200,20 @@ const relay = viewer
   ? new RelayHub((username) => { viewer.pinTab(username); }, { logger })
   : undefined;
 
-const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, warmRooms: [...warmRoomSet], logger });
+// Warm-tab recycler (2026-10-11): a pinned live-room tab grows until the pod
+// OOMs, and an OOM restart drops every warm session. 0 disables.
+const tabRecycleHours = parseFloat(process.env.SIGNER_TAB_RECYCLE_HOURS || '6');
+if (viewer && warmRoomSet.size > 0 && tabRecycleHours > 0) {
+  new TabRecycler({
+    pinnedRooms: warmRoomSet,
+    viewer,
+    relay,
+    maxAgeMs: tabRecycleHours * 3_600_000,
+    logger: { info: logger.info, warn: logger.warn }
+  }).start();
+}
+
+const server = createServer({ port: PORT, session, viewer, relay, canaryRooms, relayFallbackEnabled, warmRooms: warmRoomSet, logger });
 
 server.listen(PORT, () => {
   logger.info('tiktok-signer listening', { port: PORT });

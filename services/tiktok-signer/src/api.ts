@@ -463,9 +463,11 @@ export interface ServerOptions {
   warmRoomIsLive?: (username: string) => Promise<boolean>;
   /**
    * Warm rooms (SIGNER_WARM_ROOMS): the classic rooms whose captured WS
-   * sessions GET /v1/session leases. Empty disables the endpoint.
+   * sessions GET /v1/session leases. Empty disables the endpoint. Read on
+   * every request: index.ts passes the live set the warm-room curator adds
+   * to, and a copy taken at startup would never lease a curated room.
    */
-  warmRooms?: string[];
+  warmRooms?: Iterable<string>;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void; error: (msg: string, meta?: Record<string, unknown>) => void };
 }
 
@@ -579,7 +581,8 @@ export function createServer(options: ServerOptions): http.Server {
     // entry, measured 2026-09-18). No capture cadence — harvest only on
     // request (budget discipline, constraint 1).
     if (req.method === 'GET' && url === '/v1/session') {
-      if (!warmRooms.length) {
+      const rooms = [...warmRooms];
+      if (!rooms.length) {
         leaseOutcome('disabled');
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'session_endpoint_disabled' }));
@@ -591,7 +594,7 @@ export function createServer(options: ServerOptions): http.Server {
         res.end(JSON.stringify({ error: 'viewer mode not enabled' }));
         return;
       }
-      await handleSessionLease(res, viewer, warmRooms, captureBreaker, relay, options.warmRoomIsLive);
+      await handleSessionLease(res, viewer, rooms, captureBreaker, relay, options.warmRoomIsLive);
       return;
     }
 
