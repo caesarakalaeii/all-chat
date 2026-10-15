@@ -85,6 +85,8 @@ const MAX_ACQUISITIONS = 2;
 const BENCH_ON_403_MS = 60 * 60_000;
 /** Candidates that failed verification wait this long before re-trying. */
 const FAILED_COOLDOWN_MS = 6 * 60 * 60_000;
+/** Minimum gap between lease-triggered ticks (see nudge). */
+const NUDGE_MIN_INTERVAL_MS = 5 * 60_000;
 
 /** One live-feed discovery pass on the pool's own lane page. */
 async function discoverViaFeed(viewer: ViewerPool): Promise<string[] | undefined> {
@@ -118,6 +120,8 @@ export class WarmCurator {
   private readonly minCover: number;
   private readonly failures = new Map<string, number>();
   private benchedUntil = 0;
+  private lastNudge = 0;
+  private ticking = false;
   private timer: ReturnType<typeof setInterval> | undefined;
 
   constructor(options: WarmCuratorOptions) {
@@ -171,7 +175,12 @@ export class WarmCurator {
       }
       return;
     }
-    if (!candidates || candidates.length === 0) return;
+    if (!candidates || candidates.length === 0) {
+      this.logger?.info('warm curator discovery returned no rooms', {
+        reason: candidates === undefined ? 'no_browser' : 'empty_feed'
+      });
+      return;
+    }
     let attempts = 0;
     for (const room of candidates) {
       if (attempts >= MAX_ACQUISITIONS) break;
@@ -213,17 +222,43 @@ export class WarmCurator {
         });
       }
     }
+    if (attempts === 0) {
+      // Every candidate was listed, canary, cooling down or offline: say
+      // so, or a quiet curator is indistinguishable from a dead one.
+      this.logger?.info('warm curator found no eligible candidate', {
+        candidates: candidates.length
+      });
+    }
   }
 
   /** One scheduled tick: cover check, then acquisition if under floor. */
   async tick(): Promise<void> {
-    const cover = await this.liveCover();
-    if (cover >= this.minCover) return;
-    this.logger?.info('warm curator under coverage floor', {
-      cover,
-      floor: this.minCover
-    });
-    await this.runAcquisitionCycle();
+    // A nudge and the timer must not run two acquisition cycles at once.
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      const cover = await this.liveCover();
+      if (cover >= this.minCover) return;
+      this.logger?.info('warm curator under coverage floor', {
+        cover,
+        floor: this.minCover
+      });
+      await this.runAcquisitionCycle();
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  /**
+   * The lease endpoint found nothing to serve: tick now instead of at the
+   * next 30-minute timer, at most once per NUDGE_MIN_INTERVAL_MS. After the
+   * 2026-10-15 redeploy every seed room was offline and the curator's
+   * startup tick found nothing; the outage then waited for the timer.
+   */
+  async nudge(): Promise<void> {
+    if (Date.now() - this.lastNudge < NUDGE_MIN_INTERVAL_MS) return;
+    this.lastNudge = Date.now();
+    await this.tick().catch(() => undefined);
   }
 
   start(): void {

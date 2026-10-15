@@ -75,6 +75,35 @@ function curatorWith(config: {
 }
 
 describe('WarmCurator', () => {
+  it('nudge runs an acquisition tick now, at most once per interval', async () => {
+    const { viewer, calls } = stubbedViewer({ captures: { live1: { wsUrl: 'wss://x' } } });
+    const { curator, warmRooms } = curatorWith({
+      seed: ['offline'],
+      live: { offline: false, live1: true },
+      discovered: ['live1'],
+      viewer
+    });
+    await curator.nudge();
+    expect(warmRooms.has('live1')).toBe(true);
+    await curator.nudge();
+    expect(calls.captures).toEqual(['live1']);
+  });
+
+  it('logs when discovery yields no eligible candidate', async () => {
+    const { viewer } = stubbedViewer({});
+    const lines: string[] = [];
+    const curator = new WarmCurator({
+      warmRooms: new Set(['offline']),
+      canaryRooms: new Set(),
+      viewer,
+      isLive: async () => false,
+      discover: async () => ['offlinecandidate'],
+      logger: { info: (m) => lines.push(m), warn: (m) => lines.push(m) }
+    });
+    await curator.tick();
+    expect(lines).toContain('warm curator found no eligible candidate');
+  });
+
   it('does not acquire when coverage meets the floor', async () => {
     const { viewer, calls } = stubbedViewer({ tabs: ['seeda'] });
     const { curator } = curatorWith({
