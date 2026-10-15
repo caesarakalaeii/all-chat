@@ -364,6 +364,34 @@ describe('ViewerPool session lease accessors', () => {
     }
   });
 
+  it('lets the discovery page load fonts (the live feed renders no rooms without them)', async () => {
+    // Measured in-pod 2026-10-15: /live with the lane's blocking rendered
+    // 0 room links; allowing fonts alone brought back 33. Every curator
+    // discovery returned empty_feed while the warm list was all offline.
+    const pool = new ViewerPool({ userDataDir: '/tmp/x' });
+    let onRequest: ((request: unknown) => void) | undefined;
+    const page = {
+      setUserAgent: async () => undefined,
+      setRequestInterception: async () => undefined,
+      on: (event: string, fn: (request: unknown) => void) => {
+        if (event === 'request') onRequest = fn;
+      },
+      close: async () => undefined
+    };
+    const lanes = (pool as unknown as { lanes: Map<string, { browser: unknown }> }).lanes;
+    lanes.get('|primary')!.browser = { newPage: async () => page };
+    await pool.withDiscoveryPage(async () => undefined);
+    const outcome: string[] = [];
+    onRequest!({
+      resourceType: () => 'font',
+      url: () => 'https://sf16-website-login.neutral.ttwstatic.com/font.woff2',
+      abort: async () => void outcome.push('abort'),
+      continue: async () => void outcome.push('continue')
+    });
+    expect(outcome).toEqual(['continue']);
+    await pool.close();
+  });
+
   it('findDualListedRooms returns the case-insensitive intersection', () => {
     expect(findDualListedRooms(new Set(['SomeRoom', 'other']), ['someroom', 'third'])).toEqual([
       'someroom'
