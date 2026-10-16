@@ -162,7 +162,7 @@ Authorization: Bearer <jwt-token>
 
 ### Chat Sources
 
-Every overlay kind (chat, alerts, goal, list) takes chat sources (ADR-0069). The
+Every overlay kind (chat, alerts, goal, list) takes chat sources (ADR-0070). The
 alert-processor routes events to alerts/goal/list overlays by these rows, and
 connecting the overlay activates them like any other. The message-processor
 delivers chat lines only to chat overlays.
@@ -216,7 +216,7 @@ DELETE /api/v1/overlays/:overlay_id/sources/:source_id
 Authorization: Bearer <jwt-token>
 ```
 
-### Alert Profiles (alerts overlays, ADR-0069)
+### Alert Profiles (alerts overlays, ADR-0070)
 
 ```bash
 # Every known event type's profile: the saved row, else the built-in default

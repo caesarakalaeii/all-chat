@@ -35,7 +35,7 @@ type AlertProfileStore interface {
 	UpsertAlertProfiles(ctx context.Context, overlayID string, profiles []alerts.Profile) error
 }
 
-// AlertsHandler serves an alerts overlay's profiles and test button (ADR-0069).
+// AlertsHandler serves an alerts overlay's profiles and test button (ADR-0070).
 type AlertsHandler struct {
 	store    AlertProfileStore
 	overlays OverlayRepository

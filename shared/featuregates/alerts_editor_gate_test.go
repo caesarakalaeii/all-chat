@@ -23,7 +23,7 @@ import (
 	"testing"
 )
 
-// The alert-profile write path ships premium (ADR-0008, ADR-0069). A typo between the
+// The alert-profile write path ships premium (ADR-0008, ADR-0070). A typo between the
 // constant and the seed would leave the gate unknown, which also reads as premium but
 // can then not be flipped from the admin UI.
 func TestAlertsEditorGateSeed(t *testing.T) {

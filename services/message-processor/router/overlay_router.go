@@ -36,7 +36,7 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 }
 
 // findOverlaysForMessageSQL routes a chat:raw message to chat overlays only.
-// Alerts/goal/list overlays carry the same source rows (ADR-0069) but are fed
+// Alerts/goal/list overlays carry the same source rows (ADR-0070) but are fed
 // by the alert-processor on overlay:{id}:alerts; delivering chat to them would
 // fill their replay buffer, credit-roll sessions and TTS with lines nothing
 // renders. The sender side of the share fan-out (o2) is not filtered: what a

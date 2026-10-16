@@ -19,7 +19,7 @@
 // resolves a profile onto every alert it forwards): the known event types,
 // their built-in default profiles, placeholder substitution, and the alert
 // envelope the alert-processor publishes to overlay:{id}:alerts (ADR-0068,
-// ADR-0069).
+// ADR-0070).
 package alerts
 
 import (

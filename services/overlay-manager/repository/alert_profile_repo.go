@@ -25,7 +25,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// AlertProfileRepository persists alert_profiles (migration 107, ADR-0069).
+// AlertProfileRepository persists alert_profiles (migration 107, ADR-0070).
 type AlertProfileRepository struct {
 	pool *pgxpool.Pool
 }
