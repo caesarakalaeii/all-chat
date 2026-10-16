@@ -872,7 +872,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     )
   }
 
-  // Kind dispatch (ADR-0064): the render route is unauthenticated and the
+  // Kind dispatch (ADR-0068): the render route is unauthenticated and the
   // public config is its only source of truth about the overlay. Chat — and
   // the absent value every pre-column overlay carries — renders the chat feed
   // exactly as before; the three new kinds get a placeholder until their own

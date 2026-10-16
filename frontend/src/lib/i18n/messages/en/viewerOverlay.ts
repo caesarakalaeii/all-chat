@@ -599,7 +599,7 @@ export const viewerOverlay = {
     listenerRemedy: '\u2192 Re-add your Twitch source to switch to the new EventSub connection',
   },
   // What the render route shows for an alerts/goal/list overlay until its own
-  // renderer issue lands (ADR-0064). OBS must show the streamer something
+  // renderer issue lands (ADR-0068). OBS must show the streamer something
   // recognizable instead of a transparent blank.
   unsupportedKind: {
     heading: '{kind} overlay',

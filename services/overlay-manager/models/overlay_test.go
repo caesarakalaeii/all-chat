@@ -117,7 +117,7 @@ func TestOverlay_Validate(t *testing.T) {
 	}
 }
 
-// overlay_type (ADR-0064): the four kinds Validate accepts, the default an
+// overlay_type (ADR-0068): the four kinds Validate accepts, the default an
 // absent kind resolves to, and what must be rejected.
 func TestOverlay_ValidateOverlayType(t *testing.T) {
 	// The smallest Overlay that passes Validate, so each case below varies only

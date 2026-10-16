@@ -1,6 +1,6 @@
 -- Migration: 100_overlay_type
 -- Description: Add overlay_type column to overlays — 'chat' (every existing
---   overlay), or one of the three new ADR-0064 kinds: 'alerts' (event alert
+--   overlay), or one of the three new ADR-0068 kinds: 'alerts' (event alert
 --   box), 'goal' (goal bar), 'list' (e.g. recent follower list). Existing rows
 --   keep behaving exactly as before via the DEFAULT 'chat', and the CHECK
 --   constraint keeps out the kinds nothing renders yet.

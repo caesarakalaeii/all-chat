@@ -1,6 +1,6 @@
 # media-service
 
-All-Chat's **alert-media registry** (ADR-0064, issue #949): the first service to hold an S3/MinIO
+All-Chat's **alert-media registry** (ADR-0068, issue #949): the first service to hold an S3/MinIO
 client. Users attach media to overlay event alerts — sounds, images, GIFs, short video clips — and
 this service hands out presigned PUT URLs so the bytes go **directly** to MinIO, never through a
 service pod.
@@ -22,7 +22,7 @@ All require a user JWT; `user_id` is resolved from the token, never from the req
 | `DELETE` | `/api/v1/media/*object_key` | owner-checked delete of the registry row and the MinIO object |
 
 `object_key` is `{user_id}/{uuid}/{filename}`: the random uuid segment makes public-read URLs
-unguessable (ADR-0064), and the user_id prefix scopes the delete's owner check. The filename is
+unguessable (ADR-0068), and the user_id prefix scopes the delete's owner check. The filename is
 reduced to its bare base name before it reaches the key, so no path component can travel through
 it, and a base of `.` or `..` is rejected outright (URL clients normalize dot segments away, so
 such a key could be neither played nor deleted). Delete takes the key as the rest of the URL path

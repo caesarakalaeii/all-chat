@@ -187,7 +187,7 @@ func TestPresign_CreatesRegistryRowAndReturnsURLs(t *testing.T) {
 	assert.Equal(t, "https://media.allch.at/"+objectKey, body["public_url"])
 
 	// Key scheme: {user_id}/{uuid}/{filename} — the randomized middle
-	// segment makes the public URL unguessable (ADR-0064).
+	// segment makes the public URL unguessable (ADR-0068).
 	parts := strings.Split(objectKey, "/")
 	require.Len(t, parts, 3, "object_key must be user/uuid/filename, got %q", objectKey)
 	assert.Equal(t, testUserID, parts[0])

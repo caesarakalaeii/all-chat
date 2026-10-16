@@ -32,7 +32,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// overlay_type (ADR-0064): overlays come in four kinds. Only chat overlays have
+// overlay_type (ADR-0068): overlays come in four kinds. Only chat overlays have
 // chat sources; the responses must say which kind an overlay is so the
 // frontend can route its render page.
 

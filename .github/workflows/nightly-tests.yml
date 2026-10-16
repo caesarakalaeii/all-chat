@@ -36,6 +36,7 @@ jobs:
           - token-refresh-service
           - moderation-service
           - engagement-service
+          - alert-processor
           - discord-listener
           - support-bot
     steps:

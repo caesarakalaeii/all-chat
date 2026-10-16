@@ -20,7 +20,7 @@ import { describe, expect, it } from 'vitest'
 
 import { resolveOverlayKind } from '@/lib/utils/overlayKind'
 
-// overlay_type (ADR-0064): every overlay is one of four kinds, and every
+// overlay_type (ADR-0068): every overlay is one of four kinds, and every
 // surface that reads the column has to agree on what an absent or unknown
 // value means. These are the rules the backend's Validate()/Kind() pair
 // already enforces; the frontend cannot assume a fresh deploy ships together.
