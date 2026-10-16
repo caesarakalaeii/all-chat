@@ -57,6 +57,7 @@ import {
   type PlatformStatusState,
 } from '@/core/overlayStreamCore'
 import type { SourceInfo } from '@/components/PlatformStatusIndicators'
+import type { AlertFrame } from '@/lib/types/alert'
 
 // Single definition, owned by the badge's pure label helper so the two cannot
 // drift; re-exported here because this hook is where consumers expect it.
@@ -91,6 +92,11 @@ export interface UseOverlayStreamOptions {
    * action set is open-ended — interpreting it is the consumer's job.
    */
   onModAction?: (metadata: Record<string, unknown>, source: 'replay' | 'live') => void
+  /**
+   * An alert frame (alerts/goal/list overlays, ADR-0070). Passed through
+   * undeduped: alerts carry their own alert_id, and the alert queue dedups.
+   */
+  onAlert?: (alert: AlertFrame) => void
   /** Fired once per successful (re)connection. */
   onConnected?: () => void
 }
@@ -432,6 +438,10 @@ export function useOverlayStream(
             }
             return
           }
+
+          case 'alert':
+            optsRef.current.onAlert?.(classified.alert)
+            return
 
           case 'connected':
             // Latch, never clear: a gap already in the feed stays a gap.

@@ -382,6 +382,9 @@ export const marketing = {
       "Read your own channel through YouTube's official API with your own connection, so unlisted and members-only streams are found automatically, with no link to paste.",
     sharedChatTitle: 'Shared chat',
     sharedChatBody: 'Combine several channels into one shared conversation across your overlays.',
+    alertsOverlayTitle: 'Alert overlays',
+    alertsOverlayBody:
+      'Pop up subs, bits, raids, Super Chats and TikTok gifts on stream as their own OBS source, with a test button to line them up.',
     flairsTitle: 'Viewer flairs',
     flairsBody:
       'Stand out in any chat you appear in with premium cosmetics like animated name gradients.',

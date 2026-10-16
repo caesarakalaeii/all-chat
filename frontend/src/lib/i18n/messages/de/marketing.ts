@@ -347,6 +347,9 @@ export const marketing: LocaleNamespace<'marketing'> = {
     sharedChatTitle: 'Shared Chat',
     sharedChatBody:
       'Kombiniere mehrere Channels zu einem geteilten Gespräch über deine Overlays hinweg.',
+    alertsOverlayTitle: 'Alert-Overlays',
+    alertsOverlayBody:
+      'Zeige Abos, Bits, Raids, Super Chats und TikTok-Geschenke als eigene OBS-Quelle im Stream, mit Test-Button zum Ausrichten.',
     flairsTitle: 'Zuschauer-Flairs',
     flairsBody:
       'Hebe dich in jedem Chat, in dem du auftauchst, mit Premium-Kosmetik wie animierten Namensverläufen ab.',

@@ -44,6 +44,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, X, Clipboard, Share2, Puzzle } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { AlertTestPanel } from '@/components/overlays/AlertTestPanel'
+import { resolveOverlayKind } from '@/lib/utils/overlayKind'
 import { overlaysApi } from '@/lib/api/overlays'
 import type { TTSConfigMetadata, ElevenLabsVoice, TestKeyResult } from '@/lib/api/overlays'
 import { startAddSourceReflow } from '@/lib/api/add-source'
@@ -1948,6 +1950,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- Overlay / sources state ---
   const [overlay, setOverlay] = useState<Overlay | null>(null)
+  const isAlertsOverlay = resolveOverlayKind(overlay?.overlay_type) === 'alerts'
   const [sources, setSources] = useState<ChatSource[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
@@ -4289,7 +4292,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       </p>
                     </div>
                   )}
-                  {activeSection === 'testing' && (
+                  {/* An alerts overlay renders alerts, not chat, so it gets the
+                      test-alert control instead of the mock chat message. */}
+                  {activeSection === 'testing' && isAlertsOverlay && (
+                    <AlertTestPanel overlayId={id} />
+                  )}
+                  {activeSection === 'testing' && !isAlertsOverlay && (
                     <div className="space-y-3" data-setting-anchor="mockMessage">
                       <div>
                         <label

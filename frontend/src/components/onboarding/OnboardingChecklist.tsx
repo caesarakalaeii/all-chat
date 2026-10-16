@@ -421,6 +421,14 @@ export function OnboardingChecklist({
                   <p className="text-xs text-text-sub">{t('onboarding.extras.flairsBody')}</p>
                 </li>
                 <li>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.alertsOverlayTitle')}
+                  </span>
+                  <p className="text-xs text-text-sub">
+                    {t('onboarding.extras.alertsOverlayBody')}
+                  </p>
+                </li>
+                <li>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-text">
                       {t('onboarding.extras.streamDeckTitle')}
