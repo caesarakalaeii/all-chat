@@ -56,7 +56,7 @@ The first connect creates the `session:active:{id}` hash the credit roll measure
 and the message processor captures leaderboard events under. Every pod holding an
 overlay registers in `session:holders:{id}` (refreshed by the heartbeat), and the
 session ends only after `SESSION_END_GRACE_SECONDS` with no holder on any pod, so
-a stream keeps one session across tabs, replicas and short drops. See ADR-0068.
+a stream keeps one session across tabs, replicas and short drops. See ADR-0069.
 
 ## Environment Variables
 

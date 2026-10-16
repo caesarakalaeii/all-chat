@@ -286,6 +286,12 @@ func (h *Handler) HandleGetCreditRoll(c *gin.Context) {
 		return
 	}
 
+	// A live session starts when the overlay first connects, which can be well
+	// after the stream went live; measure duration and clips from the stream.
+	if session.EndedAt.IsZero() {
+		session.StartedAt = streamStart(session.StartedAt, h.twitchStreamStartedAt(ctx, overlayID))
+	}
+
 	// Aggregate events from Redis leaderboards
 	leaderboards, err := h.aggregateLeaderboards(ctx, session.SessionID, config)
 	if err != nil {
@@ -714,6 +720,40 @@ func (h *Handler) fetchClips(ctx context.Context, overlayID string, session *mod
 	}
 
 	return result, isFallback, nil
+}
+
+// streamStart returns the earlier of the session start and a live stream's start.
+func streamStart(sessionStartedAt, streamStartedAt time.Time) time.Time {
+	if !streamStartedAt.IsZero() && streamStartedAt.Before(sessionStartedAt) {
+		return streamStartedAt
+	}
+	return sessionStartedAt
+}
+
+// twitchStreamStartedAt returns when the overlay's Twitch channel went live, or
+// the zero time when it is offline, has no Twitch source, or the lookup fails.
+func (h *Handler) twitchStreamStartedAt(ctx context.Context, overlayID string) time.Time {
+	if h.clipsClient == nil {
+		return time.Time{}
+	}
+	sources, err := h.sourceRepo.ListByOverlayID(ctx, overlayID)
+	if err != nil {
+		return time.Time{}
+	}
+	for _, source := range sources {
+		if source.Platform != "twitch" {
+			continue
+		}
+		startedAt, err := h.clipsClient.GetStreamStartedAt(ctx, source.ChannelID)
+		if err != nil {
+			h.logger.Warn("Failed to look up Twitch stream start",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		}
+		return startedAt
+	}
+	return time.Time{}
 }
 
 // getBroadcasterTwitchID retrieves the Twitch broadcaster ID for an overlay

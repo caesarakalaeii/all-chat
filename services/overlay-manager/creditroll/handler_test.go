@@ -671,3 +671,26 @@ func TestAggregateLeaderboards_EnforcesIncludeFlags(t *testing.T) {
 		})
 	}
 }
+
+// The session only starts when the overlay first connects; a live Twitch stream
+// that started earlier (overlay loaded late, or offline for a while mid-stream)
+// is the better start. Regression for credits showing 2h48 on a 4h18 stream.
+func TestStreamStart(t *testing.T) {
+	session := time.Date(2026, 10, 16, 14, 27, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		stream time.Time
+		want   time.Time
+	}{
+		{"offline keeps session start", time.Time{}, session},
+		{"earlier stream start wins", session.Add(-90 * time.Minute), session.Add(-90 * time.Minute)},
+		{"later stream start keeps session start", session.Add(time.Minute), session},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := streamStart(session, tt.stream); !got.Equal(tt.want) {
+				t.Fatalf("streamStart() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
