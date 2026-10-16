@@ -1,8 +1,8 @@
 # ADR-0067: Desktop plugins move to their own repositories under GPL-3.0-or-later
 
 **Date**: 2026-10-16
-**Status**: Proposed
-**Deciders**: Malte Moersener; needs the agreement of every copyright holder of the two plugins before the relicensing takes effect
+**Status**: Accepted
+**Deciders**: caesarakalaeii, the sole copyright holder of the plugin code
 
 (ADR numbering is shared with the caesar-deployment repo. If 0067 is already
 taken there, renumber this file; the slug `desktop-plugins-in-own-repositories`
@@ -71,9 +71,9 @@ before any part of it merges.
   All-Chat and a plugin from now on crosses a licence boundary: plugin code may
   come into All-Chat (GPL-3.0-or-later code may be combined with AGPL-3.0), but
   All-Chat code does not go into a plugin without its authors relicensing it.
-- Relicensing needs the agreement of every copyright holder of the plugin code.
-  Until that is recorded, this ADR stays Proposed and the new repositories are
-  not published.
+- Relicensing needed the agreement of every copyright holder of the plugin code.
+  All of it was written by caesarakalaeii, directly or through a bot account
+  they own, who agreed on 2026-10-16.
 
 ## Links
 

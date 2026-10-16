@@ -738,10 +738,10 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ### ADR-0067: Desktop plugins move to their own repositories under GPL-3.0-or-later
 
-**Status**: Proposed (2026-10-16)
+**Status**: Accepted (2026-10-16)
 **Problem**: The StreamController store lists repositories, not subdirectories, so the plugin could not be submitted from this monorepo; ADR-0049's AGPL-in-GPL licence gate was still open; and contributing to one plugin meant cloning the whole platform.
 **Decision**: `caesarakalaeii/allchat-streamdeck` and `caesarakalaeii/allchat-streamcontroller`, split out with history and relicensed GPL-3.0-or-later (the StreamController host's licence). They share no code, so they get one repository each. `scripts/check-plugin-parity.py` stays here and runs over three sibling checkouts; every repository's parity job checks out a same-named branch from the others when one exists, so a cross-repo change is checked as a set.
-**Impact**: Store submission and per-plugin releases become possible; a cross-plugin change is up to three PRs; plugin code is no longer under this repository's licence. Takes effect once every copyright holder of the plugin code agrees.
+**Impact**: Store submission and per-plugin releases become possible; a cross-plugin change is up to three PRs; plugin code is no longer under this repository's licence.
 **→ Read**: [0067-desktop-plugins-in-own-repositories.md](./0067-desktop-plugins-in-own-repositories.md)
 
 ---
@@ -877,8 +877,8 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Last Updated**: 2026-10-15
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection)
+**Last Updated**: 2026-10-16
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories)
 
 **Most Referenced**:
 
