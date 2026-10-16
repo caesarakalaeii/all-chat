@@ -69,8 +69,12 @@ func TestNewServiceRegistry(t *testing.T) {
 			},
 			wantErr: false,
 			checkFunc: func(t *testing.T, sr *ServiceRegistry) {
-				assert.Len(t, sr.Services, 28) // 4 base + 7 admin + 10 share-service + 2 maintenance routes + 1 test-stream + 1 moderation + 2 payment + 1 engagement
+				assert.Len(t, sr.Services, 29) // 4 base + 7 admin + 10 share-service + 2 maintenance routes + 1 test-stream + 1 moderation + 2 payment + 1 engagement + 1 media
 				assert.NotNil(t, sr.Services["auth-service"])
+				media := sr.Services["media-service"]
+				require.NotNil(t, media, "alert media uploads (/api/v1/media/presign) need a gateway route")
+				assert.Equal(t, "/api/v1/media", media.PathPrefix)
+				assert.False(t, media.StripPrefix, "media-service mounts its routes under /api/v1/media itself")
 				assert.NotNil(t, sr.Services["engagement-service"])
 				assert.NotNil(t, sr.Services["payment-service"])
 				assert.NotNil(t, sr.Services["payment-webhooks"])

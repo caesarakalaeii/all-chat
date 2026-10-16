@@ -68,12 +68,14 @@ func (r *Repository) OverlayStatus(ctx context.Context, overlayID string) (isAct
 }
 
 // AlertProfile returns the overlay's saved profile for eventType
-// (alert_profiles, migration 107); found is false when none is saved.
+// (alert_profiles, migrations 107 + 109); found is false when none is saved.
 func (r *Repository) AlertProfile(ctx context.Context, overlayID, eventType string) (p alerts.Profile, found bool, err error) {
 	err = r.db.QueryRow(ctx, `
-		SELECT event_type, text_template, sound_url, image_url, duration_ms, volume, enabled, sort_after
+		SELECT event_type, text_template, sound_url, image_url, duration_ms, volume, enabled, sort_after,
+		       custom_html, custom_css, custom_js
 		FROM alert_profiles WHERE overlay_id = $1 AND event_type = $2`, overlayID, eventType,
-	).Scan(&p.EventType, &p.TextTemplate, &p.SoundURL, &p.ImageURL, &p.DurationMs, &p.Volume, &p.Enabled, &p.SortAfter)
+	).Scan(&p.EventType, &p.TextTemplate, &p.SoundURL, &p.ImageURL, &p.DurationMs, &p.Volume, &p.Enabled, &p.SortAfter,
+		&p.CustomHTML, &p.CustomCSS, &p.CustomJS)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return alerts.Profile{}, false, nil
 	}

@@ -33,6 +33,7 @@
 export type EditorGroupId = 'setup' | 'appearance' | 'behavior' | 'advanced'
 
 export type EditorSectionId =
+  | 'alerts'
   | 'theme'
   | 'sources'
   | 'moderators'
@@ -507,3 +508,24 @@ export function searchSettings(
   // Stable sort: score desc, registry order preserved within equal scores
   return hits.sort((a, b) => b.score - a.score).slice(0, limit)
 }
+
+/**
+ * The alert profile editor (issue #954). Not in EDITOR_SECTIONS: that list is
+ * the chat overlay's editor, which an alerts overlay replaces wholesale — its
+ * appearance, behavior and chat-testing sections style a chat feed it never
+ * renders.
+ */
+export const ALERTS_SECTION: EditorSection = {
+  id: 'alerts',
+  group: 'setup',
+  title: 'Alerts',
+  description: 'How each event looks and sounds on this overlay, and test alerts to try it.',
+  keywords: 'alert profile sound gif image text template custom html css javascript test',
+  entries: [{ label: 'Alert profiles', keywords: 'sub bits raid follow super chat gift' }],
+}
+
+/** An alerts overlay's nav: its editor plus the kind-agnostic sections. */
+export const ALERT_OVERLAY_SECTIONS: EditorSection[] = [
+  ALERTS_SECTION,
+  ...EDITOR_SECTIONS.filter((s) => s.id === 'sources' || s.id === 'danger-zone'),
+]

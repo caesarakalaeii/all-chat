@@ -40,7 +40,7 @@ window.matchMedia = (query: string) =>
 Element.prototype.scrollIntoView = () => {}
 
 const streamOptions: UseOverlayStreamOptions = {}
-const streamConfig: { config: Record<string, unknown> } = { config: {} }
+const streamConfig: { config: Record<string, unknown> | null } = { config: {} }
 
 vi.mock('@/hooks/useOverlayStream', () => ({
   useOverlayStream: (_id: string, options: UseOverlayStreamOptions) => {
@@ -140,6 +140,41 @@ describe('overlay render route kind dispatch', () => {
     })
 
     expect(screen.getByRole('status')).toHaveTextContent('E2ECheck cheered 100 bits!')
+  })
+
+  it('plays an alert that arrives before the config has loaded', async () => {
+    // Regression: the kind came only from the public config, so an alert that
+    // arrived while the config fetch had failed (e.g. during a rollout) sat in
+    // the queue unrendered until the 30s refresh. Only alerts/goal/list
+    // sockets are ever sent alert frames (ADR-0070), so the frame itself says
+    // the overlay renders alerts.
+    streamConfig.config = null
+    render(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {})
+
+    act(() => {
+      streamOptions.onAlert?.({
+        alert_id: 'early',
+        overlay_id: 'test',
+        platform: 'twitch',
+        event_type: 'follow',
+        event_data: { type: 'follow' },
+        user: { id: 'u', name: 'FirstFollower', avatar_url: '' },
+        profile: {
+          event_type: 'follow',
+          text_template: '{username} just followed!',
+          sound_url: '',
+          image_url: '',
+          duration_ms: 5000,
+          volume: 100,
+          enabled: true,
+          sort_after: 0,
+          text: 'FirstFollower just followed!',
+        },
+      })
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('FirstFollower just followed!')
   })
 
   it.each(['goal', 'list'] as const)('renders the placeholder for a %s overlay', async (kind) => {

@@ -38,7 +38,8 @@ func NewAlertProfileRepository(pool *pgxpool.Pool) *AlertProfileRepository {
 // ListAlertProfiles returns the overlay's saved profiles (no defaults).
 func (r *AlertProfileRepository) ListAlertProfiles(ctx context.Context, overlayID string) ([]alerts.Profile, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT event_type, text_template, sound_url, image_url, duration_ms, volume, enabled, sort_after
+		SELECT event_type, text_template, sound_url, image_url, duration_ms, volume, enabled, sort_after,
+		       custom_html, custom_css, custom_js
 		FROM alert_profiles
 		WHERE overlay_id = $1
 		ORDER BY event_type`, overlayID)
@@ -47,7 +48,8 @@ func (r *AlertProfileRepository) ListAlertProfiles(ctx context.Context, overlayI
 	}
 	profiles, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (alerts.Profile, error) {
 		var p alerts.Profile
-		err := row.Scan(&p.EventType, &p.TextTemplate, &p.SoundURL, &p.ImageURL, &p.DurationMs, &p.Volume, &p.Enabled, &p.SortAfter)
+		err := row.Scan(&p.EventType, &p.TextTemplate, &p.SoundURL, &p.ImageURL, &p.DurationMs, &p.Volume, &p.Enabled, &p.SortAfter,
+			&p.CustomHTML, &p.CustomCSS, &p.CustomJS)
 		return p, err
 	})
 	if err != nil {
@@ -62,8 +64,9 @@ func (r *AlertProfileRepository) UpsertAlertProfiles(ctx context.Context, overla
 		for _, p := range profiles {
 			if _, err := tx.Exec(ctx, `
 				INSERT INTO alert_profiles
-					(overlay_id, event_type, text_template, sound_url, image_url, duration_ms, volume, enabled, sort_after)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+					(overlay_id, event_type, text_template, sound_url, image_url, duration_ms, volume, enabled, sort_after,
+					 custom_html, custom_css, custom_js)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 				ON CONFLICT (overlay_id, event_type) DO UPDATE SET
 					text_template = EXCLUDED.text_template,
 					sound_url     = EXCLUDED.sound_url,
@@ -72,8 +75,12 @@ func (r *AlertProfileRepository) UpsertAlertProfiles(ctx context.Context, overla
 					volume        = EXCLUDED.volume,
 					enabled       = EXCLUDED.enabled,
 					sort_after    = EXCLUDED.sort_after,
+					custom_html   = EXCLUDED.custom_html,
+					custom_css    = EXCLUDED.custom_css,
+					custom_js     = EXCLUDED.custom_js,
 					updated_at    = now()`,
 				overlayID, p.EventType, p.TextTemplate, p.SoundURL, p.ImageURL, p.DurationMs, p.Volume, p.Enabled, p.SortAfter,
+				p.CustomHTML, p.CustomCSS, p.CustomJS,
 			); err != nil {
 				return fmt.Errorf("upsert alert profile %s: %w", p.EventType, err)
 			}

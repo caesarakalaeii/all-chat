@@ -95,6 +95,9 @@ export const onboarding = {
     alertsOverlayTitle: 'Alert overlays',
     alertsOverlayBody:
       'Pop up subs, bits, raids, Super Chats and TikTok gifts on stream as their own OBS source, with a test button to line them up.',
+    alertsEditorTitle: 'Custom alerts editor',
+    alertsEditorBody:
+      'Give every alert its own text, GIF and sound, search GIFs right in the editor, or write your own HTML, CSS and JavaScript for it.',
     flairsTitle: 'Viewer flairs',
     flairsBody:
       'Premium cosmetics for chatters, like animated name gradients, under Flairs in the navigation.',

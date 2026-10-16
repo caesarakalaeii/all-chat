@@ -17,6 +17,7 @@
 package storage
 
 import (
+	"net/url"
 	"testing"
 	"time"
 
@@ -112,4 +113,35 @@ func TestDisabledStore_SatisfiesHandlerObjectStore(t *testing.T) {
 	// Compile-time check that the 503 path's store can be injected where
 	// NewMediaHandler expects an ObjectStore.
 	var _ handlers.ObjectStore = DisabledStore{}
+}
+
+// Browsers upload straight to MinIO, so the presigned PUT must be signed for
+// the public host (the signature covers Host), not the in-cluster endpoint the
+// service itself talks to. Presigning is offline: no MinIO is reachable here.
+func TestMinioStore_PresignsForThePublicHost(t *testing.T) {
+	store, err := NewMinioStore(Config{
+		Endpoint:      "minio.allchat.svc.cluster.local:9000",
+		AccessKey:     "media-user",
+		SecretKey:     "media-pass",
+		Bucket:        "allchat-media",
+		PublicBaseURL: "https://media.allch.at/allchat-media",
+		Region:        "us-east-1",
+	})
+	require.NoError(t, err)
+
+	raw, err := store.PresignPut(t.Context(), "user-1/uuid/airhorn.mp3", time.Minute)
+	require.NoError(t, err)
+
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	assert.Equal(t, "https", u.Scheme)
+	assert.Equal(t, "media.allch.at", u.Host)
+	assert.Equal(t, "/allchat-media/user-1/uuid/airhorn.mp3", u.Path)
+	assert.NotEmpty(t, u.Query().Get("X-Amz-Signature"))
+}
+
+func TestLoadConfig_RegionDefaultsToMinIOs(t *testing.T) {
+	cfg, err := LoadConfig()
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", cfg.Region)
 }

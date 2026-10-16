@@ -225,12 +225,15 @@ Authorization: Bearer <jwt-token>
 GET /api/v1/overlays/:overlay_id/alerts/profiles
 → { "profiles": [ { "event_type": "bits", "text_template": "{username} cheered {amount}!",
                     "sound_url": "", "image_url": "", "duration_ms": 5000, "volume": 100,
-                    "enabled": true, "sort_after": 0 }, ... ] }
+                    "enabled": true, "sort_after": 0,
+                    "custom_html": "", "custom_css": "", "custom_js": "" }, ... ] }
 
 # Bulk upsert, all or nothing. Premium (gate alerts_editor). 400 unless the
 # overlay is an alerts overlay, or for an unknown/duplicated event_type, a
 # volume outside 0-100, duration_ms outside 1-60000, a non-http(s) media URL or
-# a template over 500 characters.
+# a template over 500 characters, or a custom_html/custom_css/custom_js field
+# over 64 KiB (migration 109, ADR-0071; the overlay renders custom code in a
+# sandboxed iframe, see frontend/src/components/overlays/alertSandbox.ts).
 PUT /api/v1/overlays/:overlay_id/alerts/profiles
 Body: { "profiles": [ { ...full profile as above... } ] }
 

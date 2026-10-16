@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -41,6 +42,7 @@ const (
 	envPublicBase  = "MEDIA_PUBLIC_URL"
 	envPresignTTL  = "MEDIA_PRESIGN_EXPIRY"
 	envMaxObjects  = "MEDIA_MAX_OBJECTS_PER_USER"
+	envRegion      = "MINIO_REGION"
 	defaultBucket  = "allchat-media"
 	defaultBaseURL = "https://media.allch.at"
 )
@@ -54,6 +56,9 @@ type Config struct {
 	PublicBaseURL     string
 	PresignExpiry     time.Duration
 	MaxObjectsPerUser int
+	// Region is the S3 region presigned URLs are signed for. Setting it keeps
+	// presigning offline (no bucket-location lookup through the public host).
+	Region string
 }
 
 // LoadConfig reads the storage settings from the environment. An empty
@@ -76,6 +81,7 @@ func LoadConfig() (Config, error) {
 		UseSSL:        useSSL,
 		Bucket:        envDefault(envBucket, defaultBucket),
 		PublicBaseURL: strings.TrimSuffix(envDefault(envPublicBase, defaultBaseURL), "/"),
+		Region:        envDefault(envRegion, "us-east-1"),
 	}
 
 	expiry, err := time.ParseDuration(envDefault(envPresignTTL, "5m"))
@@ -110,7 +116,11 @@ var ErrDisabled = errors.New("media storage is not configured")
 // without a bucket.
 type MinioStore struct {
 	client *minio.Client
-	bucket string
+	// presigner signs upload URLs for the public host browsers PUT to: an S3
+	// signature covers the Host header, so a URL signed for the in-cluster
+	// endpoint is unusable from outside the cluster.
+	presigner *minio.Client
+	bucket    string
 }
 
 // NewMinioStore connects to MinIO. It does not create the bucket: the bucket
@@ -124,7 +134,21 @@ func NewMinioStore(cfg Config) (*MinioStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("minio client: %w", err)
 	}
-	return &MinioStore{client: client, bucket: cfg.Bucket}, nil
+	// MEDIA_PUBLIC_URL's origin is the public S3 endpoint of this MinIO (its
+	// path, if any, only prefixes public_url).
+	public, err := url.Parse(cfg.PublicBaseURL)
+	if err != nil || public.Host == "" {
+		return nil, fmt.Errorf("%s %q is not an absolute URL", envPublicBase, cfg.PublicBaseURL)
+	}
+	presigner, err := minio.New(public.Host, &minio.Options{
+		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Secure: public.Scheme == "https",
+		Region: cfg.Region,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("minio presign client: %w", err)
+	}
+	return &MinioStore{client: client, presigner: presigner, bucket: cfg.Bucket}, nil
 }
 
 func (s *MinioStore) Available() bool { return s != nil }
@@ -133,11 +157,11 @@ func (s *MinioStore) Available() bool { return s != nil }
 // The URL does not pin the content type or size — those are validated at
 // presign time and not enforced by single-node MinIO after the fact.
 func (s *MinioStore) PresignPut(ctx context.Context, objectKey string, expiry time.Duration) (string, error) {
-	url, err := s.client.PresignedPutObject(ctx, s.bucket, objectKey, expiry)
+	u, err := s.presigner.PresignedPutObject(ctx, s.bucket, objectKey, expiry)
 	if err != nil {
 		return "", fmt.Errorf("presigned put %s/%s: %w", s.bucket, objectKey, err)
 	}
-	return url.String(), nil
+	return u.String(), nil
 }
 
 func (s *MinioStore) Remove(ctx context.Context, objectKey string) error {

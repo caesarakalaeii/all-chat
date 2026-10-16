@@ -350,6 +350,9 @@ export const marketing: LocaleNamespace<'marketing'> = {
     alertsOverlayTitle: 'Alert-Overlays',
     alertsOverlayBody:
       'Zeige Abos, Bits, Raids, Super Chats und TikTok-Geschenke als eigene OBS-Quelle im Stream, mit Test-Button zum Ausrichten.',
+    alertsEditorTitle: 'Eigener Alert-Editor',
+    alertsEditorBody:
+      'Gib jedem Alert eigenen Text, ein GIF und einen Sound, suche GIFs direkt im Editor oder schreibe eigenes HTML, CSS und JavaScript dafür.',
     flairsTitle: 'Zuschauer-Flairs',
     flairsBody:
       'Hebe dich in jedem Chat, in dem du auftauchst, mit Premium-Kosmetik wie animierten Namensverläufen ab.',

@@ -23,6 +23,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,6 +156,9 @@ func TestPutAlertProfiles_UpsertsValidProfiles(t *testing.T) {
 	p, _ := alerts.DefaultProfile("raid")
 	p.Volume = 40
 	p.Enabled = false
+	p.CustomHTML = "<b>{username}</b>"
+	p.CustomCSS = "b { color: gold }"
+	p.CustomJS = "onAlert(function () {})"
 
 	w := env.do(http.MethodPut, "/overlay-1/alerts/profiles", gin.H{"profiles": []alerts.Profile{p}})
 
@@ -168,11 +172,14 @@ func TestPutAlertProfiles_RejectsInvalidInput(t *testing.T) {
 	unknown.EventType = "webcam"
 	loud := valid
 	loud.Volume = 500
+	hugeJS := valid
+	hugeJS.CustomJS = strings.Repeat("x", alerts.MaxCustomCodeLen+1)
 
 	cases := map[string]any{
 		"unknown event_type": gin.H{"profiles": []alerts.Profile{unknown}},
 		"invalid volume":     gin.H{"profiles": []alerts.Profile{loud}},
 		"duplicate type":     gin.H{"profiles": []alerts.Profile{valid, valid}},
+		"custom_js too long": gin.H{"profiles": []alerts.Profile{hugeJS}},
 		"no profiles field":  gin.H{},
 	}
 	for name, body := range cases {

@@ -69,6 +69,9 @@ func TestBuildAlertFrame_UsesTheSavedProfile(t *testing.T) {
 	saved, _ := alerts.DefaultProfile("bits")
 	saved.TextTemplate = "{username}: {message} ({count} {nope})"
 	saved.SoundURL = "https://media.allch.at/u/ding.mp3"
+	saved.CustomHTML = "<b data-alert-text></b>"
+	saved.CustomCSS = "b { color: gold }"
+	saved.CustomJS = "onAlert(function () {})"
 	lookup := func(_ context.Context, overlayID, eventType string) (alerts.Profile, bool, error) {
 		assert.Equal(t, "o-1", overlayID)
 		assert.Equal(t, "bits", eventType)
@@ -82,6 +85,10 @@ func TestBuildAlertFrame_UsesTheSavedProfile(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data["profile"], &profile))
 	assert.Equal(t, "SomeChatter: take my bits (100 {nope})", profile.Text)
 	assert.Equal(t, saved.SoundURL, profile.SoundURL)
+	// Custom code reaches the overlay in the frame: the renderer needs no second fetch.
+	assert.Equal(t, saved.CustomHTML, profile.CustomHTML)
+	assert.Equal(t, saved.CustomCSS, profile.CustomCSS)
+	assert.Equal(t, saved.CustomJS, profile.CustomJS)
 }
 
 func TestBuildAlertFrame_DropsDisabledProfiles(t *testing.T) {

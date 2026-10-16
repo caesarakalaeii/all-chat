@@ -327,6 +327,7 @@ jobs:
           build-args: |
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             GIT_COMMIT=${{ github.sha }}
+            KLIPY_API_KEY=${{ vars.KLIPY_API_KEY }}
 
       - name: Output image details
         if: matrix.service.changed == 'true' || needs.detect-changes.outputs.shared == 'true' || github.event_name == 'workflow_dispatch'

@@ -69,6 +69,9 @@ func TestProfileValidate(t *testing.T) {
 		"javascript sound url": func(p *Profile) { p.SoundURL = "javascript:alert(1)" },
 		"relative image url":   func(p *Profile) { p.ImageURL = "/x.png" },
 		"template too long":    func(p *Profile) { p.TextTemplate = string(make([]byte, 501)) },
+		"custom html too long": func(p *Profile) { p.CustomHTML = string(make([]byte, MaxCustomCodeLen+1)) },
+		"custom css too long":  func(p *Profile) { p.CustomCSS = string(make([]byte, MaxCustomCodeLen+1)) },
+		"custom js too long":   func(p *Profile) { p.CustomJS = string(make([]byte, MaxCustomCodeLen+1)) },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -80,6 +83,9 @@ func TestProfileValidate(t *testing.T) {
 	ok := base
 	ok.SoundURL = "https://media.allch.at/u/1/ding.mp3"
 	ok.ImageURL = "https://media.allch.at/u/1/party.gif"
+	ok.CustomHTML = string(make([]byte, MaxCustomCodeLen))
+	ok.CustomCSS = "p { color: red }"
+	ok.CustomJS = "onAlert(() => {})"
 	assert.NoError(t, ok.Validate())
 }
 

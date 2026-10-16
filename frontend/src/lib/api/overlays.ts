@@ -24,6 +24,7 @@
  */
 
 import { apiClient } from './client'
+import type { EditableAlertProfile } from '@/lib/types/alert'
 import type {
   Overlay,
   OverlayConfig,
@@ -181,6 +182,29 @@ export const overlaysApi = {
     return apiClient.post<{ alert_id: string }>(`/api/v1/overlays/${id}/alerts/test`, {
       event_type: eventType,
     })
+  },
+
+  /** Every known event type's alert profile: saved rows over the defaults (ADR-0070). */
+  async getAlertProfiles(id: string): Promise<EditableAlertProfile[]> {
+    const res = await apiClient.get<{ profiles: EditableAlertProfile[] }>(
+      `/api/v1/overlays/${id}/alerts/profiles`
+    )
+    return res.profiles
+  },
+
+  /**
+   * Save alert profiles, all or nothing; returns the merged set. Premium:
+   * the route is gated by the alerts_editor feature gate.
+   */
+  async saveAlertProfiles(
+    id: string,
+    profiles: EditableAlertProfile[]
+  ): Promise<EditableAlertProfile[]> {
+    const res = await apiClient.put<{ profiles: EditableAlertProfile[] }>(
+      `/api/v1/overlays/${id}/alerts/profiles`,
+      { profiles }
+    )
+    return res.profiles
   },
 
   /**

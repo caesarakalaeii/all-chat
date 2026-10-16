@@ -26,6 +26,7 @@ import {
   Users,
   Volume2,
   Bell,
+  Code,
 } from 'lucide-react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
@@ -65,6 +66,7 @@ const features = [
   { icon: MessagesSquare, messageStem: 'sharedChat' },
   { icon: Sparkles, messageStem: 'flairs' },
   { icon: Bell, messageStem: 'alertsOverlay' },
+  { icon: Code, messageStem: 'alertsEditor' },
 ] as const satisfies ReadonlyArray<PremiumFeature>
 
 export default function UpgradePage() {
