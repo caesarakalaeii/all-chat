@@ -24,7 +24,8 @@
  * `AlertPlayer` shows the current alert — text, image/GIF, sound — and reports
  * it done once BOTH its duration and its sound have finished.
  *
- * On-stream art inside an OBS browser source: no background, no app chrome,
+ * On-stream art inside an OBS browser source (overlay/layout.tsx keeps the
+ * page transparent): no background, no app chrome, no scrollbars,
  * and nothing at all while the queue is empty. The text sits in a polite live
  * region so it is in the accessibility tree; the sound is decorative (alerts
  * are visual events, docs/ACCESSIBILITY.md).
@@ -123,12 +124,10 @@ export function AlertPlayer({
   return (
     <div
       key={alert.alert_id}
-      className="flex min-h-screen w-full items-center justify-center bg-transparent p-4"
+      className="flex h-screen w-full items-center justify-center overflow-hidden bg-transparent p-4"
       data-alert-id={alert.alert_id}
       data-event-type={alert.event_type}
     >
-      {/* Hide scrollbars and keep the OBS canvas transparent, like the chat feed. */}
-      <style>{`body { overflow: hidden !important; background: transparent !important; }`}</style>
       <div className="flex max-w-full animate-in flex-col items-center gap-3 text-center zoom-in-95 fade-in">
         {image && (
           // Decorative: the text below carries the alert. eslint: next/image
