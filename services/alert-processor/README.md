@@ -106,7 +106,7 @@ in `alert_events.event_data` as the normalized event):
 ```
 
 `message` is the event's chat text (`RawChatMessage.text`); it feeds the
-`{message}` placeholder of alert profiles (ADR-0069) and is not persisted.
+`{message}` placeholder of alert profiles (ADR-0070) and is not persisted.
 The api-gateway forwards this envelope to the overlay as a `type: "alert"`
 WebSocket frame with the overlay's resolved alert profile attached
 (see `services/api-gateway/README.md`).

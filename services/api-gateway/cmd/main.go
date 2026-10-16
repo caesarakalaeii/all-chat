@@ -266,7 +266,7 @@ func main() {
 
 	// Create Redis Pub/Sub subscriber with message handler
 	messageHandler := func(overlayID string, channel string, message []byte) {
-		// Alerts (ADR-0069) are their own path: resolved against the overlay's
+		// Alerts (ADR-0070) are their own path: resolved against the overlay's
 		// alert profile, broadcast to every non-engagement socket, and never
 		// buffered for replay — a reconnecting overlay must not replay old
 		// alerts; the dashboard test button is the recovery path.

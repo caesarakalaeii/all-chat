@@ -1,4 +1,4 @@
-# ADR-0069: Alert Overlays Carry Chat Sources; the Gateway Resolves Alert Profiles
+# ADR-0070: Alert Overlays Carry Chat Sources; the Gateway Resolves Alert Profiles
 
 **Date**: 2026-10-16
 **Status**: Accepted

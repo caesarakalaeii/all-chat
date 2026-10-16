@@ -351,7 +351,7 @@ func main() {
 			ttsPremium.POST("/:id/tts-config/test", ttsHandler.HandleTestKey)
 		}
 
-		// Alert profiles + test button (ADR-0069). Reads and the test alert are
+		// Alert profiles + test button (ADR-0070). Reads and the test alert are
 		// free; saving profiles is premium.
 		protected.GET("/:id/alerts/profiles", alertsHandler.HandleGetProfiles)
 		protected.POST("/:id/alerts/test", alertsHandler.HandleTestAlert)

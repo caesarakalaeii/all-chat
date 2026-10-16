@@ -53,7 +53,7 @@ type Subscriber struct {
 	// (single main channel) vs Subscribe (main + updates channels)
 	viewerOnly map[string]bool
 	// alerts tracks which subscriptions also listen on overlay:{id}:alerts
-	// (alerts/goal/list overlays, ADR-0069).
+	// (alerts/goal/list overlays, ADR-0070).
 	alerts map[string]bool
 	// lingerTimers holds pending deferred-close timers. A non-nil entry means
 	// refCount is 0 but the subscription is intentionally kept alive to capture
@@ -185,7 +185,7 @@ func (s *Subscriber) closeSubscriptionLocked(overlayID string) {
 //   - overlay:{id}:poll, overlay:{id}:prediction: engagement snapshots (#523),
 //     which reach both OBS overlays and viewers
 //   - overlay:{id}:alerts: alert-processor deliveries, only for
-//     alerts/goal/list overlays (ADR-0069)
+//     alerts/goal/list overlays (ADR-0070)
 func channelsFor(overlayID string, viewerOnly, withAlerts bool) []string {
 	base := "overlay:" + overlayID
 	channels := []string{base}

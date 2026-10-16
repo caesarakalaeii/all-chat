@@ -55,7 +55,7 @@ const (
 	WSMessageTypePredictionUpdate WSMessageType = "prediction_update"
 
 	// WSMessageTypeAlert carries one alert from overlay:{id}:alerts plus its
-	// resolved profile (ADR-0069). Ephemeral: never stored for replay.
+	// resolved profile (ADR-0070). Ephemeral: never stored for replay.
 	WSMessageTypeAlert WSMessageType = "alert"
 )
 

@@ -363,7 +363,7 @@ normalizers := map[string]normalizer.Normalizer{
 - API Gateway subscribes to these channels
 - Fan-out to all overlays displaying this chat source: the chat overlays only
   (`overlay_type = 'chat'`, `router/overlay_router.go`). Alerts/goal/list overlays
-  carry the same sources but are fed by the alert-processor (ADR-0069)
+  carry the same sources but are fed by the alert-processor (ADR-0070)
 
 ```go
 // publisher/pubsub.go
