@@ -607,28 +607,28 @@ func (h *Handler) handleStreamOffline(ctx context.Context, eventData json.RawMes
 // when Twitch stream goes live
 func (h *Handler) handleStreamOnline(ctx context.Context, eventData json.RawMessage) error {
 	var event struct {
-		BroadcasterUserID   string `json:"broadcaster_user_id"`
-		BroadcasterUserName string `json:"broadcaster_user_name"`
+		BroadcasterUserLogin string `json:"broadcaster_user_login"`
+		BroadcasterUserName  string `json:"broadcaster_user_name"`
 	}
 	if err := json.Unmarshal(eventData, &event); err != nil {
 		return fmt.Errorf("failed to unmarshal stream.online event: %w", err)
 	}
 
-	if event.BroadcasterUserID == "" {
-		h.logger.Warn("stream.online event missing broadcaster_user_id")
+	if event.BroadcasterUserLogin == "" {
+		h.logger.Warn("stream.online event missing broadcaster_user_login")
 		return nil
 	}
 
-	// Query which overlays have this Twitch channel as a source
+	// Twitch sources store the channel login (any case), not the numeric user id.
 	query := `
 		SELECT DISTINCT overlay_id
 		FROM overlay_chat_sources
 		WHERE platform = 'twitch'
-		  AND channel_id = $1
+		  AND lower(channel_id) = lower($1)
 		  AND is_active = true
 	`
 
-	rows, err := h.db.Query(ctx, query, event.BroadcasterUserID)
+	rows, err := h.db.Query(ctx, query, event.BroadcasterUserLogin)
 	if err != nil {
 		return fmt.Errorf("failed to query overlays for stream.online: %w", err)
 	}
