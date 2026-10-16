@@ -368,18 +368,23 @@ func main() {
 				successCount++
 			}
 
-			// Stream offline — uses app access token (no user scope needed)
-			if _, err := subscriptionMgr.SubscribeToStreamOffline(ctx, broadcasterID); err != nil {
-				if strings.Contains(err.Error(), "subscription already exists") {
-					successCount++
-				} else {
-					log.Warn("Failed to subscribe to stream.offline",
+			// Stream lifecycle — app access token (no user scope needed). stream.online
+			// drives the YouTube discovery reset on overlays that also carry this channel.
+			for _, sub := range []struct {
+				name string
+				fn   func(context.Context, string) (string, error)
+			}{
+				{"stream.offline", subscriptionMgr.SubscribeToStreamOffline},
+				{"stream.online", subscriptionMgr.SubscribeToStreamOnline},
+			} {
+				if _, err := sub.fn(ctx, broadcasterID); err != nil && !strings.Contains(err.Error(), "subscription already exists") {
+					log.Warn("Failed to subscribe to "+sub.name,
 						zap.String("broadcaster_id", broadcasterID),
 						zap.Error(err))
 					failCount++
+				} else {
+					successCount++
 				}
-			} else {
-				successCount++
 			}
 
 			// Engagement mirroring (issue #523, task H): channel.poll.* + channel.prediction.*.
