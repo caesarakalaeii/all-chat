@@ -29,6 +29,7 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/clients"
 	"github.com/caesar/all-chat/services/overlay-manager/creditroll"
 	"github.com/caesar/all-chat/services/overlay-manager/handlers"
+	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
 	"github.com/caesar/all-chat/services/overlay-manager/youtube"
 	sharedAuth "github.com/caesar/all-chat/shared/auth"
@@ -214,7 +215,9 @@ func main() {
 	// Initialize handlers
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, tracingEnabled, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo, sourceRepo, configRepo)
-	overlayHandler.SetAlertsOverlayGate(premiumKeyGate{gates: gateCache, db: dbPool, key: featuregates.GateAlertsOverlay})
+	overlayHandler.SetKindGate(models.OverlayTypeAlerts, premiumKeyGate{gates: gateCache, db: dbPool, key: featuregates.GateAlertsOverlay})
+	overlayHandler.SetKindGate(models.OverlayTypeGoal, premiumKeyGate{gates: gateCache, db: dbPool, key: featuregates.GateGoalOverlay})
+	overlayHandler.SetKindGate(models.OverlayTypeList, premiumKeyGate{gates: gateCache, db: dbPool, key: featuregates.GateListOverlay})
 	seventvResolver := clients.NewSevenTVResolver(log)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo, seventvResolver, bubbleColorsGate{gates: gateCache, db: dbPool})
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient, bm, tokenCipher)
@@ -249,6 +252,7 @@ func main() {
 	publicBaseURL := getEnv("OVERLAY_PUBLIC_BASE_URL", "https://allch.at")
 
 	alertsHandler := handlers.NewAlertsHandler(repository.NewAlertProfileRepository(dbPool), overlayRepo, redisClient)
+	goalListHandler := handlers.NewGoalListHandler(repository.NewGoalListRepository(dbPool), overlayRepo, redisClient)
 	ttsHandler := handlers.NewTTSHandler(ttsConfigRepo, overlayRepo, tokenCipher, publicBaseURL, log).WithRateRedis(redisClient)
 
 	// YouTube helper
@@ -300,6 +304,9 @@ func main() {
 	router.GET("/public/:id/event-settings", eventSettingsHandler.HandleGetPublicEventSettings)
 	router.GET("/public/:id/creditroll", creditRollHandler.HandleGetPublicConfig)
 	router.GET("/public/:id/credit-roll", creditRollHandler.HandleGetCreditRoll)
+	// Goal and list overlays' initial state for the OBS renderer (ADR-0072).
+	router.GET("/public/:id/goal", goalListHandler.HandleGetPublicGoal)
+	router.GET("/:id/list/top", goalListHandler.HandleGetListTop)
 
 	// The TTS streaming proxy uses per-overlay tts_token JWT
 	// verification inside the handler rather than the user-JWT auth
@@ -359,6 +366,13 @@ func main() {
 		protected.PUT("/:id/alerts/profiles",
 			middleware.RequirePremium(dbPool, gateCache, featuregates.GateAlertsEditor, log),
 			alertsHandler.HandlePutProfiles)
+
+		// Goal and list overlay configs (ADR-0072). Creating the overlay is
+		// the premium step (goal_overlay / list_overlay); configuring it is not.
+		protected.GET("/:id/goal", goalListHandler.HandleGetGoal)
+		protected.PUT("/:id/goal", goalListHandler.HandlePutGoal)
+		protected.GET("/:id/list", goalListHandler.HandleGetList)
+		protected.PUT("/:id/list", goalListHandler.HandlePutList)
 
 		// YouTube helper routes
 		protected.POST("/youtube/resolve", youtubeHandler.ResolveChannel)

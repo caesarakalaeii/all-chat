@@ -19,6 +19,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   ALERT_OVERLAY_SECTIONS,
+  kindSections,
   EDITOR_SECTIONS,
   EDITOR_GROUPS,
   searchSettings,
@@ -129,5 +130,14 @@ describe('alert overlay sections', () => {
     expect(ALERT_OVERLAY_SECTIONS.map((s) => s.id)).toEqual(['alerts', 'sources', 'danger-zone'])
     // The chat editor never offers the alerts section.
     expect(EDITOR_SECTIONS.map((s) => s.id)).not.toContain('alerts')
+  })
+})
+
+describe('kindSections', () => {
+  it('gives every non-chat kind its own editor plus sources and danger zone', () => {
+    expect(kindSections('chat')).toBe(EDITOR_SECTIONS)
+    expect(kindSections('alerts')).toBe(ALERT_OVERLAY_SECTIONS)
+    expect(kindSections('goal').map((s) => s.id)).toEqual(['goal', 'sources', 'danger-zone'])
+    expect(kindSections('list').map((s) => s.id)).toEqual(['list', 'sources', 'danger-zone'])
   })
 })

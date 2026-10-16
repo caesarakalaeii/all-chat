@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { resolveOverlayKind } from '@/lib/utils/overlayKind'
+import { creatableOverlayKinds, resolveOverlayKind } from '@/lib/utils/overlayKind'
 
 // overlay_type (ADR-0068): every overlay is one of four kinds, and every
 // surface that reads the column has to agree on what an absent or unknown
@@ -47,5 +47,15 @@ describe('resolveOverlayKind', () => {
     // to the chat renderer keeps today's behaviour for every overlay instead
     // of a blank OBS source.
     expect(resolveOverlayKind('credits')).toBe('chat')
+  })
+})
+
+describe('creatableOverlayKinds', () => {
+  it('offers every kind to premium users (goal and list released, ADR-0072)', () => {
+    expect(creatableOverlayKinds(true)).toEqual(['chat', 'alerts', 'goal', 'list'])
+  })
+
+  it('offers only chat without premium: alerts, goal and list are gated', () => {
+    expect(creatableOverlayKinds(false)).toEqual(['chat'])
   })
 })

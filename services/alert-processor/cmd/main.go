@@ -18,7 +18,9 @@
 // group) and routes event-typed messages to alert-capable overlays: it
 // normalizes them with the message-processor's normalizers, publishes alert
 // envelopes to overlay:{id}:alerts, persists them to alert_events, and feeds
-// 'list' overlay leaderboards (ADR-0068).
+// 'list' overlay leaderboards (ADR-0068). It also keeps goal overlays'
+// counts: event counters for bits/Super Chats and API polls for
+// followers/subscribers while the overlay is connected (ADR-0072).
 package main
 
 import (
@@ -31,7 +33,9 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/alert-processor/consumer"
+	"github.com/caesar/all-chat/services/alert-processor/goals"
 	"github.com/caesar/all-chat/services/alert-processor/leaderboard"
+	"github.com/caesar/all-chat/services/alert-processor/listpush"
 	"github.com/caesar/all-chat/services/alert-processor/processor"
 	"github.com/caesar/all-chat/services/alert-processor/publisher"
 	"github.com/caesar/all-chat/services/alert-processor/repository"
@@ -108,6 +112,16 @@ func main() {
 	pipeline := processor.New(repo, alertPublisher, boards, log)
 	streamConsumer := consumer.New(redisClient, log, pipeline, consumerName)
 
+	// Goal and list overlays (ADR-0072): debounced list_update pushes, and
+	// follower/subscriber polls of connected goal overlays.
+	bgCtx, stopBackground := context.WithCancel(context.Background())
+	defer stopBackground()
+	listPush := listpush.New(redisClient, alertPublisher, 2*time.Second, log)
+	pipeline.SetListNotifier(listPush)
+	go listPush.Run(bgCtx)
+	goalPoller := goals.NewPoller(repo, goalCounters(dbPool, log), redisClient, alertPublisher, goalPollInterval(), log)
+	go goalPoller.Run(bgCtx)
+
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
@@ -148,6 +162,7 @@ func main() {
 	<-quit
 
 	log.Info("Shutting down...")
+	stopBackground()
 	streamConsumer.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)

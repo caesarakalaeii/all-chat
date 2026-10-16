@@ -118,7 +118,7 @@ Each service has a detailed README:
 - [facebook-listener](./services/facebook-listener/README.md) - Facebook Live comments via Graph API polling + moderation (ADR-0060)
 - [instagram-listener](./services/instagram-listener/README.md) - Instagram Live comments via Graph API `live_comments` polling, read-only (ADR-0062)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
-- [alert-processor](./services/alert-processor/README.md) - Second `chat:raw` consumer (group `alert-processors`): routes event-typed messages to alerts/goal/list overlays on `overlay:{id}:alerts`, persists `alert_events`, scores list leaderboards (ADR-0068)
+- [alert-processor](./services/alert-processor/README.md) - Second `chat:raw` consumer (group `alert-processors`): routes event-typed messages to alerts/goal/list overlays on `overlay:{id}:alerts`, persists `alert_events`, scores list leaderboards and pushes debounced `list_update` frames, counts bits/Super Chat goals and polls follower/subscriber goals of connected goal overlays (ADR-0068, ADR-0072)
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
 - share-service — Shareable overlay links; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041); localization contributor tool `/translate` + admin review/export (ADR-0063); UI language gate probe `GET /api/v1/ui-languages` (ADR-0066) (`services/share-service/`, no README yet)

@@ -45,6 +45,7 @@ import Link from 'next/link'
 import { ChevronLeft, ChevronRight, X, Clipboard, Share2, Puzzle } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { AlertTestPanel } from '@/components/overlays/AlertTestPanel'
+import { GoalEditor, ListEditor } from '@/components/overlays/GoalListEditors'
 import { AlertsEditor } from '@/components/overlays/AlertsEditor'
 import { resolveOverlayKind } from '@/lib/utils/overlayKind'
 import { overlaysApi } from '@/lib/api/overlays'
@@ -125,8 +126,8 @@ import { ModeratorsPanel } from '@/components/editor/ModeratorsPanel'
 import { getTranslations, useTranslations, type TFunction } from '@/lib/i18n'
 import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
 import {
-  ALERT_OVERLAY_SECTIONS,
-  ALERTS_SECTION,
+  KIND_SECTIONS,
+  kindSections,
   EDITOR_SECTIONS,
   type EditorSectionId,
   type SpotlightSection,
@@ -1953,7 +1954,10 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
 
   // --- Overlay / sources state ---
   const [overlay, setOverlay] = useState<Overlay | null>(null)
-  const isAlertsOverlay = resolveOverlayKind(overlay?.overlay_type) === 'alerts'
+  const overlayKind = resolveOverlayKind(overlay?.overlay_type)
+  const isAlertsOverlay = overlayKind === 'alerts'
+  // Monitor, events, credits, the dock and the extension are chat-feed tools.
+  const isChatOverlay = overlayKind === 'chat'
   const [sources, setSources] = useState<ChatSource[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [acceptedShares, setAcceptedShares] = useState<AcceptedShare[]>([])
@@ -1972,7 +1976,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     if (typeof window === 'undefined') return 'theme'
     try {
       const stored = localStorage.getItem(ACTIVE_SECTION_STORAGE_KEY)
-      if (stored !== null && [...EDITOR_SECTIONS, ALERTS_SECTION].some((s) => s.id === stored)) {
+      if (stored !== null && [...EDITOR_SECTIONS, ...KIND_SECTIONS].some((s) => s.id === stored)) {
         return stored as EditorSectionId
       }
     } catch {
@@ -1980,10 +1984,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
     return 'theme'
   })
-  // An alerts overlay swaps the chat editor for its own short nav (issue
-  // #954); a remembered section the overlay's kind lacks falls back to the
-  // kind's first section without overwriting the stored choice.
-  const navSections = isAlertsOverlay ? ALERT_OVERLAY_SECTIONS : EDITOR_SECTIONS
+  // Alerts, goal and list overlays swap the chat editor for their own short
+  // nav (issues #954, #955); a remembered section the overlay's kind lacks
+  // falls back to the kind's first section without overwriting the stored
+  // choice.
+  const navSections = kindSections(overlayKind)
   const shownSection = navSections.some((s) => s.id === activeSection)
     ? activeSection
     : navSections[0].id
@@ -3331,7 +3336,15 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
         overlayId={id}
         onIframeReady={handleIframeReady}
         // An alerts overlay previews its alert box: test alerts play there.
-        previewPath={isAlertsOverlay ? `/overlays/${id}/preview/alerts` : undefined}
+        // Goal and list overlays preview their own render route, passive so
+        // an open editor never counts as a connected overlay (no goal polls).
+        previewPath={
+          isAlertsOverlay
+            ? `/overlays/${id}/preview/alerts`
+            : isChatOverlay
+              ? undefined
+              : `/overlay/${id}?passive=true`
+        }
       >
         {/* Config panel content */}
         <div className="max-w-none space-y-6 p-6">
@@ -3361,28 +3374,34 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
               )}
             </div>
             <div className="ml-4 flex shrink-0 flex-wrap gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open(`/overlay/${id}/view`, '_blank', 'noopener,noreferrer')}
-                title={t('overlayEditor.page.monitorViewTitle')}
-              >
-                {t('overlayEditor.page.monitorView')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push(`/overlays/${id}/events`)}
-              >
-                {t('overlayEditor.page.eventSettings')}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push(`/overlays/${id}/credits`)}
-              >
-                {t('overlayEditor.page.credits')}
-              </Button>
+              {isChatOverlay && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      window.open(`/overlay/${id}/view`, '_blank', 'noopener,noreferrer')
+                    }
+                    title={t('overlayEditor.page.monitorViewTitle')}
+                  >
+                    {t('overlayEditor.page.monitorView')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/overlays/${id}/events`)}
+                  >
+                    {t('overlayEditor.page.eventSettings')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/overlays/${id}/credits`)}
+                  >
+                    {t('overlayEditor.page.credits')}
+                  </Button>
+                </>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -3419,16 +3438,18 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 ? t('overlayEditor.page.copiedObsUrl')
                 : t('overlayEditor.page.copyObsUrl')}
             </Button>
-            <Button
-              variant="outline"
-              className="flex flex-1 items-center justify-center gap-2"
-              onClick={handleCopyDockUrl}
-            >
-              <Clipboard className="size-4" />
-              {copiedDock
-                ? t('overlayEditor.page.copiedDockUrl')
-                : t('overlayEditor.page.copyDockUrl')}
-            </Button>
+            {isChatOverlay && (
+              <Button
+                variant="outline"
+                className="flex flex-1 items-center justify-center gap-2"
+                onClick={handleCopyDockUrl}
+              >
+                <Clipboard className="size-4" />
+                {copiedDock
+                  ? t('overlayEditor.page.copiedDockUrl')
+                  : t('overlayEditor.page.copyDockUrl')}
+              </Button>
+            )}
           </div>
           {/* Both help triggers centred on one line. They stay inline (rather
               than becoming flex items) so the line box is the height a single
@@ -3457,26 +3478,28 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 </div>
               </Dialog.Content>
             </Dialog.Root>
-            <Dialog.Root>
-              <Dialog.Trigger
-                render={
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="xs"
-                    className="mx-4 h-auto p-0 text-text-sub hover:text-text"
-                  >
-                    {t('overlayEditor.page.dockHelpTrigger')}
-                  </Button>
-                }
-              />
-              <Dialog.Content size="sm">
-                <Dialog.Title>{t('overlayEditor.page.dockHelpTitle')}</Dialog.Title>
-                <div className="mt-3">
-                  <ObsDockHelpContent />
-                </div>
-              </Dialog.Content>
-            </Dialog.Root>
+            {isChatOverlay && (
+              <Dialog.Root>
+                <Dialog.Trigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="xs"
+                      className="mx-4 h-auto p-0 text-text-sub hover:text-text"
+                    >
+                      {t('overlayEditor.page.dockHelpTrigger')}
+                    </Button>
+                  }
+                />
+                <Dialog.Content size="sm">
+                  <Dialog.Title>{t('overlayEditor.page.dockHelpTitle')}</Dialog.Title>
+                  <div className="mt-3">
+                    <ObsDockHelpContent />
+                  </div>
+                </Dialog.Content>
+              </Dialog.Root>
+            )}
           </div>
 
           {/* 2b. Share overlay */}
@@ -3489,48 +3512,50 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
             {t('overlayEditor.page.shareOverlay')}
           </Button>
 
-          {/* 2c. Extension overlay */}
-          <Card className="p-4">
-            <div className="flex items-start gap-3">
-              <Puzzle className="mt-0.5 size-4 shrink-0 text-twitch" />
-              <div className="min-w-0 flex-1">
-                <div className="mb-0.5 flex items-center gap-2">
-                  <p className="text-sm font-semibold text-text">
-                    {t('overlayEditor.page.extensionHeading')}
+          {/* 2c. Extension overlay: the viewer extension shows a chat feed. */}
+          {isChatOverlay && (
+            <Card className="p-4">
+              <div className="flex items-start gap-3">
+                <Puzzle className="mt-0.5 size-4 shrink-0 text-twitch" />
+                <div className="min-w-0 flex-1">
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <p className="text-sm font-semibold text-text">
+                      {t('overlayEditor.page.extensionHeading')}
+                    </p>
+                    {isPublicForViewers && (
+                      <span className="inline-flex items-center rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[11px] font-semibold text-twitch">
+                        {t('overlayEditor.page.extensionActive')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-sub">
+                    {isPublicForViewers
+                      ? t('overlayEditor.page.extensionActiveBody')
+                      : t('overlayEditor.page.extensionInactiveBody')}
                   </p>
-                  {isPublicForViewers && (
-                    <span className="inline-flex items-center rounded border border-twitch/30 bg-twitch/15 px-1.5 py-0.5 text-[11px] font-semibold text-twitch">
-                      {t('overlayEditor.page.extensionActive')}
-                    </span>
-                  )}
                 </div>
-                <p className="text-xs text-text-sub">
-                  {isPublicForViewers
-                    ? t('overlayEditor.page.extensionActiveBody')
-                    : t('overlayEditor.page.extensionInactiveBody')}
-                </p>
+                {isPublicForViewers ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-xs text-text-sub hover:text-destructive"
+                    onClick={handleUnsetExtensionOverlay}
+                  >
+                    {t('overlayEditor.page.extensionDeactivate')}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 text-xs"
+                    onClick={handleSetAsExtensionOverlay}
+                  >
+                    {t('overlayEditor.page.extensionSetActive')}
+                  </Button>
+                )}
               </div>
-              {isPublicForViewers ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0 text-xs text-text-sub hover:text-destructive"
-                  onClick={handleUnsetExtensionOverlay}
-                >
-                  {t('overlayEditor.page.extensionDeactivate')}
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0 text-xs"
-                  onClick={handleSetAsExtensionOverlay}
-                >
-                  {t('overlayEditor.page.extensionSetActive')}
-                </Button>
-              )}
-            </div>
-          </Card>
+            </Card>
+          )}
 
           {/* Premium required dialog */}
           <Dialog.Root open={showPremiumRequired} onOpenChange={setShowPremiumRequired}>
@@ -3632,7 +3657,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* sticky footer uses position:sticky bottom-0 — works because split-view-config has overflow-y-auto */}
           <div className="relative">
             {/* The search indexes the chat editor's settings only. */}
-            {!isAlertsOverlay && <SettingsSearch onNavigate={handleSearchNavigate} />}
+            {isChatOverlay && <SettingsSearch onNavigate={handleSearchNavigate} />}
             <div className="@container mt-4">
               <div className="flex flex-col gap-4 @md:flex-row @md:gap-5">
                 <EditorNav
@@ -3642,6 +3667,9 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                 />
                 <div ref={panelRef} className="min-w-0 flex-1">
                   <EditorSectionHeader id={shownSection} />
+
+                  {shownSection === 'goal' && <GoalEditor overlayId={id} />}
+                  {shownSection === 'list' && <ListEditor overlayId={id} />}
 
                   {shownSection === 'alerts' && (
                     <div className="space-y-8">
@@ -4484,8 +4512,8 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     full-width sibling its z-10 bar covered the rail's last
                     button and shrank its target below the 24px WCAG 2.5.8
                     floor. */}
-                  {/* An alerts overlay saves through its own editor. */}
-                  {!isAlertsOverlay && (
+                  {/* Alerts, goal and list overlays save through their own editors. */}
+                  {isChatOverlay && (
                     <div className="sticky bottom-0 z-10 mt-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
                       <Button
                         onClick={() => void handleSaveConfiguration()}

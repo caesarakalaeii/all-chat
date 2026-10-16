@@ -538,9 +538,22 @@ export const viewerOverlay: LocaleNamespace<'viewerOverlay'> = {
 
   // The sandboxed frame a premium custom-code alert renders in (ADR-0071).
   customAlertFrameTitle: 'Eigener Alert',
-  unsupportedKind: {
-    heading: '{kind}-Overlay',
-    body: 'Dieser Overlay-Typ wird noch nicht unterstützt.',
+  goalTitles: {
+    followers: 'Follower-Ziel',
+    subscribers: 'Abonnenten-Ziel',
+    bits: 'Bits-Ziel',
+    super_chat: 'Super-Chat-Ziel',
+  },
+  goal: {
+    progress: '{current} / {target}',
+  },
+  listTitles: {
+    bits: 'Top-Cheerer',
+    gifts: 'Top-Verschenker',
+    super_chat: 'Top-Super-Chats',
+  },
+  list: {
+    empty: 'Noch keine Unterstützer',
   },
 
   statusIndicator: {

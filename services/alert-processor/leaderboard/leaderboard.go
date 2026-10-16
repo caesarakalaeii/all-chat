@@ -22,8 +22,10 @@ package leaderboard
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
+	"github.com/caesar/all-chat/shared/alerts"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -57,7 +59,19 @@ func Member(platform, userID string) string {
 
 // Key is the sorted-set key: overlay:{overlay_id}:leaderboard:{category}.
 func Key(overlayID, category string) string {
-	return fmt.Sprintf("overlay:%s:leaderboard:%s", overlayID, category)
+	return alerts.LeaderboardKey(overlayID, category)
+}
+
+// GoalMetric maps a normalized event type onto the counter goal metric it
+// advances (ADR-0072). Only bits and Super Chats are counted; followers and
+// subscribers are polled from the platform APIs instead.
+func GoalMetric(eventType string) (string, bool) {
+	switch eventType {
+	case "bits", "super_chat":
+		return eventType, true
+	default:
+		return "", false
+	}
 }
 
 // claimedKey is the once-per-alert claim that guards a board against the
@@ -82,7 +96,20 @@ end
 redis.call('EXPIRE', KEYS[1], ARGV[3])
 redis.call('ZINCRBY', KEYS[2], ARGV[1], ARGV[2])
 redis.call('EXPIRE', KEYS[2], ARGV[3])
+redis.call('HSET', KEYS[3], ARGV[2], ARGV[4])
+redis.call('EXPIRE', KEYS[3], ARGV[3])
 return 1
+`)
+
+// countOnceScript is scoreOnceScript for a goal counter: the same per-alert
+// claim, then INCRBYFLOAT. Returns {counted, total}. The counter itself has
+// no TTL: a goal lasts until its owner resets it.
+var countOnceScript = redis.NewScript(`
+if redis.call('SETNX', KEYS[1], '1') == 0 then
+	return {0, redis.call('GET', KEYS[2]) or '0'}
+end
+redis.call('EXPIRE', KEYS[1], ARGV[2])
+return {1, redis.call('INCRBYFLOAT', KEYS[2], ARGV[1])}
 `)
 
 // Client writes leaderboard scores to Redis.
@@ -97,15 +124,40 @@ func New(rdb redis.UniversalClient) *Client {
 
 // RecordAmount adds amount to the member's running score on the board, but
 // only the first time this alert is scored on this overlay's board — the
-// per-alert claim inside scoreOnceScript absorbs redeliveries. Both the
-// board and the claim carry the 30-day rolling TTL.
-func (c *Client) RecordAmount(ctx context.Context, overlayID, category, member string, amount float64, alertID string) error {
+// per-alert claim inside scoreOnceScript absorbs redeliveries. name is the
+// member's display name, kept current in the board's names hash so the list
+// renders names, not user ids. The board, its names and the claim carry the
+// 30-day rolling TTL.
+func (c *Client) RecordAmount(ctx context.Context, overlayID, category, member, name string, amount float64, alertID string) error {
 	key := Key(overlayID, category)
 	_, err := scoreOnceScript.Run(ctx, c.rdb,
-		[]string{claimedKey(overlayID, alertID), key},
-		amount, member, int64(TTL/time.Second)).Result()
+		[]string{claimedKey(overlayID, alertID), key, alerts.LeaderboardNamesKey(overlayID, category)},
+		amount, member, int64(TTL/time.Second), name).Result()
 	if err != nil {
 		return fmt.Errorf("failed to record leaderboard amount for %s: %w", key, err)
 	}
 	return nil
+}
+
+// RecordGoalAmount adds amount to the overlay's goal counter for metric, once
+// per alert, and returns the counter's total (excluding the goal's
+// starting_value) and whether this call counted it.
+func (c *Client) RecordGoalAmount(ctx context.Context, overlayID, metric string, amount float64, alertID string) (float64, bool, error) {
+	key := alerts.GoalKey(overlayID, metric)
+	res, err := countOnceScript.Run(ctx, c.rdb,
+		[]string{fmt.Sprintf("overlay:%s:goal-counted:%s", overlayID, alertID), key},
+		amount, int64(TTL/time.Second)).Slice()
+	if err != nil {
+		return 0, false, fmt.Errorf("failed to count goal amount for %s: %w", key, err)
+	}
+	if len(res) != 2 {
+		return 0, false, fmt.Errorf("goal count script for %s returned %d values", key, len(res))
+	}
+	counted, _ := res[0].(int64)
+	raw, _ := res[1].(string)
+	total, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("goal counter %s holds %q: %w", key, raw, err)
+	}
+	return total, counted == 1, nil
 }

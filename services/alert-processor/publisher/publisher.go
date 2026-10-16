@@ -63,3 +63,17 @@ func (p *Publisher) Publish(ctx context.Context, alert *models.Alert) error {
 	}
 	return nil
 }
+
+// PublishFrame sends a goal or list_update frame (ADR-0072) to the overlay's
+// channel; the gateway forwards it under the frame's own type.
+func (p *Publisher) PublishFrame(ctx context.Context, overlayID string, frame any) error {
+	channel := Channel(overlayID)
+	data, err := json.Marshal(frame)
+	if err != nil {
+		return fmt.Errorf("failed to marshal frame for %s: %w", channel, err)
+	}
+	if err := p.rdb.Publish(ctx, channel, data).Err(); err != nil {
+		return fmt.Errorf("failed to publish frame to %s: %w", channel, err)
+	}
+	return nil
+}

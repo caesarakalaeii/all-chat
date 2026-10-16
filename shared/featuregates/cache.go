@@ -143,6 +143,12 @@ const (
 	// is_premium=TRUE (migration 108). Only the create is gated: an existing
 	// alerts overlay keeps rendering and receiving alerts after premium lapses.
 	GateAlertsOverlay = "alerts_overlay"
+
+	// GateGoalOverlay and GateListOverlay gate creating (or cloning) a goal or
+	// list overlay (issue #955, ADR-0072), exactly like GateAlertsOverlay.
+	// Seeded is_premium=TRUE (migrations 110 and 111).
+	GateGoalOverlay = "goal_overlay"
+	GateListOverlay = "list_overlay"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate

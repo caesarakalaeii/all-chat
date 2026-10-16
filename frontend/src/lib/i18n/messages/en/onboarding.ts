@@ -98,6 +98,12 @@ export const onboarding = {
     alertsEditorTitle: 'Custom alerts editor',
     alertsEditorBody:
       'Give every alert its own text, GIF and sound, search GIFs right in the editor, or write your own HTML, CSS and JavaScript for it.',
+    goalOverlayTitle: 'Goal overlays',
+    goalOverlayBody:
+      'A progress bar toward a follower, subscriber, bits or Super Chat goal that fills up live on stream.',
+    listOverlayTitle: 'Leaderboard overlays',
+    listOverlayBody:
+      'Rank your top cheerers, gifters or Super Chatters of the last 30 days on stream, updated with every new one.',
     flairsTitle: 'Viewer flairs',
     flairsBody:
       'Premium cosmetics for chatters, like animated name gradients, under Flairs in the navigation.',

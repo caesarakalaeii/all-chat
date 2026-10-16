@@ -28,6 +28,7 @@ import (
 	"github.com/caesar/all-chat/services/alert-processor/publisher"
 	"github.com/caesar/all-chat/services/alert-processor/repository"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/shared/alerts"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +47,17 @@ type fakeStore struct {
 	// how a multi-overlay fan-out is made to fail partway through.
 	failInsertOverlay string
 	inserts           []*models.Alert
+	goal              *alerts.GoalConfig
+}
+
+func (f *fakeStore) GoalConfig(context.Context, string) (*alerts.GoalConfig, error) {
+	return f.goal, nil
+}
+
+type fakeNotifier struct{ marked []string }
+
+func (f *fakeNotifier) MarkDirty(overlayID, category string) {
+	f.marked = append(f.marked, overlayID+"/"+category)
 }
 
 func (f *fakeStore) FindAlertOverlays(_ context.Context, _, _ string) ([]repository.AlertOverlay, error) {
@@ -403,4 +415,65 @@ func TestHandle_RouteFailurePropagates(t *testing.T) {
 	_, _, p := newHarness(t, store)
 
 	assert.Error(t, p.Handle(context.Background(), bitsEvent()))
+}
+
+// A scored board is handed to the list_update debouncer, and the board keeps
+// the sender's display name for the renderer.
+func TestHandle_ListScoreMarksTheBoardDirty(t *testing.T) {
+	store := &fakeStore{overlays: []repository.AlertOverlay{{OverlayID: "overlay-c", OverlayType: "list"}}}
+	mr, _, p := newHarness(t, store)
+	n := &fakeNotifier{}
+	p.SetListNotifier(n)
+
+	require.NoError(t, p.Handle(context.Background(), bitsEvent()))
+	assert.Equal(t, []string{"overlay-c/bits"}, n.marked)
+	assert.Equal(t, "Some Chatter", mr.HGet("overlay:overlay-c:leaderboard:bits:names", "twitch:u1"))
+}
+
+// A counter goal (bits) advances on its event and pushes a goal frame with
+// starting_value + counted amount; a redelivery neither counts nor pushes.
+func TestHandle_CounterGoalAdvancesAndPushes(t *testing.T) {
+	store := &fakeStore{
+		overlays: []repository.AlertOverlay{{OverlayID: "overlay-g", OverlayType: "goal"}},
+		goal:     &alerts.GoalConfig{Metric: "bits", Platform: "twitch", Target: 1000, StartingValue: 50, Title: "Bits"},
+	}
+	_, rdb, p := newHarness(t, store)
+	sub := rdb.Subscribe(context.Background(), publisher.Channel("overlay-g"))
+	t.Cleanup(func() { _ = sub.Close() })
+	_, err := sub.Receive(context.Background())
+	require.NoError(t, err)
+
+	require.NoError(t, p.Handle(context.Background(), bitsEvent()))
+	var frames []string
+	for i := 0; i < 2; i++ {
+		select {
+		case m := <-sub.Channel():
+			frames = append(frames, m.Payload)
+		case <-time.After(time.Second):
+			t.Fatal("want the alert and the goal frame")
+		}
+	}
+	assert.JSONEq(t, `{"type":"goal","overlay_id":"overlay-g","goal":"bits","current":150,"target":1000,"title":"Bits"}`, frames[1])
+
+	require.NoError(t, p.Handle(context.Background(), bitsEvent()))
+	<-sub.Channel() // the redelivered alert itself
+	select {
+	case m := <-sub.Channel():
+		t.Fatalf("a redelivery must not push a goal frame, got %s", m.Payload)
+	case <-time.After(200 * time.Millisecond):
+	}
+	v, err := rdb.Get(context.Background(), alerts.GoalKey("overlay-g", "bits")).Result()
+	require.NoError(t, err)
+	assert.Equal(t, "100", v)
+}
+
+// A polled goal (followers) is not advanced by events.
+func TestHandle_PolledGoalIgnoresEvents(t *testing.T) {
+	store := &fakeStore{
+		overlays: []repository.AlertOverlay{{OverlayID: "overlay-g", OverlayType: "goal"}},
+		goal:     &alerts.GoalConfig{Metric: "followers", Platform: "twitch", Target: 100},
+	}
+	mr, _, p := newHarness(t, store)
+	require.NoError(t, p.Handle(context.Background(), bitsEvent()))
+	assert.False(t, mr.Exists(alerts.GoalKey("overlay-g", "followers")))
 }

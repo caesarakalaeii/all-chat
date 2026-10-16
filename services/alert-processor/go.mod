@@ -6,10 +6,13 @@ replace github.com/caesar/all-chat/shared => ../../shared
 
 replace github.com/caesar/all-chat/services/message-processor => ../message-processor
 
+replace github.com/caesar/all-chat/services/moderation-service => ../moderation-service
+
 require (
 	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/caesar/all-chat/services/message-processor v0.0.0-00010101000000-000000000000
-	github.com/caesar/all-chat/shared v0.0.0-00010101000000-000000000000
+	github.com/caesar/all-chat/services/moderation-service v0.0.0-00010101000000-000000000000
+	github.com/caesar/all-chat/shared v0.0.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.11.0
