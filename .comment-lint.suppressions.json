@@ -51,7 +51,7 @@
     "restate": 1
   },
   "services/api-gateway/websocket/manager.go": {
-    "restate": 6
+    "restate": 5
   },
   "services/auth-service/cmd/main.go": {
     "restate": 5
