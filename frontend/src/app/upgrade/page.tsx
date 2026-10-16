@@ -25,6 +25,7 @@ import {
   Sparkles,
   Users,
   Volume2,
+  Bell,
 } from 'lucide-react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
@@ -63,6 +64,7 @@ const features = [
   { icon: BadgeCheck, messageStem: 'youtubeOfficialApi' },
   { icon: MessagesSquare, messageStem: 'sharedChat' },
   { icon: Sparkles, messageStem: 'flairs' },
+  { icon: Bell, messageStem: 'alertsOverlay' },
 ] as const satisfies ReadonlyArray<PremiumFeature>
 
 export default function UpgradePage() {

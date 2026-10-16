@@ -26,6 +26,7 @@
  * without a WebSocket. Keep this file free of React and browser globals.
  */
 
+import type { AlertFrame } from '@/lib/types/alert'
 import type {
   ChatMessage,
   DeletionMetadata,
@@ -255,7 +256,7 @@ export interface ConnectedData {
 
 export interface WsEnvelope {
   type?: string
-  data?: ChatMessage | PlatformStatus | DeletionMetadata[] | ConnectedData | null
+  data?: ChatMessage | PlatformStatus | DeletionMetadata[] | ConnectedData | AlertFrame | null
   timestamp?: string
   error?: string
 }
@@ -268,6 +269,7 @@ export type EnvelopeClassification =
   | { kind: 'update'; message: ChatMessage }
   | { kind: 'status'; status: PlatformStatus }
   | { kind: 'connected'; replayTruncated: boolean }
+  | { kind: 'alert'; alert: AlertFrame }
   | { kind: 'ignore' }
 
 /**
@@ -312,6 +314,12 @@ export function classifyEnvelope(envelope: WsEnvelope | null | undefined): Envel
       const data = envelope.data as PlatformStatus | undefined
       if (!data) return { kind: 'ignore' }
       return { kind: 'status', status: data }
+    }
+    case 'alert': {
+      // Alerts/goal/list overlays only (ADR-0070); never part of the chat feed.
+      const data = envelope.data as AlertFrame | undefined
+      if (!data?.alert_id) return { kind: 'ignore' }
+      return { kind: 'alert', alert: data }
     }
     default:
       return { kind: 'ignore' }

@@ -39,4 +39,13 @@ describe('UpgradePage premium feature list', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(t('marketing.upgrade.youtubeOfficialApiBody'))).toBeInTheDocument()
   })
+
+  it('lists alert overlays', () => {
+    render(<UpgradePage />)
+
+    expect(
+      screen.getByRole('heading', { name: t('marketing.upgrade.alertsOverlayTitle') })
+    ).toBeInTheDocument()
+    expect(screen.getByText(t('marketing.upgrade.alertsOverlayBody'))).toBeInTheDocument()
+  })
 })

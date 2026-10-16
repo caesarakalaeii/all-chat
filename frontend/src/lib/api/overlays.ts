@@ -174,6 +174,16 @@ export const overlaysApi = {
   },
 
   /**
+   * Publish a synthetic alert of one event type to an alerts overlay (ADR-0070).
+   * It reaches the overlay through the same WebSocket path as a real alert.
+   */
+  async sendTestAlert(id: string, eventType: string): Promise<{ alert_id: string }> {
+    return apiClient.post<{ alert_id: string }>(`/api/v1/overlays/${id}/alerts/test`, {
+      event_type: eventType,
+    })
+  },
+
+  /**
    * Get credit roll configuration for an overlay
    */
   async getCreditRollConfig(id: string): Promise<CreditRollConfig> {

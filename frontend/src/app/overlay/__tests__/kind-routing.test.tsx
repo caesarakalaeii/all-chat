@@ -27,8 +27,8 @@ import type { ChatMessage } from '@/lib/types/message'
 
 // The render route dispatches on the overlay's kind (ADR-0068), read from the
 // public config the page already fetches. Chat overlays must keep rendering
-// exactly as before; the three new kinds show a placeholder until their own
-// renderer issues land.
+// exactly as before; alerts overlays render the alert box; goal and list show
+// a placeholder until their own renderer issues land.
 
 window.matchMedia = (query: string) =>
   ({
@@ -111,14 +111,42 @@ describe('overlay render route kind dispatch', () => {
     expect(screen.getByText('legacy shape')).toBeInTheDocument()
   })
 
-  it.each(['alerts', 'goal', 'list'] as const)(
-    'renders the placeholder for a %s overlay',
-    async (kind) => {
-      streamConfig.config = { overlay_type: kind }
-      render(<OBSOverlayPage params={resolvedParams('test')} />)
-      await act(async () => {})
+  it('renders an alert frame on an alerts overlay, and nothing before one', async () => {
+    streamConfig.config = { overlay_type: 'alerts' }
+    const { container } = render(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {})
+    expect(container).toBeEmptyDOMElement()
 
-      expect(screen.getByText(/not supported yet/i)).toBeInTheDocument()
-    },
-  )
+    act(() => {
+      streamOptions.onAlert?.({
+        alert_id: 'a1',
+        overlay_id: 'test',
+        platform: 'twitch',
+        event_type: 'bits',
+        event_data: { type: 'bits' },
+        user: { id: 'u', name: 'E2ECheck', avatar_url: '' },
+        profile: {
+          event_type: 'bits',
+          text_template: '{username} cheered {amount}!',
+          sound_url: '',
+          image_url: '',
+          duration_ms: 5000,
+          volume: 100,
+          enabled: true,
+          sort_after: 0,
+          text: 'E2ECheck cheered 100 bits!',
+        },
+      })
+    })
+
+    expect(screen.getByRole('status')).toHaveTextContent('E2ECheck cheered 100 bits!')
+  })
+
+  it.each(['goal', 'list'] as const)('renders the placeholder for a %s overlay', async (kind) => {
+    streamConfig.config = { overlay_type: kind }
+    render(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {})
+
+    expect(screen.getByText(/not supported yet/i)).toBeInTheDocument()
+  })
 })

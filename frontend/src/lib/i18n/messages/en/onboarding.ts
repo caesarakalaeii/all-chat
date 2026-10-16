@@ -92,6 +92,9 @@ export const onboarding = {
     bubbleColorsTitle: 'Differently-coloured bubbles',
     bubbleColorsBody:
       'Give each platform its own bubble colour, or cycle a palette down the feed, under Bubble colors in Appearance. Free.',
+    alertsOverlayTitle: 'Alert overlays',
+    alertsOverlayBody:
+      'Pop up subs, bits, raids, Super Chats and TikTok gifts on stream as their own OBS source, with a test button to line them up.',
     flairsTitle: 'Viewer flairs',
     flairsBody:
       'Premium cosmetics for chatters, like animated name gradients, under Flairs in the navigation.',

@@ -25,20 +25,23 @@
  * creatable: a single-option radio group is a question with no choice.
  */
 
-import { CREATABLE_OVERLAY_KINDS } from '@/lib/utils/overlayKind'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import { creatableOverlayKinds } from '@/lib/utils/overlayKind'
 import { useTranslations } from '@/lib/i18n'
 import type { OverlayType } from '@/lib/types/overlay'
 
 export function OverlayKindPicker({
   value,
   onChange,
-  kinds = CREATABLE_OVERLAY_KINDS,
+  kinds: kindsProp,
 }: {
   value: OverlayType
   onChange: (kind: OverlayType) => void
   kinds?: readonly OverlayType[]
 }) {
   const t = useTranslations()
+  const isPremium = useAuthStore((s) => s.user?.is_premium ?? false)
+  const kinds = kindsProp ?? creatableOverlayKinds(isPremium)
 
   if (kinds.length < 2) return null
 

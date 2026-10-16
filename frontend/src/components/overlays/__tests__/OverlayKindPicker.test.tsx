@@ -22,15 +22,33 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 import { OverlayKindPicker } from '@/components/overlays/OverlayKindPicker'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import type { User } from '@/lib/types/auth'
 import { OVERLAY_KINDS } from '@/lib/utils/overlayKind'
 import type { OverlayType } from '@/lib/types/overlay'
 
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  useAuthStore.setState({ user: null })
+})
+
+const signIn = (isPremium: boolean) =>
+  useAuthStore.setState({ user: { id: 'u', is_premium: isPremium } as User })
 
 describe('OverlayKindPicker', () => {
-  it('renders nothing while chat is the only creatable kind', () => {
+  it('renders nothing for a user who may only create chat overlays', () => {
+    signIn(false)
     const { container } = render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('offers alerts, and only alerts, beside chat to a premium user', () => {
+    // The alerts_overlay gate (ADR-0008); goal and list are not released yet.
+    signIn(true)
+    render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
+    const radios = screen.getAllByRole('radio')
+    expect(radios).toHaveLength(2)
+    expect(screen.getByRole('radio', { name: /Alerts/ })).toBeInTheDocument()
   })
 
   it('offers every kind it is given', () => {

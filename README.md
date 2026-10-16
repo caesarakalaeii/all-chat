@@ -74,6 +74,8 @@ In OBS, open **View > Docks > Custom Browser Docks**, give the dock a name, past
 
 **One account, several overlays.** Each overlay has its own mix of chat sources, its own theme, its own OBS URL and its own monitor. For example, one overlay for Twitch and TikTok on a gaming stream and a YouTube-only one for a podcast.
 
+**Alert overlays (Premium).** Create an overlay of kind **Alerts** to get an alert box as its own OBS browser source: subs, bits, raids, follows, Super Chats, memberships and TikTok gifts pop up one at a time with their text, image or GIF and sound, then the source goes empty again. It uses the same chat sources as a chat overlay. Under **Testing** in the overlay editor, **Send test alert** fires a sample of any event type so you can line it up in OBS.
+
 **Your moderators can use it too.** Under **Moderators** in the overlay editor you can invite the
 people who already moderate for you (Premium). You get a private link to send them; they accept it
 with their own All-Chat account, and every channel handed to them shows up under **Channels you

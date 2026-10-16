@@ -136,11 +136,12 @@ Authorization: Bearer <jwt-token>
 Body: {
   "name": "My Stream Overlay",
   "description": "Multi-platform chat display",
-  "settings": {
-    "theme": "dark",
-    "font_size": 16
-  }
+  "overlay_type": "chat"   # chat (default) | alerts; goal/list → 403 (not released)
 }
+# overlay_type "alerts" needs the alerts_overlay premium gate (ADR-0008,
+# migration 108): 403 {"error":"Premium required","feature":"alerts_overlay"}.
+# Cloning an alerts overlay (POST /overlays/:id/clone) checks the same gate.
+# Existing alerts overlays keep working when premium lapses.
 
 # List user's overlays
 GET /api/v1/overlays
