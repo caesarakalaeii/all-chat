@@ -237,9 +237,9 @@ func main() {
 
 		// UI language picker probe (ADR-0066). The chosen language lives in the
 		// browser, so there is nothing to serve: the route exists for the gate.
-		// Settings calls it and offers the picker on 200, explains the beta on
-		// 403. Both dimensions are enforced so either can be flipped from the
-		// admin UI: seeded early-access, free (migration 103).
+		// Settings calls it and offers the picker on a 200, or explains the beta
+		// on a 403. Both dimensions are enforced so either can be flipped from
+		// the admin UI: seeded early-access, free (migration 103).
 		uiLanguagesRoutes := api.Group("/ui-languages")
 		uiLanguagesRoutes.Use(
 			middleware.RequireEarlyAccess(dbPool, gateCache, featuregates.GateUILanguages, log),
