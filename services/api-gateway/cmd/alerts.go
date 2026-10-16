@@ -31,7 +31,7 @@ import (
 type alertProfileLookup func(ctx context.Context, overlayID, eventType string) (p alerts.Profile, found bool, err error)
 
 // buildAlertFrame wraps one overlay:{id}:alerts payload in a type "alert"
-// WebSocket frame (ADR-0069): the alert envelope unchanged, plus "profile" —
+// WebSocket frame (ADR-0070): the alert envelope unchanged, plus "profile" —
 // the overlay's saved or default profile for the event type with its text
 // template already rendered. Event types without profiles are forwarded with
 // no "profile" key. It returns a nil frame for a profile the streamer switched

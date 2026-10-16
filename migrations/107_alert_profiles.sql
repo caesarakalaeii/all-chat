@@ -1,6 +1,6 @@
 -- Migration: 107_alert_profiles
 -- Description: Per-overlay alert profiles for alerts overlays (issue #952,
---   ADR-0069): how one event type (subscription, bits, super_chat, ...) is
+--   ADR-0070): how one event type (subscription, bits, super_chat, ...) is
 --   presented — a text template with {username}/{amount}/{count}/{message}
 --   placeholders, optional sound and image URLs, duration, volume, on/off.
 --
@@ -34,14 +34,14 @@ CREATE TABLE IF NOT EXISTS alert_profiles (
 );
 
 COMMENT ON TABLE alert_profiles IS
-    'Saved alert profiles of an alerts overlay, one per event type (ADR-0069). Missing rows fall back to the defaults in shared/alerts.';
+    'Saved alert profiles of an alerts overlay, one per event type (ADR-0070). Missing rows fall back to the defaults in shared/alerts.';
 
 INSERT INTO feature_gates (feature_key, is_premium, early_access, description)
 VALUES (
     'alerts_editor',
     TRUE,
     FALSE,
-    'Save custom alert profiles (text, sound, image, duration) on an alerts overlay (ADR-0069). Defaults and test alerts stay free'
+    'Save custom alert profiles (text, sound, image, duration) on an alerts overlay (ADR-0070). Defaults and test alerts stay free'
 )
 ON CONFLICT (feature_key) DO NOTHING;
 

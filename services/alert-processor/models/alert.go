@@ -37,7 +37,7 @@ type Alert struct {
 	EventData *mpmodels.EventInfo `json:"event_data"`
 	User      AlertUser           `json:"user"`
 	// Message is the event's chat text (resub message, cheer text, Super Chat
-	// comment): the {message} placeholder of alert profiles (ADR-0069). Not
+	// comment): the {message} placeholder of alert profiles (ADR-0070). Not
 	// persisted to alert_events.
 	Message    string    `json:"message"`
 	OccurredAt time.Time `json:"occurred_at"`

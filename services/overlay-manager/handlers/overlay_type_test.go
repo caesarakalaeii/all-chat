@@ -33,7 +33,7 @@ import (
 )
 
 // overlay_type (ADR-0068): overlays come in four kinds. Every kind takes chat
-// sources (ADR-0069); the responses must say which kind an overlay is so the
+// sources (ADR-0070); the responses must say which kind an overlay is so the
 // frontend can route its render page.
 
 func decodeOverlayBody(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
@@ -182,7 +182,7 @@ func postSource(router *gin.Engine, path string) *httptest.ResponseRecorder {
 	return w
 }
 
-// Every overlay kind takes chat sources (ADR-0069): an alerts/goal/list
+// Every overlay kind takes chat sources (ADR-0070): an alerts/goal/list
 // overlay's sources are what the alert-processor routes events by and what
 // activates the listeners when the overlay connects. Only the
 // message-processor tells the kinds apart — it delivers chat to chat overlays

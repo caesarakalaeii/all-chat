@@ -50,7 +50,7 @@ that is being actively watched, regardless of which listener owns it. This is th
 primary fix for the 24h Twitch-chat dropout — see ADR-0032. The write is `updated_at`
 -only, so it does not fire the `chat_source_changes` NOTIFY trigger (migration 059).
 
-### Alert delivery (ADR-0069)
+### Alert delivery (ADR-0070)
 
 An alerts/goal/list overlay socket (the kind is read with `is_active` at
 connect) also subscribes `overlay:{id}:alerts`, next to the `:poll` and

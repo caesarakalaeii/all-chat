@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Alerts/goal/list overlays carry chat sources too (ADR-0069). Chat must reach
+// Alerts/goal/list overlays carry chat sources too (ADR-0070). Chat must reach
 // only chat overlays, through both the direct branch and the share fan-out;
 // each branch needs its own filter, so they are pinned separately.
 func TestFindOverlaysForMessageRoutesOnlyChatOverlays(t *testing.T) {
