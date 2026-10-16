@@ -19,7 +19,7 @@
 'use client'
 
 /**
- * The kind picker on the overlay create surfaces (ADR-0064), shared by
+ * The kind picker on the overlay create surfaces (ADR-0068), shared by
  * /overlays/new and the onboarding create dialog. Controlled: the parent owns
  * the state and the request payload. Renders nothing while only one kind is
  * creatable: a single-option radio group is a question with no choice.

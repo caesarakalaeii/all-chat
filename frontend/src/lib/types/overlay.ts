@@ -26,7 +26,7 @@ import type { VisualSettings } from './visual-settings'
  * Includes types for overlays, configurations, and chat sources.
  */
 
-/** The four overlay kinds (ADR-0064), the value of `overlays.overlay_type`. */
+/** The four overlay kinds (ADR-0068), the value of `overlays.overlay_type`. */
 export type OverlayType = 'chat' | 'alerts' | 'goal' | 'list'
 
 export interface Overlay {
@@ -70,7 +70,7 @@ export interface OverlayConfig {
    */
   bubble_colors_locked?: boolean
   /**
-   * Which kind of overlay this config belongs to (ADR-0064), carried alongside
+   * Which kind of overlay this config belongs to (ADR-0068), carried alongside
    * the flattened config so the editor can route its settings by kind without
    * a second request. Resolved per request by overlay-manager, never persisted.
    */
@@ -100,7 +100,7 @@ export interface PublicSourceStatus {
  */
 export interface PublicOverlayConfig {
   /**
-   * Which kind of overlay this is (ADR-0064) — the render page's only way to
+   * Which kind of overlay this is (ADR-0068) — the render page's only way to
    * route by kind, since it is unauthenticated and reads nothing else.
    */
   overlay_type?: OverlayType
@@ -302,7 +302,7 @@ export interface DiscordSourceConfig {
 export interface CreateOverlayRequest {
   name: string
   description?: string
-  /** Which kind to create (ADR-0064). Absent means chat. */
+  /** Which kind to create (ADR-0068). Absent means chat. */
   overlay_type?: OverlayType
 }
 

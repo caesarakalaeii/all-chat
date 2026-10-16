@@ -223,6 +223,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `tiktok-signer` | Self-hosted TikTok webcast signing via TikTok's own SDK in a headless browser (ADR-0052) |
 | `discord-listener` | Discord channel chat relay |
 | `message-processor` | Message normalization, emote enrichment, overlay routing |
+| `alert-processor` | Event alerts: a second `chat:raw` consumer that routes events to alerts/goal/list overlays and scores leaderboards (ADR-0068) |
 | `overlay-manager` | Overlay CRUD, source configuration, settings |
 | `source-manager` | Leader election, active source tracking, demand coordination |
 | `share-service` | Shareable overlay link generation; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041) |

@@ -20,7 +20,7 @@
 
 /**
  * What /overlay/[id] renders for an alerts/goal/list overlay until the kind's
- * own renderer issue lands (ADR-0064). Deliberately quiet: it sits inside an
+ * own renderer issue lands (ADR-0068). Deliberately quiet: it sits inside an
  * OBS browser source on the streamer's canvas, so it paints no background and
  * no app chrome — just enough for the streamer to recognize the URL works.
  */

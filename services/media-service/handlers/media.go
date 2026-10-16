@@ -43,7 +43,7 @@ const MaxUploadBytes = 10 << 20
 const maxFilenameLength = 255
 
 // allowedContentTypes is the closed set the presign endpoint accepts
-// (ADR-0064 alert media: sounds, images, GIFs, and short video clips).
+// (ADR-0068 alert media: sounds, images, GIFs, and short video clips).
 var allowedContentTypes = map[string]bool{
 	"image/png":  true,
 	"image/jpeg": true,
@@ -170,7 +170,7 @@ func (h *MediaHandler) Presign(c *gin.Context) {
 		return
 	}
 
-	// Key scheme per ADR-0064: the uuid segment makes the public-read URL
+	// Key scheme per ADR-0068: the uuid segment makes the public-read URL
 	// unguessable, the user_id prefix scopes the owner check on delete.
 	objectKey := fmt.Sprintf("%s/%s/%s", userID, uuid.NewString(), filename)
 

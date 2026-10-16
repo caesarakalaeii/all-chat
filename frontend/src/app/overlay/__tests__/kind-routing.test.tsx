@@ -25,7 +25,7 @@ import OBSOverlayPage from '@/app/overlay/[id]/page'
 import type { UseOverlayStreamOptions } from '@/hooks/useOverlayStream'
 import type { ChatMessage } from '@/lib/types/message'
 
-// The render route dispatches on the overlay's kind (ADR-0064), read from the
+// The render route dispatches on the overlay's kind (ADR-0068), read from the
 // public config the page already fetches. Chat overlays must keep rendering
 // exactly as before; the three new kinds show a placeholder until their own
 // renderer issues land.

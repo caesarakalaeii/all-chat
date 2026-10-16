@@ -186,7 +186,7 @@ docker-build:
 	@echo "Building Docker images..."
 	cd deployments && docker-compose build
 
-# Create the alert-media bucket (allchat-media, ADR-0064) on the local
+# Create the alert-media bucket (allchat-media, ADR-0068) on the local
 # MinIO with public-read policy — the compose twin of the k8s bucket Job
 # (apps/workloads/all-chat/minio-bucket-job.yaml in caesar-deployment).
 # Needs the compose minio service running (`make docker-up`). Credentials

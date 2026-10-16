@@ -53,6 +53,7 @@ jobs:
           - services/youtube-quota-monitor
           - services/support-bot
           - services/media-service
+          - services/alert-processor
           # Shared modules
           - shared
           - shared/ratelimit

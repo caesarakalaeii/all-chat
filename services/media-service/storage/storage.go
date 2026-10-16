@@ -60,7 +60,7 @@ type Config struct {
 // Endpoint is NOT an error: it means MinIO is not deployed (or not wired to
 // this service yet) and the media routes answer 503 — same env-gating pattern
 // as youtube-listener-innertube's optional subscribers. Everything else
-// defaults to the ADR-0064 values; unparsable overrides are errors, because a
+// defaults to the ADR-0068 values; unparsable overrides are errors, because a
 // silently-ignored MEDIA_MAX_OBJECTS_PER_USER is a quota that isn't enforced
 // and a silently-ignored MINIO_USE_SSL is TLS that isn't on.
 func LoadConfig() (Config, error) {

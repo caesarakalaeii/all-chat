@@ -10,7 +10,7 @@
 --   lists this registry, never the bucket, and an orphan holds no bytes.
 --
 -- object_key is {user_id}/{uuid}/{filename} (randomized middle segment per
---   ADR-0064's key scheme): the uuid makes keys unguessable so the
+--   ADR-0068's key scheme): the uuid makes keys unguessable so the
 --   public-read bucket can serve media directly, and the user_id prefix
 --   scopes ownership checks on delete. UNIQUE because a presign attempt
 --   never reuses a key; a collision would mean a UUID collision.
