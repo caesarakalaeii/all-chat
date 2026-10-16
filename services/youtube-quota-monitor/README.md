@@ -7,8 +7,10 @@ Single-owner observability for the shared YouTube Data API quota.
 The quota-based `youtube-listener` is no longer deployed (the listener path moved to
 InnerTube, whose chat ingestion costs no quota). But three services still spend official
 quota against the shared `youtube_quota_usage` table: `moderation-service` (bans, 50 units),
-`auth-service` (streamer sends, 5 units), and `youtube-listener-innertube` (subscriber
-alerts, 1 unit per poll when enabled — adaptive interval, only while live), all via
+`auth-service` (streamer sends, 5 units), `youtube-listener-innertube` (subscriber
+alerts, 1 unit per poll when enabled — adaptive interval, only while live), and
+`alert-processor` (subscriber goal bars, 1 unit per `channels.list` poll, every
+`GOAL_POLL_SECONDS` only while the goal overlay is connected, ADR-0072), all via
 reserve-confirm-rollback (ADR-0006).
 
 Nothing was left to *observe* that usage — the listener used to export the Prometheus

@@ -25,6 +25,7 @@
 
 import { apiClient } from './client'
 import type { EditableAlertProfile } from '@/lib/types/alert'
+import type { GoalConfig, GoalState, ListConfig } from '@/lib/types/goal'
 import type {
   Overlay,
   OverlayConfig,
@@ -172,6 +173,31 @@ export const overlaysApi = {
    */
   async sendMockMessage(id: string, payload: MockMessagePayload): Promise<void> {
     await apiClient.post(`/api/v1/overlays/${id}/mock-messages`, payload)
+  },
+
+  /** A goal overlay's goal and current value (ADR-0072). */
+  async getGoal(id: string): Promise<GoalState> {
+    return apiClient.get<GoalState>(`/api/v1/overlays/${id}/goal`)
+  },
+
+  /** Save a goal; reset_progress discards counted bits/Super Chats. */
+  async saveGoal(id: string, goal: GoalConfig, resetProgress = false): Promise<GoalState> {
+    return apiClient.put<GoalState>(`/api/v1/overlays/${id}/goal`, {
+      ...goal,
+      reset_progress: resetProgress,
+    })
+  },
+
+  /** A list overlay's board choice (ADR-0072). */
+  async getList(id: string): Promise<{ list: ListConfig; configured: boolean }> {
+    return apiClient.get<{ list: ListConfig; configured: boolean }>(`/api/v1/overlays/${id}/list`)
+  },
+
+  async saveList(id: string, list: ListConfig): Promise<{ list: ListConfig; configured: boolean }> {
+    return apiClient.put<{ list: ListConfig; configured: boolean }>(
+      `/api/v1/overlays/${id}/list`,
+      list
+    )
   },
 
   /**

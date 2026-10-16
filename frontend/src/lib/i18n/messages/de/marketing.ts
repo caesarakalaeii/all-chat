@@ -353,6 +353,12 @@ export const marketing: LocaleNamespace<'marketing'> = {
     alertsEditorTitle: 'Eigener Alert-Editor',
     alertsEditorBody:
       'Gib jedem Alert eigenen Text, ein GIF und einen Sound, suche GIFs direkt im Editor oder schreibe eigenes HTML, CSS und JavaScript dafür.',
+    goalOverlayTitle: 'Ziel-Overlays',
+    goalOverlayBody:
+      'Ein Fortschrittsbalken für ein Follower-, Abonnenten-, Bits- oder Super-Chat-Ziel, der sich live auf dem Stream füllt.',
+    listOverlayTitle: 'Bestenlisten-Overlays',
+    listOverlayBody:
+      'Zeig deine Top-Cheerer, -Verschenker oder -Super-Chatter der letzten 30 Tage auf dem Stream, aktualisiert bei jedem neuen.',
     flairsTitle: 'Zuschauer-Flairs',
     flairsBody:
       'Hebe dich in jedem Chat, in dem du auftauchst, mit Premium-Kosmetik wie animierten Namensverläufen ab.',

@@ -11,6 +11,7 @@ COPY shared /build/shared
 
 # Copy modules this service depends on via replace directives
 COPY services/message-processor /build/services/message-processor
+COPY services/moderation-service /build/services/moderation-service
 
 # Copy service files
 COPY services/alert-processor /build/services/alert-processor

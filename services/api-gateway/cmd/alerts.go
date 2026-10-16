@@ -48,6 +48,17 @@ func buildAlertFrame(ctx context.Context, overlayID string, payload []byte, look
 		return nil, fmt.Errorf("decode alert: %w", err)
 	}
 
+	// Goal and list_update frames (ADR-0072) ride the same channel; they carry
+	// their own type and need no profile.
+	var frameType string
+	if raw, ok := data["type"]; ok && json.Unmarshal(raw, &frameType) == nil {
+		switch models.WSMessageType(frameType) {
+		case models.WSMessageTypeGoal, models.WSMessageTypeListUpdate:
+			msg := models.WSMessage{Type: models.WSMessageType(frameType), Data: data, Timestamp: now}
+			return msg.ToJSON()
+		}
+	}
+
 	var lookupErr error
 	if profile, known := alerts.DefaultProfile(alert.EventType); known {
 		saved, found, err := lookup(ctx, overlayID, alert.EventType)

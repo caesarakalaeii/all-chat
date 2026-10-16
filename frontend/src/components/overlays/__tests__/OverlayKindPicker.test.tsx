@@ -42,19 +42,20 @@ describe('OverlayKindPicker', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('offers alerts, and only alerts, beside chat to a premium user', () => {
-    // The alerts_overlay gate (ADR-0008); goal and list are not released yet.
+  it('offers alerts, goal and list beside chat to a premium user', () => {
+    // The alerts_overlay, goal_overlay and list_overlay gates (ADR-0008).
     signIn(true)
     render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
-    const radios = screen.getAllByRole('radio')
-    expect(radios).toHaveLength(2)
-    expect(screen.getByRole('radio', { name: /Alerts/ })).toBeInTheDocument()
+    expect(screen.getAllByRole('radio')).toHaveLength(4)
+    for (const label of ['Alerts', 'Goal', 'List']) {
+      expect(screen.getByRole('radio', { name: new RegExp(`^${label}`) })).toBeInTheDocument()
+    }
   })
 
   it('offers every kind it is given', () => {
     render(<OverlayKindPicker value="chat" onChange={vi.fn()} kinds={OVERLAY_KINDS} />)
     for (const label of ['Chat', 'Alerts', 'Goal', 'List']) {
-      expect(screen.getByRole('radio', { name: new RegExp(label) })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: new RegExp(`^${label}`) })).toBeInTheDocument()
     }
   })
 
@@ -69,7 +70,7 @@ describe('OverlayKindPicker', () => {
 
   it('marks the selected kind', () => {
     render(<OverlayKindPicker value="goal" onChange={vi.fn()} kinds={OVERLAY_KINDS} />)
-    expect(screen.getByRole('radio', { name: /Goal/ })).toBeChecked()
-    expect(screen.getByRole('radio', { name: /Chat/ })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: /^Goal/ })).toBeChecked()
+    expect(screen.getByRole('radio', { name: /^Chat/ })).not.toBeChecked()
   })
 })

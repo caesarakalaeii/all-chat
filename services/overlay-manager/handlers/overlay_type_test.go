@@ -53,8 +53,8 @@ func TestHandleCreateOverlay_OverlayType(t *testing.T) {
 		{name: "absent resolves to chat", requestType: nil, wantType: "chat", wantStatusCode: http.StatusCreated},
 		{name: "chat", requestType: "chat", wantType: "chat", wantStatusCode: http.StatusCreated},
 		{name: "alerts", requestType: "alerts", wantType: "alerts", wantStatusCode: http.StatusCreated},
-		{name: "goal is not available yet", requestType: "goal", wantStatusCode: http.StatusForbidden},
-		{name: "list is not available yet", requestType: "list", wantStatusCode: http.StatusForbidden},
+		{name: "goal", requestType: "goal", wantType: "goal", wantStatusCode: http.StatusCreated},
+		{name: "list", requestType: "list", wantType: "list", wantStatusCode: http.StatusCreated},
 		{
 			name:           "unknown type is rejected before the DB is touched",
 			requestType:    "webcam",
@@ -384,8 +384,8 @@ func (g *fakeAlertsOverlayGate) Allowed(context.Context, string) (bool, error) {
 	return g.allowed, g.err
 }
 
-// Creating an alerts overlay is the alerts_overlay premium gate (ADR-0008); a
-// chat overlay never consults it, and a gate error fails closed.
+// Creating an alerts, goal or list overlay is that kind's premium gate
+// (ADR-0008); a chat overlay never consults one, and a gate error fails closed.
 func TestHandleCreateOverlay_AlertsGate(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -398,6 +398,8 @@ func TestHandleCreateOverlay_AlertsGate(t *testing.T) {
 		{name: "non-premium is refused", kind: "alerts", gate: &fakeAlertsOverlayGate{}, wantStatus: http.StatusForbidden, wantCalls: 1},
 		{name: "gate error fails closed", kind: "alerts", gate: &fakeAlertsOverlayGate{err: assert.AnError}, wantStatus: http.StatusInternalServerError, wantCalls: 1},
 		{name: "chat skips the gate", kind: "chat", gate: &fakeAlertsOverlayGate{}, wantStatus: http.StatusCreated, wantCalls: 0},
+		{name: "non-premium goal is refused", kind: "goal", gate: &fakeAlertsOverlayGate{}, wantStatus: http.StatusForbidden, wantCalls: 1},
+		{name: "premium creates list", kind: "list", gate: &fakeAlertsOverlayGate{allowed: true}, wantStatus: http.StatusCreated, wantCalls: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -410,7 +412,7 @@ func TestHandleCreateOverlay_AlertsGate(t *testing.T) {
 				},
 			}
 			h := NewOverlayHandler(repo, &mockSourceRepository{}, &capturingConfigRepo{})
-			h.SetAlertsOverlayGate(tt.gate)
+			h.SetKindGate(tt.kind, tt.gate)
 
 			gin.SetMode(gin.TestMode)
 			router := gin.New()
@@ -447,7 +449,7 @@ func TestHandleCloneOverlay_AlertsGateRefuses(t *testing.T) {
 		},
 	}
 	h := NewOverlayHandler(repo, &mockSourceRepository{}, &capturingConfigRepo{})
-	h.SetAlertsOverlayGate(&fakeAlertsOverlayGate{})
+	h.SetKindGate(models.OverlayTypeAlerts, &fakeAlertsOverlayGate{})
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

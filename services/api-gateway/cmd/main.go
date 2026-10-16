@@ -680,6 +680,9 @@ func main() {
 		publicAPI.GET("/overlays/public/:id/event-settings", proxyHandler.ForwardRequest)
 		publicAPI.GET("/overlays/public/:id/creditroll", proxyHandler.ForwardRequest)
 		publicAPI.GET("/overlays/public/:id/credit-roll", proxyHandler.ForwardRequest)
+		// Goal and list overlays' initial state for the OBS renderer (ADR-0072).
+		publicAPI.GET("/overlays/public/:id/goal", proxyHandler.ForwardRequest)
+		publicAPI.GET("/overlays/:id/list/top", proxyHandler.ForwardRequest)
 
 		// The TTS streaming proxy uses a per-overlay tts_token JWT, not the user JWT.
 		// Auth is enforced downstream in overlay-manager via the tts_token query param.
@@ -812,6 +815,10 @@ func main() {
 		protectedAPI.GET("/overlays/:id/alerts/profiles", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/overlays/:id/alerts/profiles", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/alerts/test", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/overlays/:id/goal", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/overlays/:id/goal", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/overlays/:id/list", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/overlays/:id/list", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/creditroll", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/creditroll", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/credit-roll", proxyHandler.ForwardRequest)

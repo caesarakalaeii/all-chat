@@ -45,7 +45,26 @@ var (
 		Name: "alert_processor_publish_errors_total",
 		Help: "Failed publishes to overlay:{id}:alerts; the alert is redelivered.",
 	}, []string{"platform", "event_type"})
+
+	goalPolls = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "alert_processor_goal_poll_total",
+		Help: "Goal count polls of connected goal overlays (ADR-0072), by platform and result (ok, reconnect, hidden, quota_skipped, error).",
+	}, []string{"platform", "result"})
+
+	goalAPIErrors = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "alert_processor_goal_api_errors_total",
+		Help: "Goal count polls that failed at the platform API or token layer (result=error of alert_processor_goal_poll_total).",
+	}, []string{"platform"})
 )
+
+// RecordGoalPoll counts one goal poll by its result; "error" also counts an
+// API error.
+func RecordGoalPoll(platform, result string) {
+	goalPolls.WithLabelValues(platform, result).Inc()
+	if result == "error" {
+		goalAPIErrors.WithLabelValues(platform).Inc()
+	}
+}
 
 // RecordConsumed counts one parsed stream entry. event_type is "chat" for
 // chat lines, so the consumed/routed delta is exactly the chat volume the

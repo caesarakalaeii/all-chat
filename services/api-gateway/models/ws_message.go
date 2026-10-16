@@ -57,6 +57,12 @@ const (
 	// WSMessageTypeAlert carries one alert from overlay:{id}:alerts plus its
 	// resolved profile (ADR-0070). Ephemeral: never stored for replay.
 	WSMessageTypeAlert WSMessageType = "alert"
+
+	// WSMessageTypeGoal carries a goal overlay's current value and
+	// WSMessageTypeListUpdate a list overlay's re-ranked board; both arrive on
+	// overlay:{id}:alerts from the alert-processor (ADR-0072).
+	WSMessageTypeGoal       WSMessageType = "goal"
+	WSMessageTypeListUpdate WSMessageType = "list_update"
 )
 
 // WSMessage is the wrapper for all WebSocket messages

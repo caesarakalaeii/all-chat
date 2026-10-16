@@ -785,6 +785,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0072: Goal and list overlays — demand-gated goal polls in the alert-processor, debounced leaderboard pushes
+
+**Status**: Accepted (2026-10-16)
+**Problem**: Goal and list overlays (ADR-0068) had no renderer, config or data path. Follower/subscriber counts must be polled from platform APIs (YouTube through the shared quota ledger) without polling idle overlays or polling twice from two replicas, and a live leaderboard must update without a frame per cheer.
+**Decision**: The alert-processor polls `followers` (Twitch Helix `channels/followers` `total`, owner token via `moderation-service/tokens`) and `subscribers` (YouTube `channels.list?part=statistics`, 1 unit, reserve/confirm/rollback) every `GOAL_POLL_SECONDS` (60) only for overlays whose `overlay:connected:{id}` demand key exists, behind a per-overlay `SET NX` lock. `bits`/`super_chat` goals are once-per-alert `INCRBYFLOAT` counters. Lists get `list_update` frames debounced to one per board per 2s via a Redis window claim that defers rather than drops. Public `GET /overlays/public/:id/goal` and `GET /overlays/:id/list/top` seed the renderer; the gateway forwards `goal`/`list_update` frames under their own WS types. Creation gated by `goal_overlay` / `list_overlay` (migrations 110/111).
+**Impact**: No new service or coordinator; YouTube polls show up in the existing quota gauge. The alert-processor now needs the token cipher and Twitch/YouTube app credentials. YouTube subscriber counts are rounded by YouTube.
+**→ Read**: [0072-goal-and-list-overlays-polled-goals-and-debounced-leaderboards.md](./0072-goal-and-list-overlays-polled-goals-and-debounced-leaderboards.md)
+
+---
+
 
 ## How to Create a New ADR
 

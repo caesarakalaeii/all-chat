@@ -46,3 +46,14 @@ func TestCounters_LabelAndIncrement(t *testing.T) {
 			"%s counter must increment on its label pair", tc.name)
 	}
 }
+
+func TestRecordGoalPoll_ErrorsAlsoCountAsAPIErrors(t *testing.T) {
+	ok, apiErr := goalPolls.WithLabelValues("twitch", "ok"), goalAPIErrors.WithLabelValues("twitch")
+	okBefore, errBefore := testutil.ToFloat64(ok), testutil.ToFloat64(apiErr)
+
+	RecordGoalPoll("twitch", "ok")
+	RecordGoalPoll("twitch", "error")
+
+	assert.Equal(t, okBefore+1, testutil.ToFloat64(ok))
+	assert.Equal(t, errBefore+1, testutil.ToFloat64(apiErr), "only the error result counts an API error")
+}

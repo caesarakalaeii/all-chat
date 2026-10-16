@@ -598,14 +598,28 @@ export const viewerOverlay = {
     listenerDeprecated: 'The legacy Twitch chat connection is being retired.',
     listenerRemedy: '\u2192 Re-add your Twitch source to switch to the new EventSub connection',
   },
-  // What the render route shows for an alerts/goal/list overlay until its own
-  // renderer issue lands (ADR-0068). OBS must show the streamer something
-  // recognizable instead of a transparent blank.
   // The sandboxed frame a premium custom-code alert renders in (ADR-0071).
   customAlertFrameTitle: 'Custom alert',
-  unsupportedKind: {
-    heading: '{kind} overlay',
-    body: 'This overlay type is not supported yet.',
+  // The goal bar overlay (ADR-0072). goalTitles name the goal when the streamer
+  // gave it no title.
+  goalTitles: {
+    followers: 'Follower goal',
+    subscribers: 'Subscriber goal',
+    bits: 'Bits goal',
+    super_chat: 'Super Chat goal',
+  },
+  goal: {
+    progress: '{current} / {target}',
+  },
+  // The top-supporter list overlay (ADR-0072). listTitles name the board when
+  // the streamer gave it no title.
+  listTitles: {
+    bits: 'Top cheerers',
+    gifts: 'Top gifters',
+    super_chat: 'Top Super Chats',
+  },
+  list: {
+    empty: 'No supporters yet',
   },
   // The per-channel connection tooltips on the overlay pages' status strip. Each
   // is one whole string: the ' - ' separator is punctuation a language may

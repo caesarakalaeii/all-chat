@@ -30,6 +30,7 @@ import (
 	"github.com/caesar/all-chat/services/alert-processor/publisher"
 	"github.com/caesar/all-chat/services/alert-processor/repository"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/shared/alerts"
 	"go.uber.org/zap"
 )
 
@@ -38,6 +39,13 @@ import (
 type Store interface {
 	FindAlertOverlays(ctx context.Context, platform, channelID string) ([]repository.AlertOverlay, error)
 	InsertAlertEvent(ctx context.Context, alert *models.Alert) error
+	GoalConfig(ctx context.Context, overlayID string) (*alerts.GoalConfig, error)
+}
+
+// ListNotifier receives every leaderboard change; the listpush debouncer
+// turns them into list_update frames.
+type ListNotifier interface {
+	MarkDirty(overlayID, category string)
 }
 
 // Processor runs the alert pipeline for one raw message at a time.
@@ -45,6 +53,7 @@ type Processor struct {
 	store       Store
 	publisher   *publisher.Publisher
 	leaderboard *leaderboard.Client
+	lists       ListNotifier // nil: no list_update pushes
 	log         *zap.Logger
 }
 
@@ -69,6 +78,11 @@ func New(store Store, pub *publisher.Publisher, boards *leaderboard.Client, log 
 // animate overlays on an event history does not record. The remaining
 // duplicate window is the usual at-least-once one — a redelivered alert can
 // reach subscribers twice — which the spec accepts.
+// SetListNotifier wires the list_update debouncer.
+func (p *Processor) SetListNotifier(n ListNotifier) {
+	p.lists = n
+}
+
 func (p *Processor) Handle(ctx context.Context, raw *mpmodels.RawChatMessage) error {
 	info, user, err := normalizer.Normalize(raw)
 	if err != nil {
@@ -109,8 +123,13 @@ func (p *Processor) Handle(ctx context.Context, raw *mpmodels.RawChatMessage) er
 			return fmt.Errorf("publish alert %s: %w", alert.AlertID, err)
 		}
 
-		if overlay.OverlayType == "list" {
+		switch overlay.OverlayType {
+		case "list":
 			if err := p.recordLeaderboardAmount(ctx, alert); err != nil {
+				return err
+			}
+		case "goal":
+			if err := p.countGoalAmount(ctx, alert); err != nil {
 				return err
 			}
 		}
@@ -136,8 +155,48 @@ func (p *Processor) recordLeaderboardAmount(ctx context.Context, alert *models.A
 	}
 
 	member := leaderboard.Member(alert.Platform, alert.User.ID)
-	if err := p.leaderboard.RecordAmount(ctx, alert.OverlayID, category, member, info.Value.Amount, alert.AlertID); err != nil {
+	if err := p.leaderboard.RecordAmount(ctx, alert.OverlayID, category, member, alert.User.Name, info.Value.Amount, alert.AlertID); err != nil {
 		return fmt.Errorf("record leaderboard amount for overlay %s: %w", alert.OverlayID, err)
+	}
+	if p.lists != nil {
+		p.lists.MarkDirty(alert.OverlayID, category)
+	}
+	return nil
+}
+
+// countGoalAmount advances a counter goal (bits, super_chat) whose metric the
+// event matches and pushes the new value (ADR-0072). Polled goals ignore
+// events: their value is the platform's own count. Counting is once per
+// alert, so a redelivery neither double-counts nor re-pushes.
+func (p *Processor) countGoalAmount(ctx context.Context, alert *models.Alert) error {
+	metric, ok := leaderboard.GoalMetric(alert.EventType)
+	info := alert.EventData
+	if !ok || info == nil || info.Value == nil || info.Value.Amount <= 0 {
+		return nil
+	}
+	cfg, err := p.store.GoalConfig(ctx, alert.OverlayID)
+	if err != nil {
+		return fmt.Errorf("load goal of overlay %s: %w", alert.OverlayID, err)
+	}
+	if cfg == nil || cfg.Metric != metric {
+		return nil
+	}
+	total, counted, err := p.leaderboard.RecordGoalAmount(ctx, alert.OverlayID, metric, info.Value.Amount, alert.AlertID)
+	if err != nil {
+		return fmt.Errorf("count goal amount for overlay %s: %w", alert.OverlayID, err)
+	}
+	if !counted {
+		return nil
+	}
+	frame := alerts.GoalFrame{
+		Type: "goal", OverlayID: alert.OverlayID, Goal: metric,
+		Current: float64(cfg.StartingValue) + total, Target: cfg.Target, Title: cfg.Title,
+	}
+	// A lost frame self-heals: the renderer re-reads the goal on reconnect and
+	// the next counted event pushes the total again. Not worth a redelivery
+	// of the alert, which has already been published.
+	if err := p.publisher.PublishFrame(ctx, alert.OverlayID, frame); err != nil {
+		p.log.Warn("Goal frame publish failed", zap.String("overlay_id", alert.OverlayID), zap.Error(err))
 	}
 	return nil
 }

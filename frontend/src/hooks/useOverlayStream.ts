@@ -58,6 +58,7 @@ import {
 } from '@/core/overlayStreamCore'
 import type { SourceInfo } from '@/components/PlatformStatusIndicators'
 import type { AlertFrame } from '@/lib/types/alert'
+import type { GoalFrame, ListUpdateFrame } from '@/lib/types/goal'
 
 // Single definition, owned by the badge's pure label helper so the two cannot
 // drift; re-exported here because this hook is where consumers expect it.
@@ -97,6 +98,10 @@ export interface UseOverlayStreamOptions {
    * undeduped: alerts carry their own alert_id, and the alert queue dedups.
    */
   onAlert?: (alert: AlertFrame) => void
+  /** A goal overlay's current value (ADR-0072). */
+  onGoal?: (goal: GoalFrame) => void
+  /** A list overlay board's re-ranked top entries (ADR-0072). */
+  onListUpdate?: (update: ListUpdateFrame) => void
   /** Fired once per successful (re)connection. */
   onConnected?: () => void
 }
@@ -441,6 +446,14 @@ export function useOverlayStream(
 
           case 'alert':
             optsRef.current.onAlert?.(classified.alert)
+            return
+
+          case 'goal':
+            optsRef.current.onGoal?.(classified.goal)
+            return
+
+          case 'listUpdate':
+            optsRef.current.onListUpdate?.(classified.update)
             return
 
           case 'connected':

@@ -125,3 +125,23 @@ func TestBuildAlertFrame_RejectsGarbage(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, frame)
 }
+
+// Goal and list_update frames (ADR-0072) share the alerts channel but are not
+// alerts: forwarded unchanged under their own WS type, with no profile lookup.
+func TestBuildAlertFrame_ForwardsGoalAndListFramesUnderTheirOwnType(t *testing.T) {
+	failLookup := func(context.Context, string, string) (alerts.Profile, bool, error) {
+		t.Fatal("goal/list frames must not resolve an alert profile")
+		return alerts.Profile{}, false, nil
+	}
+	for typ, payload := range map[string]string{
+		"goal":        `{"type":"goal","overlay_id":"o-1","goal":"followers","current":12,"target":100,"title":"F"}`,
+		"list_update": `{"type":"list_update","overlay_id":"o-1","category":"bits","entries":[{"rank":1,"name":"A","platform":"twitch","amount":5}]}`,
+	} {
+		frame, err := buildAlertFrame(context.Background(), "o-1", []byte(payload), failLookup, frameTime)
+		require.NoError(t, err)
+		gotType, data := decodeFrame(t, frame)
+		assert.Equal(t, typ, gotType)
+		assert.NotContains(t, data, "profile")
+		assert.Contains(t, data, "overlay_id")
+	}
+}

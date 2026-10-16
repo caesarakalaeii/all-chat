@@ -158,6 +158,7 @@ jobs:
               - 'services/alert-processor/**'
               - 'shared/**'
               - 'services/message-processor/**'
+              - 'services/moderation-service/**'
             frontend:
               - 'frontend/**'
             shared:

@@ -27,6 +27,8 @@ import {
   Volume2,
   Bell,
   Code,
+  Target,
+  Trophy,
 } from 'lucide-react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
@@ -67,6 +69,8 @@ const features = [
   { icon: Sparkles, messageStem: 'flairs' },
   { icon: Bell, messageStem: 'alertsOverlay' },
   { icon: Code, messageStem: 'alertsEditor' },
+  { icon: Target, messageStem: 'goalOverlay' },
+  { icon: Trophy, messageStem: 'listOverlay' },
 ] as const satisfies ReadonlyArray<PremiumFeature>
 
 export default function UpgradePage() {
