@@ -74,6 +74,7 @@ func bitsEvent() *mpmodels.RawChatMessage {
 		UserID:    "u1",
 		Username:  "somechatter",
 		Tags:      map[string]string{"display-name": "Some Chatter"},
+		Text:      "Cheer100 great stream",
 		Timestamp: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC),
 		EventType: "bits",
 		EventData: map[string]interface{}{"bits": 100},
@@ -140,6 +141,7 @@ func TestHandle_FansOutToEveryAlertCapableOverlay(t *testing.T) {
 		assert.Equal(t, "bits", insert.EventType)
 		assert.Equal(t, "twitch", insert.Platform)
 		assert.Equal(t, bitsEvent().Timestamp, insert.OccurredAt)
+		assert.Equal(t, "Cheer100 great stream", insert.Message, "the chat text feeds the {message} placeholder")
 		assert.Equal(t, models.AlertUser{ID: "u1", Name: "Some Chatter"}, insert.User)
 		require.NotNil(t, insert.EventData, "the normalized event payload must be carried")
 		assert.NotEmpty(t, insert.AlertID)

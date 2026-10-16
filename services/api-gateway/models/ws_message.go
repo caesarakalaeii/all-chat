@@ -53,6 +53,10 @@ const (
 	// WSMessageTypePredictionUpdate carries an aggregate prediction snapshot
 	// (issue #523). Broadcast to the overlay; state conveys active/locked/resolved.
 	WSMessageTypePredictionUpdate WSMessageType = "prediction_update"
+
+	// WSMessageTypeAlert carries one alert from overlay:{id}:alerts plus its
+	// resolved profile (ADR-0069). Ephemeral: never stored for replay.
+	WSMessageTypeAlert WSMessageType = "alert"
 )
 
 // WSMessage is the wrapper for all WebSocket messages
@@ -77,13 +81,13 @@ type ChatMessageData struct {
 
 // UserInfo contains user information
 type UserInfo struct {
-	ID          string  `json:"id"`
-	Username    string  `json:"username"`
-	DisplayName string  `json:"display_name"`
-	AvatarURL   string  `json:"avatar_url,omitempty"`
+	ID          string   `json:"id"`
+	Username    string   `json:"username"`
+	DisplayName string   `json:"display_name"`
+	AvatarURL   string   `json:"avatar_url,omitempty"`
 	BadgeURLs   []string `json:"badge_urls,omitempty"` // Legacy field for compatibility
-	Badges      []Badge `json:"badges"`
-	Color       string  `json:"color,omitempty"`
+	Badges      []Badge  `json:"badges"`
+	Color       string   `json:"color,omitempty"`
 }
 
 // Badge represents a user badge
@@ -141,12 +145,12 @@ type ViewerConnectedData struct {
 
 // PlatformStatusData represents connection status for a platform
 type PlatformStatusData struct {
-	Platform     string     `json:"platform"`                  // "youtube", "twitch", "kick", "tiktok", "discord"
-	ChannelID    string     `json:"channel_id"`                // Platform-specific channel identifier
-	ChannelName  string     `json:"channel_name,omitempty"`    // Human-readable channel name
-	Status       string     `json:"status"`                    // "connected", "reconnecting", "offline", "quota_exceeded"
-	NextRetryAt  *time.Time `json:"next_retry_at,omitempty"`   // Timestamp when next reconnection happens (nil if connected)
-	ErrorMessage string     `json:"error_message,omitempty"`   // Human-readable error
+	Platform     string     `json:"platform"`                // "youtube", "twitch", "kick", "tiktok", "discord"
+	ChannelID    string     `json:"channel_id"`              // Platform-specific channel identifier
+	ChannelName  string     `json:"channel_name,omitempty"`  // Human-readable channel name
+	Status       string     `json:"status"`                  // "connected", "reconnecting", "offline", "quota_exceeded"
+	NextRetryAt  *time.Time `json:"next_retry_at,omitempty"` // Timestamp when next reconnection happens (nil if connected)
+	ErrorMessage string     `json:"error_message,omitempty"` // Human-readable error
 }
 
 // NewChatMessage creates a new chat message WebSocket message

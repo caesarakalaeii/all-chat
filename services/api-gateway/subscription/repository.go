@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/caesar/all-chat/shared/alerts"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -53,23 +54,33 @@ func (r *Repository) VerifyOverlayOwnership(ctx context.Context, overlayID, user
 	return exists, nil
 }
 
-// IsOverlayActive checks if an overlay is active
-func (r *Repository) IsOverlayActive(ctx context.Context, overlayID string) (bool, error) {
-	query := `
-		SELECT is_active FROM overlays
-		WHERE id = $1
-	`
-
-	var isActive bool
-	err := r.db.QueryRow(ctx, query, overlayID).Scan(&isActive)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
-		}
-		return false, fmt.Errorf("failed to check overlay status: %w", err)
+// OverlayStatus reports whether an overlay is active and its overlay_type
+// (ADR-0068). A missing overlay reads as inactive.
+func (r *Repository) OverlayStatus(ctx context.Context, overlayID string) (isActive bool, overlayType string, err error) {
+	err = r.db.QueryRow(ctx, `SELECT is_active, overlay_type FROM overlays WHERE id = $1`, overlayID).Scan(&isActive, &overlayType)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, "", nil
 	}
+	if err != nil {
+		return false, "", fmt.Errorf("failed to check overlay status: %w", err)
+	}
+	return isActive, overlayType, nil
+}
 
-	return isActive, nil
+// AlertProfile returns the overlay's saved profile for eventType
+// (alert_profiles, migration 107); found is false when none is saved.
+func (r *Repository) AlertProfile(ctx context.Context, overlayID, eventType string) (p alerts.Profile, found bool, err error) {
+	err = r.db.QueryRow(ctx, `
+		SELECT event_type, text_template, sound_url, image_url, duration_ms, volume, enabled, sort_after
+		FROM alert_profiles WHERE overlay_id = $1 AND event_type = $2`, overlayID, eventType,
+	).Scan(&p.EventType, &p.TextTemplate, &p.SoundURL, &p.ImageURL, &p.DurationMs, &p.Volume, &p.Enabled, &p.SortAfter)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return alerts.Profile{}, false, nil
+	}
+	if err != nil {
+		return alerts.Profile{}, false, fmt.Errorf("failed to load alert profile: %w", err)
+	}
+	return p, true, nil
 }
 
 // GetPublicOverlayByUsername gets the public overlay ID for a streamer by username

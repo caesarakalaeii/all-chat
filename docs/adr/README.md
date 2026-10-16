@@ -765,6 +765,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0069: Alert overlays carry chat sources; the gateway resolves alert profiles
+
+**Status**: Accepted (2026-10-16)
+**Problem**: ADR-0068 routes events by an alert overlay's `overlay_chat_sources`, but overlay-manager refused chat sources on non-chat overlays, so routing never matched (zero `alert_events` in prod); and nothing subscribed `overlay:{id}:alerts` or stored how an alert looks (#952).
+**Decision**: Every overlay kind takes ordinary chat sources; the message-processor routes chat only to `overlay_type = 'chat'`. The gateway subscribes `overlay:{id}:alerts` for non-chat overlays (sibling of `:poll`/`:prediction`) and forwards `type: "alert"` frames, the envelope plus the resolved `profile` (saved row in `alert_profiles` or the Go default in `shared/alerts`, placeholders substituted server-side; disabled profiles dropped; never replayed). overlay-manager serves `GET/PUT /overlays/:id/alerts/profiles` (PUT premium via `alerts_editor`, alerts overlays only) and `POST /overlays/:id/alerts/test`. Migration 107.
+**Impact**: Alert overlays use the source flow streamers already know; one resolver serves real and test alerts; adding an event type is a code change. Builds on ADR-0068.
+**→ Read**: [0069-alert-overlays-carry-chat-sources-and-gateway-resolves-alert-profiles.md](./0069-alert-overlays-carry-chat-sources-and-gateway-resolves-alert-profiles.md)
+
+---
+
 
 ## How to Create a New ADR
 

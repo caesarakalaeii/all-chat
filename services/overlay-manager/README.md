@@ -162,6 +162,11 @@ Authorization: Bearer <jwt-token>
 
 ### Chat Sources
 
+Every overlay kind (chat, alerts, goal, list) takes chat sources (ADR-0069). The
+alert-processor routes events to alerts/goal/list overlays by these rows, and
+connecting the overlay activates them like any other. The message-processor
+delivers chat lines only to chat overlays.
+
 ```bash
 # Add chat source to overlay
 POST /api/v1/overlays/:overlay_id/sources
@@ -210,6 +215,34 @@ Body: { "config": { ... } }
 DELETE /api/v1/overlays/:overlay_id/sources/:source_id
 Authorization: Bearer <jwt-token>
 ```
+
+### Alert Profiles (alerts overlays, ADR-0069)
+
+```bash
+# Every known event type's profile: the saved row, else the built-in default
+# (shared/alerts). Free.
+GET /api/v1/overlays/:overlay_id/alerts/profiles
+→ { "profiles": [ { "event_type": "bits", "text_template": "{username} cheered {amount}!",
+                    "sound_url": "", "image_url": "", "duration_ms": 5000, "volume": 100,
+                    "enabled": true, "sort_after": 0 }, ... ] }
+
+# Bulk upsert, all or nothing. Premium (gate alerts_editor). 400 unless the
+# overlay is an alerts overlay, or for an unknown/duplicated event_type, a
+# volume outside 0-100, duration_ms outside 1-60000, a non-http(s) media URL or
+# a template over 500 characters.
+PUT /api/v1/overlays/:overlay_id/alerts/profiles
+Body: { "profiles": [ { ...full profile as above... } ] }
+
+# Publish a synthetic alert (fresh alert_id, event_data.metadata.test = true)
+# straight to overlay:{overlay_id}:alerts. Free. 400 on a chat overlay or an
+# unknown event_type. → 202 { "alert_id": "..." }
+POST /api/v1/overlays/:overlay_id/alerts/test
+Body: { "event_type": "bits" }
+```
+
+Placeholders `{username}`, `{amount}` (value display text), `{count}` (numeric
+value) and `{message}` (the event's chat text) are substituted by the
+api-gateway when it forwards the alert; a missing field keeps its literal token.
 
 ### Mock Chat (Testing)
 

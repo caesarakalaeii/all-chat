@@ -50,6 +50,38 @@ that is being actively watched, regardless of which listener owns it. This is th
 primary fix for the 24h Twitch-chat dropout — see ADR-0032. The write is `updated_at`
 -only, so it does not fire the `chat_source_changes` NOTIFY trigger (migration 059).
 
+### Alert delivery (ADR-0069)
+
+An alerts/goal/list overlay socket (the kind is read with `is_active` at
+connect) also subscribes `overlay:{id}:alerts`, next to the `:poll` and
+`:prediction` engagement channels. Each alert-processor message there is sent
+to every non-engagement socket as:
+
+```json
+{
+  "type": "alert",
+  "data": {
+    "alert_id": "…", "overlay_id": "…", "platform": "twitch", "event_type": "bits",
+    "event_data": { "type": "bits", "tier": "high",
+                    "value": { "amount": 100, "currency": "bits", "display_text": "100 bits" },
+                    "duration": 8, "is_update": false },
+    "user": { "id": "…", "name": "SomeChatter", "avatar_url": "" },
+    "message": "Cheer100 great stream",
+    "occurred_at": "2026-10-16T12:00:00Z",
+    "profile": { "event_type": "bits", "text": "SomeChatter cheered 100 bits!",
+                 "text_template": "{username} cheered {amount}!", "sound_url": "", "image_url": "",
+                 "duration_ms": 5000, "volume": 100, "enabled": true, "sort_after": 0 }
+  },
+  "timestamp": "2026-10-16T12:00:00.12Z"
+}
+```
+
+The profile is resolved here, per alert, from `alert_profiles` (falling back to
+the default in `shared/alerts`, also on a DB error). A disabled profile drops
+the alert, and an event type with no profile (e.g. `like_aggregate`) is sent
+without `profile`. Alerts are never written to the chat replay buffer, and
+clients dedup on `alert_id`, because a redelivered alert can arrive twice.
+
 ### Stream sessions (credit roll)
 
 The first connect creates the `session:active:{id}` hash the credit roll measures
@@ -150,6 +182,9 @@ All overlay routes require JWT authentication.
 | POST | `/api/v1/overlays/:id/sources` | Add chat source |
 | PUT | `/api/v1/overlays/:id/sources/:source_id` | Update chat source |
 | DELETE | `/api/v1/overlays/:id/sources/:source_id` | Remove chat source |
+| GET | `/api/v1/overlays/:id/alerts/profiles` | Alert profiles, merged over defaults |
+| PUT | `/api/v1/overlays/:id/alerts/profiles` | Save alert profiles (premium, `alerts_editor`) |
+| POST | `/api/v1/overlays/:id/alerts/test` | Publish a test alert |
 
 ### Emote Service Routes
 
