@@ -55,6 +55,8 @@ export const onboarding: LocaleNamespace<'onboarding'> = {
       'Gib dem Dock einen Namen, füge den kopierten Dock-Link in das URL-Feld ein, klicke dann auf Anwenden und schließe den Dialog.',
     step3:
       'Das Dock hat eine eigene Anmeldung — melde dich einmal innerhalb des Panels an und bleib angemeldet. Ziehe das Panel dorthin, wo du es haben willst; eine schmale Spalte neben Szenen und Quellen eignet sich gut.',
+    splitTip:
+      'Chat und Aktivität gleichzeitig sehen? Wähle im Dock den Tab „Beides“. Für zwei getrennte Docks ersetze am Ende dock=1 beim einen Link durch dock=chat und beim anderen durch dock=activity.',
   },
   extras: {
     heading: 'Optional: Mehr rausholen',

@@ -24,24 +24,35 @@
  * right surface for that, but its wide-viewport chrome (a wrapping header, a
  * stack of full-width notice strips and a two-column `ResizableSplit`) is not.
  * Dock mode is a PRESENTATION mode of that same route: same data path, same
- * moderation, narrower chrome and one panel at a time.
+ * moderation, narrower chrome.
  *
  * The mode is opt-in and keyed on the `dock` query parameter, so every existing
  * link to the monitor keeps today's layout. Like `ViewLayout`, the selected dock
  * tab is a moderator's personal, browser-local preference (localStorage only)
  * and never touches the overlay's saved settings.
+ *
+ * Two ways to see chat and activity at once: the `split` tab stacks both in
+ * one dock, and `dock=chat` / `dock=activity` pin a dock to one panel with no
+ * tab bar, for two docks side by side.
  */
 
-/** Which of the two dock panels is showing. */
-export type DockTab = 'chat' | 'activity'
+/** One of the two monitor panels. */
+export type DockPanel = 'chat' | 'activity'
+
+/** What the tabbed dock shows: one panel, or both stacked (`split`). */
+export type DockTab = DockPanel | 'split'
 
 /** Chat is what a docked panel is for; Activity is the deliberate switch. */
 export const DEFAULT_DOCK_TAB: DockTab = 'chat'
 
+const DOCK_PANELS: ReadonlySet<string> = new Set<DockPanel>(['chat', 'activity'])
+const VALID_DOCK_TABS: ReadonlySet<string> = new Set<DockTab>(['chat', 'activity', 'split'])
+
 /**
  * Whether the monitor should render in dock mode.
  *
- * Truthy for `dock=1` and `dock=true` only. An unrecognised value (`dock=0`,
+ * Truthy for `dock=1`, `dock=true` and the pinned panels `dock=chat` and
+ * `dock=activity`, case-insensitively. An unrecognised value (`dock=0`,
  * `dock=yes`, a typo) is NOT dock mode: a mistyped parameter must leave the
  * monitor exactly as it is rather than silently reshaping it.
  */
@@ -49,10 +60,18 @@ export function isDockMode(params: URLSearchParams): boolean {
   const raw = params.get('dock')
   if (raw === null) return false
   const value = raw.toLowerCase()
-  return value === '1' || value === 'true'
+  return value === '1' || value === 'true' || DOCK_PANELS.has(value)
 }
 
-const VALID_DOCK_TABS: ReadonlySet<string> = new Set<DockTab>(['chat', 'activity'])
+/**
+ * The panel a pinned dock URL shows, or null for the tabbed dock (and for no
+ * dock at all). A pinned dock never reads or writes the saved tab: two docks
+ * share one CEF profile, so a shared tab preference would fight between them.
+ */
+export function pinnedDockPanel(params: URLSearchParams): DockPanel | null {
+  const value = params.get('dock')?.toLowerCase()
+  return value !== undefined && DOCK_PANELS.has(value) ? (value as DockPanel) : null
+}
 
 /** localStorage key prefix; the overlay id is appended per the task spec. */
 export function dockTabStorageKey(overlayId: string): string {
