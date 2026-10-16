@@ -23,11 +23,21 @@ import (
 	"testing"
 )
 
-// The alert-profile write path ships premium (ADR-0008, ADR-0070). A typo between the
-// constant and the seed would leave the gate unknown, which also reads as premium but
-// can then not be flipped from the admin UI.
-func TestAlertsEditorGateSeed(t *testing.T) {
-	raw, err := os.ReadFile("../../migrations/107_alert_profiles.sql")
+// The alerts gates ship premium (ADR-0008, ADR-0070): saving alert profiles
+// (migration 107) and creating alerts overlays (migration 108). A typo between a
+// constant and its seed would leave the gate unknown, which also reads as
+// premium but can then not be flipped from the admin UI.
+func TestAlertsGateSeeds(t *testing.T) {
+	for file, key := range map[string]string{
+		"107_alert_profiles.sql":      GateAlertsEditor,
+		"108_alerts_overlay_gate.sql": GateAlertsOverlay,
+	} {
+		t.Run(key, func(t *testing.T) { assertPremiumSeed(t, file, key) })
+	}
+}
+
+func assertPremiumSeed(t *testing.T, file, key string) {
+	raw, err := os.ReadFile("../../migrations/" + file)
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
 	}
@@ -37,8 +47,8 @@ func TestAlertsEditorGateSeed(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("want exactly one feature_gates seed row, got %d", len(rows))
 	}
-	if got := rows[0][1]; got != GateAlertsEditor {
-		t.Fatalf("seeded key = %q, want %q", got, GateAlertsEditor)
+	if got := rows[0][1]; got != key {
+		t.Fatalf("seeded key = %q, want %q", got, key)
 	}
 	if got := rows[0][2]; !strings.EqualFold(got, "TRUE") {
 		t.Fatalf("seeded is_premium = %s, want TRUE", got)

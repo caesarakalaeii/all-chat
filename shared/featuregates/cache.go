@@ -137,6 +137,12 @@ const (
 	// (migration 107). Only the write is gated: reading profiles, the built-in
 	// defaults and the test-alert button stay free.
 	GateAlertsEditor = "alerts_editor"
+
+	// GateAlertsOverlay is the feature key for creating (or cloning) an alerts
+	// overlay (POST /overlays with overlay_type "alerts", ADR-0068). Seeded
+	// is_premium=TRUE (migration 108). Only the create is gated: an existing
+	// alerts overlay keeps rendering and receiving alerts after premium lapses.
+	GateAlertsOverlay = "alerts_overlay"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate

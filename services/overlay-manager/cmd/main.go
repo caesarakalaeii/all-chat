@@ -214,6 +214,7 @@ func main() {
 	// Initialize handlers
 	mpClient := clients.NewMessageProcessorClient(config.MessageProcessorURL, config.MessageProcessorAPIKey, tracingEnabled, log)
 	overlayHandler := handlers.NewOverlayHandler(overlayRepo, sourceRepo, configRepo)
+	overlayHandler.SetAlertsOverlayGate(premiumKeyGate{gates: gateCache, db: dbPool, key: featuregates.GateAlertsOverlay})
 	seventvResolver := clients.NewSevenTVResolver(log)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo, seventvResolver, bubbleColorsGate{gates: gateCache, db: dbPool})
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient, bm, tokenCipher)

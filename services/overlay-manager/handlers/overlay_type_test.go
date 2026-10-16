@@ -52,7 +52,7 @@ func TestHandleCreateOverlay_OverlayType(t *testing.T) {
 	}{
 		{name: "absent resolves to chat", requestType: nil, wantType: "chat", wantStatusCode: http.StatusCreated},
 		{name: "chat", requestType: "chat", wantType: "chat", wantStatusCode: http.StatusCreated},
-		{name: "alerts is not available yet", requestType: "alerts", wantStatusCode: http.StatusForbidden},
+		{name: "alerts", requestType: "alerts", wantType: "alerts", wantStatusCode: http.StatusCreated},
 		{name: "goal is not available yet", requestType: "goal", wantStatusCode: http.StatusForbidden},
 		{name: "list is not available yet", requestType: "list", wantStatusCode: http.StatusForbidden},
 		{
@@ -371,4 +371,92 @@ func TestHandleAdminGetUserOverlays_OverlayType(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body), "body: %s", w.Body.String())
 	require.Len(t, body, 1)
 	assert.Equal(t, models.OverlayTypeAlerts, body[0]["overlay_type"])
+}
+
+type fakeAlertsOverlayGate struct {
+	allowed bool
+	err     error
+	calls   int
+}
+
+func (g *fakeAlertsOverlayGate) Allowed(context.Context, string) (bool, error) {
+	g.calls++
+	return g.allowed, g.err
+}
+
+// Creating an alerts overlay is the alerts_overlay premium gate (ADR-0008); a
+// chat overlay never consults it, and a gate error fails closed.
+func TestHandleCreateOverlay_AlertsGate(t *testing.T) {
+	tests := []struct {
+		name       string
+		kind       string
+		gate       *fakeAlertsOverlayGate
+		wantStatus int
+		wantCalls  int
+	}{
+		{name: "premium creates alerts", kind: "alerts", gate: &fakeAlertsOverlayGate{allowed: true}, wantStatus: http.StatusCreated, wantCalls: 1},
+		{name: "non-premium is refused", kind: "alerts", gate: &fakeAlertsOverlayGate{}, wantStatus: http.StatusForbidden, wantCalls: 1},
+		{name: "gate error fails closed", kind: "alerts", gate: &fakeAlertsOverlayGate{err: assert.AnError}, wantStatus: http.StatusInternalServerError, wantCalls: 1},
+		{name: "chat skips the gate", kind: "chat", gate: &fakeAlertsOverlayGate{}, wantStatus: http.StatusCreated, wantCalls: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var created *models.Overlay
+			repo := &mockOverlayRepository{
+				listByUserIDFunc: func(context.Context, string) ([]*models.Overlay, error) { return nil, nil },
+				createFunc: func(_ context.Context, overlay *models.Overlay) error {
+					created = overlay
+					return nil
+				},
+			}
+			h := NewOverlayHandler(repo, &mockSourceRepository{}, &capturingConfigRepo{})
+			h.SetAlertsOverlayGate(tt.gate)
+
+			gin.SetMode(gin.TestMode)
+			router := gin.New()
+			router.Use(func(c *gin.Context) { c.Set("user_id", "user-1") })
+			router.POST("/", h.HandleCreateOverlay)
+
+			raw, err := json.Marshal(map[string]any{"name": "My Overlay", "overlay_type": tt.kind})
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(raw))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+
+			assert.Equal(t, tt.wantStatus, w.Code, w.Body.String())
+			assert.Equal(t, tt.wantCalls, tt.gate.calls)
+			if tt.wantStatus != http.StatusCreated {
+				assert.Nil(t, created, "a refused create must not reach the repository")
+			}
+		})
+	}
+}
+
+// Cloning is a create: a user without the gate cannot duplicate their way to a
+// new alerts overlay.
+func TestHandleCloneOverlay_AlertsGateRefuses(t *testing.T) {
+	var created *models.Overlay
+	repo := &mockOverlayRepository{
+		getByIDAndUserIDFunc: func(context.Context, string, string) (*models.Overlay, error) {
+			return &models.Overlay{ID: "overlay-1", UserID: "user-1", Name: "A", OverlayType: models.OverlayTypeAlerts}, nil
+		},
+		createFunc: func(_ context.Context, overlay *models.Overlay) error {
+			created = overlay
+			return nil
+		},
+	}
+	h := NewOverlayHandler(repo, &mockSourceRepository{}, &capturingConfigRepo{})
+	h.SetAlertsOverlayGate(&fakeAlertsOverlayGate{})
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) { c.Set("user_id", "user-1") })
+	router.POST("/:id/clone", h.HandleCloneOverlay)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/overlay-1/clone", nil))
+
+	assert.Equal(t, http.StatusForbidden, w.Code)
+	assert.Nil(t, created)
 }
