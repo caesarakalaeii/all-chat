@@ -61,6 +61,13 @@ type Manager struct {
 	gracePeriodMu         sync.Mutex
 	disconnectGracePeriod time.Duration
 
+	// sessionEndTimers end the stream session (credit roll) once an overlay has
+	// had no connection for sessionEndGrace. Longer than disconnectGracePeriod so
+	// an OBS scene switch or a short network drop does not split one stream into
+	// several sessions. Guarded by gracePeriodMu.
+	sessionEndTimers map[string]*time.Timer
+	sessionEndGrace  time.Duration
+
 	// Heartbeat tracking for connection TTL
 	heartbeatInterval time.Duration
 	connectionTTL     time.Duration
@@ -97,6 +104,13 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		}
 	}
 
+	sessionEndGrace := 15 * time.Minute
+	if env := os.Getenv("SESSION_END_GRACE_SECONDS"); env != "" {
+		if seconds, err := strconv.Atoi(env); err == nil && seconds > 0 {
+			sessionEndGrace = time.Duration(seconds) * time.Second
+		}
+	}
+
 	// Connection TTL: 10 minutes (auto-expire if heartbeat stops)
 	// Increased from 5 minutes to tolerate temporary Redis failures
 	connectionTTL := 10 * time.Minute
@@ -129,6 +143,7 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 
 	logger.Info("WebSocket manager initialized",
 		zap.Duration("disconnect_grace_period", gracePeriod),
+		zap.Duration("session_end_grace", sessionEndGrace),
 		zap.Duration("connection_ttl", connectionTTL),
 		zap.Duration("heartbeat_interval", heartbeatInterval),
 		zap.Duration("disconnect_linger_ttl", disconnectLingerTTL),
@@ -144,11 +159,13 @@ func NewManager(logger *zap.Logger, m *metrics.GatewayMetrics, redisClient *redi
 		redisClient:           redisClient,
 		gracePeriodTimers:     make(map[string]*time.Timer),
 		disconnectGracePeriod: gracePeriod,
+		sessionEndTimers:      make(map[string]*time.Timer),
+		sessionEndGrace:       sessionEndGrace,
 		heartbeatInterval:     heartbeatInterval,
 		connectionTTL:         connectionTTL,
 		disconnectLingerTTL:   disconnectLingerTTL,
 		stopHeartbeat:         make(chan struct{}),
-		sessionManager:        sessions.NewSessionManager(redisClient, db, logger, gracePeriod),
+		sessionManager:        sessions.NewSessionManager(redisClient, db, logger, sessionEndGrace),
 		noDemandOverlays:      make(map[string]bool),
 	}
 	if db != nil {
@@ -180,7 +197,11 @@ func (m *Manager) AddConnectionNoDemand(ctx context.Context, conn *Connection) {
 func (m *Manager) addConnection(ctx context.Context, conn *Connection, skipDemand bool) {
 	overlayID := conn.OverlayID()
 
-	// Ensure session exists (creates new or reactivates existing)
+	// Claim the overlay for this pod before touching the session, so a peer
+	// pod whose end grace expires right now sees the overlay as held.
+	m.sessionManager.AddHolder(ctx, overlayID)
+
+	// Ensure session exists (creates new, or reactivates one in its end grace)
 	if err := m.sessionManager.EnsureSession(ctx, overlayID); err != nil {
 		m.logger.Error("Failed to ensure session",
 			zap.String("overlay_id", overlayID),
@@ -189,7 +210,8 @@ func (m *Manager) addConnection(ctx context.Context, conn *Connection, skipDeman
 		// Continue - session management is non-critical for overlay display
 	}
 
-	// Cancel grace period timer if overlay was in grace period
+	// Cancel grace period timers if overlay was in grace period. EnsureSession
+	// above already reverted the session to ACTIVE.
 	m.gracePeriodMu.Lock()
 	if timer, exists := m.gracePeriodTimers[overlayID]; exists {
 		timer.Stop()
@@ -197,13 +219,10 @@ func (m *Manager) addConnection(ctx context.Context, conn *Connection, skipDeman
 		m.logger.Info("Cancelled disconnect grace period (overlay reconnected)",
 			zap.String("overlay_id", overlayID),
 		)
-		// Update session state back to ACTIVE
-		if err := m.sessionManager.CancelGracePeriod(ctx, overlayID); err != nil {
-			m.logger.Error("Failed to cancel grace period",
-				zap.String("overlay_id", overlayID),
-				zap.Error(err),
-			)
-		}
+	}
+	if timer, exists := m.sessionEndTimers[overlayID]; exists {
+		timer.Stop()
+		delete(m.sessionEndTimers, overlayID)
 	}
 	m.gracePeriodMu.Unlock()
 
@@ -424,6 +443,8 @@ func (m *Manager) RemoveConnection(conn *Connection) {
 		)
 		m.mu.Unlock()
 
+		m.sessionManager.RemoveHolder(context.Background(), overlayID)
+
 		// Start grace period timer
 		m.startDisconnectGracePeriod(overlayID)
 	} else {
@@ -462,17 +483,8 @@ func (m *Manager) startDisconnectGracePeriod(overlayID string) {
 		m.mu.RUnlock()
 
 		if !hasPool {
-			// Still no connections, end session and publish disconnected event
+			// Still no connections, publish disconnected event
 			ctx := context.Background()
-
-			// End session
-			if err := m.sessionManager.EndSession(ctx, overlayID); err != nil {
-				m.logger.Error("Failed to end session",
-					zap.String("overlay_id", overlayID),
-					zap.Error(err),
-				)
-			}
-
 			m.publishConnectionEvent(ctx, overlayID, "disconnected")
 			m.logger.Info("Grace period expired, overlay still disconnected",
 				zap.String("overlay_id", overlayID),
@@ -485,6 +497,29 @@ func (m *Manager) startDisconnectGracePeriod(overlayID string) {
 	})
 
 	m.gracePeriodTimers[overlayID] = timer
+
+	if timer, exists := m.sessionEndTimers[overlayID]; exists {
+		timer.Stop()
+	}
+	m.sessionEndTimers[overlayID] = time.AfterFunc(m.sessionEndGrace, func() {
+		m.gracePeriodMu.Lock()
+		delete(m.sessionEndTimers, overlayID)
+		m.gracePeriodMu.Unlock()
+
+		m.mu.RLock()
+		_, hasPool := m.pools[overlayID]
+		m.mu.RUnlock()
+		if hasPool {
+			return
+		}
+		// Another pod may still serve the overlay; only the last one ends it.
+		if err := m.sessionManager.EndSessionIfIdle(context.Background(), overlayID); err != nil {
+			m.logger.Error("Failed to end session",
+				zap.String("overlay_id", overlayID),
+				zap.Error(err),
+			)
+		}
+	})
 }
 
 // BroadcastToOverlayFiltered sends a message to all connections in an overlay
@@ -642,6 +677,7 @@ func (m *Manager) refreshConnectionTTLs() {
 	// instead of expiring after SessionTTL. Batched into a single round trip
 	// rather than one EXPIRE per overlay alongside the SetEx below.
 	m.sessionManager.RefreshTTLs(ctx, overlayIDs)
+	m.sessionManager.AddHolder(ctx, overlayIDs...)
 
 	// Refresh TTL for each connected overlay
 	refreshed := 0

@@ -755,6 +755,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0068: A stream session ends only when no gateway pod holds the overlay, after a 15-minute grace
+
+**Status**: Accepted (2026-10-16)
+**Problem**: Credits showed 2h48 for a 4h18 stream. Each api-gateway pod ended the shared session when its own pool emptied, even while another pod still served the OBS overlay, and a 60-second grace split a stream on any scene switch or short drop. Each split also reset the leaderboards.
+**Decision**: Pods register in a `session:holders:{overlay}` sorted set (heartbeat-scored, stale after 10 min); the session is only marked ENDING or ended when no holder remains, after `SESSION_END_GRACE_SECONDS` (default 900), separate from the 60s WebSocket grace. `ending_at` lets the next connect replace a session whose ending pod died.
+**Impact**: One session per stream across pods and short drops; streams under 15 minutes apart merge; completed-session credits measure to `ended_at`.
+**→ Read**: [0068-stream-session-spans-gateway-pods-and-short-drops.md](./0068-stream-session-spans-gateway-pods-and-short-drops.md)
+
+---
+
 
 ## How to Create a New ADR
 
@@ -895,4 +905,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-09-12
+**Last Updated**: 2026-10-16

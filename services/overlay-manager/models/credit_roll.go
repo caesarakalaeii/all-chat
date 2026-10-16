@@ -141,4 +141,5 @@ type SessionInfo struct {
 	State       string    `json:"state"`
 	EventCount  int       `json:"event_count"`
 	LastEventAt time.Time `json:"last_event_at,omitempty"`
+	EndedAt     time.Time `json:"ended_at,omitempty"` // zero while the session is live
 }

@@ -157,6 +157,9 @@ func (r *CreditRollRepository) GetMostRecentCompletedSession(ctx context.Context
 	if totalEvents != nil {
 		session.EventCount = *totalEvents
 	}
+	if endedAt != nil {
+		session.EndedAt = *endedAt
+	}
 
 	return &session, nil
 }

@@ -321,9 +321,19 @@ func TestCalculateSessionDuration(t *testing.T) {
 	tests := []struct {
 		name      string
 		startedAt time.Time
+		endedAt   time.Time
 		wantMin   int
 		wantMax   int
 	}{
+		{
+			// A completed session read from the DB fallback must report its
+			// real length, not keep growing until the credits are shown.
+			name:      "ended session measures to its end",
+			startedAt: now.Add(-5 * time.Hour),
+			endedAt:   now.Add(-1 * time.Hour),
+			wantMin:   4 * 60 * 60,
+			wantMax:   4 * 60 * 60,
+		},
 		{
 			name:      "zero time returns 0",
 			startedAt: time.Time{},
@@ -358,7 +368,7 @@ func TestCalculateSessionDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := calculateSessionDuration(tt.startedAt)
+			result := calculateSessionDuration(tt.startedAt, tt.endedAt)
 			if result < tt.wantMin || result > tt.wantMax {
 				t.Errorf("calculateSessionDuration() = %d, want between %d and %d", result, tt.wantMin, tt.wantMax)
 			}
