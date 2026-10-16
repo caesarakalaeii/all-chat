@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Parity gate for the two desktop plugins (ADR-0049).
 
-Two plugins ship the same buttons in two languages: `streamdeck-plugin/`
-(TypeScript, Elgato SDK, Windows + macOS) and `streamcontroller-plugin/`
-(Python, StreamController, Linux). ADR-0049 names the resulting risk exactly:
+Two plugins ship the same buttons in two languages, each in its own repository:
+`allchat-streamdeck` (TypeScript, Elgato SDK, Windows + macOS) and
+`allchat-streamcontroller` (Python, StreamController, Linux). ADR-0049 names the
+resulting risk exactly:
 
     The real cost of two plugins is drift, not effort. [...] the *button set*
     now exists twice and will diverge unless it is defined once. Treat the
@@ -24,14 +25,23 @@ to read differently. It pins the things that must not diverge:
 3.  **The keep-in-sync pointers are mutual.** The convention CLAUDE.md uses for
     OnboardingChecklist.tsx / upgrade only works when both ends point at each
     other; a one-way pointer rots the moment someone edits the unmarked file.
+    Pointers name the repository first (`allchat-streamdeck/src/...`), which is
+    also the directory each repository is checked out into.
 4.  **The version stamp is in every property inspector.** Three HTML files carry
-    one hand-maintained Linking block that nothing else in the repo parses, so an
-    element the shared script needs can silently exist in only one of them.
+    one hand-maintained Linking block that nothing else parses, so an element the
+    shared script needs can silently exist in only one of them.
+
+The script lives here rather than in either plugin because All-Chat owns the API
+both of them implement. It expects both plugin repositories checked out as
+siblings of this one, under their repository names, which is the layout the
+plugin repositories' CI builds and the one a local clone of all three gives:
+
+    git clone https://github.com/caesarakalaeii/allchat-streamdeck.git
+    git clone https://github.com/caesarakalaeii/allchat-streamcontroller.git
+    python3 all-chat/scripts/check-plugin-parity.py
 
 Standard library only, so it runs in the flake dev shell, in CI, and in the
-Caterpillar sandbox without an install step:
-
-    python3 scripts/check-plugin-parity.py
+Caterpillar sandbox without an install step.
 """
 
 from __future__ import annotations
@@ -40,9 +50,10 @@ import re
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent
-TS = REPO / "streamdeck-plugin"
-PY = REPO / "streamcontroller-plugin"
+#: The directory holding all three checkouts; every path below is relative to it.
+WORKSPACE = Path(__file__).resolve().parent.parent.parent
+TS = WORKSPACE / "allchat-streamdeck"
+PY = WORKSPACE / "allchat-streamcontroller"
 
 TS_API = TS / "src" / "allchat" / "api.ts"
 PY_API = PY / "allchat" / "api.py"
@@ -166,7 +177,7 @@ SEND_PLATFORMS: tuple[str, ...] = ("all", "twitch", "youtube", "kick")
 UNSENDABLE: tuple[str, ...] = ("tiktok", "discord")
 
 # Keep-in-sync pointers, e.g.
-#     KEEP IN SYNC with ``streamdeck-plugin/src/allchat/api.ts`` (ADR-0049).
+#     KEEP IN SYNC with ``allchat-streamdeck/src/allchat/api.ts`` (ADR-0049).
 # Matched in either language's comment syntax; the quoting around the path is
 # whatever the surrounding docstring/JSDoc uses, so it is skipped over.
 POINTER = re.compile(r"KEEP IN SYNC with[`'\"\s]+([A-Za-z0-9_./-]+\.(?:ts|py))")
@@ -178,7 +189,7 @@ PLUGIN_SOURCES = sorted(
 
 def read(path: Path) -> str:
     if not path.is_file():
-        fail(f"expected file is missing: {path.relative_to(REPO)}")
+        fail(f"expected file is missing: {path.relative_to(WORKSPACE)}")
         return ""
     return path.read_text(encoding="utf-8")
 
@@ -253,22 +264,22 @@ def check_action_list() -> None:
 
     for ts_name, py_name, route in ACTIONS:
         if ts_name not in ts_funcs:
-            fail(f"{TS_API.relative_to(REPO)} does not export `{ts_name}` ({route})")
+            fail(f"{TS_API.relative_to(WORKSPACE)} does not export `{ts_name}` ({route})")
         if py_name not in py_funcs:
-            fail(f"{PY_API.relative_to(REPO)} does not define `{py_name}` ({route})")
+            fail(f"{PY_API.relative_to(WORKSPACE)} does not define `{py_name}` ({route})")
 
     known_ts = {a[0] for a in ACTIONS} | set(TS_ONLY_ALLOWED)
     known_py = {a[1] for a in ACTIONS} | set(PY_ONLY_ALLOWED)
 
     for extra in sorted(ts_funcs - known_ts):
         fail(
-            f"{TS_API.relative_to(REPO)} exports `{extra}`, which is not in the ADR-0049 action list. "
-            f"Add it to ACTIONS here and implement it in {PY_API.relative_to(REPO)}, or allowlist it with a reason."
+            f"{TS_API.relative_to(WORKSPACE)} exports `{extra}`, which is not in the ADR-0049 action list. "
+            f"Add it to ACTIONS here and implement it in {PY_API.relative_to(WORKSPACE)}, or allowlist it with a reason."
         )
     for extra in sorted(py_funcs - known_py):
         fail(
-            f"{PY_API.relative_to(REPO)} defines `{extra}`, which is not in the ADR-0049 action list. "
-            f"Add it to ACTIONS here and implement it in {TS_API.relative_to(REPO)}, or allowlist it with a reason."
+            f"{PY_API.relative_to(WORKSPACE)} defines `{extra}`, which is not in the ADR-0049 action list. "
+            f"Add it to ACTIONS here and implement it in {TS_API.relative_to(WORKSPACE)}, or allowlist it with a reason."
         )
 
 
@@ -277,13 +288,13 @@ def check_constants() -> None:
         ts_value = ts_constant(read(ts_path), name)
         py_value = py_constant(read(py_path), name)
         if ts_value is None:
-            fail(f"{ts_path.relative_to(REPO)} does not export a string constant `{name}`")
+            fail(f"{ts_path.relative_to(WORKSPACE)} does not export a string constant `{name}`")
         if py_value is None:
-            fail(f"{py_path.relative_to(REPO)} does not define a string constant `{name}`")
+            fail(f"{py_path.relative_to(WORKSPACE)} does not define a string constant `{name}`")
         if ts_value is not None and py_value is not None and ts_value != py_value:
             fail(
                 f"`{name}` differs between the plugins: "
-                f"{ts_path.relative_to(REPO)} has {ts_value!r}, {py_path.relative_to(REPO)} has {py_value!r}"
+                f"{ts_path.relative_to(WORKSPACE)} has {ts_value!r}, {py_path.relative_to(WORKSPACE)} has {py_value!r}"
             )
 
 
@@ -299,9 +310,9 @@ def check_send_platforms() -> None:
     ui_platforms = tuple(re.findall(r'<option value="([a-z]+)"', read(TS_SEND_UI)))
 
     for label, found in (
-        (f"{TS_SETTINGS.relative_to(REPO)} PLATFORMS", ts_platforms),
-        (f"{PY_SETTINGS.relative_to(REPO)} PLATFORMS", py_platforms),
-        (f"{TS_SEND_UI.relative_to(REPO)} <option> values", ui_platforms),
+        (f"{TS_SETTINGS.relative_to(WORKSPACE)} PLATFORMS", ts_platforms),
+        (f"{PY_SETTINGS.relative_to(WORKSPACE)} PLATFORMS", py_platforms),
+        (f"{TS_SEND_UI.relative_to(WORKSPACE)} <option> values", ui_platforms),
     ):
         if set(found) != set(SEND_PLATFORMS):
             fail(
@@ -320,7 +331,7 @@ def check_send_platforms() -> None:
         keys = set(re.findall(r'^\s*"?([a-z]+)"?:', _unsendable_literal(read(path)), re.MULTILINE))
         if keys != set(UNSENDABLE):
             fail(
-                f"{path.relative_to(REPO)} UNSENDABLE_PLATFORMS covers {sorted(keys)}, "
+                f"{path.relative_to(WORKSPACE)} UNSENDABLE_PLATFORMS covers {sorted(keys)}, "
                 f"expected {sorted(UNSENDABLE)}. Each read-only platform needs an "
                 f"explanation, not just an absence."
             )
@@ -383,7 +394,7 @@ def check_inspector_watchdogs() -> None:
     if watchdog is not None and loopback_flow is not None and watchdog <= loopback_flow:
         fail(
             f"WATCHDOG_MS ({watchdog / 1000:g}s) does not outlast LOOPBACK_TIMEOUT_MS "
-            f"({loopback_flow / 1000:g}s) in {TS_LINKING.relative_to(REPO)}. The panel would "
+            f"({loopback_flow / 1000:g}s) in {TS_LINKING.relative_to(WORKSPACE)}. The panel would "
             f"give up on a loopback flow that is still running."
         )
 
@@ -391,7 +402,7 @@ def check_inspector_watchdogs() -> None:
         fail(
             f"CODE_WATCHDOG_MS ({code_watchdog / 1000:g}s) does not outlast "
             f"CODE_FLOW_TIMEOUT_MS ({code_flow / 1000:g}s) in "
-            f"{TS_LINKING.relative_to(REPO)}. The pairing code is valid that long and the "
+            f"{TS_LINKING.relative_to(WORKSPACE)}. The pairing code is valid that long and the "
             f"user is typing it on another device."
         )
 
@@ -411,14 +422,14 @@ def check_version_stamp() -> None:
     """
     if VERSION_ELEMENT_ID not in read(TS_LINK_SCRIPT):
         fail(
-            f"{TS_LINK_SCRIPT.relative_to(REPO)} does not write to `{VERSION_ELEMENT_ID}`. "
+            f"{TS_LINK_SCRIPT.relative_to(WORKSPACE)} does not write to `{VERSION_ELEMENT_ID}`. "
             f"The version stamp belongs in the shared script, not three times in the HTML."
         )
 
     for page in TS_INSPECTORS:
         if f'id="{VERSION_ELEMENT_ID}"' not in read(page):
             fail(
-                f"{page.relative_to(REPO)} has no element with id=\"{VERSION_ELEMENT_ID}\". "
+                f"{page.relative_to(WORKSPACE)} has no element with id=\"{VERSION_ELEMENT_ID}\". "
                 f"All three property inspectors carry the version stamp, or a support "
                 f"report from that action cannot say which build it came from."
             )
@@ -436,13 +447,13 @@ def check_version_stamp() -> None:
     ]
     if not failure_logs:
         fail(
-            f"{TS_ACTION_BASE.relative_to(REPO)} logs no `linking failed` error. If the "
+            f"{TS_ACTION_BASE.relative_to(WORKSPACE)} logs no `linking failed` error. If the "
             f"wording changed, change it here too."
         )
     for call in failure_logs:
         if PLUGIN_VERSION_EXPRESSION not in call:
             fail(
-                f"{TS_ACTION_BASE.relative_to(REPO)} logs a linking failure without "
+                f"{TS_ACTION_BASE.relative_to(WORKSPACE)} logs a linking failure without "
                 f"`{PLUGIN_VERSION_EXPRESSION}`: {' '.join(call.split())}. A log a streamer "
                 f"sends in has to name the build, or the first reply is always "
                 f"'which version?'."
@@ -460,9 +471,9 @@ def check_sync_pointers() -> None:
         fail("no KEEP IN SYNC pointers found at all; the drift convention has been deleted")
 
     for path, targets in pointers.items():
-        source_rel = path.relative_to(REPO).as_posix()
+        source_rel = path.relative_to(WORKSPACE).as_posix()
         for target_rel in sorted(targets):
-            target = REPO / target_rel
+            target = WORKSPACE / target_rel
             if not target.is_file():
                 fail(f"{source_rel} points at {target_rel}, which does not exist")
                 continue
@@ -489,9 +500,9 @@ def check_linking() -> None:
         ts_match = re.search(rf"^const {ts_name}\s*=\s*([0-9_]+)", ts_src, re.MULTILINE)
         py_match = re.search(rf"^{py_name}\s*=\s*([0-9_.]+)", py_src, re.MULTILINE)
         if not ts_match:
-            fail(f"{TS_LINKING.relative_to(REPO)} does not define `{ts_name}`")
+            fail(f"{TS_LINKING.relative_to(WORKSPACE)} does not define `{ts_name}`")
         if not py_match:
-            fail(f"{PY_LINKING.relative_to(REPO)} does not define `{py_name}`")
+            fail(f"{PY_LINKING.relative_to(WORKSPACE)} does not define `{py_name}`")
         if not ts_match or not py_match:
             continue
         ts_seconds = float(ts_match.group(1).replace("_", "")) / 1000.0
@@ -514,8 +525,8 @@ def check_linking() -> None:
     )
     if ts_scopes != set(LINKING_SCOPES) or py_scopes != set(LINKING_SCOPES):
         fail(
-            f"REQUESTED_SCOPES differ: {TS_LINKING.relative_to(REPO)} has {sorted(ts_scopes)}, "
-            f"{PY_LINKING.relative_to(REPO)} has {sorted(py_scopes)}, expected "
+            f"REQUESTED_SCOPES differ: {TS_LINKING.relative_to(WORKSPACE)} has {sorted(ts_scopes)}, "
+            f"{PY_LINKING.relative_to(WORKSPACE)} has {sorted(py_scopes)}, expected "
             f"{sorted(LINKING_SCOPES)} on both."
         )
 
@@ -526,7 +537,7 @@ def check_linking() -> None:
     for path, src in ((TS_LINKING, ts_src), (PY_LINKING, py_src)):
         if "0.0.0.0" in src:
             fail(
-                f"{path.relative_to(REPO)} mentions 0.0.0.0. The loopback listener must bind "
+                f"{path.relative_to(WORKSPACE)} mentions 0.0.0.0. The loopback listener must bind "
                 f"127.0.0.1 ONLY (ADR-0049): the wildcard address is reachable from the local "
                 f"network while linking is in progress."
             )
@@ -539,6 +550,15 @@ def _scope_literal(src: str, name: str) -> str:
 
 
 def main() -> int:
+    missing = [p.name for p in (TS, PY) if not p.is_dir()]
+    if missing:
+        print(
+            f"Desktop plugin parity check cannot run: no checkout of {', '.join(missing)} "
+            f"next to this repository in {WORKSPACE}. See this script's docstring.",
+            file=sys.stderr,
+        )
+        return 2
+
     check_action_list()
     check_constants()
     check_send_platforms()
@@ -553,7 +573,7 @@ def main() -> int:
             print(f"  - {message}", file=sys.stderr)
         print(
             "\nBoth plugins implement one action list. If a button changed on one side, "
-            "change it on the other in the same PR.",
+            "change it on the other in a branch of the same name, so CI checks them together.",
             file=sys.stderr,
         )
         return 1

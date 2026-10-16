@@ -61,9 +61,8 @@ import { toastManager } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
 
-const STREAMDECK_README = 'https://github.com/caesarakalaeii/all-chat/tree/main/streamdeck-plugin'
-const STREAMCONTROLLER_README =
-  'https://github.com/caesarakalaeii/all-chat/tree/main/streamcontroller-plugin'
+const STREAMDECK_README = 'https://github.com/caesarakalaeii/allchat-streamdeck#readme'
+const STREAMCONTROLLER_README = 'https://github.com/caesarakalaeii/allchat-streamcontroller#readme'
 
 /**
  * Catalog key stem per scope. `satisfies` rather than a type annotation so the

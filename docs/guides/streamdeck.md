@@ -215,7 +215,7 @@ This matters most when **linking hangs**. Stream Deck plugin installs from befor
 button still starts the flow, but nothing it reports back can ever replace
 "Starting…", whether the flow succeeded or failed. If the panel warns that the
 plugin has not answered and the build may be out of date, that is this. Install a current build — see [Installing and
-updating](../../streamdeck-plugin/README.md#installing-and-updating) — and try
+updating](https://github.com/caesarakalaeii/allchat-streamdeck#installing-and-updating) — and try
 again. Quote the version in any bug report; the Stream Deck plugin also writes it
 into every linking failure in its log.
 
@@ -273,5 +273,5 @@ resolve the current one first.
 
 - [ADR-0049: Stream Deck and desktop control surfaces via paired device tokens](../adr/0049-desktop-control-surfaces-via-paired-device-tokens.md) — why linking works the way it does, and why the loopback redirect gets its own validation rule
 - [ADR-0051: Personal access tokens for non-browser clients](../adr/0051-personal-access-tokens-for-non-browser-clients.md) — why the pasted-token route exists, how tokens are stored, and why it stays supported
-- [`streamdeck-plugin/README.md`](../../streamdeck-plugin/README.md) — installing and building the Elgato plugin
-- [`streamcontroller-plugin/README.md`](../../streamcontroller-plugin/README.md) — installing the Linux StreamController plugin
+- [`allchat-streamdeck`](https://github.com/caesarakalaeii/allchat-streamdeck) — installing and building the Elgato plugin (its own repository, GPL-3.0-or-later)
+- [`allchat-streamcontroller`](https://github.com/caesarakalaeii/allchat-streamcontroller) — installing the Linux StreamController plugin (its own repository, GPL-3.0-or-later)

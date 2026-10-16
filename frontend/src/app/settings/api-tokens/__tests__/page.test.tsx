@@ -202,13 +202,13 @@ describe('Settings → API tokens page', () => {
     expect(await screen.findByText(/don't have any API tokens yet/i)).toBeInTheDocument()
 
     const streamDeck = screen.getByRole('link', { name: /Stream Deck plugin README/i })
-    expect(streamDeck).toHaveAttribute('href', expect.stringContaining('streamdeck-plugin'))
+    expect(streamDeck).toHaveAttribute('href', expect.stringContaining('allchat-streamdeck'))
     const streamController = screen.getByRole('link', {
       name: /StreamController plugin README/i,
     })
     expect(streamController).toHaveAttribute(
       'href',
-      expect.stringContaining('streamcontroller-plugin')
+      expect.stringContaining('allchat-streamcontroller')
     )
   })
 
