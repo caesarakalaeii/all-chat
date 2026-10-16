@@ -513,6 +513,52 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     saveConfiguration: 'Konfiguration speichern',
     savingConfiguration: 'Wird gespeichert...',
   },
+  goalMetrics: {
+    followers: 'Twitch-Follower',
+    subscribers: 'YouTube-Abonnenten',
+    bits: 'Twitch-Bits',
+    super_chat: 'YouTube-Super-Chats',
+  },
+  goalStatus: {
+    reconnect:
+      'Der letzte Abruf ist fehlgeschlagen: Verbinde diesen Kanal erneut mit deinem Konto, damit All-Chat ihn lesen kann.',
+    hidden:
+      'Dieser YouTube-Kanal verbirgt seine Abonnentenzahl, daher kann das Ziel sie nicht lesen.',
+  },
+  goalEditor: {
+    current: 'Aktuell {current} von {target}.',
+    metricLabel: 'Was der Balken zählt',
+    polledHint:
+      'Wird etwa einmal pro Minute von der Plattform gelesen, solange das Overlay in OBS geöffnet ist. YouTube rundet große Abonnentenzahlen.',
+    countedHint: 'Gezählt aus jedem Cheer bzw. Super Chat, den dieses Overlay empfängt.',
+    titleLabel: 'Titel (optional)',
+    targetLabel: 'Ziel',
+    startLabel: 'Startwert',
+    startHintPolled: 'Wird angezeigt, bis der erste Wert eintrifft.',
+    startHintCounted: 'Wird zum Gezählten addiert, für Fortschritt von vor diesem Overlay.',
+    resetLabel: 'Gezählten Fortschritt beim Speichern zurücksetzen',
+    save: 'Ziel speichern',
+    saving: 'Wird gespeichert...',
+    saved: 'Ziel gespeichert',
+    saveFailed: 'Ziel konnte nicht gespeichert werden',
+    loadFailed: 'Ziel konnte nicht geladen werden',
+  },
+  listCategories: {
+    bits: 'Gecheerte Bits',
+    gifts: 'Verschenkte Subs und Mitgliedschaften',
+    super_chat: 'Super Chats',
+  },
+  listEditor: {
+    body: 'Listet die Unterstützer der letzten 30 Tage. Jeder neue Cheer, jedes Geschenk und jeder Super Chat aktualisiert sie live.',
+    categoryLabel: 'Sortiert nach',
+    titleLabel: 'Titel (optional)',
+    limitLabel: 'Angezeigte Plätze (1 bis {max})',
+    save: 'Bestenliste speichern',
+    saving: 'Wird gespeichert...',
+    saved: 'Bestenliste gespeichert',
+    saveFailed: 'Bestenliste konnte nicht gespeichert werden',
+    loadFailed: 'Bestenliste konnte nicht geladen werden',
+  },
   alertTest: {
     heading: 'Test-Alerts',
     body: 'Sende einen Test-Alert an dieses Overlay. Er läuft in OBS und auf jeder offenen Overlay-Seite, genau wie ein echter.',
@@ -871,8 +917,8 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
   createKindDescriptions: {
     chat: 'Dein Live-Chat von allen verbundenen Plattformen.',
     alerts: 'On-Stream-Alerts für Subs, Bits, Raids und mehr.',
-    goal: 'Ein Fortschrittsbalken für ein Follower- oder Abonnenten-Ziel.',
-    list: 'Eine rollierende Liste aktueller Follower oder Abonnenten.',
+    goal: 'Ein Fortschrittsbalken für ein Follower-, Abonnenten-, Bits- oder Super-Chat-Ziel.',
+    list: 'Deine Top-Unterstützer nach Bits, Geschenken oder Super Chats.',
   },
   embedPreview: {
     waitingHeading: 'Warten auf Nachrichten...',

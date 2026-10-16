@@ -31,6 +31,8 @@ func TestAlertsGateSeeds(t *testing.T) {
 	for file, key := range map[string]string{
 		"107_alert_profiles.sql":      GateAlertsEditor,
 		"108_alerts_overlay_gate.sql": GateAlertsOverlay,
+		"110_goal_configs.sql":        GateGoalOverlay,
+		"111_list_configs.sql":        GateListOverlay,
 	} {
 		t.Run(key, func(t *testing.T) { assertPremiumSeed(t, file, key) })
 	}

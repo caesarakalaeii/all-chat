@@ -18,6 +18,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
@@ -41,29 +42,44 @@ type OverlayHandler struct {
 	repo       OverlayRepository
 	sourceRepo SourceRepository
 	configRepo OverlayConfigRepository
-	// alertsGate is the alerts_overlay premium gate (ADR-0008) on creating an
-	// alerts overlay. Unset (tests, direct construction) reads as open.
-	alertsGate alertsOverlayGate
+	// kindGates are the per-kind premium gates (ADR-0008) on creating an
+	// alerts, goal or list overlay. An unset gate (tests, direct
+	// construction) reads as open.
+	kindGates map[string]kindGate
 }
 
-// alertsOverlayGate decides whether a user may create an alerts overlay.
-type alertsOverlayGate interface {
+// kindGate decides whether a user may create an overlay of one kind.
+type kindGate interface {
 	Allowed(ctx context.Context, userID string) (bool, error)
 }
 
-// SetAlertsOverlayGate wires the alerts_overlay premium check.
-func (h *OverlayHandler) SetAlertsOverlayGate(g alertsOverlayGate) {
-	h.alertsGate = g
+// kindGateFeature names the feature gate of every premium overlay kind; chat
+// has none.
+var kindGateFeature = map[string]string{
+	models.OverlayTypeAlerts: featuregates.GateAlertsOverlay,
+	models.OverlayTypeGoal:   featuregates.GateGoalOverlay,
+	models.OverlayTypeList:   featuregates.GateListOverlay,
+}
+
+// SetKindGate wires the premium check for creating overlays of kind. Kinds
+// without a feature gate (chat) ignore it.
+func (h *OverlayHandler) SetKindGate(kind string, g kindGate) {
+	if h.kindGates == nil {
+		h.kindGates = make(map[string]kindGate)
+	}
+	h.kindGates[kind] = g
 }
 
 // refuseGatedKind writes the 403/500 and returns true when the caller may not
 // create an overlay of this kind. Errors fail closed. Only creates are gated:
-// an existing alerts overlay keeps rendering after premium lapses.
+// an existing alerts/goal/list overlay keeps rendering after premium lapses.
 func (h *OverlayHandler) refuseGatedKind(c *gin.Context, userID, kind string) bool {
-	if kind != models.OverlayTypeAlerts || h.alertsGate == nil {
+	feature, gated := kindGateFeature[kind]
+	gate := h.kindGates[kind]
+	if !gated || gate == nil {
 		return false
 	}
-	allowed, err := h.alertsGate.Allowed(c.Request.Context(), userID)
+	allowed, err := gate.Allowed(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check premium status"})
 		return true
@@ -71,8 +87,8 @@ func (h *OverlayHandler) refuseGatedKind(c *gin.Context, userID, kind string) bo
 	if !allowed {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error":   "Premium required",
-			"feature": featuregates.GateAlertsOverlay,
-			"message": "Alert overlays are a premium feature.",
+			"feature": feature,
+			"message": fmt.Sprintf("%s overlays are a premium feature.", kind),
 		})
 		return true
 	}
@@ -82,16 +98,6 @@ func (h *OverlayHandler) refuseGatedKind(c *gin.Context, userID, kind string) bo
 // NewOverlayHandler creates a new overlay handler
 func NewOverlayHandler(repo OverlayRepository, sourceRepo SourceRepository, configRepo OverlayConfigRepository) *OverlayHandler {
 	return &OverlayHandler{repo: repo, sourceRepo: sourceRepo, configRepo: configRepo}
-}
-
-// unreleasedOverlayTypes can be stored and rendered but not newly created:
-// nothing renders them yet, so a new one would only put the
-// "not supported yet" placeholder on stream. Existing overlays of these kinds
-// keep working and can still be cloned. Release a kind by deleting it here and
-// in CREATABLE_OVERLAY_KINDS (frontend/src/lib/utils/overlayKind.ts).
-var unreleasedOverlayTypes = map[string]bool{
-	models.OverlayTypeGoal: true,
-	models.OverlayTypeList: true,
 }
 
 // HandleCreateOverlay handles POST /overlays
@@ -138,10 +144,6 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 		return
 	}
 
-	if unreleasedOverlayTypes[overlay.OverlayType] {
-		c.JSON(http.StatusForbidden, gin.H{"error": overlay.OverlayType + " overlays are not available yet"})
-		return
-	}
 	if h.refuseGatedKind(c, overlay.UserID, overlay.OverlayType) {
 		return
 	}

@@ -27,8 +27,8 @@ import type { ChatMessage } from '@/lib/types/message'
 
 // The render route dispatches on the overlay's kind (ADR-0068), read from the
 // public config the page already fetches. Chat overlays must keep rendering
-// exactly as before; alerts overlays render the alert box; goal and list show
-// a placeholder until their own renderer issues land.
+// exactly as before; alerts overlays render the alert box, goal overlays the
+// goal bar and list overlays the leaderboard (ADR-0072).
 
 window.matchMedia = (query: string) =>
   ({
@@ -177,11 +177,92 @@ describe('overlay render route kind dispatch', () => {
     expect(screen.getByRole('status')).toHaveTextContent('FirstFollower just followed!')
   })
 
-  it.each(['goal', 'list'] as const)('renders the placeholder for a %s overlay', async (kind) => {
-    streamConfig.config = { overlay_type: kind }
+  it('renders the goal bar from its public read and moves it on a goal frame', async () => {
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: url.endsWith('/overlays/public/test/goal'),
+      json: async () => ({
+        goal: {
+          metric: 'bits',
+          platform: 'twitch',
+          target: 1000,
+          starting_value: 0,
+          title: 'Bits!',
+        },
+        configured: true,
+        current: 250,
+        status: '',
+      }),
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+    streamConfig.config = { overlay_type: 'goal' }
     render(<OBSOverlayPage params={resolvedParams('test')} />)
     await act(async () => {})
 
-    expect(screen.getByText(/not supported yet/i)).toBeInTheDocument()
+    const bar = screen.getByRole('progressbar', { name: 'Bits!' })
+    expect(bar).toHaveAttribute('aria-valuenow', '250')
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/overlays/public/test/goal')
+
+    act(() => {
+      streamOptions.onGoal?.({
+        type: 'goal',
+        overlay_id: 'test',
+        goal: 'bits',
+        current: 600,
+        target: 1000,
+        title: 'Bits!',
+      })
+    })
+    expect(screen.getByRole('progressbar', { name: 'Bits!' })).toHaveAttribute(
+      'aria-valuenow',
+      '600'
+    )
+    vi.unstubAllGlobals()
+  })
+
+  it('renders the leaderboard and re-ranks it on a list_update', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          title: 'Top cheerers',
+          category: 'bits',
+          limit: 2,
+          entries: [{ rank: 1, name: 'First', platform: 'twitch', amount: 100 }],
+        }),
+      }))
+    )
+    streamConfig.config = { overlay_type: 'list' }
+    render(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {})
+    expect(screen.getByRole('list', { name: 'Top cheerers' })).toHaveTextContent('First')
+
+    act(() => {
+      streamOptions.onListUpdate?.({
+        type: 'list_update',
+        overlay_id: 'test',
+        category: 'bits',
+        entries: [
+          { rank: 1, name: 'Newcomer', platform: 'twitch', amount: 900 },
+          { rank: 2, name: 'First', platform: 'twitch', amount: 100 },
+          { rank: 3, name: 'Third', platform: 'twitch', amount: 10 },
+        ],
+      })
+    })
+    const rows = screen.getAllByRole('listitem')
+    expect(rows.map((r) => r.textContent)).toEqual(['1Newcomer900', '2First100'])
+    vi.unstubAllGlobals()
+  })
+
+  it('does not fetch goal or list state for a chat overlay', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    streamConfig.config = { overlay_type: 'chat' }
+    render(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {})
+    expect(
+      fetchMock.mock.calls.map((c) => String(c[0])).filter((u) => /goal|list\/top/.test(u))
+    ).toEqual([])
+    vi.unstubAllGlobals()
   })
 })

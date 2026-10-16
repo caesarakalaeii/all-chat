@@ -5,7 +5,7 @@ Stream (with its own consumer group) and routes them to alert-capable overlays
 (`overlay_type` IN `alerts`, `goal`, `list`): it normalizes each event with the
 message-processor's platform normalizers, publishes an alert envelope to the
 overlay's Pub/Sub channel, persists it to `alert_events`, and feeds `list`
-overlay leaderboards.
+overlay leaderboards and `goal` overlay counts (ADR-0072).
 
 It is a **read-only sibling** of the message-processor: the chat pipeline's
 filter/demote path is untouched, and this service's consumer group never sees
@@ -31,7 +31,10 @@ the message-processor's pending entries (ADR-0002 consumer-group pattern).
 - **History**: every routed alert is persisted to `alert_events`, idempotent on
   `alert_id`
 - **Leaderboards**: `list` overlays get Redis sorted sets of summed
-  amount-bearing events (bits, gifts, super chats) with a 30-day rolling TTL
+  amount-bearing events (bits, gifts, super chats) with a 30-day rolling TTL,
+  pushed as debounced `list_update` frames
+- **Goals**: bits/Super Chat goals counted once per alert; follower (Twitch) and
+  subscriber (YouTube) goals polled only while the overlay is connected
 - **Health checks**: `/health/live` and `/health/ready` (Postgres + Redis)
 - **Metrics**: Prometheus counters by platform and event_type
 
@@ -52,6 +55,15 @@ Per overlay:
   1. INSERT alert_events ... ON CONFLICT (id) DO NOTHING
   2. PUBLISH overlay:{overlay_id}:alerts
   3. 'list' overlays: ZINCRBY overlay:{overlay_id}:leaderboard:{category}
+     → mark board dirty → list_update (debounced, listpush)
+     'goal' overlays: INCRBYFLOAT overlay:{overlay_id}:goal:{metric} → goal frame
+
+Goal poller (every GOAL_POLL_SECONDS, both replicas):
+  goal overlays with followers/subscribers goals
+  ↓ only if overlay:connected:{id} exists (gateway demand key)
+  ↓ only if SET overlay:{id}:goal-poll-lock NX wins (one replica per interval)
+  Helix channels/followers | YouTube channels.list (reserve/confirm quota)
+  ↓ SET overlay:{id}:goal:{metric}, PUBLISH goal frame
 ```
 
 ---
@@ -142,8 +154,36 @@ Categories (amount-bearing events only):
 | `gifts`      | `mystery_gift`, `gift_subscription`, `membership_gift`, `gift` |
 | `super_chat` | `super_chat`                                       |
 
-`goal` overlays receive the same alert events (they may animate on them) but do
-not keep leaderboards; authoritative goal counts are polled separately.
+The scoring script also keeps `overlay:{overlay_id}:leaderboard:{category}:names`
+(hash member → latest display name, same TTL) so the list renders names.
+
+Every changed board is marked dirty; a flush every second claims
+`SET overlay:{id}:list-push:{category} NX PX 2000` and, if won, publishes the
+board's top 25 as `{"type":"list_update","overlay_id","category","entries":[{rank,name,platform,amount}]}`.
+A replica that loses the window keeps the board dirty, so the cluster sends at
+most one frame per board per 2s and never drops the last change (ADR-0072).
+
+---
+
+## Goals (`goal` overlays, ADR-0072)
+
+The goal is the overlay's `goal_configs` row (overlay-manager owns it).
+
+| Metric | Platform | Source |
+|---|---|---|
+| `bits` | twitch | counted: `INCRBYFLOAT overlay:{id}:goal:bits`, once per alert (claim `overlay:{id}:goal-counted:{alert_id}`) |
+| `super_chat` | youtube | counted, same pattern |
+| `followers` | twitch | polled: Helix `GET /channels/followers?broadcaster_id=` `total`, the owner's token (`moderation-service/tokens`, ADR-0016) |
+| `subscribers` | youtube | polled: `channels.list?part=statistics&id=` (1 unit) through `shared/quota` reserve/confirm/rollback |
+
+Counted goals push `{"type":"goal","overlay_id","goal","current","target","title"}`
+with `current = starting_value + counted`; only events matching the configured
+metric count. Polls run every `GOAL_POLL_SECONDS` only for overlays whose
+`overlay:connected:{id}` key exists, behind a per-overlay lock
+(`overlay:{id}:goal-poll-lock`, interval − 1s), and store the count in
+`overlay:{id}:goal:{metric}`. A missing/revoked credential stores
+`overlay:{id}:goal-status = reconnect`, a hidden YouTube count `hidden`
+(TTL 3 intervals); the editor shows it. YouTube rounds public subscriber counts.
 
 ---
 
@@ -171,13 +211,18 @@ APP_VERSION=0.1.0
 ENVIRONMENT=development
 OTEL_ENABLED=false         # OpenTelemetry tracing opt-in
 OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
+GOAL_POLL_SECONDS=60       # follower/subscriber goal poll interval
+TOKEN_ENCRYPTION_KEY_V1=   # token cipher; without it no goal is polled
+TWITCH_CLIENT_ID= TWITCH_CLIENT_SECRET=     # follower goals (token refresh + Helix)
+YOUTUBE_CLIENT_ID= YOUTUBE_CLIENT_SECRET=   # subscriber goals (token refresh)
+YOUTUBE_QUOTA_LIMIT_DAILY= # default shared/quota.DefaultDailyLimit
 ```
 
 ---
 
 ## Metrics
 
-All labelled by `platform` and `event_type` (`event_type` is `chat` for chat
+The event counters are labelled by `platform` and `event_type` (`event_type` is `chat` for chat
 lines, so the consumed/routed delta is the chat volume the alert path skips):
 
 | Metric                                       | Meaning                                  |
@@ -186,6 +231,11 @@ lines, so the consumed/routed delta is the chat volume the alert path skips):
 | `alert_processor_events_routed_total`        | alerts fanned out (one per event × overlay) |
 | `alert_processor_events_persisted_total`     | `alert_events` write attempts            |
 | `alert_processor_publish_errors_total`       | failed publishes (alert is redelivered)  |
+| `alert_processor_goal_poll_total{platform,result}` | goal polls: `ok`, `reconnect`, `hidden`, `quota_skipped`, `error` |
+| `alert_processor_goal_api_errors_total{platform}`  | goal polls that failed at the API/token layer |
+
+YouTube goal polls are also counted in the shared `youtube_quota_usage` table,
+so `listener_quota_usage_percentage` (youtube-quota-monitor, ADR-0023) includes them.
 
 ---
 

@@ -136,12 +136,12 @@ Authorization: Bearer <jwt-token>
 Body: {
   "name": "My Stream Overlay",
   "description": "Multi-platform chat display",
-  "overlay_type": "chat"   # chat (default) | alerts; goal/list → 403 (not released)
+  "overlay_type": "chat"   # chat (default) | alerts | goal | list
 }
-# overlay_type "alerts" needs the alerts_overlay premium gate (ADR-0008,
-# migration 108): 403 {"error":"Premium required","feature":"alerts_overlay"}.
-# Cloning an alerts overlay (POST /overlays/:id/clone) checks the same gate.
-# Existing alerts overlays keep working when premium lapses.
+# alerts, goal and list need their premium gate (ADR-0008): alerts_overlay
+# (migration 108), goal_overlay (110), list_overlay (111):
+# 403 {"error":"Premium required","feature":"<gate>"}. Cloning checks the same
+# gate. Existing overlays of those kinds keep working when premium lapses.
 
 # List user's overlays
 GET /api/v1/overlays
@@ -247,6 +247,45 @@ Body: { "event_type": "bits" }
 Placeholders `{username}`, `{amount}` (value display text), `{count}` (numeric
 value) and `{message}` (the event's chat text) are substituted by the
 api-gateway when it forwards the alert; a missing field keeps its literal token.
+
+### Goal and list overlays (ADR-0072)
+
+```bash
+# Goal of a goal overlay (owner; 400 for other kinds). Unconfigured overlays
+# read as {metric:"followers", platform:"twitch", target:100}.
+GET /api/v1/overlays/:overlay_id/goal
+# → { "goal": {metric, platform, target, starting_value, title},
+#     "configured": true, "current": 42, "status": "" | "reconnect" | "hidden" }
+
+# Save (owner, free; creating the overlay was the premium step). metric/platform
+# pairs: followers/twitch, subscribers/youtube (polled by the alert-processor),
+# bits/twitch, super_chat/youtube (counted from events on top of
+# starting_value). reset_progress deletes the event counter. Pushes a
+# {type:"goal"} frame to overlay:{id}:alerts.
+PUT /api/v1/overlays/:overlay_id/goal
+Body: { "metric": "bits", "platform": "twitch", "target": 1000,
+        "starting_value": 0, "title": "", "reset_progress": false }
+
+# Public, for the OBS renderer (404 unless a goal overlay). Same body as GET.
+GET /api/v1/overlays/public/:overlay_id/goal
+
+# Board of a list overlay (owner; 400 for other kinds): bits | gifts | super_chat,
+# limit 1..25. PUT pushes a {type:"list_update"} frame carrying limit and title.
+GET /api/v1/overlays/:overlay_id/list
+PUT /api/v1/overlays/:overlay_id/list
+Body: { "category": "gifts", "limit": 10, "title": "Top gifters" }
+
+# Public top-N of the alert-processor's sorted set (ZREVRANGE WITHSCORES plus
+# the board's names hash). Defaults from the list config; limit clamped to 1..25.
+GET /api/v1/overlays/:overlay_id/list/top?category=bits&limit=10
+# → { "title": "", "category": "bits", "limit": 10,
+#     "entries": [{ "rank": 1, "name": "Cheerer", "platform": "twitch", "amount": 500 }] }
+```
+
+Current goal values live in Redis `overlay:{id}:goal:{metric}` (polled count, or
+counted sum without `starting_value`), the last poll problem in
+`overlay:{id}:goal-status`. Tables: `goal_configs`, `list_configs`
+(migrations 110, 111).
 
 ### Mock Chat (Testing)
 

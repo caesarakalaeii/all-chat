@@ -18,8 +18,10 @@ package main
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 // TestLoadConfig_Defaults: an unconfigured local run must come up with the
@@ -78,4 +80,22 @@ func TestTracingConfig_ReadsTheManifestOTELVars(t *testing.T) {
 	assert.True(t, cfg.Enabled)
 	assert.Equal(t, "otel-collector:4317", cfg.OTLPEndpoint)
 	assert.Equal(t, "production", cfg.Environment)
+}
+
+func TestGoalPollInterval(t *testing.T) {
+	t.Setenv("GOAL_POLL_SECONDS", "")
+	assert.Equal(t, 60*time.Second, goalPollInterval(), "default")
+	t.Setenv("GOAL_POLL_SECONDS", "15")
+	assert.Equal(t, 15*time.Second, goalPollInterval())
+	t.Setenv("GOAL_POLL_SECONDS", "-1")
+	assert.Equal(t, 60*time.Second, goalPollInterval(), "invalid falls back")
+}
+
+func TestGoalCounters_NoCipherPollsNothing(t *testing.T) {
+	t.Setenv("TOKEN_ENCRYPTION_KEY", "")
+	t.Setenv("TOKEN_ENCRYPTION_KEY_V1", "")
+	t.Setenv("YOUTUBE_TOKEN_ENCRYPTION_KEY", "")
+	t.Setenv("TWITCH_CLIENT_ID", "id")
+	t.Setenv("TWITCH_CLIENT_SECRET", "secret")
+	assert.Empty(t, goalCounters(nil, zap.NewNop()))
 }

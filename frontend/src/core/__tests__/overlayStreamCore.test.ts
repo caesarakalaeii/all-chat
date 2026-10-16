@@ -271,6 +271,27 @@ describe('classifyEnvelope', () => {
     expect(classifyEnvelope({ type: 'alert', data: null }).kind).toBe('ignore')
   })
 
+  it('passes goal and list_update frames through (ADR-0072)', () => {
+    const goal = {
+      type: 'goal',
+      overlay_id: 'ov1',
+      goal: 'bits',
+      current: 5,
+      target: 10,
+      title: '',
+    }
+    expect(classifyEnvelope({ type: 'goal', data: goal as never })).toEqual({ kind: 'goal', goal })
+    const list = { type: 'list_update', overlay_id: 'ov1', category: 'bits', entries: [] }
+    expect(classifyEnvelope({ type: 'list_update', data: list as never })).toEqual({
+      kind: 'listUpdate',
+      update: list,
+    })
+    expect(classifyEnvelope({ type: 'goal', data: null }).kind).toBe('ignore')
+    expect(classifyEnvelope({ type: 'list_update', data: { overlay_id: 'x' } as never }).kind).toBe(
+      'ignore'
+    )
+  })
+
   it('ignores null / typeless envelopes', () => {
     expect(classifyEnvelope(null).kind).toBe('ignore')
     expect(classifyEnvelope({}).kind).toBe('ignore')

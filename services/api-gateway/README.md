@@ -83,6 +83,10 @@ the alert, and an event type with no profile (e.g. `like_aggregate`) is sent
 without `profile`. Alerts are never written to the chat replay buffer, and
 clients dedup on `alert_id`, because a redelivered alert can arrive twice.
 
+Goal and list frames (ADR-0072) ride the same channel. A payload whose `type`
+is `goal` or `list_update` is forwarded unchanged as `{"type":"goal"|"list_update",
+"data":{...}}`, with no profile lookup.
+
 ### Stream sessions (credit roll)
 
 The first connect creates the `session:active:{id}` hash the credit roll measures
@@ -187,6 +191,10 @@ All overlay routes require JWT authentication.
 | GET | `/api/v1/overlays/:id/alerts/profiles` | Alert profiles, merged over defaults |
 | PUT | `/api/v1/overlays/:id/alerts/profiles` | Save alert profiles (premium, `alerts_editor`) |
 | POST | `/api/v1/overlays/:id/alerts/test` | Publish a test alert |
+| GET/PUT | `/api/v1/overlays/:id/goal` | Goal overlay config (ADR-0072) |
+| GET/PUT | `/api/v1/overlays/:id/list` | List overlay config (ADR-0072) |
+| GET | `/api/v1/overlays/public/:id/goal` | Public: goal state for the OBS renderer |
+| GET | `/api/v1/overlays/:id/list/top` | Public: leaderboard top-N for the OBS renderer |
 | * | `/api/v1/media/*` | media-service: presigned alert-media uploads (`MEDIA_SERVICE_URL`, ADR-0071) |
 
 ### Emote Service Routes

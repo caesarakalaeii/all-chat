@@ -27,6 +27,7 @@
  */
 
 import type { AlertFrame } from '@/lib/types/alert'
+import type { GoalFrame, ListUpdateFrame } from '@/lib/types/goal'
 import type {
   ChatMessage,
   DeletionMetadata,
@@ -256,7 +257,15 @@ export interface ConnectedData {
 
 export interface WsEnvelope {
   type?: string
-  data?: ChatMessage | PlatformStatus | DeletionMetadata[] | ConnectedData | AlertFrame | null
+  data?:
+    | ChatMessage
+    | PlatformStatus
+    | DeletionMetadata[]
+    | ConnectedData
+    | AlertFrame
+    | GoalFrame
+    | ListUpdateFrame
+    | null
   timestamp?: string
   error?: string
 }
@@ -270,6 +279,8 @@ export type EnvelopeClassification =
   | { kind: 'status'; status: PlatformStatus }
   | { kind: 'connected'; replayTruncated: boolean }
   | { kind: 'alert'; alert: AlertFrame }
+  | { kind: 'goal'; goal: GoalFrame }
+  | { kind: 'listUpdate'; update: ListUpdateFrame }
   | { kind: 'ignore' }
 
 /**
@@ -320,6 +331,18 @@ export function classifyEnvelope(envelope: WsEnvelope | null | undefined): Envel
       const data = envelope.data as AlertFrame | undefined
       if (!data?.alert_id) return { kind: 'ignore' }
       return { kind: 'alert', alert: data }
+    }
+    case 'goal': {
+      // Goal overlays only (ADR-0072): the goal's current value.
+      const data = envelope.data as GoalFrame | undefined
+      if (!data || typeof data.current !== 'number') return { kind: 'ignore' }
+      return { kind: 'goal', goal: data }
+    }
+    case 'list_update': {
+      // List overlays only (ADR-0072): one board's re-ranked top entries.
+      const data = envelope.data as ListUpdateFrame | undefined
+      if (!data || !Array.isArray(data.entries)) return { kind: 'ignore' }
+      return { kind: 'listUpdate', update: data }
     }
     default:
       return { kind: 'ignore' }

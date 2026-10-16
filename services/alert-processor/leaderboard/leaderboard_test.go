@@ -83,11 +83,11 @@ func TestRecordAmount_AccumulatesPerOverlayAndCategory(t *testing.T) {
 	mr, c := newTestClient(t)
 	ctx := context.Background()
 
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5, "alert-1"))
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 3, "alert-2"))
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:bob", 10, "alert-3"))
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "bits", "twitch:alice", 100, "alert-4"))
-	require.NoError(t, c.RecordAmount(ctx, "overlay-b", "gifts", "twitch:alice", 1, "alert-5"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", "Alice", 5, "alert-1"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", "Alice", 3, "alert-2"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:bob", "Bob", 10, "alert-3"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "bits", "twitch:alice", "Alice", 100, "alert-4"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-b", "gifts", "twitch:alice", "Alice", 1, "alert-5"))
 
 	alice, err := mr.ZScore("overlay:overlay-a:leaderboard:gifts", "twitch:alice")
 	require.NoError(t, err)
@@ -114,7 +114,7 @@ func TestRecordAmount_RefreshesTTL(t *testing.T) {
 	ctx := context.Background()
 	key := "overlay:overlay-a:leaderboard:gifts"
 
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5, "alert-1"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", "Alice", 5, "alert-1"))
 
 	ttl := mr.TTL(key)
 	assert.InDelta(t, (30 * 24 * time.Hour).Seconds(), ttl.Seconds(), 60, "fresh board TTL must be ~30 days")
@@ -122,7 +122,7 @@ func TestRecordAmount_RefreshesTTL(t *testing.T) {
 	// Age the board almost to expiry, then write again: the write must extend
 	// the life back to ~30 days.
 	mr.FastForward(29 * 24 * time.Hour)
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 1, "alert-2"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", "Alice", 1, "alert-2"))
 
 	ttl = mr.TTL(key)
 	assert.InDelta(t, (30 * 24 * time.Hour).Seconds(), ttl.Seconds(), 60, "a write must refresh the 30-day TTL")
@@ -142,14 +142,14 @@ func TestRecordAmount_ScoresOncePerAlert(t *testing.T) {
 	ctx := context.Background()
 	key := "overlay:overlay-a:leaderboard:gifts"
 
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5, "alert-1"))
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 5, "alert-1"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", "Alice", 5, "alert-1"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", "Alice", 5, "alert-1"))
 
 	score, err := mr.ZScore(key, "twitch:alice")
 	require.NoError(t, err)
 	assert.InDelta(t, 5.0, score, 1e-9, "a redelivered alert must not double-count its amount")
 
-	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", 3, "alert-2"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "gifts", "twitch:alice", "Alice", 3, "alert-2"))
 	score, err = mr.ZScore(key, "twitch:alice")
 	require.NoError(t, err)
 	assert.InDelta(t, 8.0, score, 1e-9, "a different alert from the same member must still add")
@@ -160,8 +160,55 @@ func TestRecordAmount_ScoresOncePerAlert(t *testing.T) {
 
 	// The claim is scoped per overlay: the same alert scores each list overlay
 	// it is routed to exactly once.
-	require.NoError(t, c.RecordAmount(ctx, "overlay-b", "gifts", "twitch:alice", 5, "alert-1"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-b", "gifts", "twitch:alice", "Alice", 5, "alert-1"))
 	other, err := mr.ZScore("overlay:overlay-b:leaderboard:gifts", "twitch:alice")
 	require.NoError(t, err)
 	assert.InDelta(t, 5.0, other, 1e-9, "the claim must be scoped per overlay, not global")
+}
+
+func TestRecordAmount_StoresTheLatestDisplayName(t *testing.T) {
+	mr, c := newTestClient(t)
+	ctx := context.Background()
+
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "bits", "twitch:alice", "alice", 5, "alert-1"))
+	require.NoError(t, c.RecordAmount(ctx, "overlay-a", "bits", "twitch:alice", "Alice_Renamed", 5, "alert-2"))
+
+	assert.Equal(t, "Alice_Renamed", mr.HGet("overlay:overlay-a:leaderboard:bits:names", "twitch:alice"))
+	ttl := mr.TTL("overlay:overlay-a:leaderboard:bits:names")
+	assert.InDelta(t, (30 * 24 * time.Hour).Seconds(), ttl.Seconds(), 60, "names expire with their board")
+}
+
+func TestRecordGoalAmount_CountsOncePerAlert(t *testing.T) {
+	mr, c := newTestClient(t)
+	ctx := context.Background()
+
+	total, counted, err := c.RecordGoalAmount(ctx, "overlay-g", "bits", 100, "alert-1")
+	require.NoError(t, err)
+	assert.True(t, counted)
+	assert.InDelta(t, 100.0, total, 1e-9)
+
+	total, counted, err = c.RecordGoalAmount(ctx, "overlay-g", "bits", 100, "alert-1")
+	require.NoError(t, err)
+	assert.False(t, counted, "a redelivered alert must not count twice")
+	assert.InDelta(t, 100.0, total, 1e-9)
+
+	total, _, err = c.RecordGoalAmount(ctx, "overlay-g", "bits", 2.5, "alert-2")
+	require.NoError(t, err)
+	assert.InDelta(t, 102.5, total, 1e-9)
+
+	v, err := mr.Get("overlay:overlay-g:goal:bits")
+	require.NoError(t, err)
+	assert.Equal(t, "102.5", v)
+	assert.Zero(t, mr.TTL("overlay:overlay-g:goal:bits"), "a goal counter lasts until the owner resets it")
+}
+
+func TestGoalMetric(t *testing.T) {
+	m, ok := GoalMetric("bits")
+	assert.True(t, ok)
+	assert.Equal(t, "bits", m)
+	m, ok = GoalMetric("super_chat")
+	assert.True(t, ok)
+	assert.Equal(t, "super_chat", m)
+	_, ok = GoalMetric("mystery_gift")
+	assert.False(t, ok, "gifts have no goal metric")
 }

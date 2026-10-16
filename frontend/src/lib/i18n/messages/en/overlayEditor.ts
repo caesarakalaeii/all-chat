@@ -587,6 +587,53 @@ export const overlayEditor = {
     savingConfiguration: 'Saving...',
   },
   // The "Send test alert" control on an alerts overlay (ADR-0070).
+  // The goal overlay's editor (issue #955, ADR-0072).
+  goalMetrics: {
+    followers: 'Twitch followers',
+    subscribers: 'YouTube subscribers',
+    bits: 'Twitch bits',
+    super_chat: 'YouTube Super Chats',
+  },
+  goalStatus: {
+    reconnect:
+      'The last count failed: reconnect this channel on your account so All-Chat can read it.',
+    hidden: 'This YouTube channel hides its subscriber count, so the goal cannot read it.',
+  },
+  goalEditor: {
+    current: 'Now at {current} of {target}.',
+    metricLabel: 'What the bar counts',
+    polledHint:
+      'Read from the platform about once a minute while the overlay is open in OBS. YouTube rounds large subscriber counts.',
+    countedHint: 'Counted from every cheer or Super Chat this overlay receives.',
+    titleLabel: 'Title (optional)',
+    targetLabel: 'Target',
+    startLabel: 'Starting value',
+    startHintPolled: 'Shown until the first count arrives.',
+    startHintCounted: 'Added to what this overlay counts, for progress made before it existed.',
+    resetLabel: 'Reset counted progress on save',
+    save: 'Save goal',
+    saving: 'Saving...',
+    saved: 'Goal saved',
+    saveFailed: 'Could not save the goal',
+    loadFailed: 'Could not load the goal',
+  },
+  // The list overlay's editor (issue #955, ADR-0072).
+  listCategories: {
+    bits: 'Bits cheered',
+    gifts: 'Subs and memberships gifted',
+    super_chat: 'Super Chats',
+  },
+  listEditor: {
+    body: 'Ranks the supporters of the last 30 days. Every new cheer, gift or Super Chat updates it live.',
+    categoryLabel: 'Ranked by',
+    titleLabel: 'Title (optional)',
+    limitLabel: 'Ranks shown (1 to {max})',
+    save: 'Save leaderboard',
+    saving: 'Saving...',
+    saved: 'Leaderboard saved',
+    saveFailed: 'Could not save the leaderboard',
+    loadFailed: 'Could not load the leaderboard',
+  },
   alertTest: {
     heading: 'Test alerts',
     body: 'Send a test alert to this overlay. It plays in OBS and on every open overlay page, just like a real one.',
@@ -985,8 +1032,8 @@ export const overlayEditor = {
   createKindDescriptions: {
     chat: 'Your live chat from every connected platform.',
     alerts: 'On-stream alerts for subs, bits, raids and more.',
-    goal: 'A progress bar for a follower or subscriber goal.',
-    list: 'A rolling list of recent followers or subscribers.',
+    goal: 'A progress bar toward a follower, subscriber, bits or Super Chat goal.',
+    list: 'Your top supporters ranked by bits, gifts or Super Chats.',
   },
   // /overlays/[id]/preview/embed. Chat message content is never copy — only the
   // chrome around it, which here is one empty state.

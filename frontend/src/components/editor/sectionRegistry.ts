@@ -30,10 +30,14 @@
  * that control (falls back to the section top when absent).
  */
 
+import type { OverlayType } from '@/lib/types/overlay'
+
 export type EditorGroupId = 'setup' | 'appearance' | 'behavior' | 'advanced'
 
 export type EditorSectionId =
   | 'alerts'
+  | 'goal'
+  | 'list'
   | 'theme'
   | 'sources'
   | 'moderators'
@@ -524,8 +528,50 @@ export const ALERTS_SECTION: EditorSection = {
   entries: [{ label: 'Alert profiles', keywords: 'sub bits raid follow super chat gift' }],
 }
 
+const KIND_AGNOSTIC_SECTIONS = EDITOR_SECTIONS.filter(
+  (s) => s.id === 'sources' || s.id === 'danger-zone'
+)
+
 /** An alerts overlay's nav: its editor plus the kind-agnostic sections. */
-export const ALERT_OVERLAY_SECTIONS: EditorSection[] = [
-  ALERTS_SECTION,
-  ...EDITOR_SECTIONS.filter((s) => s.id === 'sources' || s.id === 'danger-zone'),
-]
+export const ALERT_OVERLAY_SECTIONS: EditorSection[] = [ALERTS_SECTION, ...KIND_AGNOSTIC_SECTIONS]
+
+/** The goal overlay's editor (issue #955, ADR-0072). */
+export const GOAL_SECTION: EditorSection = {
+  id: 'goal',
+  group: 'setup',
+  title: 'Goal',
+  description: 'What the goal bar counts, its target and its title.',
+  keywords: 'goal bar target followers subscribers bits super chat progress',
+  entries: [{ label: 'Goal', keywords: 'target title starting value reset' }],
+}
+
+/** The list overlay's editor (issue #955, ADR-0072). */
+export const LIST_SECTION: EditorSection = {
+  id: 'list',
+  group: 'setup',
+  title: 'Leaderboard',
+  description: 'Which supporters the list ranks, how many, and its title.',
+  keywords: 'list leaderboard top supporters bits gifts super chat',
+  entries: [{ label: 'Leaderboard', keywords: 'category limit title' }],
+}
+
+/** Every non-chat kind's own editor section, for the section header lookup. */
+export const KIND_SECTIONS: EditorSection[] = [ALERTS_SECTION, GOAL_SECTION, LIST_SECTION]
+
+/**
+ * The editor nav of an overlay kind: the chat editor for chat, and for every
+ * other kind its own section plus the kind-agnostic ones. The chat editor's
+ * appearance and behavior sections style a chat feed those kinds never render.
+ */
+export function kindSections(kind: OverlayType): EditorSection[] {
+  switch (kind) {
+    case 'alerts':
+      return ALERT_OVERLAY_SECTIONS
+    case 'goal':
+      return [GOAL_SECTION, ...KIND_AGNOSTIC_SECTIONS]
+    case 'list':
+      return [LIST_SECTION, ...KIND_AGNOSTIC_SECTIONS]
+    default:
+      return EDITOR_SECTIONS
+  }
+}

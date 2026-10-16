@@ -46,6 +46,7 @@ import type { ChatMessage, DeletionMetadata } from '@/lib/types/message'
 import { renderMessageContent } from '@/lib/renderMessage'
 import PlatformStatusIndicators from '@/components/PlatformStatusIndicators'
 import { useOverlayStream } from '@/hooks/useOverlayStream'
+import { usePublicSeed } from '@/hooks/usePublicSeed'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import {
   BUBBLE_SLOT_ATTR,
@@ -86,8 +87,9 @@ import { createTTSPlayer } from '@/lib/utils/ttsPlayer'
 import type { TTSPlayer, TTSSettings } from '@/lib/utils/ttsPlayer'
 import { messageExpiry, nextFadeDelayMs } from '@/lib/utils/messageFade'
 import { resolveOverlayKind } from '@/lib/utils/overlayKind'
-import { UnsupportedKindPlaceholder } from '@/components/overlays/UnsupportedKindPlaceholder'
 import { AlertPlayer, useAlertQueue } from '@/components/overlays/AlertBox'
+import { GoalBar, useGoal } from '@/components/overlays/GoalBar'
+import { LeaderboardList, useListBoard } from '@/components/overlays/LeaderboardList'
 
 // Fonts are proxied through /font-proxy/css so end-user IPs never reach Google
 // (DSGVO / "Google Fonts Urteil" LG München 2022-01-20, Az. 3 O 17493/20).
@@ -397,12 +399,18 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // Alerts overlays (ADR-0068): the queue is fed from the same stream. Called
   // unconditionally (stable hook order); chat overlays never get alert frames.
   const alertQueue = useAlertQueue()
+  // Goal and list overlays (ADR-0072), the same way: fed from the stream,
+  // seeded from their public read routes once the config names the kind.
+  const goal = useGoal()
+  const listBoard = useListBoard()
 
   const { config, sources, activeChannels, channelStatuses } = useOverlayStream(id, {
     onChat,
     onMessageUpdate,
     onDeletion,
     onAlert: alertQueue.enqueue,
+    onGoal: goal.onGoal,
+    onListUpdate: listBoard.onListUpdate,
     passive,
   })
 
@@ -881,8 +889,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // Kind dispatch (ADR-0068): the render route is unauthenticated and the
   // public config is its only source of truth about the overlay. Chat — and
   // the absent value every pre-column overlay carries — renders the chat feed
-  // exactly as before; alerts overlays render the alert box; goal and list get
-  // a placeholder until their own renderer issues land. This sits AFTER the last hook on purpose: React
+  // exactly as before; alerts overlays render the alert box, goal overlays the
+  // goal bar, list overlays the leaderboard. This sits AFTER the last hook on purpose: React
   // requires a stable hook count across renders, and the kind can flip
   // mid-session (first render sees no config, the 30s refresh delivers one).
   // The effects above then run harmlessly against state nothing renders.
@@ -890,14 +898,25 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // a rollout), an alert frame is proof enough: the gateway only sends them
   // to alerts/goal/list sockets (ADR-0070). Without this the first alert sat
   // unrendered until the 30s config refresh.
+  usePublicSeed(
+    config?.overlay_type === 'goal' ? `/api/v1/overlays/public/${id}/goal` : null,
+    goal.seed
+  )
+  usePublicSeed(
+    config?.overlay_type === 'list' ? `/api/v1/overlays/${id}/list/top` : null,
+    listBoard.seed
+  )
   const kind = resolveOverlayKind(
     config?.overlay_type ?? (!config && alertQueue.current ? 'alerts' : undefined)
   )
   if (kind === 'alerts') {
     return <AlertPlayer alert={alertQueue.current} onDone={alertQueue.finish} />
   }
-  if (kind !== 'chat') {
-    return <UnsupportedKindPlaceholder kind={kind} />
+  if (kind === 'goal') {
+    return <GoalBar state={goal.state} />
+  }
+  if (kind === 'list') {
+    return <LeaderboardList top={listBoard.top} />
   }
 
   return (
