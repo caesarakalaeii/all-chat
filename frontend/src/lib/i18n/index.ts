@@ -23,50 +23,32 @@
  * a second locale.
  */
 
-import { DEFAULT_LOCALE, type Locale } from './config'
-import { enMessages } from './messages/en'
-import { translate, type MessageParams, type MessageKey, type TFunction } from './translate'
-
-/**
- * One TFunction per locale, built on first use.
- *
- * The identity has to be stable: a component that resolves copy inside
- * useEffect or useCallback must list t in its dependency array, and a fresh
- * closure per render would re-fire that effect on every render. Guarded by
- * __tests__/index.test.ts.
- */
-const translatorsByLocale = new Map<Locale, TFunction>()
+import type { Locale } from './config'
+import type { TFunction } from './translate'
+import { activeTranslator, translatorFor } from './translators'
 
 /**
  * For Server Components, plain modules and tests.
  *
- * The locale argument is accepted and ignored while English is the only catalog,
- * so that call sites already pass what locale #2 will need. Picking a catalog
- * from it then happens here and nowhere else.
+ * Without an argument it follows the active locale. On the server that is
+ * always DEFAULT_LOCALE, so statically rendered pages stay static and English;
+ * on the client it is whatever the user chose, applied after hydration.
+ * A string resolved once at module load is fixed at DEFAULT_LOCALE.
  */
-export function getTranslations(locale: Locale = DEFAULT_LOCALE): TFunction {
-  const cached = translatorsByLocale.get(locale)
-  if (cached) return cached
-  const translator: TFunction = (key: MessageKey, params?: MessageParams) =>
-    translate(enMessages, key, params)
-  translatorsByLocale.set(locale, translator)
-  return translator
+export function getTranslations(locale?: Locale): TFunction {
+  return locale === undefined ? activeTranslator : translatorFor(locale)
 }
 
-/**
- * For Client Components.
- *
- * Deliberately not a hook over a context: the frontend has no React Context
- * anywhere, and Storybook renders components standalone under a required CI
- * gate, so a component needing a wrapping provider would fail to render there.
- * It exists as a hook-shaped seam so that adding a locale is a change inside
- * src/lib/i18n/ rather than a sweep across every component.
- */
-export function useTranslations(): TFunction {
-  return getTranslations(DEFAULT_LOCALE)
-}
+export { useActiveLocale, useTranslations } from './use-translations'
+export { chooseLocale, restoreStoredLocale } from './active-locale'
 
-export { DEFAULT_LOCALE, SUPPORTED_LOCALES, isSupportedLocale, type Locale } from './config'
+export {
+  DEFAULT_LOCALE,
+  LOCALE_NATIVE_NAMES,
+  SUPPORTED_LOCALES,
+  isSupportedLocale,
+  type Locale,
+} from './config'
 export {
   DATE_ONLY,
   TIMESTAMP,

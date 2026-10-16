@@ -98,6 +98,9 @@ export const onboarding = {
     streamDeckTitle: 'Stream Deck buttons',
     streamDeckBody:
       'Drive polls, predictions and canned messages from a physical button. Link a Stream Deck or StreamController under Paired devices — nothing to copy or paste. Starting a poll or prediction is still Premium.',
+    languageTitle: 'Use All-Chat in German',
+    languageBody:
+      'Switch the interface language under Settings. German is the first language beyond English, and the choice is remembered per browser.',
     // Beta-tester surface (ADR-0063): only rendered when the viewer holds the
     // beta-tester role, so the copy names the role, not the price.
     translateTitle: 'Help translate All-Chat',

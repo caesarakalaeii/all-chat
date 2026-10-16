@@ -121,6 +121,16 @@ const (
 	// quota. The listener re-evaluates it each sync round, so a lapse or a gate flip drops
 	// the channel back to innertube while the stored opt-in stays.
 	GateYouTubeOfficialAPI = "youtube_official_api"
+
+	// GateUILanguages is the feature key for choosing a non-English UI language
+	// (ADR-0066). Seeded early_access=TRUE, is_premium=FALSE (migration 103): the
+	// catalogs start machine-translated, so beta testers and ambassadors see them
+	// first, and flipping early_access=FALSE opens them to everyone for free. A
+	// language is not an upsell; the premium dimension exists only so the admin
+	// UI can make it one without a deploy. share-service answers the frontend's
+	// probe at GET /api/v1/ui-languages; the stored choice itself lives in the
+	// browser, so the gate controls who can pick a language, not what renders.
+	GateUILanguages = "ui_languages"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate

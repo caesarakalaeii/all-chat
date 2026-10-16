@@ -870,6 +870,10 @@ func main() {
 		protectedAPI.GET("/localization/locales/:code/translations", proxyHandler.ForwardRequest)  // -> share-service
 		protectedAPI.POST("/localization/locales/:code/translations", proxyHandler.ForwardRequest) // -> share-service
 
+		// UI language picker probe (ADR-0066) — gated on the service side by the
+		// ui_languages feature gate.
+		protectedAPI.GET("/ui-languages", proxyHandler.ForwardRequest) // -> share-service
+
 		// Payment service (ADR-0018) — authenticated surfaces (-> payment-service).
 		protectedAPI.GET("/payment/patreon/connect", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/payment/status", proxyHandler.ForwardRequest)

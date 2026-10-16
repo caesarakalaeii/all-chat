@@ -34,8 +34,7 @@ export const translate = {
   localeNone: 'No languages yet',
   localeRequestButton: 'Request a language',
   localeRequestTitle: 'Request a language',
-  localeRequestBody:
-    'Requested languages appear for everyone once an admin approves them.',
+  localeRequestBody: 'Requested languages appear for everyone once an admin approves them.',
   localeCodeLabel: 'Language code',
   localeCodePlaceholder: 'de, fr, pt-BR…',
   localeEnglishNameLabel: 'Name in English',
