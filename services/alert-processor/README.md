@@ -100,9 +100,16 @@ in `alert_events.event_data` as the normalized event):
     "name": "SomeChatter",
     "avatar_url": ""
   },
+  "message": "Cheer100 great stream",
   "occurred_at": "2026-03-01T12:00:00Z"
 }
 ```
+
+`message` is the event's chat text (`RawChatMessage.text`); it feeds the
+`{message}` placeholder of alert profiles (ADR-0069) and is not persisted.
+The api-gateway forwards this envelope to the overlay as a `type: "alert"`
+WebSocket frame with the overlay's resolved alert profile attached
+(see `services/api-gateway/README.md`).
 
 `user.avatar_url` is empty for Twitch events: the message-processor's avatar
 enricher runs in the chat pipeline only, and this service does not re-run it.

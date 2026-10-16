@@ -32,8 +32,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// overlay_type (ADR-0068): overlays come in four kinds. Only chat overlays have
-// chat sources; the responses must say which kind an overlay is so the
+// overlay_type (ADR-0068): overlays come in four kinds. Every kind takes chat
+// sources (ADR-0069); the responses must say which kind an overlay is so the
 // frontend can route its render page.
 
 func decodeOverlayBody(t *testing.T, w *httptest.ResponseRecorder) map[string]any {
@@ -182,46 +182,33 @@ func postSource(router *gin.Engine, path string) *httptest.ResponseRecorder {
 	return w
 }
 
-func TestHandleAddSource_RejectsNonChatOverlayTypes(t *testing.T) {
-	// Only chat overlays carry chat sources: an alerts/goal/list overlay has no
-	// source pipeline, so a source row would be inert data that still shows up
-	// in admin listings and source counts.
-	for _, overlayType := range []string{models.OverlayTypeAlerts, models.OverlayTypeGoal, models.OverlayTypeList} {
+// Every overlay kind takes chat sources (ADR-0069): an alerts/goal/list
+// overlay's sources are what the alert-processor routes events by and what
+// activates the listeners when the overlay connects. Only the
+// message-processor tells the kinds apart — it delivers chat to chat overlays
+// only.
+func TestHandleAddSource_AcceptsEveryOverlayType(t *testing.T) {
+	for _, overlayType := range []string{models.OverlayTypeChat, models.OverlayTypeAlerts, models.OverlayTypeGoal, models.OverlayTypeList} {
 		t.Run(overlayType, func(t *testing.T) {
 			var created *models.ChatSource
 			router := overlayTypeSourceRouter(overlayType, &created)
 
 			w := postSource(router, "/overlays/overlay-1/sources")
 
-			assert.Equal(t, http.StatusBadRequest, w.Code)
-			var body map[string]any
-			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-			assert.Contains(t, body["error"], overlayType, "the error must name the kind so the streamer can act on it")
-			assert.Contains(t, body["error"], "chat", "the error must say chat sources are the problem")
-			assert.Nil(t, created, "no source row may be created on a non-chat overlay")
+			assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+			assert.NotNil(t, created)
 		})
 	}
-
-	t.Run("chat overlay still accepts sources", func(t *testing.T) {
-		var created *models.ChatSource
-		router := overlayTypeSourceRouter(models.OverlayTypeChat, &created)
-
-		w := postSource(router, "/overlays/overlay-1/sources")
-
-		assert.Equal(t, http.StatusCreated, w.Code)
-		assert.NotNil(t, created)
-	})
 }
 
-func TestHandleAddSourceAuto_RejectsNonChatOverlayTypes(t *testing.T) {
+func TestHandleAddSourceAuto_AcceptsAlertOverlayTypes(t *testing.T) {
 	var created *models.ChatSource
-	router := overlayTypeSourceRouter(models.OverlayTypeGoal, &created)
+	router := overlayTypeSourceRouter(models.OverlayTypeAlerts, &created)
 
 	w := postSource(router, "/internal/overlays/overlay-1/sources/auto")
 
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Nil(t, created,
-		"the internal OAuth callback must not strand a chat source on a goal overlay either")
+	assert.Less(t, w.Code, 300, w.Body.String())
+	assert.NotNil(t, created, "the OAuth callback's auto-add must attach the source to an alerts overlay too")
 }
 
 func TestHandleGetConfig_ReturnsOverlayType(t *testing.T) {

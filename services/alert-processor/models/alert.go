@@ -30,13 +30,17 @@ import (
 // shape is the wire contract with the alerts-overlay frontend — see
 // TestAlertJSONSchema, which pins the keys exactly.
 type Alert struct {
-	AlertID    string              `json:"alert_id"`
-	OverlayID  string              `json:"overlay_id"`
-	Platform   string              `json:"platform"`
-	EventType  string              `json:"event_type"`
-	EventData  *mpmodels.EventInfo `json:"event_data"`
-	User       AlertUser           `json:"user"`
-	OccurredAt time.Time           `json:"occurred_at"`
+	AlertID   string              `json:"alert_id"`
+	OverlayID string              `json:"overlay_id"`
+	Platform  string              `json:"platform"`
+	EventType string              `json:"event_type"`
+	EventData *mpmodels.EventInfo `json:"event_data"`
+	User      AlertUser           `json:"user"`
+	// Message is the event's chat text (resub message, cheer text, Super Chat
+	// comment): the {message} placeholder of alert profiles (ADR-0069). Not
+	// persisted to alert_events.
+	Message    string    `json:"message"`
+	OccurredAt time.Time `json:"occurred_at"`
 }
 
 // AlertUser is the event sender. ID is the platform-native id (most senders

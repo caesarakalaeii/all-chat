@@ -76,7 +76,7 @@ func TestSubscriberStop(t *testing.T) {
 	sub, _ := newTestSubscriber(t, mr.Addr())
 	ctx := context.Background()
 
-	err = sub.Subscribe(ctx, "overlay-stop-test")
+	err = sub.Subscribe(ctx, "overlay-stop-test", false)
 	require.NoError(t, err)
 
 	done := make(chan struct{})
@@ -105,8 +105,8 @@ func TestSubscriberSubscribeUnsubscribeRefCount(t *testing.T) {
 
 	overlayID := "overlay-refcount"
 
-	require.NoError(t, sub.Subscribe(ctx, overlayID))
-	require.NoError(t, sub.Subscribe(ctx, overlayID)) // second ref
+	require.NoError(t, sub.Subscribe(ctx, overlayID, false))
+	require.NoError(t, sub.Subscribe(ctx, overlayID, false)) // second ref
 
 	assert.True(t, sub.IsSubscribed(overlayID), "should still be subscribed after first unsubscribe")
 
@@ -138,7 +138,7 @@ func TestSubscriberResubscribeOnChannelClose(t *testing.T) {
 	}
 
 	overlayID := "overlay-reconnect"
-	require.NoError(t, sub.Subscribe(ctx, overlayID))
+	require.NoError(t, sub.Subscribe(ctx, overlayID, false))
 
 	// Publish a message before the drop to confirm the subscription works
 	mr.Publish("overlay:"+overlayID, "hello")
@@ -346,7 +346,7 @@ func TestSubscriberLinger_KeepsSubscriptionAliveWhenRefCountHitsZero(t *testing.
 	}
 
 	overlayID := "overlay-linger"
-	require.NoError(t, sub.Subscribe(ctx, overlayID))
+	require.NoError(t, sub.Subscribe(ctx, overlayID, false))
 
 	// Drop the last ref — Pub/Sub must stay alive.
 	require.NoError(t, sub.Unsubscribe(ctx, overlayID))
@@ -383,7 +383,7 @@ func TestSubscriberLinger_ResubscribeCancelsTimer(t *testing.T) {
 	ctx := context.Background()
 
 	overlayID := "overlay-relinger"
-	require.NoError(t, sub.Subscribe(ctx, overlayID))
+	require.NoError(t, sub.Subscribe(ctx, overlayID, false))
 
 	sub.mu.RLock()
 	original := sub.subscriptions[overlayID]
@@ -397,7 +397,7 @@ func TestSubscriberLinger_ResubscribeCancelsTimer(t *testing.T) {
 	require.True(t, hasTimer, "linger timer must be scheduled after refCount==0")
 
 	// Reconnect within the window.
-	require.NoError(t, sub.Subscribe(ctx, overlayID))
+	require.NoError(t, sub.Subscribe(ctx, overlayID, false))
 
 	sub.mu.RLock()
 	_, hasTimerAfterReconnect := sub.lingerTimers[overlayID]
@@ -422,7 +422,7 @@ func TestSubscriberLinger_FiresAfterWindow(t *testing.T) {
 	ctx := context.Background()
 
 	overlayID := "overlay-linger-fires"
-	require.NoError(t, sub.Subscribe(ctx, overlayID))
+	require.NoError(t, sub.Subscribe(ctx, overlayID, false))
 	require.NoError(t, sub.Unsubscribe(ctx, overlayID))
 
 	require.Eventually(t, func() bool {

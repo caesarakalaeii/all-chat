@@ -35,16 +35,19 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
 
-// FindOverlaysForMessage finds all overlays that should receive this message.
-// It uses a UNION to include both direct platform sources and recipient overlays
-// that have subscribed to a sender overlay via a shared_overlay source.
-func (r *Repository) FindOverlaysForMessage(ctx context.Context, platform, channelID string) ([]models.OverlayTarget, error) {
-	query := `
+// findOverlaysForMessageSQL routes a chat:raw message to chat overlays only.
+// Alerts/goal/list overlays carry the same source rows (ADR-0069) but are fed
+// by the alert-processor on overlay:{id}:alerts; delivering chat to them would
+// fill their replay buffer, credit-roll sessions and TTS with lines nothing
+// renders. The sender side of the share fan-out (o2) is not filtered: what a
+// recipient chat overlay receives depends on its own kind, not the sender's.
+const findOverlaysForMessageSQL = `
 		-- Direct platform sources (overlays that have this platform/channel directly)
 		SELECT DISTINCT o.id, o.user_id
 		FROM overlays o
 		JOIN overlay_chat_sources ocs ON o.id = ocs.overlay_id
 		WHERE o.is_active = true
+		  AND o.overlay_type = 'chat'
 		  AND ocs.is_active = true
 		  AND ocs.platform = $1
 		  AND ocs.channel_id = $2
@@ -62,6 +65,7 @@ func (r *Repository) FindOverlaysForMessage(ctx context.Context, platform, chann
 		    ON sr.sender_overlay_id = ocs.channel_id::uuid
 		    AND sr.status = 'accepted'
 		WHERE o.is_active = true
+		  AND o.overlay_type = 'chat'
 		  AND sr.sender_overlay_id IN (
 		      SELECT o2.id
 		      FROM overlays o2
@@ -73,7 +77,11 @@ func (r *Repository) FindOverlaysForMessage(ctx context.Context, platform, chann
 		  )
 	`
 
-	rows, err := r.db.Query(ctx, query, platform, channelID)
+// FindOverlaysForMessage finds all overlays that should receive this message.
+// It uses a UNION to include both direct platform sources and recipient overlays
+// that have subscribed to a sender overlay via a shared_overlay source.
+func (r *Repository) FindOverlaysForMessage(ctx context.Context, platform, channelID string) ([]models.OverlayTarget, error) {
+	rows, err := r.db.Query(ctx, findOverlaysForMessageSQL, platform, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query overlays: %w", err)
 	}

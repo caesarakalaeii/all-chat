@@ -247,6 +247,7 @@ func main() {
 	ttsConfigRepo := repository.NewTTSConfigRepository(dbPool)
 	publicBaseURL := getEnv("OVERLAY_PUBLIC_BASE_URL", "https://allch.at")
 
+	alertsHandler := handlers.NewAlertsHandler(repository.NewAlertProfileRepository(dbPool), overlayRepo, redisClient)
 	ttsHandler := handlers.NewTTSHandler(ttsConfigRepo, overlayRepo, tokenCipher, publicBaseURL, log).WithRateRedis(redisClient)
 
 	// YouTube helper
@@ -349,6 +350,14 @@ func main() {
 			ttsPremium.POST("/:id/tts-voices/preview", ttsHandler.HandleGetVoicesPreview)
 			ttsPremium.POST("/:id/tts-config/test", ttsHandler.HandleTestKey)
 		}
+
+		// Alert profiles + test button (ADR-0069). Reads and the test alert are
+		// free; saving profiles is premium.
+		protected.GET("/:id/alerts/profiles", alertsHandler.HandleGetProfiles)
+		protected.POST("/:id/alerts/test", alertsHandler.HandleTestAlert)
+		protected.PUT("/:id/alerts/profiles",
+			middleware.RequirePremium(dbPool, gateCache, featuregates.GateAlertsEditor, log),
+			alertsHandler.HandlePutProfiles)
 
 		// YouTube helper routes
 		protected.POST("/youtube/resolve", youtubeHandler.ResolveChannel)

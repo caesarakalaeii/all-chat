@@ -361,7 +361,9 @@ normalizers := map[string]normalizer.Normalizer{
 **Publisher** (`publisher/pubsub.go`):
 - Publishes to overlay-specific channel: `overlay:{overlay_id}`
 - API Gateway subscribes to these channels
-- Fan-out to all overlays displaying this chat source
+- Fan-out to all overlays displaying this chat source: the chat overlays only
+  (`overlay_type = 'chat'`, `router/overlay_router.go`). Alerts/goal/list overlays
+  carry the same sources but are fed by the alert-processor (ADR-0069)
 
 ```go
 // publisher/pubsub.go
