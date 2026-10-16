@@ -308,3 +308,31 @@ func TestProxyHandler_ForwardsOriginalHost(t *testing.T) {
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "allch.at", gotForwardedHost)
 }
+
+// media-service keys carry user filenames; a segment escaped by the client
+// (%23 for '#', %3F for '?') must reach the backend still escaped, or the
+// backend sees a truncated path plus a bogus fragment or query.
+func TestProxyHandler_KeepsEscapedPathSegments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var gotPath string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.EscapedPath()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer backend.Close()
+
+	registry := &models.ServiceRegistry{
+		Services: map[string]*models.ServiceConfig{
+			"media-service": {Name: "media-service", BaseURL: backend.URL, PathPrefix: "/api/v1/media"},
+		},
+	}
+	router := gin.New()
+	router.DELETE("/api/v1/media/*object_key", NewProxyHandler(registry).ForwardRequest)
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodDelete, "/api/v1/media/u-1/0b6e/air%23horn%3F.mp3", nil))
+
+	assert.Equal(t, http.StatusNoContent, w.Code)
+	assert.Equal(t, "/api/v1/media/u-1/0b6e/air%23horn%3F.mp3", gotPath)
+}
