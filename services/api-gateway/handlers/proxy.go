@@ -60,8 +60,10 @@ func (p *ProxyHandler) ForwardRequest(c *gin.Context) {
 		return
 	}
 
-	// Build the backend path - strip prefix if configured
-	backendPath := path
+	// Build the backend path - strip prefix if configured. Unmodified paths go
+	// out still escaped: a decoded '#' or '?' (e.g. in a media-service object
+	// key) would otherwise turn into a fragment or query on the backend URL.
+	backendPath := c.Request.URL.EscapedPath()
 	if service.StripPrefix && len(path) >= len(service.PathPrefix) {
 		// Strip the matched prefix from the path
 		backendPath = path[len(service.PathPrefix):]
