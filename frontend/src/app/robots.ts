@@ -34,20 +34,30 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
       {
         userAgent: '*',
         allow: ['/', '/legal/'],
+        // No trailing slashes: Next serves /dashboard, not /dashboard/, so a
+        // `/dashboard/` rule left the section roots crawlable and indexable.
         disallow: [
-          '/dashboard/',
-          '/admin/',
-          '/auth/',
-          '/settings/',
-          '/overlays/',
-          '/overlay/',
-          '/chat/',
-          '/api/',
+          '/dashboard',
+          '/admin',
+          '/auth',
+          '/settings',
+          '/overlays',
+          '/overlay',
+          '/chat',
+          '/api',
+          // Login-gated tools with no public content.
+          '/translate',
+          '/moderate',
+          '/link',
+          '/dev',
           // Build-hashed font/image assets. Their filenames change every deploy,
           // so Google keeps re-crawling stale URLs and reporting 404s. Blocking
           // only media/ (not the JS/CSS chunks Googlebot needs to render) stops
           // the noise without harming rendering.
           '/_next/static/media/',
+          // Cloudflare Email Obfuscation rewrites the legal pages' mailto links
+          // to /cdn-cgi/l/email-protection#..., which 404s for crawlers.
+          '/cdn-cgi/',
         ],
       },
     ],
