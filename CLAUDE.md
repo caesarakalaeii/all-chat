@@ -121,7 +121,7 @@ Each service has a detailed README:
 - [alert-processor](./services/alert-processor/README.md) - Second `chat:raw` consumer (group `alert-processors`): routes event-typed messages to alerts/goal/list overlays on `overlay:{id}:alerts`, persists `alert_events`, scores list leaderboards (ADR-0068)
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
-- share-service — Shareable overlay links; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041); localization contributor tool `/translate` + admin review/export (ADR-0063); UI language gate probe `GET /api/v1/ui-languages` (ADR-0068) (`services/share-service/`, no README yet)
+- share-service — Shareable overlay links; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041); localization contributor tool `/translate` + admin review/export (ADR-0063); UI language gate probe `GET /api/v1/ui-languages` (ADR-0066) (`services/share-service/`, no README yet)
 - [moderation-service](./services/moderation-service/README.md) - Cross-platform chat moderation write-path (delete/timeout/ban, ADR-0017)
 - [payment-service](./services/payment-service/README.md) - Patreon premium entitlements; writes users.is_premium (streamer, ADR-0018) + viewers.is_premium (viewer split, ADR-0019)
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh

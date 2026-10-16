@@ -318,6 +318,13 @@ CREATE TABLE overlay_chat_sources (
 );
 ```
 
+### Credit roll duration
+
+A live credit roll is measured from the earlier of the stream session start
+(first overlay connect, see api-gateway) and the overlay's live Twitch stream
+start from Helix `GET /streams`; a completed session is measured to its
+`ended_at`. Clips use the same window. See ADR-0069.
+
 ### credit_roll_configs Table
 
 Each `include_*` column toggles one leaderboard category; `aggregateLeaderboards` skips disabled categories. `include_treasure_chests`, `include_shares` and `include_likes` were added (migration 105) as opt-in (default false) so existing credit rolls do not change when the new boards ship.
