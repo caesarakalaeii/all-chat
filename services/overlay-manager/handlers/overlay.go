@@ -21,6 +21,7 @@ import (
 	"net/http"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
+	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/gin-gonic/gin"
 )
 
@@ -40,6 +41,42 @@ type OverlayHandler struct {
 	repo       OverlayRepository
 	sourceRepo SourceRepository
 	configRepo OverlayConfigRepository
+	// alertsGate is the alerts_overlay premium gate (ADR-0008) on creating an
+	// alerts overlay. Unset (tests, direct construction) reads as open.
+	alertsGate alertsOverlayGate
+}
+
+// alertsOverlayGate decides whether a user may create an alerts overlay.
+type alertsOverlayGate interface {
+	Allowed(ctx context.Context, userID string) (bool, error)
+}
+
+// SetAlertsOverlayGate wires the alerts_overlay premium check.
+func (h *OverlayHandler) SetAlertsOverlayGate(g alertsOverlayGate) {
+	h.alertsGate = g
+}
+
+// refuseGatedKind writes the 403/500 and returns true when the caller may not
+// create an overlay of this kind. Errors fail closed. Only creates are gated:
+// an existing alerts overlay keeps rendering after premium lapses.
+func (h *OverlayHandler) refuseGatedKind(c *gin.Context, userID, kind string) bool {
+	if kind != models.OverlayTypeAlerts || h.alertsGate == nil {
+		return false
+	}
+	allowed, err := h.alertsGate.Allowed(c.Request.Context(), userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check premium status"})
+		return true
+	}
+	if !allowed {
+		c.JSON(http.StatusForbidden, gin.H{
+			"error":   "Premium required",
+			"feature": featuregates.GateAlertsOverlay,
+			"message": "Alert overlays are a premium feature.",
+		})
+		return true
+	}
+	return false
 }
 
 // NewOverlayHandler creates a new overlay handler
@@ -48,14 +85,13 @@ func NewOverlayHandler(repo OverlayRepository, sourceRepo SourceRepository, conf
 }
 
 // unreleasedOverlayTypes can be stored and rendered but not newly created:
-// nothing feeds or renders them yet, so a new one would only put the
+// nothing renders them yet, so a new one would only put the
 // "not supported yet" placeholder on stream. Existing overlays of these kinds
 // keep working and can still be cloned. Release a kind by deleting it here and
 // in CREATABLE_OVERLAY_KINDS (frontend/src/lib/utils/overlayKind.ts).
 var unreleasedOverlayTypes = map[string]bool{
-	models.OverlayTypeAlerts: true,
-	models.OverlayTypeGoal:   true,
-	models.OverlayTypeList:   true,
+	models.OverlayTypeGoal: true,
+	models.OverlayTypeList: true,
 }
 
 // HandleCreateOverlay handles POST /overlays
@@ -104,6 +140,9 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 
 	if unreleasedOverlayTypes[overlay.OverlayType] {
 		c.JSON(http.StatusForbidden, gin.H{"error": overlay.OverlayType + " overlays are not available yet"})
+		return
+	}
+	if h.refuseGatedKind(c, overlay.UserID, overlay.OverlayType) {
 		return
 	}
 
@@ -301,6 +340,9 @@ func (h *OverlayHandler) HandleCloneOverlay(c *gin.Context) {
 	source, err := h.repo.GetByIDAndUserID(c.Request.Context(), overlayID, userID.(string))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "overlay not found"})
+		return
+	}
+	if h.refuseGatedKind(c, userID.(string), source.Kind()) {
 		return
 	}
 

@@ -140,4 +140,16 @@ describe('OnboardingChecklist optional extras', () => {
     expect(getByText(t('onboarding.extras.youtubeOfficialApiTitle'))).toBeInTheDocument()
     expect(getByText(t('onboarding.extras.youtubeOfficialApiBody'))).toBeInTheDocument()
   })
+
+  it('lists alert overlays among the premium extras', () => {
+    useOnboardingStore.setState({
+      status: 'active',
+      sessionSteps: { obsCopied: true, extrasDone: false },
+    })
+    const { getByText } = render(
+      <OnboardingChecklist surface="editor" sourceCount={1} themeId="neon" overlayCount={1} />
+    )
+    expect(getByText(t('onboarding.extras.alertsOverlayTitle'))).toBeInTheDocument()
+    expect(getByText(t('onboarding.extras.alertsOverlayBody'))).toBeInTheDocument()
+  })
 })

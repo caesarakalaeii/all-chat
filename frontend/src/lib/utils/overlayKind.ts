@@ -33,13 +33,31 @@ import type { OverlayType } from '@/lib/types/overlay'
 export const OVERLAY_KINDS: readonly OverlayType[] = ['chat', 'alerts', 'goal', 'list']
 
 /**
- * The kinds a user may create today. Alerts, goal and list have no renderer
- * yet, so offering them would only put a "not supported yet" placeholder on
- * stream; existing overlays of those kinds still resolve and render as before.
+ * The kinds a user may create today. Goal and list have no renderer yet, so
+ * offering them would only put a "not supported yet" placeholder on stream;
+ * existing overlays of those kinds still resolve and render as before.
  * overlay-manager refuses the same kinds on create (unreleasedOverlayTypes);
  * release a kind by adding it here and removing it there.
  */
-export const CREATABLE_OVERLAY_KINDS: readonly OverlayType[] = ['chat']
+export const CREATABLE_OVERLAY_KINDS: readonly OverlayType[] = ['chat', 'alerts']
+
+/**
+ * Creatable kinds behind a premium gate: alerts is `alerts_overlay` (ADR-0008,
+ * migration 108), which overlay-manager enforces on create and clone.
+ */
+const PREMIUM_OVERLAY_KINDS: readonly OverlayType[] = ['alerts']
+
+/**
+ * The kinds to offer this user. The server re-checks the gate, so this only
+ * decides what the UI shows.
+ * ponytail: keyed on users.is_premium (like the other premium toggles), not on
+ * the live gate; flipping alerts_overlay free needs a public gate probe here.
+ */
+export function creatableOverlayKinds(isPremium: boolean): readonly OverlayType[] {
+  return isPremium
+    ? CREATABLE_OVERLAY_KINDS
+    : CREATABLE_OVERLAY_KINDS.filter((kind) => !PREMIUM_OVERLAY_KINDS.includes(kind))
+}
 
 /**
  * Resolve a raw overlay_type value to a known kind, defaulting to chat.

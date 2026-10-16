@@ -257,6 +257,20 @@ describe('sourceKey', () => {
 })
 
 describe('classifyEnvelope', () => {
+  it('passes alert frames through and ignores one without an alert_id', () => {
+    const data = {
+      alert_id: 'a1',
+      overlay_id: 'ov1',
+      platform: 'twitch',
+      event_type: 'bits',
+      event_data: { type: 'bits' },
+      user: { id: 'u', name: 'U', avatar_url: '' },
+    }
+    const res = classifyEnvelope({ type: 'alert', data })
+    expect(res).toEqual({ kind: 'alert', alert: data })
+    expect(classifyEnvelope({ type: 'alert', data: null }).kind).toBe('ignore')
+  })
+
   it('ignores null / typeless envelopes', () => {
     expect(classifyEnvelope(null).kind).toBe('ignore')
     expect(classifyEnvelope({}).kind).toBe('ignore')

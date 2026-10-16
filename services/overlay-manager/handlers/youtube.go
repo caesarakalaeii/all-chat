@@ -22,8 +22,8 @@ import (
 	"net/http"
 	"strings"
 
-	sharedmw "github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/services/overlay-manager/youtube"
+	sharedmw "github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
@@ -49,11 +49,11 @@ type ResolveChannelRequest struct {
 
 // ResolveChannelResponse is the response for channel resolution
 type ResolveChannelResponse struct {
-	ChannelID   string `json:"channel_id"`
-	Title       string `json:"title,omitempty"`
-	CustomURL   string `json:"custom_url,omitempty"`
-	Thumbnail   string `json:"thumbnail,omitempty"`
-	InputType   string `json:"input_type"` // "channel_id", "video_url", "handle", "channel_url"
+	ChannelID string `json:"channel_id"`
+	Title     string `json:"title,omitempty"`
+	CustomURL string `json:"custom_url,omitempty"`
+	Thumbnail string `json:"thumbnail,omitempty"`
+	InputType string `json:"input_type"` // "channel_id", "video_url", "handle", "channel_url"
 }
 
 // ResolveChannel resolves a YouTube URL/handle to a channel ID
@@ -75,8 +75,8 @@ func (h *YouTubeHandler) ResolveChannel(c *gin.Context) {
 				zap.String("user_ip", sharedmw.AnonymizeIP(c.ClientIP())),
 			)
 			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error": "YouTube API quota exhausted",
-				"message": "Daily YouTube API quota limit reached. Please try again after midnight PST.",
+				"error":       "YouTube API quota exhausted",
+				"message":     "Daily YouTube API quota limit reached. Please try again after midnight PST.",
 				"retry_after": "3600",
 			})
 			return

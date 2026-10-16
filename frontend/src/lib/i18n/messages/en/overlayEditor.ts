@@ -586,6 +586,37 @@ export const overlayEditor = {
     saveConfiguration: 'Save Configuration',
     savingConfiguration: 'Saving...',
   },
+  // The "Send test alert" control on an alerts overlay (ADR-0070).
+  alertTest: {
+    heading: 'Test alerts',
+    body: 'Send a test alert to this overlay. It plays in OBS and on every open overlay page, just like a real one.',
+    eventTypeLabel: 'Event type',
+    send: 'Send test alert',
+    sending: 'Sending...',
+    sent: 'Test alert sent',
+    failed: 'Could not send the test alert',
+  },
+  // Event type names for the test-alert picker (shared/alerts eventDefs).
+  alertEventTypes: {
+    subscription: 'Subscription',
+    resubscription: 'Resubscription',
+    gift_subscription: 'Gifted sub',
+    mystery_gift: 'Mystery gift subs',
+    bits: 'Bits',
+    raid: 'Raid',
+    follow: 'Follow',
+    channel_points: 'Channel points redemption',
+    charity_donation: 'Charity donation',
+    super_chat: 'Super Chat',
+    super_sticker: 'Super Sticker',
+    new_sponsor: 'New member',
+    member_milestone: 'Member milestone',
+    membership_gift: 'Gifted memberships',
+    subscriber: 'YouTube subscriber',
+    gift: 'TikTok gift',
+    share: 'TikTok share',
+    tiktok_subscription: 'TikTok subscription',
+  },
   // Injecting a fake chat message so a streamer can see their overlay react.
   testing: {
     platformLabel: 'Platform',
