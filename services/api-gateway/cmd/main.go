@@ -904,6 +904,8 @@ func main() {
 		// User-facing upcoming maintenance (-> overlay-manager)
 		protectedAPI.GET("/maintenance/upcoming", proxyHandler.ForwardRequest)
 
+		registerMediaRoutes(protectedAPI, proxyHandler.ForwardRequest)
+
 		// Engagement service (issue #523) — polls, predictions, points (-> engagement-service).
 		// JWTAuth accepts both user and viewer tokens; engagement-service enforces which
 		// each route needs (owner ownership check vs viewer_id) and verifies authorization
