@@ -459,10 +459,6 @@ function MediaField({
           className="max-h-32 w-fit rounded-md object-contain"
         />
       )}
-      {kind === 'sound' && value && !error && (
-        // Preview of the streamer's own sound effect: nothing to caption.
-        <audio controls src={value} className="w-full" />
-      )}
       <div className="flex flex-wrap items-center gap-2">
         <input
           ref={fileRef}

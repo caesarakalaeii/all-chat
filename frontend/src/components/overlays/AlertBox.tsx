@@ -34,6 +34,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { VisuallyHidden } from '@/components/ui/visually-hidden'
+import { useTranslations } from '@/lib/i18n'
 import type { AlertProfile } from '@/lib/types/alert'
 
 import { AlertQueue, alertDurationMs, alertText, type AlertFrame } from './alertQueue'
@@ -168,6 +169,7 @@ export function AlertPlayer({
  * one alert's script survives into the next.
  */
 function CustomCodeAlert({ alert }: { alert: AlertFrame & { profile: AlertProfile } }) {
+  const t = useTranslations()
   const srcDoc = buildAlertSrcdoc(alert.profile)
   return (
     <div
@@ -177,7 +179,7 @@ function CustomCodeAlert({ alert }: { alert: AlertFrame & { profile: AlertProfil
       data-event-type={alert.event_type}
     >
       <iframe
-        title="Alert"
+        title={t('viewerOverlay.customAlertFrameTitle')}
         sandbox={ALERT_SANDBOX}
         srcDoc={srcDoc}
         // Opaque-origin frame: "*" is the only target origin that reaches it.

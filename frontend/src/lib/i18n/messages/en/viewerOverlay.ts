@@ -601,6 +601,8 @@ export const viewerOverlay = {
   // What the render route shows for an alerts/goal/list overlay until its own
   // renderer issue lands (ADR-0068). OBS must show the streamer something
   // recognizable instead of a transparent blank.
+  // The sandboxed frame a premium custom-code alert renders in (ADR-0071).
+  customAlertFrameTitle: 'Custom alert',
   unsupportedKind: {
     heading: '{kind} overlay',
     body: 'This overlay type is not supported yet.',

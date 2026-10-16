@@ -204,8 +204,11 @@ test.describe('Alerts editor', () => {
 
     await page.getByRole('button', { name: 'Send test alert' }).click()
     const box = preview(page)
-    await expect(box.locator('iframe[title="Alert"]')).toHaveAttribute('sandbox', 'allow-scripts')
-    const sandbox = box.frameLocator('iframe[title="Alert"]')
+    await expect(box.locator('iframe[title="Custom alert"]')).toHaveAttribute(
+      'sandbox',
+      'allow-scripts'
+    )
+    const sandbox = box.frameLocator('iframe[title="Custom alert"]')
     // The page's CSP applies to the srcdoc: this proves inline scripts run under it.
     await expect(sandbox.locator('#js')).toHaveText('JS saw AllChatTester')
     await expect(sandbox.locator('#custom')).toHaveText('AllChatTester just subscribed!')
