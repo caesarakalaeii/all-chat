@@ -1428,7 +1428,10 @@ class TikTokListenerService {
         this.handleFollow(username, overlayId, data);
       });
 
-      connection.on(WebcastEvent.SOCIAL, (data) => {
+      // SOCIAL is the connector's leftover bucket: it emits FOLLOW or SHARE for those
+      // frames and SOCIAL only for everything else, so listening on SOCIAL dropped real
+      // shares and published every other social frame (e.g. room entries) as a share.
+      connection.on(WebcastEvent.SHARE, (data) => {
         this.handleShare(username, overlayId, data);
       });
 

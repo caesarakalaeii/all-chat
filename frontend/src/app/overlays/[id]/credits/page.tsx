@@ -498,7 +498,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     min="0"
                     max="1"
                     step="0.1"
-                    value={config.background_opacity || 0.8}
+                    value={config.background_opacity ?? 0.8}
                     onChange={(e) =>
                       setConfig({ ...config, background_opacity: parseFloat(e.target.value) })
                     }
@@ -506,7 +506,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   />
                   <p className="text-dim mt-1 text-xs">
                     {t('overlayEditor.credits.currentValue', {
-                      value: config.background_opacity || 0.8,
+                      value: config.background_opacity ?? 0.8,
                     })}
                   </p>
                 </div>
