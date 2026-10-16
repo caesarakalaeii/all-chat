@@ -49,6 +49,10 @@ func TestAlertProfileRepository_UpsertRoundTripOnRealMigrations(t *testing.T) {
 
 	bits.Volume = 30
 	bits.Enabled = false
+	// Custom code columns (migration 109) round-trip too.
+	bits.CustomHTML = `<div class="boom">{username}</div>`
+	bits.CustomCSS = ".boom { color: gold }"
+	bits.CustomJS = "onAlert(function (a) { document.title = a.event.alert_id })"
 	require.NoError(t, repo.UpsertAlertProfiles(ctx, overlayID, []alerts.Profile{bits}))
 
 	got, err = repo.ListAlertProfiles(ctx, overlayID)

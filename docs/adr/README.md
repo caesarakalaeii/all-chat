@@ -775,6 +775,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0071: The alerts editor — premium saving, sandboxed custom code under the page CSP, client-side KLIPY search
+
+**Status**: Accepted (2026-10-16)
+**Problem**: Alerts overlays had stored profiles but no editor (the dashboard showed chat appearance sections), and issue #954 asked for premium custom HTML/CSS/JS, KLIPY GIF search and media uploads. Streamer JS needs isolation that holds against hostile code without weakening the strict overlay CSP, and no browser upload could ever have reached MinIO.
+**Decision**: Saving stays premium (`alerts_editor`, ADR-0070); defaults and test alerts are free. Custom code (migration 109, 64 KiB per field) renders in `<iframe sandbox="allow-scripts" srcdoc>` (opaque origin, no other tokens) with a `{type:"alert", profile, event}` postMessage bridge and an injected `onAlert`/`allchat.fill` runtime. It runs under the inherited page CSP, unchanged, through `'unsafe-inline'`; a move to nonces must carry them into the srcdoc. KLIPY search runs in the browser with a build-time public key (`NEXT_PUBLIC_KLIPY_API_KEY`) and degrades to "unavailable". The gateway proxies `/api/v1/media`; media-service presigns for the public host.
+**Impact**: Hostile alert code is contained by the browser's origin boundary; no CSP or host changes. Custom code is inline-only (no external scripts outside the CSP's hosts, no `eval`). Search needs a KLIPY key set as a repository variable.
+**→ Read**: [0071-alerts-editor-sandboxed-custom-code-and-client-side-gif-search.md](./0071-alerts-editor-sandboxed-custom-code-and-client-side-gif-search.md)
+
+---
+
 
 ## How to Create a New ADR
 

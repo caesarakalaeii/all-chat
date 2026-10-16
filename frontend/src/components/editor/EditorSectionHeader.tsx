@@ -19,7 +19,12 @@
  */
 
 import React from 'react'
-import { EDITOR_GROUPS, EDITOR_SECTIONS, type EditorSectionId } from './sectionRegistry'
+import {
+  ALERTS_SECTION,
+  EDITOR_GROUPS,
+  EDITOR_SECTIONS,
+  type EditorSectionId,
+} from './sectionRegistry'
 
 /**
  * Breadcrumb + heading + description for the active settings section
@@ -27,7 +32,7 @@ import { EDITOR_GROUPS, EDITOR_SECTIONS, type EditorSectionId } from './sectionR
  * navigation equivalent to the old one-drawer-one-heading structure.
  */
 export function EditorSectionHeader({ id }: { id: EditorSectionId }): React.ReactElement | null {
-  const section = EDITOR_SECTIONS.find((s) => s.id === id)
+  const section = [...EDITOR_SECTIONS, ALERTS_SECTION].find((s) => s.id === id)
   if (section === undefined) return null
   const group = EDITOR_GROUPS.find((g) => g.id === section.group)
   return (

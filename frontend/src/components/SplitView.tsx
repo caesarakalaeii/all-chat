@@ -52,10 +52,13 @@ export function SplitView({
   overlayId,
   children,
   onIframeReady,
+  previewPath,
 }: {
   overlayId: string
   children: React.ReactNode
   onIframeReady?: (iframe: HTMLIFrameElement) => void
+  /** Same-origin route the preview pane loads; defaults to the chat embed. */
+  previewPath?: string
 }) {
   const t = useTranslations()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -116,7 +119,7 @@ export function SplitView({
       onPointerUp={onPointerUp}
     >
       {/* Config panel: full width on mobile, leftPct% on desktop via .split-view-config */}
-      <div className="split-view-config flex-shrink-0 overflow-y-auto">{children}</div>
+      <div className="split-view-config shrink-0 overflow-y-auto">{children}</div>
 
       {/* Draggable divider — hidden on mobile. Exposed as a value slider
           (aria-valuenow = config panel %): aria-query classifies `separator`
@@ -124,7 +127,7 @@ export function SplitView({
           separator cannot satisfy the a11y gate; `slider` carries the same
           value/min/max/orientation + arrow-key semantics (mirrors
           ResizableSplit). */}
-      <div className="relative hidden w-1 flex-shrink-0 md:block">
+      <div className="relative hidden w-1 shrink-0 md:block">
         <div
           role="slider"
           aria-label={t('common.splitPane.resizeLabel')}
@@ -182,7 +185,7 @@ export function SplitView({
             },
             [onIframeReady]
           )}
-          src={`/overlays/${overlayId}/preview/embed`}
+          src={previewPath ?? `/overlays/${overlayId}/preview/embed`}
           className="h-full w-full border-0"
           title={t('common.splitPane.previewTitle')}
           sandbox="allow-scripts allow-same-origin"

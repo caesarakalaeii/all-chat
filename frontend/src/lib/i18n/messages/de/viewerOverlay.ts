@@ -536,6 +536,8 @@ export const viewerOverlay: LocaleNamespace<'viewerOverlay'> = {
       '\u2192 Füge deine Twitch-Quelle neu hinzu, um auf die neue EventSub-Verbindung zu wechseln',
   },
 
+  // The sandboxed frame a premium custom-code alert renders in (ADR-0071).
+  customAlertFrameTitle: 'Eigener Alert',
   unsupportedKind: {
     heading: '{kind}-Overlay',
     body: 'Dieser Overlay-Typ wird noch nicht unterstützt.',

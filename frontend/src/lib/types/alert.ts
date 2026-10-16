@@ -18,8 +18,35 @@
 
 /** The alert WebSocket frame (ADR-0068, ADR-0070). */
 
-/** The resolved profile the gateway attaches (absent for event types without one). */
-export interface AlertProfile {
+/** Mirrors shared/alerts eventDefs, in its order (a unit test holds them equal). */
+export const ALERT_EVENT_TYPES = [
+  'subscription',
+  'resubscription',
+  'gift_subscription',
+  'mystery_gift',
+  'bits',
+  'raid',
+  'follow',
+  'channel_points',
+  'charity_donation',
+  'super_chat',
+  'super_sticker',
+  'new_sponsor',
+  'member_milestone',
+  'membership_gift',
+  'subscriber',
+  'gift',
+  'share',
+  'tiktok_subscription',
+] as const
+
+export type AlertEventType = (typeof ALERT_EVENT_TYPES)[number]
+
+/**
+ * One saved (or default) alert profile, as GET/PUT
+ * /overlays/:id/alerts/profiles exchange it (overlay-manager, ADR-0070).
+ */
+export interface EditableAlertProfile {
   event_type: string
   text_template: string
   sound_url: string
@@ -30,6 +57,18 @@ export interface AlertProfile {
   enabled: boolean
   /** Waiting alerts play in ascending sort_after; equal values stay FIFO. */
   sort_after: number
+  /**
+   * Premium custom code (migration 109, ADR-0071). Any non-empty field makes
+   * the alert box render it in a sandboxed iframe instead of the built-in
+   * layout. Absent from frames of a gateway older than the columns.
+   */
+  custom_html?: string
+  custom_css?: string
+  custom_js?: string
+}
+
+/** The resolved profile the gateway attaches (absent for event types without one). */
+export interface AlertProfile extends EditableAlertProfile {
   /** text_template with placeholders substituted server-side. */
   text: string
 }

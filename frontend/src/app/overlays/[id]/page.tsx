@@ -45,6 +45,7 @@ import Link from 'next/link'
 import { ChevronLeft, ChevronRight, X, Clipboard, Share2, Puzzle } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { AlertTestPanel } from '@/components/overlays/AlertTestPanel'
+import { AlertsEditor } from '@/components/overlays/AlertsEditor'
 import { resolveOverlayKind } from '@/lib/utils/overlayKind'
 import { overlaysApi } from '@/lib/api/overlays'
 import type { TTSConfigMetadata, ElevenLabsVoice, TestKeyResult } from '@/lib/api/overlays'
@@ -124,6 +125,8 @@ import { ModeratorsPanel } from '@/components/editor/ModeratorsPanel'
 import { getTranslations, useTranslations, type TFunction } from '@/lib/i18n'
 import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
 import {
+  ALERT_OVERLAY_SECTIONS,
+  ALERTS_SECTION,
   EDITOR_SECTIONS,
   type EditorSectionId,
   type SpotlightSection,
@@ -1969,7 +1972,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     if (typeof window === 'undefined') return 'theme'
     try {
       const stored = localStorage.getItem(ACTIVE_SECTION_STORAGE_KEY)
-      if (stored !== null && EDITOR_SECTIONS.some((s) => s.id === stored)) {
+      if (stored !== null && [...EDITOR_SECTIONS, ALERTS_SECTION].some((s) => s.id === stored)) {
         return stored as EditorSectionId
       }
     } catch {
@@ -1977,6 +1980,13 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     }
     return 'theme'
   })
+  // An alerts overlay swaps the chat editor for its own short nav (issue
+  // #954); a remembered section the overlay's kind lacks falls back to the
+  // kind's first section without overwriting the stored choice.
+  const navSections = isAlertsOverlay ? ALERT_OVERLAY_SECTIONS : EDITOR_SECTIONS
+  const shownSection = navSections.some((s) => s.id === activeSection)
+    ? activeSection
+    : navSections[0].id
   // Search jump target: a data-setting-anchor value inside the activating section
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -3317,7 +3327,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
   return (
     <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
-      <SplitView overlayId={id} onIframeReady={handleIframeReady}>
+      <SplitView
+        overlayId={id}
+        onIframeReady={handleIframeReady}
+        // An alerts overlay previews its alert box: test alerts play there.
+        previewPath={isAlertsOverlay ? `/overlays/${id}/preview/alerts` : undefined}
+      >
         {/* Config panel content */}
         <div className="max-w-none space-y-6 p-6">
           <OnboardingChecklist
@@ -3616,14 +3631,26 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
           {/* Settings: search + left nav + one section at a time (ADR-0042) */}
           {/* sticky footer uses position:sticky bottom-0 — works because split-view-config has overflow-y-auto */}
           <div className="relative">
-            <SettingsSearch onNavigate={handleSearchNavigate} />
+            {/* The search indexes the chat editor's settings only. */}
+            {!isAlertsOverlay && <SettingsSearch onNavigate={handleSearchNavigate} />}
             <div className="@container mt-4">
               <div className="flex flex-col gap-4 @md:flex-row @md:gap-5">
-                <EditorNav activeId={activeSection} onSelect={handleSelectSection} />
+                <EditorNav
+                  activeId={shownSection}
+                  onSelect={handleSelectSection}
+                  sections={navSections}
+                />
                 <div ref={panelRef} className="min-w-0 flex-1">
-                  <EditorSectionHeader id={activeSection} />
+                  <EditorSectionHeader id={shownSection} />
 
-                  {activeSection === 'theme' && (
+                  {shownSection === 'alerts' && (
+                    <div className="space-y-8">
+                      <AlertsEditor overlayId={id} isPremium={user?.is_premium ?? false} />
+                      <AlertTestPanel overlayId={id} />
+                    </div>
+                  )}
+
+                  {shownSection === 'theme' && (
                     <div>
                       <ThemeContent onApply={handleThemeApply} isAdmin={user?.is_admin === true} />
                       <Button
@@ -3639,70 +3666,70 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   )}
 
                   {/* Appearance groups — promoted from the retired nested AppearancePanel (ADR-0042) */}
-                  {activeSection === 'typography' && (
+                  {shownSection === 'typography' && (
                     <TypographyGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
                     />
                   )}
-                  {activeSection === 'colors' && (
+                  {shownSection === 'colors' && (
                     <ColorsGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
                     />
                   )}
-                  {activeSection === 'background' && (
+                  {shownSection === 'background' && (
                     <BackgroundGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
                     />
                   )}
-                  {activeSection === 'bubble-colors' && (
+                  {shownSection === 'bubble-colors' && (
                     <BubbleColorsGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
                       locked={bubbleColorsLocked}
                     />
                   )}
-                  {activeSection === 'visibility' && (
+                  {shownSection === 'visibility' && (
                     <VisibilityGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
                       visibilityDefaults={iframeVisibilityDefaults}
                     />
                   )}
-                  {activeSection === 'sizing' && (
+                  {shownSection === 'sizing' && (
                     <SizingGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
                     />
                   )}
-                  {activeSection === 'platform-colors' && (
+                  {shownSection === 'platform-colors' && (
                     <PlatformColorsGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
                     />
                   )}
-                  {activeSection === 'events' && (
+                  {shownSection === 'events' && (
                     <EventsGroup
                       visualSettings={visualSettings}
                       onChange={handleVisualSettingsChange}
                     />
                   )}
-                  {activeSection === 'filters' && (
+                  {shownSection === 'filters' && (
                     <FilterGroup
                       filterSettings={filterSettings}
                       onChange={handleFilterSettingsChange}
                     />
                   )}
-                  {activeSection === 'sounds' && (
+                  {shownSection === 'sounds' && (
                     <SoundGroup
                       displaySettings={{ ...soundSettings, ...ttsSettings }}
                       onChange={handleSoundSettingsChange}
                       isPremium={user?.is_premium ?? false}
                     />
                   )}
-                  {activeSection === 'tts' && (
+                  {shownSection === 'tts' && (
                     <TTSGroup
                       displaySettings={{ ...soundSettings, ...ttsSettings }}
                       onChange={handleTTSSettingsChange}
@@ -3752,7 +3779,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     />
                   )}
 
-                  {activeSection === 'sources' && (
+                  {shownSection === 'sources' && (
                     <div>
                       {isLoading ? (
                         <SourceListSkeleton />
@@ -3854,7 +3881,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     </div>
                   )}
 
-                  {activeSection === 'messages' && (
+                  {shownSection === 'messages' && (
                     <div className="space-y-5">
                       {/* Max Messages */}
                       <div data-setting-anchor="maxMessages">
@@ -4165,11 +4192,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   )}
 
                   {/* Engagement — polls, predictions & viewer points (issue #523) */}
-                  {activeSection === 'engagement' && <EngagementPanel overlayId={id} />}
+                  {shownSection === 'engagement' && <EngagementPanel overlayId={id} />}
 
-                  {activeSection === 'moderators' && <ModeratorsPanel overlayId={id} />}
+                  {shownSection === 'moderators' && <ModeratorsPanel overlayId={id} />}
 
-                  {activeSection === 'custom-css' && (
+                  {shownSection === 'custom-css' && (
                     <div className="space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xs font-medium text-text">
@@ -4292,12 +4319,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                       </p>
                     </div>
                   )}
-                  {/* An alerts overlay renders alerts, not chat, so it gets the
-                      test-alert control instead of the mock chat message. */}
-                  {activeSection === 'testing' && isAlertsOverlay && (
-                    <AlertTestPanel overlayId={id} />
-                  )}
-                  {activeSection === 'testing' && !isAlertsOverlay && (
+                  {shownSection === 'testing' && (
                     <div className="space-y-3" data-setting-anchor="mockMessage">
                       <div>
                         <label
@@ -4438,7 +4460,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     </div>
                   )}
 
-                  {activeSection === 'danger-zone' && (
+                  {shownSection === 'danger-zone' && (
                     <div className="space-y-3">
                       <p className="text-xs text-text-sub">
                         {t('overlayEditor.dangerZone.explainer')}
@@ -4462,30 +4484,33 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                     full-width sibling its z-10 bar covered the rail's last
                     button and shrank its target below the 24px WCAG 2.5.8
                     floor. */}
-                  <div className="sticky bottom-0 z-10 mt-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
-                    <Button
-                      onClick={() => void handleSaveConfiguration()}
-                      disabled={!configLoaded || isSavingConfig}
-                      className="w-full"
-                    >
-                      {isSavingConfig
-                        ? t('overlayEditor.page.savingConfiguration')
-                        : t('overlayEditor.page.saveConfiguration')}
-                    </Button>
-                    {/* Always-mounted live region so save success/failure announces
+                  {/* An alerts overlay saves through its own editor. */}
+                  {!isAlertsOverlay && (
+                    <div className="sticky bottom-0 z-10 mt-6 border-t border-border bg-bg/95 p-4 backdrop-blur-sm">
+                      <Button
+                        onClick={() => void handleSaveConfiguration()}
+                        disabled={!configLoaded || isSavingConfig}
+                        className="w-full"
+                      >
+                        {isSavingConfig
+                          ? t('overlayEditor.page.savingConfiguration')
+                          : t('overlayEditor.page.saveConfiguration')}
+                      </Button>
+                      {/* Always-mounted live region so save success/failure announces
                       to screen readers (WCAG 4.1.3) — conditionally mounting the
                       role="status" element would not announce reliably. */}
-                    <p
-                      role="status"
-                      className={cn(
-                        'text-center text-sm',
-                        configAlert && 'mt-2',
-                        configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
-                      )}
-                    >
-                      {configAlert?.message}
-                    </p>
-                  </div>
+                      <p
+                        role="status"
+                        className={cn(
+                          'text-center text-sm',
+                          configAlert && 'mt-2',
+                          configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
+                        )}
+                      >
+                        {configAlert?.message}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

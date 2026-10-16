@@ -80,6 +80,12 @@ type Profile struct {
 	Volume       int    `json:"volume"`
 	Enabled      bool   `json:"enabled"`
 	SortAfter    int    `json:"sort_after"`
+	// Custom code (premium, migration 109, ADR-0071): when any is set, the
+	// alert box renders it in a sandboxed iframe instead of the built-in
+	// layout. Never validated beyond size: the sandbox is the isolation.
+	CustomHTML string `json:"custom_html"`
+	CustomCSS  string `json:"custom_css"`
+	CustomJS   string `json:"custom_js"`
 }
 
 // ResolvedProfile is a profile with its template rendered for one alert.
@@ -89,6 +95,10 @@ type ResolvedProfile struct {
 }
 
 const maxTemplateLen = 500
+
+// MaxCustomCodeLen caps each custom code field: it travels in every alert
+// frame and is stored per event type.
+const MaxCustomCodeLen = 64 * 1024
 
 type eventDef struct {
 	eventType, platform, template string
@@ -161,6 +171,11 @@ func (p Profile) Validate() error {
 	}
 	if len(p.TextTemplate) > maxTemplateLen {
 		return fmt.Errorf("%s: text_template is longer than %d characters", p.EventType, maxTemplateLen)
+	}
+	for field, code := range map[string]string{"custom_html": p.CustomHTML, "custom_css": p.CustomCSS, "custom_js": p.CustomJS} {
+		if len(code) > MaxCustomCodeLen {
+			return fmt.Errorf("%s: %s is longer than %d bytes", p.EventType, field, MaxCustomCodeLen)
+		}
 	}
 	if p.DurationMs < 1 || p.DurationMs > 60000 {
 		return fmt.Errorf("%s: duration_ms must be between 1 and 60000", p.EventType)

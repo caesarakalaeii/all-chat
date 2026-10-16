@@ -33,7 +33,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { VisuallyHidden } from '@/components/ui/visually-hidden'
+import { useTranslations } from '@/lib/i18n'
+import type { AlertProfile } from '@/lib/types/alert'
+
 import { AlertQueue, alertDurationMs, alertText, type AlertFrame } from './alertQueue'
+import { ALERT_SANDBOX, alertBridgeMessage, buildAlertSrcdoc, hasCustomCode } from './alertSandbox'
 
 // A sound that never reports its end (stalled stream) must not freeze the queue.
 const MAX_SOUND_OVERRUN_MS = 60_000
@@ -118,6 +123,10 @@ export function AlertPlayer({
 
   if (!alert) return null
 
+  if (alert.profile && hasCustomCode(alert.profile)) {
+    return <CustomCodeAlert alert={{ ...alert, profile: alert.profile }} />
+  }
+
   // The profile image (GIF) wins; the sender's avatar fills in without one.
   const image = alert.profile?.image_url
   const avatar = !image && alert.user.avatar_url
@@ -148,6 +157,40 @@ export function AlertPlayer({
           {alertText(alert)}
         </p>
       </div>
+    </div>
+  )
+}
+
+/**
+ * A premium custom-code alert (ADR-0071): the streamer's HTML/CSS/JS in a
+ * sandboxed srcdoc iframe, sent the alert over postMessage once it has loaded.
+ * The sandbox token list and the message contract live in alertSandbox.ts.
+ * One frame per alert (AlertPlayer re-renders per alert_id), so no state from
+ * one alert's script survives into the next.
+ */
+function CustomCodeAlert({ alert }: { alert: AlertFrame & { profile: AlertProfile } }) {
+  const t = useTranslations()
+  const srcDoc = buildAlertSrcdoc(alert.profile)
+  return (
+    <div
+      key={alert.alert_id}
+      className="h-screen w-full overflow-hidden bg-transparent"
+      data-alert-id={alert.alert_id}
+      data-event-type={alert.event_type}
+    >
+      <iframe
+        title={t('viewerOverlay.customAlertFrameTitle')}
+        sandbox={ALERT_SANDBOX}
+        srcDoc={srcDoc}
+        // Opaque-origin frame: "*" is the only target origin that reaches it.
+        onLoad={(e) => e.currentTarget.contentWindow?.postMessage(alertBridgeMessage(alert), '*')}
+        className="size-full border-0 bg-transparent"
+      />
+      {/* The frame's content is the streamer's; the alert text stays in the
+          accessibility tree regardless. */}
+      <VisuallyHidden role="status" aria-live="polite">
+        {alertText(alert)}
+      </VisuallyHidden>
     </div>
   )
 }

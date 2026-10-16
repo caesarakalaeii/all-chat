@@ -37,39 +37,16 @@ import {
 } from '@/components/ui/select'
 import { overlaysApi } from '@/lib/api/overlays'
 import { useTranslations } from '@/lib/i18n'
+import { ALERT_EVENT_TYPES, type AlertEventType } from '@/lib/types/alert'
 import { toastManager } from '@/lib/toast'
-
-/** Mirrors shared/alerts eventDefs, in its order (a unit test holds them equal). */
-export const ALERT_TEST_EVENT_TYPES = [
-  'subscription',
-  'resubscription',
-  'gift_subscription',
-  'mystery_gift',
-  'bits',
-  'raid',
-  'follow',
-  'channel_points',
-  'charity_donation',
-  'super_chat',
-  'super_sticker',
-  'new_sponsor',
-  'member_milestone',
-  'membership_gift',
-  'subscriber',
-  'gift',
-  'share',
-  'tiktok_subscription',
-] as const
-
-type AlertTestEventType = (typeof ALERT_TEST_EVENT_TYPES)[number]
 
 export function AlertTestPanel({ overlayId }: { overlayId: string }) {
   const t = useTranslations()
   const selectId = useId()
-  const [eventType, setEventType] = useState<AlertTestEventType>('subscription')
+  const [eventType, setEventType] = useState<AlertEventType>('subscription')
   const [sending, setSending] = useState(false)
 
-  const items = ALERT_TEST_EVENT_TYPES.map((value) => ({
+  const items = ALERT_EVENT_TYPES.map((value) => ({
     value,
     label: t(`overlayEditor.alertEventTypes.${value}`),
   }))
@@ -102,7 +79,7 @@ export function AlertTestPanel({ overlayId }: { overlayId: string }) {
           items={items}
           value={eventType}
           onValueChange={(value) => {
-            if (value !== null) setEventType(value as AlertTestEventType)
+            if (value !== null) setEventType(value as AlertEventType)
           }}
         >
           <SelectTrigger id={selectId} className="w-full">

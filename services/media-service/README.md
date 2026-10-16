@@ -30,7 +30,11 @@ such a key could be neither played nor deleted). Delete takes the key as the res
 not the whole key into one segment.
 
 `upload_url` is a presigned PUT valid for `MEDIA_PRESIGN_EXPIRY` (default 5 minutes); the client
-performs the upload with it directly against MinIO. `public_url` is `MEDIA_PUBLIC_URL` + `/` +
+performs the upload with it directly against MinIO. It is signed for the **origin of
+`MEDIA_PUBLIC_URL`** (path-style, `https://media.allch.at/allchat-media/{key}?X-Amz-…`), not for
+`MINIO_ENDPOINT`: an S3 signature covers the Host header, so a URL signed for the in-cluster
+endpoint is unusable from a browser (ADR-0071). Presigning is offline (`MINIO_REGION` is set, so
+no bucket-location lookup). The gateway proxies `/api/v1/media` here (`MEDIA_SERVICE_URL`). `public_url` is `MEDIA_PUBLIC_URL` + `/` +
 the key with each segment percent-escaped (`#`, `?`, `%` and friends in a filename stay raw in the
 key but must be escaped in the URL) — the URL an alert (or the frontend) plays.
 
@@ -72,7 +76,8 @@ and deleting a row only logs a failed MinIO removal rather than failing the requ
 | `MINIO_MEDIA_USER` / `MINIO_MEDIA_PASSWORD` | — | dedicated MinIO media credentials (preferred over root) |
 | `MINIO_USE_SSL` | `true` | TLS to MinIO; `false` for local compose |
 | `MINIO_BUCKET` | `allchat-media` | bucket provisioned with the MinIO instance (issue #948) |
-| `MEDIA_PUBLIC_URL` | `https://media.allch.at` | base for `public_url`; include the bucket path if MinIO serves it under one |
+| `MEDIA_PUBLIC_URL` | `https://media.allch.at` | base for `public_url`. MinIO serves path-style, so include the bucket (`https://media.allch.at/allchat-media`); its origin is also the host uploads are signed for |
+| `MINIO_REGION` | `us-east-1` | region presigned URLs are signed for (MinIO's default) |
 | `MEDIA_PRESIGN_EXPIRY` | `5m` | presigned PUT lifetime (Go duration) |
 | `MEDIA_MAX_OBJECTS_PER_USER` | `100` | per-user quota on registered media |
 | `OTEL_ENABLED` | `false` | OpenTelemetry tracing; the k8s manifest sets `true` |

@@ -886,7 +886,13 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
   // requires a stable hook count across renders, and the kind can flip
   // mid-session (first render sees no config, the 30s refresh delivers one).
   // The effects above then run harmlessly against state nothing renders.
-  const kind = resolveOverlayKind(config?.overlay_type)
+  // Until a config has loaded (or while its fetch keeps failing, e.g. during
+  // a rollout), an alert frame is proof enough: the gateway only sends them
+  // to alerts/goal/list sockets (ADR-0070). Without this the first alert sat
+  // unrendered until the 30s config refresh.
+  const kind = resolveOverlayKind(
+    config?.overlay_type ?? (!config && alertQueue.current ? 'alerts' : undefined)
+  )
   if (kind === 'alerts') {
     return <AlertPlayer alert={alertQueue.current} onDone={alertQueue.finish} />
   }

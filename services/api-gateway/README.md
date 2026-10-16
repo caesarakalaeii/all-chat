@@ -70,7 +70,8 @@ to every non-engagement socket as:
     "occurred_at": "2026-10-16T12:00:00Z",
     "profile": { "event_type": "bits", "text": "SomeChatter cheered 100 bits!",
                  "text_template": "{username} cheered {amount}!", "sound_url": "", "image_url": "",
-                 "duration_ms": 5000, "volume": 100, "enabled": true, "sort_after": 0 }
+                 "duration_ms": 5000, "volume": 100, "enabled": true, "sort_after": 0,
+                 "custom_html": "", "custom_css": "", "custom_js": "" }
   },
   "timestamp": "2026-10-16T12:00:00.12Z"
 }
@@ -109,6 +110,7 @@ EMOTE_SERVICE_URL=http://localhost:8083
 ```bash
 # Server configuration
 PORT=8080                               # API Gateway port
+MEDIA_SERVICE_URL=http://localhost:8094 # media-service (/api/v1/media, ADR-0071)
 LOG_LEVEL=info                          # debug, info, warn, error
 
 # CORS configuration
@@ -185,6 +187,7 @@ All overlay routes require JWT authentication.
 | GET | `/api/v1/overlays/:id/alerts/profiles` | Alert profiles, merged over defaults |
 | PUT | `/api/v1/overlays/:id/alerts/profiles` | Save alert profiles (premium, `alerts_editor`) |
 | POST | `/api/v1/overlays/:id/alerts/test` | Publish a test alert |
+| * | `/api/v1/media/*` | media-service: presigned alert-media uploads (`MEDIA_SERVICE_URL`, ADR-0071) |
 
 ### Emote Service Routes
 

@@ -28,6 +28,7 @@ export interface SliderControlProps {
   step: number
   unit?: string
   onChange: (v: number) => void
+  disabled?: boolean
 }
 
 export function SliderControl({
@@ -38,6 +39,7 @@ export function SliderControl({
   step,
   unit,
   onChange,
+  disabled,
 }: SliderControlProps): React.ReactElement {
   // Explicit label/control association so the range input has an accessible
   // name; the native range element keeps 2.1.1/2.5.7 handled by the browser.
@@ -54,8 +56,9 @@ export function SliderControl({
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(parseFloat(e.target.value))}
-        className="flex-1 accent-current"
+        className="min-w-0 flex-1 accent-current"
       />
       <span
         aria-hidden="true"

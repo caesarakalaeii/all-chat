@@ -385,6 +385,9 @@ export const marketing = {
     alertsOverlayTitle: 'Alert overlays',
     alertsOverlayBody:
       'Pop up subs, bits, raids, Super Chats and TikTok gifts on stream as their own OBS source, with a test button to line them up.',
+    alertsEditorTitle: 'Custom alerts editor',
+    alertsEditorBody:
+      'Give every alert its own text, GIF and sound, search GIFs right in the editor, or write your own HTML, CSS and JavaScript for it.',
     flairsTitle: 'Viewer flairs',
     flairsBody:
       'Stand out in any chat you appear in with premium cosmetics like animated name gradients.',

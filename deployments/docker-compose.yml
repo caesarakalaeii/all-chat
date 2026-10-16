@@ -217,6 +217,7 @@ services:
       AUTH_SERVICE_URL: http://auth-service:8081
       OVERLAY_SERVICE_URL: http://overlay-manager:8082
       EMOTE_SERVICE_URL: http://emote-service:8083
+      MEDIA_SERVICE_URL: http://media-service:8094
       DATABASE_HOST: postgres
       DATABASE_PORT: "5432"
       DATABASE_NAME: allchat
