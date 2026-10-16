@@ -20,6 +20,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,6 +36,17 @@ const (
 
 	// SessionTTL is how long to keep session data in Redis
 	SessionTTL = 24 * time.Hour
+
+	// holdersKeyPrefix keys a sorted set of the gateway pods that currently hold
+	// a WebSocket for the overlay (member = pod ID, score = last heartbeat unix
+	// time). The session is shared across pods, so only the last pod to let go
+	// may end it.
+	holdersKeyPrefix = "session:holders:"
+
+	// holderStaleAfter drops a holder whose pod stopped heartbeating (crashed
+	// without RemoveHolder). Matches the default overlay:connected TTL, which
+	// the same heartbeat refreshes every 2 minutes.
+	holderStaleAfter = 10 * time.Minute
 )
 
 // parseSessionTime safely parses RFC3339 time with validation
@@ -86,9 +99,12 @@ type SessionInfo struct {
 
 // SessionManager manages stream session lifecycle
 type SessionManager struct {
-	redis       *redis.Client
-	db          *pgxpool.Pool
-	logger      *zap.Logger
+	redis  *redis.Client
+	db     *pgxpool.Pool
+	logger *zap.Logger
+	podID  string
+	// gracePeriod is how long a session survives with no connection on any pod
+	// before it ends; a reconnect inside it resumes the same stream session.
 	gracePeriod time.Duration
 }
 
@@ -100,8 +116,61 @@ func NewSessionManager(redis *redis.Client, db *pgxpool.Pool, logger *zap.Logger
 		redis:       redis,
 		db:          db,
 		logger:      logger,
+		podID:       podIdentity(),
 		gracePeriod: gracePeriod,
 	}
+}
+
+// podIdentity names this gateway replica in the holders set. Kubernetes sets
+// HOSTNAME to the pod name; the PID fallback only matters outside a pod.
+func podIdentity() string {
+	if h := os.Getenv("HOSTNAME"); h != "" {
+		return h
+	}
+	return "pid-" + strconv.Itoa(os.Getpid())
+}
+
+// AddHolder records that this pod holds a connection for the overlay. Called
+// when the pod's pool for the overlay is created and on every heartbeat.
+func (sm *SessionManager) AddHolder(ctx context.Context, overlayIDs ...string) {
+	if len(overlayIDs) == 0 {
+		return
+	}
+	now := float64(time.Now().Unix())
+	pipe := sm.redis.Pipeline()
+	for _, overlayID := range overlayIDs {
+		key := holdersKeyPrefix + overlayID
+		pipe.ZAdd(ctx, key, redis.Z{Score: now, Member: sm.podID})
+		pipe.Expire(ctx, key, holderStaleAfter)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		sm.logger.Warn("Failed to record session holders",
+			zap.Int("count", len(overlayIDs)),
+			zap.Error(err),
+		)
+	}
+}
+
+// RemoveHolder records that this pod no longer holds a connection for the overlay.
+func (sm *SessionManager) RemoveHolder(ctx context.Context, overlayID string) {
+	if err := sm.redis.ZRem(ctx, holdersKeyPrefix+overlayID, sm.podID).Err(); err != nil {
+		sm.logger.Warn("Failed to remove session holder",
+			zap.String("overlay_id", overlayID),
+			zap.Error(err),
+		)
+	}
+}
+
+// isHeld reports whether any pod still holds a connection for the overlay,
+// pruning holders whose pod stopped heartbeating.
+func (sm *SessionManager) isHeld(ctx context.Context, overlayID string) (bool, error) {
+	key := holdersKeyPrefix + overlayID
+	cutoff := strconv.FormatInt(time.Now().Add(-holderStaleAfter).Unix(), 10)
+	if err := sm.redis.ZRemRangeByScore(ctx, key, "-inf", "("+cutoff).Err(); err != nil {
+		return false, err
+	}
+	n, err := sm.redis.ZCard(ctx, key).Result()
+	return n > 0, err
 }
 
 // EnsureSession creates a session if none exists for this overlay.
@@ -122,12 +191,20 @@ func (sm *SessionManager) EnsureSession(ctx context.Context, overlayID string) e
 
 	if exists > 0 {
 		// Session exists, check if it's in ENDING state and revert to ACTIVE
-		state, err := sm.redis.HGet(ctx, key, "state").Result()
-		if err == nil && state == "ENDING" {
-			// Cancel grace period by reverting to ACTIVE
+		fields, err := sm.redis.HMGet(ctx, key, "state", "ending_at").Result()
+		if err != nil || fields[0] != "ENDING" {
+			return nil // Session already active
+		}
+		// The pod that started the grace period may have died before its timer
+		// fired. A reconnect after the grace must start a new stream session,
+		// not stretch the old one across both streams.
+		endingAt, _ := fields[1].(string)
+		if t, perr := time.Parse(time.RFC3339, endingAt); perr != nil || time.Since(t) < sm.gracePeriod {
 			return sm.CancelGracePeriod(ctx, overlayID)
 		}
-		return nil // Session already active
+		if err := sm.EndSession(ctx, overlayID); err != nil {
+			return err
+		}
 	}
 
 	// Create new session
@@ -226,9 +303,15 @@ func (sm *SessionManager) StartGracePeriod(ctx context.Context, overlayID string
 		return fmt.Errorf("failed to check session existence: %w", err)
 	}
 
+	// Another pod still serves the overlay: the stream is not ending.
+	if held, err := sm.isHeld(ctx, overlayID); err != nil || held {
+		return err
+	}
+
 	// Update state to ENDING and refresh TTL
 	pipe := sm.redis.Pipeline()
 	pipe.HSet(ctx, key, "state", "ENDING")
+	pipe.HSet(ctx, key, "ending_at", time.Now().UTC().Format(time.RFC3339))
 	pipe.Expire(ctx, key, SessionTTL)
 
 	if _, err := pipe.Exec(ctx); err != nil {
@@ -250,6 +333,7 @@ func (sm *SessionManager) CancelGracePeriod(ctx context.Context, overlayID strin
 	// Update state back to ACTIVE and refresh TTL
 	pipe := sm.redis.Pipeline()
 	pipe.HSet(ctx, key, "state", "ACTIVE")
+	pipe.HDel(ctx, key, "ending_at")
 	pipe.Expire(ctx, key, SessionTTL)
 
 	if _, err := pipe.Exec(ctx); err != nil {
@@ -284,6 +368,19 @@ func (sm *SessionManager) RefreshTTLs(ctx context.Context, overlayIDs []string) 
 			zap.Error(err),
 		)
 	}
+}
+
+// EndSessionIfIdle ends the session unless another pod still holds a
+// connection for the overlay. Called when this pod's end grace expires.
+func (sm *SessionManager) EndSessionIfIdle(ctx context.Context, overlayID string) error {
+	held, err := sm.isHeld(ctx, overlayID)
+	if err != nil {
+		return fmt.Errorf("failed to check session holders: %w", err)
+	}
+	if held {
+		return nil
+	}
+	return sm.EndSession(ctx, overlayID)
 }
 
 // EndSession transitions to COMPLETED and archives to database
@@ -328,17 +425,19 @@ func (sm *SessionManager) EndSession(ctx context.Context, overlayID string) erro
 	duration := endedAt.Sub(startedAt)
 
 	// Update session in database
-	query := `
-		UPDATE stream_sessions
-		SET state = $1, ended_at = $2, total_events = $3, updated_at = NOW()
-		WHERE id = $4
-	`
-	if _, err := sm.db.Exec(ctx, query, "COMPLETED", endedAt, eventCount, sessionID); err != nil {
-		sm.logger.Error("Failed to update session in database",
-			zap.String("session_id", sessionID),
-			zap.Error(err),
-		)
-		// Continue even if DB update fails
+	if sm.db != nil {
+		query := `
+			UPDATE stream_sessions
+			SET state = $1, ended_at = $2, total_events = $3, updated_at = NOW()
+			WHERE id = $4
+		`
+		if _, err := sm.db.Exec(ctx, query, "COMPLETED", endedAt, eventCount, sessionID); err != nil {
+			sm.logger.Error("Failed to update session in database",
+				zap.String("session_id", sessionID),
+				zap.Error(err),
+			)
+			// Continue even if DB update fails
+		}
 	}
 
 	// Delete session from Redis
