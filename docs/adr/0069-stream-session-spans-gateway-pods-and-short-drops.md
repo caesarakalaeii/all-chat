@@ -1,10 +1,10 @@
-# ADR-0068: A stream session ends only when no gateway pod holds the overlay, after a 15-minute grace
+# ADR-0069: A stream session ends only when no gateway pod holds the overlay, after a 15-minute grace
 
 **Date**: 2026-10-16
 **Status**: Accepted
 **Deciders**: caesarakalaeii
 
-(ADR numbering is shared with the caesar-deployment repo. If 0068 is already
+(ADR numbering is shared with the caesar-deployment repo. If 0069 is already
 taken there, renumber this file; the slug is the stable identifier.)
 
 ## Context and Problem Statement
@@ -43,12 +43,19 @@ stream were missing from the credits.
 4. `ENDING` records `ending_at`. If the pod that owned the end timer died, the
    next connect after the grace ends the old session and starts a new one
    instead of resuming it into the next stream.
+5. The credit roll measures a live session from the earlier of the session
+   start and the overlay's live Twitch stream start (Helix `GET /streams`, with
+   the app token overlay-manager already uses for clips). An overlay that was not
+   loaded for part of the stream still reports the stream's length, and clips
+   cover the whole stream. Leaderboards stay per session. Other platforms are not
+   consulted yet.
 
 ## Considered Options
 
-- **Use the platform's stream start time** (Twitch `stream.online`, YouTube
+- **Use only the platform's stream start time** (Twitch `stream.online`, YouTube
   `actualStartTime`). Fixes the displayed number but not the leaderboard split,
-  and multistream overlays have several start times.
+  and multistream overlays have several start times. Adopted as a complement,
+  see Decision 5.
 - **Cross-pod check only, keep 60 seconds.** Fixes the multi-replica bug but
   still splits a stream on every scene switch longer than a minute.
 

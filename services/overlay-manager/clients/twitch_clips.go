@@ -35,15 +35,15 @@ const (
 
 // ClipData represents a single clip from Twitch API
 type ClipData struct {
-	ID           string  `json:"id"`
-	URL          string  `json:"url"`
-	EmbedURL     string  `json:"embed_url"`
-	BroadcasterID string `json:"broadcaster_id"`
-	Title        string  `json:"title"`
-	ViewCount    int     `json:"view_count"`
-	CreatedAt    string  `json:"created_at"` // RFC3339
-	ThumbnailURL string  `json:"thumbnail_url"`
-	Duration     float64 `json:"duration"`
+	ID            string  `json:"id"`
+	URL           string  `json:"url"`
+	EmbedURL      string  `json:"embed_url"`
+	BroadcasterID string  `json:"broadcaster_id"`
+	Title         string  `json:"title"`
+	ViewCount     int     `json:"view_count"`
+	CreatedAt     string  `json:"created_at"` // RFC3339
+	ThumbnailURL  string  `json:"thumbnail_url"`
+	Duration      float64 `json:"duration"`
 }
 
 // ClipsResponse represents the Twitch clips API response
@@ -171,6 +171,46 @@ func (c *TwitchClipsClient) GetUserID(ctx context.Context, username string) (str
 	}
 
 	return usersResp.Data[0].ID, nil
+}
+
+// GetStreamStartedAt returns when the channel's current live stream started,
+// or the zero time when the channel is offline.
+func (c *TwitchClipsClient) GetStreamStartedAt(ctx context.Context, login string) (time.Time, error) {
+	token, err := c.getAccessToken(ctx)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to get access token: %w", err)
+	}
+
+	urlStr := "https://api.twitch.tv/helix/streams?" + url.Values{"user_login": {login}}.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, urlStr, nil)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Client-Id", c.clientID)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to call streams API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return time.Time{}, fmt.Errorf("twitch streams API returned status %d", resp.StatusCode)
+	}
+
+	var streamsResp struct {
+		Data []struct {
+			StartedAt time.Time `json:"started_at"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&streamsResp); err != nil {
+		return time.Time{}, fmt.Errorf("failed to decode response: %w", err)
+	}
+	if len(streamsResp.Data) == 0 {
+		return time.Time{}, nil
+	}
+	return streamsResp.Data[0].StartedAt, nil
 }
 
 // getAccessToken gets or refreshes app access token using client credentials flow
