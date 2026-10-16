@@ -736,6 +736,14 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: No URL, middleware or static-rendering change. Server-rendered pages stay English, and overlays in OBS stay English unless chosen there.
 **→ Read**: [0066-client-side-ui-locale-selection.md](./0066-client-side-ui-locale-selection.md)
 
+### ADR-0067: Desktop plugins move to their own repositories under GPL-3.0-or-later
+
+**Status**: Proposed (2026-10-16)
+**Problem**: The StreamController store lists repositories, not subdirectories, so the plugin could not be submitted from this monorepo; ADR-0049's AGPL-in-GPL licence gate was still open; and contributing to one plugin meant cloning the whole platform.
+**Decision**: `caesarakalaeii/allchat-streamdeck` and `caesarakalaeii/allchat-streamcontroller`, split out with history and relicensed GPL-3.0-or-later (the StreamController host's licence). They share no code, so they get one repository each. `scripts/check-plugin-parity.py` stays here and runs over three sibling checkouts; every repository's parity job checks out a same-named branch from the others when one exists, so a cross-repo change is checked as a set.
+**Impact**: Store submission and per-plugin releases become possible; a cross-plugin change is up to three PRs; plugin code is no longer under this repository's licence. Takes effect once every copyright holder of the plugin code agrees.
+**→ Read**: [0067-desktop-plugins-in-own-repositories.md](./0067-desktop-plugins-in-own-repositories.md)
+
 ---
 
 
