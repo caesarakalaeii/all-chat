@@ -562,7 +562,7 @@ func TestOverlayRepository_GetByIDAndUserID(t *testing.T) {
 	}
 }
 
-// The overlay_type column (ADR-0064) must round-trip through every read the
+// The overlay_type column (ADR-0068) must round-trip through every read the
 // repo offers, and an overlay created without a kind must read back as chat —
 // that is what every pre-existing overlay resolves to.
 func TestOverlayRepository_OverlayTypeRoundTrip(t *testing.T) {

@@ -19,7 +19,7 @@
 'use client'
 
 /**
- * Kind badge for the dashboard's overlay cards (ADR-0064).
+ * Kind badge for the dashboard's overlay cards (ADR-0068).
  *
  * Renders nothing for chat overlays: they are the overwhelming majority and
  * their cards must stay byte-identical to how they looked before kinds

@@ -58,6 +58,7 @@ jobs:
       picarto-listener: ${{ steps.changes.outputs.picarto-listener }}
       instagram-listener: ${{ steps.changes.outputs.instagram-listener }}
       media-service: ${{ steps.changes.outputs.media-service }}
+      alert-processor: ${{ steps.changes.outputs.alert-processor }}
       frontend: ${{ steps.changes.outputs.frontend }}
       shared: ${{ steps.changes.outputs.shared }}
       migrations: ${{ steps.changes.outputs.migrations }}
@@ -153,6 +154,10 @@ jobs:
             media-service:
               - 'services/media-service/**'
               - 'shared/**'
+            alert-processor:
+              - 'services/alert-processor/**'
+              - 'shared/**'
+              - 'services/message-processor/**'
             frontend:
               - 'frontend/**'
             shared:
@@ -267,6 +272,9 @@ jobs:
           - name: media-service
             changed: ${{ needs.detect-changes.outputs.media-service }}
             path: services/media-service
+          - name: alert-processor
+            changed: ${{ needs.detect-changes.outputs.alert-processor }}
+            path: services/alert-processor
           - name: frontend
             changed: ${{ needs.detect-changes.outputs.frontend }}
             path: frontend
@@ -367,6 +375,7 @@ jobs:
           - picarto-listener
           - facebook-listener
           - media-service
+          - alert-processor
           # Every Go service under services/ belongs here. tiktok-listener is
           # deliberately absent: it is a Node service and has no go.mod. Verify with:
           #   for d in services/*/; do [ -f "$d/go.mod" ] && basename "$d"; done

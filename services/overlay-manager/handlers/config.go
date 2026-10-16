@@ -128,7 +128,7 @@ func (h *ConfigHandler) HandleGetConfig(c *gin.Context) {
 	// is unchanged apart from one added field. Resolved per request and never
 	// persisted; the unauthenticated HandleGetPublicConfig does not carry it.
 	// overlay_type is carried so the editor can route its settings by kind
-	// (ADR-0064) without a second request.
+	// (ADR-0068) without a second request.
 	c.JSON(http.StatusOK, struct {
 		*models.OverlayConfig
 		BubbleColorsLocked bool   `json:"bubble_colors_locked"`
@@ -303,7 +303,7 @@ func (h *ConfigHandler) HandleGetPublicConfig(c *gin.Context) {
 		})
 	}
 
-	// overlay_type routes the render page by kind (ADR-0064): this endpoint is
+	// overlay_type routes the render page by kind (ADR-0068): this endpoint is
 	// the unauthenticated renderer's only source of truth about the overlay.
 	c.JSON(http.StatusOK, gin.H{
 		"overlay_type":         overlay.Kind(),

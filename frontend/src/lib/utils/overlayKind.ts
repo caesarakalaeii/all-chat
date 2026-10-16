@@ -17,14 +17,14 @@
  */
 
 /**
- * Overlay kind helpers (ADR-0064).
+ * Overlay kind helpers (ADR-0068).
  *
  * `overlay_type` comes from three places that deploy at different times: the
  * overlays table (NOT NULL since migration 100, but the column did not exist
  * for overlays created before it), the overlay responses, and the public
  * overlay config the render page fetches — where it is simply absent until the
  * first fetch resolves. Every reader funnels through resolveOverlayKind so
- * those cases all mean "chat", the kind every overlay was before ADR-0064.
+ * those cases all mean "chat", the kind every overlay was before ADR-0068.
  */
 
 import type { OverlayType } from '@/lib/types/overlay'

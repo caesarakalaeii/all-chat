@@ -744,6 +744,15 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: Store submission and per-plugin releases become possible; a cross-plugin change is up to three PRs; plugin code is no longer under this repository's licence.
 **→ Read**: [0067-desktop-plugins-in-own-repositories.md](./0067-desktop-plugins-in-own-repositories.md)
 
+### ADR-0068: Event alerts platform — alert overlay kinds, a separate chat:raw consumer, and presigned-upload alert media
+
+**Status**: Accepted (2026-10-01)
+**Problem**: Event data already flows through `chat:raw` as event-typed messages (Twitch/YouTube/TikTok listeners), but nothing routes it to a non-chat rendering surface, keeps event history, or holds streamer-uploaded alert media — and the chat pipeline must not grow a second job.
+**Decision**: Three new overlay kinds (`overlays.overlay_type` 'alerts'/'goal'/'list', default 'chat'); a separate **alert-processor** consuming `chat:raw` with its own consumer group `alert-processors`, normalizing via the message-processor's own normalizers (one-direction import) and routing to alert-capable overlays — persist to `alert_events`, publish to `overlay:{id}:alerts`, score `list` leaderboards — with idempotency as a first-class contract (deterministic UUIDv5 alert ids + ON CONFLICT DO NOTHING for history, per-alert SET NX claim inside one atomic Lua script for boards, ACK only after persist+publish); alert media in single-node MinIO (public-read behind `media.allch.at`, presigned direct uploads, unguessable `{user_id}/{uuid}/{filename}` keys).
+**Impact**: Alert features land without touching listeners or the chat pipeline; a broken alert-processor degrades to "no alerts", never "no chat"; redelivery can animate an alert twice (accepted, cosmetic) but never double-writes history or double-counts a board; single-node MinIO defers distribution/replication as follow-ups.
+(ADR numbering collision: code and issues #949-#955 cited this record as ADR-0064 before the file existed, while `main` gave 0064 to the TikTok transport tiers record and 0066/0067 to later records; it landed as 0068. The content is unchanged apart from the header.)
+**→ Read**: [0068-event-alerts-platform.md](./0068-event-alerts-platform.md)
+
 ---
 
 

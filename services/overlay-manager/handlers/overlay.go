@@ -71,7 +71,7 @@ func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
 		Name        string `json:"name" binding:"required"`
 		Description string `json:"description"`
 		IsActive    *bool  `json:"is_active"`
-		// One of models.OverlayType* (ADR-0064). Absent means chat.
+		// One of models.OverlayType* (ADR-0068). Absent means chat.
 		OverlayType string `json:"overlay_type"`
 	}
 

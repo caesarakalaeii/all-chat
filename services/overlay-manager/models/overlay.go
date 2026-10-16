@@ -22,7 +22,7 @@ import (
 	"time"
 )
 
-// Overlay kind (ADR-0064). Chat is the only kind with a renderer today; the
+// Overlay kind (ADR-0068). Chat is the only kind with a renderer today; the
 // other three are created and routed but render a placeholder until their own
 // issues land.
 const (

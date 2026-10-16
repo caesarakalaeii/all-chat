@@ -825,7 +825,7 @@ func (h *SourcesHandler) annotateParkedDiscovery(ctx context.Context, sources []
 }
 
 // rejectNonChatOverlay writes the 400 that keeps chat sources off
-// alerts/goal/list overlays (ADR-0064): their pipelines have nothing that
+// alerts/goal/list overlays (ADR-0068): their pipelines have nothing that
 // reads a chat source, so an attached row would be inert data that still
 // shows up in admin listings and source counts. Returns true when the
 // request was rejected, so callers can `return`.
