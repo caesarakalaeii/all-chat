@@ -33,6 +33,10 @@ ARG BUILD_DATE
 ARG GIT_COMMIT
 ENV NEXT_PUBLIC_BUILD_DATE=$BUILD_DATE
 ENV NEXT_PUBLIC_GIT_COMMIT=$GIT_COMMIT
+# KLIPY GIF search app key (ADR-0071): public by design (it is in every search
+# URL), baked in at build time. Empty disables search gracefully.
+ARG KLIPY_API_KEY=
+ENV NEXT_PUBLIC_KLIPY_API_KEY=$KLIPY_API_KEY
 
 # Umami analytics (cookieless) is configured directly in src/components/Analytics.tsx
 # (Website ID + script host are pinned there, not secrets), so no build args needed.

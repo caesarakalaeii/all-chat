@@ -18,6 +18,7 @@
 
 import { describe, it, expect } from 'vitest'
 import {
+  ALERT_OVERLAY_SECTIONS,
   EDITOR_SECTIONS,
   EDITOR_GROUPS,
   searchSettings,
@@ -120,5 +121,13 @@ describe('searchSettings', () => {
     const showBadges = hits.find((h) => h.entry?.label === 'Show badges')
     expect(showBadges?.section.id).toBe('visibility')
     expect(showBadges?.entry?.anchorId).toBe('showBadges')
+  })
+})
+
+describe('alert overlay sections', () => {
+  it('replace the chat editor with the alerts editor plus the kind-agnostic sections', () => {
+    expect(ALERT_OVERLAY_SECTIONS.map((s) => s.id)).toEqual(['alerts', 'sources', 'danger-zone'])
+    // The chat editor never offers the alerts section.
+    expect(EDITOR_SECTIONS.map((s) => s.id)).not.toContain('alerts')
   })
 })

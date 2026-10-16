@@ -30,7 +30,8 @@ vi.mock('@/lib/api/overlays', () => ({
 const toast = vi.fn()
 vi.mock('@/lib/toast', () => ({ toastManager: { add: (t: unknown) => toast(t) } }))
 
-import { ALERT_TEST_EVENT_TYPES, AlertTestPanel } from '@/components/overlays/AlertTestPanel'
+import { AlertTestPanel } from '@/components/overlays/AlertTestPanel'
+import { ALERT_EVENT_TYPES } from '@/lib/types/alert'
 
 afterEach(() => {
   cleanup()
@@ -70,6 +71,6 @@ describe('AlertTestPanel', () => {
     )
     const goTypes = [...goSource.matchAll(/^\s*\{"([a-z_]+)", "[a-z]+", "/gm)].map((m) => m[1])
     expect(goTypes.length).toBeGreaterThan(0)
-    expect([...ALERT_TEST_EVENT_TYPES]).toEqual(goTypes)
+    expect([...ALERT_EVENT_TYPES]).toEqual(goTypes)
   })
 })

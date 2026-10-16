@@ -33,13 +33,24 @@ export interface ToggleSwitchProps {
   label: string
   checked: boolean
   onChange: (checked: boolean) => void
+  disabled?: boolean
 }
 
-export function ToggleSwitch({ label, checked, onChange }: ToggleSwitchProps): React.ReactElement {
+export function ToggleSwitch({
+  label,
+  checked,
+  onChange,
+  disabled,
+}: ToggleSwitchProps): React.ReactElement {
   return (
     <Field.Root className="flex-row items-center justify-between gap-2">
       <Field.Label className="text-sm font-normal text-text-sub">{label}</Field.Label>
-      <Switch.Root checked={checked} onCheckedChange={onChange}>
+      <Switch.Root
+        checked={checked}
+        onCheckedChange={onChange}
+        disabled={disabled}
+        className="data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+      >
         <Switch.Thumb />
       </Switch.Root>
     </Field.Root>

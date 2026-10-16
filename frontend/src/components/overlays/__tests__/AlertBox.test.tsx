@@ -141,4 +141,44 @@ describe('AlertBox', () => {
     feed(alert('a', { image_url: 'https://x/a.gif' }))
     expect(document.querySelector('img')).toHaveAttribute('src', 'https://x/a.gif')
   })
+
+  it('renders custom code in a scripts-only sandbox and posts the alert to it on load', () => {
+    feed(
+      alert('a', {
+        custom_html: '<h1 data-alert-text></h1>',
+        custom_css: 'h1 { color: gold }',
+        custom_js: 'onAlert(function () {})',
+      })
+    )
+    const frame = document.querySelector('iframe')
+    expect(frame).not.toBeNull()
+    // The security contract: exactly this token list (alertSandbox.ts).
+    expect(frame!.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame!.getAttribute('srcdoc')).toContain('<h1 data-alert-text></h1>')
+    // The built-in layout is replaced, but the text stays in the a11y tree.
+    expect(screen.getByRole('status')).toHaveTextContent('text a')
+
+    const post = vi.spyOn(frame!.contentWindow!, 'postMessage')
+    act(() => {
+      frame!.dispatchEvent(new Event('load'))
+    })
+    expect(post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'alert',
+        profile: expect.objectContaining({ text: 'text a' }),
+        event: expect.objectContaining({ alert_id: 'a' }),
+      }),
+      '*'
+    )
+
+    // Timing still belongs to the parent: the frame goes away after duration_ms.
+    act(() => vi.advanceTimersByTime(1000))
+    expect(document.querySelector('iframe')).toBeNull()
+  })
+
+  it('keeps the built-in layout when custom code is blank', () => {
+    feed(alert('a', { custom_html: '  ', custom_css: '', custom_js: '' }))
+    expect(document.querySelector('iframe')).toBeNull()
+    expect(screen.getByRole('status')).toHaveTextContent('text a')
+  })
 })

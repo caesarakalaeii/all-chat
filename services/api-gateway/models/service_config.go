@@ -322,6 +322,16 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		StripPrefix: false,
 	}
 
+	// Media service (ADR-0068): presigned alert-media uploads. Mounts its own
+	// routes under /api/v1/media, so nothing is stripped.
+	registry.Services["media-service"] = &ServiceConfig{
+		Name:        "media-service",
+		BaseURL:     getEnvOrDefault("MEDIA_SERVICE_URL", "http://localhost:8094"),
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/media",
+		StripPrefix: false,
+	}
+
 	// Validate all service URLs are set
 	for name, service := range registry.Services {
 		if service.BaseURL == "" {
