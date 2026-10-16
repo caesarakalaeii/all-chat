@@ -25,7 +25,8 @@
  * output deterministic across machines.
  */
 
-import { DEFAULT_LOCALE, type Locale } from './config'
+import { getActiveLocale } from './active-locale'
+import type { Locale } from './config'
 
 // Constructing an Intl formatter is expensive relative to formatting with one,
 // and code that moves off a module-level constant tends to construct per render.
@@ -56,7 +57,7 @@ function dateTimeFormatter(
   return formatter
 }
 
-export function formatNumber(value: number, locale: Locale = DEFAULT_LOCALE): string {
+export function formatNumber(value: number, locale: Locale = getActiveLocale()): string {
   return numberFormatter(locale).format(value)
 }
 
@@ -69,7 +70,7 @@ const currencyFormatters = new Map<string, Intl.NumberFormat>()
 export function formatCurrency(
   value: number,
   currency: string,
-  locale: Locale = DEFAULT_LOCALE
+  locale: Locale = getActiveLocale()
 ): string {
   const cacheKey = `${locale}|${currency}`
   let formatter = currencyFormatters.get(cacheKey)
@@ -88,7 +89,7 @@ export function formatCurrency(
 export function formatDateTime(
   value: Date | number,
   options: Intl.DateTimeFormatOptions = {},
-  locale: Locale = DEFAULT_LOCALE
+  locale: Locale = getActiveLocale()
 ): string {
   return dateTimeFormatter(locale, options).format(value)
 }

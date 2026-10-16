@@ -216,6 +216,15 @@ func NewServiceRegistry() (*ServiceRegistry, error) {
 		PathPrefix:  "/api/v1/admin/localization",
 		StripPrefix: false,
 	}
+	// UI language picker probe (ADR-0066) → share-service, which gates it with
+	// the ui_languages feature gate.
+	registry.Services["share-service-ui-languages"] = &ServiceConfig{
+		Name:        "share-service-ui-languages",
+		BaseURL:     shareURL,
+		HealthPath:  "/health/live",
+		PathPrefix:  "/api/v1/ui-languages",
+		StripPrefix: false,
+	}
 	// Ambassador routes (ADR-0041) → share-service. One prefix covers the public
 	// list (GET /api/v1/ambassadors) and the self-service showcase
 	// (/api/v1/ambassadors/me/showcase) by longest-prefix match.

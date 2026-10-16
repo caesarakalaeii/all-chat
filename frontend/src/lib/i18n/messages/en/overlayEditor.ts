@@ -498,8 +498,7 @@ export const overlayEditor = {
     channelTitle: 'Connect {platform}',
     owncastBody:
       'An Owncast server streams one channel. Enter its base URL (e.g. https://watch.example.com) and we will follow its chat.',
-    channelBody:
-      "No login step here. Enter the channel name and we'll pull its live chat.",
+    channelBody: "No login step here. Enter the channel name and we'll pull its live chat.",
     owncastPlaceholder: 'https://watch.example.com',
     channelPlaceholder: 'Channel name',
     connectDiscord: 'Connect Discord',
@@ -848,7 +847,8 @@ export const overlayEditor = {
     youtubeMemberGiftsLabel: 'Membership Gifts',
     youtubeMemberGiftsDescription: 'Gifted memberships',
     youtubeSubscribersLabel: 'Subscribers',
-    youtubeSubscribersDescription: 'New public channel subscribers (private subscriptions do not trigger an alert)',
+    youtubeSubscribersDescription:
+      'New public channel subscribers (private subscriptions do not trigger an alert)',
     kickSubsLabel: 'Subscriptions',
     kickSubsDescription: 'Kick channel subscriptions',
     // The render site spelled the ampersand &amp;; a catalog string is not HTML.

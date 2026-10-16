@@ -325,7 +325,7 @@ describe('bubble colours group copy', () => {
     expect(t('overlayEditor.bubbleColors.userColorOpacityNote')).toBe(
       'Applies to flat colours; gradient names fill the bubble opaque. Outline always uses its own 2px width.'
     )
-   })
+  })
 
   it('keeps the palette section copy', () => {
     expect(t('overlayEditor.bubbleColors.paletteHeading')).toBe('Palette')

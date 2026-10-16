@@ -235,6 +235,20 @@ func main() {
 			localizationRoutes.POST("/locales/:code/translations", localizationHandler.SubmitTranslations)
 		}
 
+		// UI language picker probe (ADR-0066). The chosen language lives in the
+		// browser, so there is nothing to serve: the route exists for the gate.
+		// Settings calls it and offers the picker on 200, explains the beta on
+		// 403. Both dimensions are enforced so either can be flipped from the
+		// admin UI: seeded early-access, free (migration 103).
+		uiLanguagesRoutes := api.Group("/ui-languages")
+		uiLanguagesRoutes.Use(
+			middleware.RequireEarlyAccess(dbPool, gateCache, featuregates.GateUILanguages, log),
+			middleware.RequirePremium(dbPool, gateCache, featuregates.GateUILanguages, log),
+		)
+		uiLanguagesRoutes.GET("", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"enabled": true})
+		})
+
 		// Non-premium routes for receivers (accept/reject should not require premium)
 		api.POST("/shares/:id/accept", shareHandler.AcceptRequest)
 		api.POST("/shares/:id/reject", shareHandler.RejectRequest)

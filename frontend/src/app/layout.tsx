@@ -37,6 +37,7 @@ import { JsonLd } from '@/components/JsonLd'
 import CookieBanner from '@/components/CookieBanner'
 import ImpersonationBanner from '@/components/ImpersonationBanner'
 import { SiteFooter } from '@/components/SiteFooter'
+import { LocaleSync } from '@/components/LocaleSync'
 import { ToastProvider } from '@/components/ui/toast'
 import { DEFAULT_LOCALE, getTranslations } from '@/lib/i18n'
 
@@ -145,8 +146,11 @@ const webSiteLd = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
+    // The server always renders DEFAULT_LOCALE; LocaleSync moves `lang` to the
+    // stored UI language after hydration (ADR-0066).
     <html lang={DEFAULT_LOCALE} className={cn(barlow.variable, dmMono.variable)}>
       <body>
+        <LocaleSync />
         {/* Skip link (WCAG 2.4.1): first focusable element on every page;
             visually hidden until keyboard-focused. Pages opt in by giving
             their <main> id="main-content" tabIndex={-1}. */}
