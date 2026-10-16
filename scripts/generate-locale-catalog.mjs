@@ -26,15 +26,18 @@
  *   2. The admin downloads the export:
  *        GET /api/v1/admin/localization/export/<locale>
  *      which returns {"locale": "de", "translations": [{key, value}, ...]}.
- *   3. This script turns that JSON into the shape locale #2 needs
- *      (docs/frontend/I18N.md, "Adding locale #2"):
+ *   3. This script turns that JSON into catalog files
+ *      (docs/frontend/I18N.md, "Adding another locale"):
  *        - frontend/src/lib/i18n/messages/<locale>/  — one file per namespace,
  *          nested the same way the English catalog is, `as const` included;
  *          keys missing from the export stay English (missing keys resolve
  *          at the English fallback, so a partial locale ships safely);
  *        - a printed TODO list of the steps the PR still needs (barrel entry,
- *          SUPPORTED_LOCALES, index mapping) — the script does NOT do them,
+ *          SUPPORTED_LOCALES, catalog loader) — the script does NOT do them,
  *          because each is a one-line edit a reviewer should see in the diff.
+ *
+ *      Each namespace file is overwritten whole, so for a locale that already
+ *      ships (de) a key the export lacks is dropped from the repo, not kept.
  *
  * Usage:
  *   node scripts/generate-locale-catalog.mjs <export.json> [--out <dir>]
@@ -194,10 +197,10 @@ if (skippedKeys.length > 0) {
 }
 console.log('')
 console.log('Remaining steps for the PR (deliberately NOT done by this script):')
-console.log(`  1. Add \`messages/${locale}/index.ts\` composing the generated files`)
-console.log(`     (copy the shape of messages/en/index.ts, import from './${locale}').`)
-console.log('  2. Add the locale to SUPPORTED_LOCALES in src/lib/i18n/config.ts.')
-console.log('  3. Map the locale to its catalog in src/lib/i18n/index.ts.')
+console.log(`  1. Add \`messages/${locale}/index.ts\` composing the generated files into a`)
+console.log(`     \`${locale}Messages: LocaleMessages\` (copy the shape of messages/de/index.ts).`)
+console.log('  2. Add the locale to SUPPORTED_LOCALES and LOCALE_NATIVE_NAMES in src/lib/i18n/config.ts.')
+console.log('  3. Add its loader to catalogLoaders in src/lib/i18n/active-locale.ts.')
 console.log('  4. Run `npx tsc --noEmit` in frontend/ — the typed catalog check')
 console.log('     only becomes total after step 3.')
 console.log('  5. Cover the release steps in CLAUDE.md "Shipping a Feature".')

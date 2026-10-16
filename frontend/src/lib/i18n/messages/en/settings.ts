@@ -32,6 +32,16 @@ export const settings = {
     toastUnfeatured: 'Removed from the homepage showcase',
     toastFailed: 'Failed to update showcase setting',
   },
+  // The UI language card on /settings (ADR-0066). The language names in the
+  // picker are not here: each is written in its own language, from
+  // LOCALE_NATIVE_NAMES in src/lib/i18n/config.ts.
+  language: {
+    heading: 'Language',
+    body: 'Choose the language All-Chat uses in this browser. Public pages and overlays running in OBS stay in English.',
+    selectLabel: 'Interface language',
+    betaNote: 'More languages are in beta testing. Beta testers and ambassadors can pick them now.',
+    checkFailed: 'Could not check which languages you can use. English is always available.',
+  },
   // The /settings landing page: profile, the cards linking to each sub-page, the
   // Discord server and account links, and account deletion.
   index: {

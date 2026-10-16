@@ -32,6 +32,7 @@ import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { toastManager } from '@/lib/toast'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AmbassadorSettingsCard } from '@/components/settings/AmbassadorSettingsCard'
+import { LanguageSettingsCard } from '@/components/settings/LanguageSettingsCard'
 import {
   getGuilds,
   disconnectGuild,
@@ -237,6 +238,8 @@ function SettingsContent() {
             </div>
           </div>
         </div>
+
+        <LanguageSettingsCard />
 
         {/* Setup guide section */}
         <div className="lanes-panel p-6">

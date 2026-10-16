@@ -447,6 +447,31 @@ export function OnboardingChecklist({
                       two in sync per the note above. */}
                   <p className="text-xs text-text-sub">{t('onboarding.extras.streamDeckBody')}</p>
                 </li>
+                <li>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-text">
+                      {t('onboarding.extras.languageTitle')}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        trackEvent('cta_click', {
+                          cta: 'ui_language',
+                          location: 'onboarding-extras',
+                        })
+                        router.push('/settings#language')
+                      }}
+                    >
+                      {t('onboarding.checklist.showMe')}
+                    </Button>
+                  </div>
+                  {/* Not in app/upgrade/page.tsx: that list is the PREMIUM tour, and the
+                      ui_languages gate is seeded free (migration 103, ADR-0066) and only
+                      early-access while the catalogs are machine-translated. The Settings
+                      card explains the beta to everyone else. */}
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.languageBody')}</p>
+                </li>
                 {/* Beta-tester tour entry (ADR-0063). /upgrade does not list
                     it: that page is the PREMIUM tour and the translate tool is
                     gated by role, not by premium. */}

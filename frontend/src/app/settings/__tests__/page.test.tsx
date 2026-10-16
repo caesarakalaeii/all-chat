@@ -70,6 +70,10 @@ vi.mock('@/components/AppNav', () => ({ AppNav: () => null }))
 vi.mock('@/components/settings/AmbassadorSettingsCard', () => ({
   AmbassadorSettingsCard: () => null,
 }))
+// Likewise the language card probes its own feature gate.
+vi.mock('@/components/settings/LanguageSettingsCard', () => ({
+  LanguageSettingsCard: () => null,
+}))
 
 // Both stores are read with selectors, so the mock has to apply the selector to a
 // plain state object rather than return a fixed value.

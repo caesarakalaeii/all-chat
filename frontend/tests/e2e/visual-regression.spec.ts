@@ -259,7 +259,8 @@ test.describe('visual baselines (chrome)', () => {
   })
 
   test('settings', async ({ page }) => {
-    await mockAuthedApi(page)
+    // The language card probes its gate; the open state is the steady one to baseline.
+    await mockAuthedApi(page, { '**/api/v1/ui-languages': { enabled: true } })
     await page.goto('/settings')
     await expectBaseline(
       page,

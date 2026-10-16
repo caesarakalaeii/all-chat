@@ -175,8 +175,10 @@ node scripts/generate-locale-catalog.mjs localization-export-de.json --out /tmp/
 **Output**: `messages/<locale>/<namespace>.ts` files in the English catalog's
 shape (nested, `as const`), only for namespaces that have translations. Keys
 absent from the export stay English at runtime. The script prints the
-remaining PR wiring steps (barrel, `SUPPORTED_LOCALES`, index mapping) — it
+remaining PR wiring steps (barrel, `SUPPORTED_LOCALES`, catalog loader) — it
 does not do them, and it never writes to the repo without you running it.
+Each namespace file is overwritten whole: for a locale already in the repo
+(German), keys the export lacks are dropped, so merge rather than regenerate.
 
 **Requirements**: Node.js 22+ (no npm packages)
 

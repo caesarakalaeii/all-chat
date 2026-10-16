@@ -120,7 +120,7 @@ Each service has a detailed README:
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
-- share-service — Shareable overlay links; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041); localization contributor tool `/translate` + admin review/export (ADR-0063) (`services/share-service/`, no README yet)
+- share-service — Shareable overlay links; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041); localization contributor tool `/translate` + admin review/export (ADR-0063); UI language gate probe `GET /api/v1/ui-languages` (ADR-0066) (`services/share-service/`, no README yet)
 - [moderation-service](./services/moderation-service/README.md) - Cross-platform chat moderation write-path (delete/timeout/ban, ADR-0017)
 - [payment-service](./services/payment-service/README.md) - Patreon premium entitlements; writes users.is_premium (streamer, ADR-0018) + viewers.is_premium (viewer split, ADR-0019)
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
@@ -134,7 +134,7 @@ Each service has a detailed README:
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Pull request process, code review guidelines
 - [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
 - [Accessibility](./docs/ACCESSIBILITY.md) - WCAG 2.2 AA scope, CI gates (shrink-only ratchets), contracts for new UI code
-- [Frontend i18n](./docs/frontend/I18N.md) - the UI string catalog: how to add a string, placeholder syntax, why there is no provider and no locale in the URL
+- [Frontend i18n](./docs/frontend/I18N.md) - the UI string catalog (English, German): how to add a string, placeholder syntax, how a locale is chosen and what stays English, why there is no provider and no locale in the URL
 - [Agent UI verification](./docs/frontend/AGENT_UI_VERIFICATION.md) - the screenshot ritual and pixel-baseline gate every UI change must pass before "done"; [Onlook pilot](./docs/frontend/ONLOOK_PILOT.md) for visual editing
 - [Design System](./frontend/DESIGN_SYSTEM.md) - shadcn primitives, design tokens, and the CI gates that keep the UI consistent (ADR-0056). Agents: use the `shadcn-ui` skill
 

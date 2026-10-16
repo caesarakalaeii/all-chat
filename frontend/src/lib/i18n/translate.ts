@@ -52,6 +52,29 @@ export type MessageParams = Record<string, string | number>
  */
 export type TFunction = (key: MessageKey, params?: MessageParams) => string
 
+/**
+ * Another locale's copy of a catalog subtree: the English shape with every leaf
+ * widened to `string`. Annotating a namespace object with it turns a missing or
+ * an extra key into a compile error.
+ */
+export type LocaleShape<T> = {
+  readonly [K in keyof T]: T[K] extends string ? string : LocaleShape<T[K]>
+}
+
+/** A complete translation of one English namespace. */
+export type LocaleNamespace<N extends keyof EnMessages> = LocaleShape<EnMessages[N]>
+
+type PartialLocaleShape<T> = {
+  readonly [K in keyof T]?: T[K] extends string ? string : PartialLocaleShape<T[K]>
+}
+
+/**
+ * A whole non-English catalog. Partial at every level: a namespace or key it
+ * lacks resolves to English (see translateWithFallback), which is what lets
+ * scripts/generate-locale-catalog.mjs emit only the keys a reviewer approved.
+ */
+export type LocaleMessages = PartialLocaleShape<EnMessages>
+
 const PLACEHOLDER = /\{(\w+)\}/g
 
 // Warnings are for developers, and a production overlay must not spend work on
@@ -62,15 +85,34 @@ function warnInDevelopment(message: string): void {
   }
 }
 
-function lookup(messages: MessageCatalog, key: string): string | undefined {
-  let node: string | MessageCatalog = messages
+function lookup(messages: object, key: string): string | undefined {
+  let node: unknown = messages
   for (const segment of key.split('.')) {
-    if (typeof node === 'string') return undefined
-    const next: string | MessageCatalog | undefined = node[segment]
-    if (next === undefined) return undefined
-    node = next
+    if (typeof node !== 'object' || node === null) return undefined
+    node = (node as Record<string, unknown>)[segment]
   }
   return typeof node === 'string' ? node : undefined
+}
+
+function resolve(catalogs: readonly object[], key: string, params?: MessageParams): string {
+  let template: string | undefined
+  for (const catalog of catalogs) {
+    template = lookup(catalog, key)
+    if (template !== undefined) break
+  }
+  if (template === undefined) {
+    warnInDevelopment(`[i18n] Missing message for key "${key}"`)
+    return key
+  }
+
+  return template.replace(PLACEHOLDER, (placeholder, name: string) => {
+    const value = params?.[name]
+    if (value === undefined) {
+      warnInDevelopment(`[i18n] Missing param "${name}" for key "${key}"`)
+      return placeholder
+    }
+    return String(value)
+  })
 }
 
 /**
@@ -86,18 +128,19 @@ export function translate<T extends MessageCatalog>(
   key: MessageKeyOf<T>,
   params?: MessageParams
 ): string {
-  const template = lookup(messages, key)
-  if (template === undefined) {
-    warnInDevelopment(`[i18n] Missing message for key "${key}"`)
-    return key
-  }
+  return resolve([messages], key, params)
+}
 
-  return template.replace(PLACEHOLDER, (placeholder, name: string) => {
-    const value = params?.[name]
-    if (value === undefined) {
-      warnInDevelopment(`[i18n] Missing param "${name}" for key "${key}"`)
-      return placeholder
-    }
-    return String(value)
-  })
+/**
+ * As translate, but a key `messages` lacks resolves from `fallback` before it
+ * degrades to the key string: a partially translated locale shows English for
+ * the gaps, never a raw key.
+ */
+export function translateWithFallback(
+  messages: LocaleMessages,
+  fallback: EnMessages,
+  key: MessageKey,
+  params?: MessageParams
+): string {
+  return resolve([messages, fallback], key, params)
 }

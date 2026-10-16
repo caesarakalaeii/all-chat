@@ -728,6 +728,14 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Impact**: Unlisted streams work for free; members-only chat works for premium streamers; quota is spent only on opted-in channels. The listener runs as `youtube-listener-official`, deployed via caesar-deployment #147 (2026-10-10).
 **→ Read**: [0065-premium-official-youtube-api-listener.md](./0065-premium-official-youtube-api-listener.md)
 
+### ADR-0066: German as a second UI language, chosen per browser and applied after hydration
+
+**Status**: Proposed (2026-10-15)
+**Problem**: ADR-0055 deferred how a second locale is chosen. Locale may not enter the URL, a request-time read would make every static page dynamic, and the frontend has no React Context.
+**Decision**: The choice is stored in the browser (`localStorage.allchat_locale`) and applied after hydration by `LocaleSync` in the root layout; the active locale is a module singleton that `useTranslations()` subscribes to via `useSyncExternalStore`. Non-English catalogs load on demand and fall back to English per key. German covers every namespace except `legal`. A Settings card offers the picker, gated by `ui_languages` (migration 103, early access first, free).
+**Impact**: No URL, middleware or static-rendering change. Server-rendered pages stay English, and overlays in OBS stay English unless chosen there.
+**→ Read**: [0066-client-side-ui-locale-selection.md](./0066-client-side-ui-locale-selection.md)
+
 ---
 
 
@@ -861,8 +869,8 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Last Updated**: 2026-10-10
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim)
+**Last Updated**: 2026-10-15
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection)
 
 **Most Referenced**:
 
