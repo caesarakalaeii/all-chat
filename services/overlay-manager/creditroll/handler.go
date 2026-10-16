@@ -72,13 +72,17 @@ func validateStartedAt(t time.Time) error {
 	return nil
 }
 
-// calculateSessionDuration safely calculates duration with bounds checking
-func calculateSessionDuration(startedAt time.Time) int {
+// calculateSessionDuration safely calculates duration with bounds checking.
+// A zero endedAt means the session is still live and is measured to now.
+func calculateSessionDuration(startedAt, endedAt time.Time) int {
 	if startedAt.IsZero() {
 		return 0
 	}
 
-	duration := time.Since(startedAt)
+	if endedAt.IsZero() {
+		endedAt = time.Now()
+	}
+	duration := endedAt.Sub(startedAt)
 
 	// Sanity checks
 	if duration < 0 {
@@ -309,7 +313,7 @@ func (h *Handler) HandleGetCreditRoll(c *gin.Context) {
 		OverlayID:              overlayID,
 		SessionID:              session.SessionID,
 		SessionStartedAt:       session.StartedAt,
-		SessionDurationSeconds: calculateSessionDuration(session.StartedAt),
+		SessionDurationSeconds: calculateSessionDuration(session.StartedAt, session.EndedAt),
 		Leaderboards:           *leaderboards,
 		Clips:                  clips,
 		ClipsIsFallback:        clipsIsFallback,

@@ -297,3 +297,141 @@ func (h *releaseTestHook) ProcessPipelineHook(next redis.ProcessPipelineHook) re
 		return next(ctx, cmds)
 	}
 }
+
+// newPodSessionManager builds a SessionManager acting as one gateway pod; tests
+// pass the same client to several of them to model a multi-replica gateway.
+func newPodSessionManager(client *redis.Client, podID string) *SessionManager {
+	sm := NewSessionManager(client, nil, zap.NewNop(), 15*time.Minute)
+	sm.podID = podID
+	return sm
+}
+
+// TestSession_SurvivesGraceExpiryWhileAnotherPodHoldsTheOverlay is the
+// regression test for credits showing 2h48 on a 4h18 stream: the OBS overlay
+// stayed connected to pod A while a second tab on pod B closed, and pod B's
+// grace timer ended the shared session, so the next connect started a fresh one.
+func TestSession_SurvivesGraceExpiryWhileAnotherPodHoldsTheOverlay(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	ctx := context.Background()
+	podA, podB := newPodSessionManager(client, "pod-a"), newPodSessionManager(client, "pod-b")
+	key := SessionKeyPrefix + "ov"
+
+	podA.AddHolder(ctx, "ov")
+	if err := podA.EnsureSession(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	podB.AddHolder(ctx, "ov")
+	sessionID := mr.HGet(key, "session_id")
+
+	podB.RemoveHolder(ctx, "ov")
+	if err := podB.StartGracePeriod(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	if state := mr.HGet(key, "state"); state != "ACTIVE" {
+		t.Fatalf("pod A still serves the overlay, state must stay ACTIVE, got %q", state)
+	}
+	if err := podB.EndSessionIfIdle(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	if got := mr.HGet(key, "session_id"); got != sessionID {
+		t.Fatalf("session must survive while pod A holds the overlay, got %q want %q", got, sessionID)
+	}
+}
+
+func TestEndSessionIfIdle_EndsWhenNoPodHoldsTheOverlay(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	ctx := context.Background()
+	pod := newPodSessionManager(client, "pod-a")
+
+	pod.AddHolder(ctx, "ov")
+	if err := pod.EnsureSession(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	pod.RemoveHolder(ctx, "ov")
+	if err := pod.EndSessionIfIdle(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	if mr.Exists(SessionKeyPrefix + "ov") {
+		t.Fatal("session must end once no pod holds the overlay")
+	}
+}
+
+// A pod killed without running RemoveHolder leaves its entry behind; once its
+// heartbeat is older than holderStaleAfter it must not keep the session alive.
+func TestEndSessionIfIdle_IgnoresStaleHolderOfCrashedPod(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	ctx := context.Background()
+	pod := newPodSessionManager(client, "pod-a")
+
+	if err := pod.EnsureSession(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	stale := float64(time.Now().Add(-holderStaleAfter - time.Minute).Unix())
+	if _, err := mr.ZAdd(holdersKeyPrefix+"ov", stale, "crashed-pod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := pod.EndSessionIfIdle(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	if mr.Exists(SessionKeyPrefix + "ov") {
+		t.Fatal("a stale holder must not keep the session alive")
+	}
+}
+
+func TestEnsureSession_ResumesSessionWithinEndGrace(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	ctx := context.Background()
+	pod := newPodSessionManager(client, "pod-a")
+	key := SessionKeyPrefix + "ov"
+
+	if err := pod.EnsureSession(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	sessionID := mr.HGet(key, "session_id")
+	mr.HSet(key, "state", "ENDING")
+	mr.HSet(key, "ending_at", time.Now().UTC().Add(-time.Minute).Format(time.RFC3339))
+
+	if err := pod.EnsureSession(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	if got := mr.HGet(key, "session_id"); got != sessionID {
+		t.Fatalf("reconnect within the end grace must resume the session, got %q want %q", got, sessionID)
+	}
+	if state := mr.HGet(key, "state"); state != "ACTIVE" {
+		t.Fatalf("resumed session must be ACTIVE, got %q", state)
+	}
+}
+
+// A pod that dies during its end-grace window never fires the timer, so the
+// ENDING hash lingers; the next connect must not stretch that old session
+// into a new stream.
+func TestEnsureSession_StartsFreshSessionAfterEndGraceElapsed(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer client.Close()
+	ctx := context.Background()
+	pod := newPodSessionManager(client, "pod-a")
+	key := SessionKeyPrefix + "ov"
+
+	if err := pod.EnsureSession(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	sessionID := mr.HGet(key, "session_id")
+	mr.HSet(key, "state", "ENDING")
+	mr.HSet(key, "ending_at", time.Now().UTC().Add(-time.Hour).Format(time.RFC3339))
+
+	if err := pod.EnsureSession(ctx, "ov"); err != nil {
+		t.Fatal(err)
+	}
+	if got := mr.HGet(key, "session_id"); got == "" || got == sessionID {
+		t.Fatalf("expired ENDING session must be replaced by a fresh one, got %q", got)
+	}
+}

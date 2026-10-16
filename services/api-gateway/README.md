@@ -50,6 +50,14 @@ that is being actively watched, regardless of which listener owns it. This is th
 primary fix for the 24h Twitch-chat dropout — see ADR-0032. The write is `updated_at`
 -only, so it does not fire the `chat_source_changes` NOTIFY trigger (migration 059).
 
+### Stream sessions (credit roll)
+
+The first connect creates the `session:active:{id}` hash the credit roll measures
+and the message processor captures leaderboard events under. Every pod holding an
+overlay registers in `session:holders:{id}` (refreshed by the heartbeat), and the
+session ends only after `SESSION_END_GRACE_SECONDS` with no holder on any pod, so
+a stream keeps one session across tabs, replicas and short drops. See ADR-0068.
+
 ## Environment Variables
 
 ### Required
@@ -73,6 +81,9 @@ LOG_LEVEL=info                          # debug, info, warn, error
 
 # CORS configuration
 CORS_ORIGIN=http://localhost:3000       # Allowed origins (comma-separated or *)
+
+# Sessions
+SESSION_END_GRACE_SECONDS=900           # End the credit-roll session after this long with no connection
 ```
 
 ## API Routes
