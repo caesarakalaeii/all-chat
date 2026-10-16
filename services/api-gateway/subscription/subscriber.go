@@ -52,6 +52,9 @@ type Subscriber struct {
 	// viewerOnly tracks whether each subscription was created by SubscribeViewerOnly
 	// (single main channel) vs Subscribe (main + updates channels)
 	viewerOnly map[string]bool
+	// alerts tracks which subscriptions also listen on overlay:{id}:alerts
+	// (alerts/goal/list overlays, ADR-0069).
+	alerts map[string]bool
 	// lingerTimers holds pending deferred-close timers. A non-nil entry means
 	// refCount is 0 but the subscription is intentionally kept alive to capture
 	// messages for the chat replay buffer during a connection gap.
@@ -90,6 +93,7 @@ func NewSubscriber(client *redis.Client, logger *zap.Logger, handler MessageHand
 		subscriptions:  make(map[string]*redis.PubSub),
 		refCounts:      make(map[string]int),
 		viewerOnly:     make(map[string]bool),
+		alerts:         make(map[string]bool),
 		lingerTimers:   make(map[string]*time.Timer),
 		lingerDuration: linger,
 		stopChan:       make(chan struct{}),
@@ -172,11 +176,33 @@ func (s *Subscriber) closeSubscriptionLocked(overlayID string) {
 	}
 	delete(s.subscriptions, overlayID)
 	delete(s.viewerOnly, overlayID)
+	delete(s.alerts, overlayID)
 }
 
-// Subscribe subscribes to an overlay channel
+// channelsFor lists the Redis channels one overlay subscription listens on:
+//   - overlay:{id}: chat messages and events
+//   - overlay:{id}:updates: TikTok like aggregate updates (not for viewer-only)
+//   - overlay:{id}:poll, overlay:{id}:prediction: engagement snapshots (#523),
+//     which reach both OBS overlays and viewers
+//   - overlay:{id}:alerts: alert-processor deliveries, only for
+//     alerts/goal/list overlays (ADR-0069)
+func channelsFor(overlayID string, viewerOnly, withAlerts bool) []string {
+	base := "overlay:" + overlayID
+	channels := []string{base}
+	if !viewerOnly {
+		channels = append(channels, base+":updates")
+	}
+	channels = append(channels, base+":poll", base+":prediction")
+	if withAlerts {
+		channels = append(channels, base+":alerts")
+	}
+	return channels
+}
+
+// Subscribe subscribes to an overlay's channels (see channelsFor); withAlerts
+// adds overlay:{id}:alerts for alerts/goal/list overlays.
 // Increments reference count, only subscribes on first connection
-func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
+func (s *Subscriber) Subscribe(ctx context.Context, overlayID string, withAlerts bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -188,8 +214,15 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 	// fast path: no Pub/Sub re-subscribe, no message loss between drops.
 	s.cancelLingerLocked(overlayID)
 
-	// If already subscribed, just return
-	if _, exists := s.subscriptions[overlayID]; exists {
+	// If already subscribed, just return — after adding the alerts channel
+	// when a viewer-only socket created the subscription without it.
+	if existing, exists := s.subscriptions[overlayID]; exists {
+		if withAlerts && !s.alerts[overlayID] {
+			if err := existing.Subscribe(ctx, "overlay:"+overlayID+":alerts"); err != nil {
+				return fmt.Errorf("failed to subscribe to alerts channel: %w", err)
+			}
+			s.alerts[overlayID] = true
+		}
 		s.logger.Debug("Already subscribed to overlay",
 			zap.String("overlay_id", overlayID),
 			zap.Int("ref_count", s.refCounts[overlayID]),
@@ -197,15 +230,8 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 		return nil
 	}
 
-	// Subscribe to both main and update channels
-	// Main channel: regular chat messages and events
-	// Update channel: TikTok like aggregate updates
-	mainChannel := fmt.Sprintf("overlay:%s", overlayID)
-	updateChannel := fmt.Sprintf("overlay:%s:updates", overlayID)
-	// Engagement snapshots (issue #523): aggregate poll/prediction state.
-	pollChannel := fmt.Sprintf("overlay:%s:poll", overlayID)
-	predictionChannel := fmt.Sprintf("overlay:%s:prediction", overlayID)
-	pubsub := s.client.Subscribe(ctx, mainChannel, updateChannel, pollChannel, predictionChannel)
+	channels := channelsFor(overlayID, false, withAlerts)
+	pubsub := s.client.Subscribe(ctx, channels...)
 
 	// Verify subscription
 	if _, err := pubsub.Receive(ctx); err != nil {
@@ -214,11 +240,11 @@ func (s *Subscriber) Subscribe(ctx context.Context, overlayID string) error {
 
 	s.subscriptions[overlayID] = pubsub
 	s.viewerOnly[overlayID] = false
+	s.alerts[overlayID] = withAlerts
 
 	s.logger.Info("Subscribed to overlay channels",
 		zap.String("overlay_id", overlayID),
-		zap.String("main_channel", mainChannel),
-		zap.String("update_channel", updateChannel),
+		zap.Strings("channels", channels),
 	)
 
 	// Start listening for messages
@@ -350,22 +376,8 @@ func (s *Subscriber) resubscribe(overlayID string) {
 			}
 		}
 
-		// Determine whether this was a viewer-only subscription (main channel only)
-		// or a full subscription (main + updates channels).
-		isViewerOnly := s.viewerOnly[overlayID]
-
-		var pubsub *redis.PubSub
-		// Engagement snapshots (issue #523) reach both OBS overlays and viewers.
-		pollChannel := fmt.Sprintf("overlay:%s:poll", overlayID)
-		predictionChannel := fmt.Sprintf("overlay:%s:prediction", overlayID)
-		if isViewerOnly {
-			channel := fmt.Sprintf("overlay:%s", overlayID)
-			pubsub = s.client.Subscribe(context.Background(), channel, pollChannel, predictionChannel)
-		} else {
-			mainChannel := fmt.Sprintf("overlay:%s", overlayID)
-			updateChannel := fmt.Sprintf("overlay:%s:updates", overlayID)
-			pubsub = s.client.Subscribe(context.Background(), mainChannel, updateChannel, pollChannel, predictionChannel)
-		}
+		pubsub := s.client.Subscribe(context.Background(),
+			channelsFor(overlayID, s.viewerOnly[overlayID], s.alerts[overlayID])...)
 
 		if _, err := pubsub.Receive(context.Background()); err != nil {
 			pubsub.Close()
@@ -426,6 +438,7 @@ func (s *Subscriber) Stop() {
 	s.subscriptions = make(map[string]*redis.PubSub)
 	s.refCounts = make(map[string]int)
 	s.viewerOnly = make(map[string]bool)
+	s.alerts = make(map[string]bool)
 	s.mu.Unlock()
 
 	s.wg.Wait()
@@ -478,12 +491,8 @@ func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) 
 		return nil
 	}
 
-	// Subscribe to Redis channel (viewer-only: main channel, plus engagement
-	// snapshots so viewers see live poll/prediction state; no TikTok updates channel).
-	channel := fmt.Sprintf("overlay:%s", overlayID)
-	pollChannel := fmt.Sprintf("overlay:%s:poll", overlayID)
-	predictionChannel := fmt.Sprintf("overlay:%s:prediction", overlayID)
-	pubsub := s.client.Subscribe(ctx, channel, pollChannel, predictionChannel)
+	// Viewer-only: no TikTok updates channel, no alerts.
+	pubsub := s.client.Subscribe(ctx, channelsFor(overlayID, true, false)...)
 
 	// Verify subscription
 	if _, err := pubsub.Receive(ctx); err != nil {
@@ -495,7 +504,6 @@ func (s *Subscriber) SubscribeViewerOnly(ctx context.Context, overlayID string) 
 
 	s.logger.Info("Subscribed to overlay channel (viewer-only, no polling trigger)",
 		zap.String("overlay_id", overlayID),
-		zap.String("channel", channel),
 	)
 
 	// Start listening for messages

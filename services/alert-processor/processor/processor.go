@@ -94,6 +94,7 @@ func (p *Processor) Handle(ctx context.Context, raw *mpmodels.RawChatMessage) er
 			EventType:  raw.EventType,
 			EventData:  info,
 			User:       models.AlertUserFrom(user),
+			Message:    raw.Text,
 			OccurredAt: raw.Timestamp,
 		}
 		metrics.RecordRouted(raw.Platform, raw.EventType)

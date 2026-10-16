@@ -297,7 +297,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	}
 
 	// Check if overlay is active
-	isActive, err := h.repo.IsOverlayActive(ctx, overlayID)
+	isActive, overlayType, err := h.repo.OverlayStatus(ctx, overlayID)
 	if err != nil {
 		h.logger.Error("Failed to check overlay status",
 			zap.String("overlay_id", overlayID),
@@ -350,9 +350,10 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 		)
 	}
 
-	// Subscribe to overlay's Redis Pub/Sub channel
+	// Subscribe to overlay's Redis Pub/Sub channels; alerts/goal/list overlays
+	// also get overlay:{id}:alerts (ADR-0069).
 	// Use background context - subscription must outlive the HTTP request
-	if err := h.subscriber.Subscribe(context.Background(), overlayID); err != nil {
+	if err := h.subscriber.Subscribe(context.Background(), overlayID, overlayType != "chat"); err != nil {
 		h.logger.Error("Failed to subscribe to overlay channel",
 			zap.String("overlay_id", overlayID),
 			zap.Error(err),

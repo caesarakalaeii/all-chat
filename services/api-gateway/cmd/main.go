@@ -261,8 +261,26 @@ func main() {
 	healthChecker.Start()
 	defer healthChecker.Stop()
 
+	// Create repository for overlay verification and alert profiles
+	subRepo := subscription.NewRepository(db)
+
 	// Create Redis Pub/Sub subscriber with message handler
 	messageHandler := func(overlayID string, channel string, message []byte) {
+		// Alerts (ADR-0069) are their own path: resolved against the overlay's
+		// alert profile, broadcast to every non-engagement socket, and never
+		// buffered for replay — a reconnecting overlay must not replay old
+		// alerts; the dashboard test button is the recovery path.
+		if strings.HasSuffix(channel, ":alerts") {
+			frame, err := buildAlertFrame(context.Background(), overlayID, message, subRepo.AlertProfile, time.Now().UTC())
+			if err != nil {
+				log.Warn("Alert frame built with errors", zap.String("overlay_id", overlayID), zap.Error(err))
+			}
+			if frame != nil {
+				wsManager.BroadcastToOverlayFiltered(overlayID, frame, wsconn.BroadcastFilter{})
+			}
+			return
+		}
+
 		// Determine message type based on channel
 		// Main channel: overlay:{id} -> regular messages/events
 		// Update channel: overlay:{id}:updates -> TikTok like aggregate updates
@@ -399,9 +417,6 @@ func main() {
 
 	subscriber := subscription.NewSubscriber(redisClient, log, messageHandler, gatewayMetrics)
 	defer subscriber.Stop()
-
-	// Create repository for overlay verification
-	subRepo := subscription.NewRepository(db)
 
 	// Create status subscriber for platform connection status
 	statusSubscriber := subscription.NewStatusSubscriber(redisClient, wsManager, log, gatewayMetrics)
@@ -794,6 +809,9 @@ func main() {
 		protectedAPI.DELETE("/overlays/:id/sources/:source_id", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/event-settings", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/overlays/:id/event-settings", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/overlays/:id/alerts/profiles", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/overlays/:id/alerts/profiles", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/overlays/:id/alerts/test", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/creditroll", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/overlays/:id/creditroll", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/overlays/:id/credit-roll", proxyHandler.ForwardRequest)

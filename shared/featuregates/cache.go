@@ -131,6 +131,12 @@ const (
 	// probe at GET /api/v1/ui-languages; the stored choice itself lives in the
 	// browser, so the gate controls who can pick a language, not what renders.
 	GateUILanguages = "ui_languages"
+
+	// GateAlertsEditor is the feature key for saving alert profiles on an alerts
+	// overlay (PUT /overlays/:id/alerts/profiles, ADR-0069). Seeded is_premium=TRUE
+	// (migration 107). Only the write is gated: reading profiles, the built-in
+	// defaults and the test-alert button stay free.
+	GateAlertsEditor = "alerts_editor"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate
