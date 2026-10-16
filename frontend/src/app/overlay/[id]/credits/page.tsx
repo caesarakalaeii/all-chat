@@ -98,7 +98,6 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     const loadCreditRoll = async () => {
       try {
-        // Load config
         const configResponse = await fetch(`/api/v1/overlays/public/${id}/creditroll`)
         if (configResponse.ok) {
           const configData = await configResponse.json()
@@ -106,7 +105,6 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           setCustomCss(configData.custom_css || '')
         }
 
-        // Load credit roll data
         const dataResponse = await fetch(`/api/v1/overlays/public/${id}/credit-roll`)
         if (!dataResponse.ok) {
           const errorData = await dataResponse.json()
@@ -115,6 +113,8 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
         const data = await dataResponse.json()
         setCreditData(data)
+        setCurrentClipIndex(0)
+        setError(null)
       } catch (err) {
         console.error('Failed to load credit roll:', err)
         setError(err instanceof Error ? err.message : t('viewerOverlay.credits.loadFailed'))
@@ -123,7 +123,16 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       }
     }
 
+    // OBS loads a browser source when OBS starts, not when its scene goes live,
+    // so a roll fetched once would show the stream's start state and ignore any
+    // settings saved since. Re-fetch each time the source becomes active.
+    const onActiveChanged = (e: Event) => {
+      if ((e as CustomEvent<{ active?: boolean }>).detail?.active) loadCreditRoll()
+    }
+
     loadCreditRoll()
+    window.addEventListener('obsSourceActiveChanged', onActiveChanged)
+    return () => window.removeEventListener('obsSourceActiveChanged', onActiveChanged)
   }, [id, t])
 
   // Initialize Twitch Player when clip changes
@@ -152,28 +161,31 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       muted: config?.clips_muted ?? true,
     }
 
+    // ENDED and the fallback timer can both fire for one clip; advancing twice
+    // skipped every other clip. Whichever fires first wins.
+    let advanced = false
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined
+    const advance = () => {
+      if (advanced) return
+      advanced = true
+      setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length)
+    }
+
     try {
       playerRef.current = new window.Twitch.Embed(playerContainerRef.current, options)
 
-      // Listen for player ready event
       playerRef.current.addEventListener(window.Twitch.Embed.VIDEO_READY, () => {
         const player = playerRef.current.getPlayer()
-
-        // Auto-advance when clip ends
-        player.addEventListener(window.Twitch.Player.ENDED, () => {
-          setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length)
-        })
-
-        // Fallback timer in case ENDED event doesn't fire
-        const duration = (currentClip.duration || 30) * 1000 + 3000
-        setTimeout(() => {
-          if (playerRef.current) {
-            setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length)
-          }
-        }, duration)
+        player.addEventListener(window.Twitch.Player.ENDED, advance)
+        fallbackTimer = setTimeout(advance, (currentClip.duration || 30) * 1000 + 3000)
       })
     } catch (err) {
       console.error('Failed to initialize Twitch player:', err)
+    }
+
+    return () => {
+      advanced = true
+      if (fallbackTimer) clearTimeout(fallbackTimer)
     }
   }, [twitchReady, creditData, currentClipIndex, config?.clips_muted])
 
@@ -270,7 +282,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
   }
 
   const theme = config?.theme || 'cinematic'
-  const bgOpacity = config?.background_opacity || 0.8
+  const bgOpacity = config?.background_opacity ?? 0.8
 
   const currentClip = creditData?.clips?.[currentClipIndex]
 
@@ -298,7 +310,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           <div
             className="absolute inset-0 z-10"
             style={{
-              background: `linear-gradient(to bottom, rgba(0, 0, 0, ${bgOpacity * 0.7}), rgba(0, 0, 0, ${bgOpacity * 0.5}))`,
+              background: `linear-gradient(to bottom, rgba(0, 0, 0, ${bgOpacity}), rgba(0, 0, 0, ${bgOpacity * 0.85}))`,
               pointerEvents: 'none',
             }}
           />
@@ -313,7 +325,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
               ? theme === 'cinematic'
                 ? `linear-gradient(to bottom, rgba(17, 24, 39, ${bgOpacity}), rgba(0, 0, 0, ${bgOpacity}))`
                 : theme === 'modern'
-                  ? `linear-gradient(135deg, rgba(99, 102, 241, ${bgOpacity * 0.3}), rgba(139, 92, 246, ${bgOpacity * 0.3}))`
+                  ? `linear-gradient(135deg, rgba(99, 102, 241, ${bgOpacity}), rgba(139, 92, 246, ${bgOpacity}))`
                   : `rgba(17, 24, 39, ${bgOpacity})`
               : 'transparent',
         }}
