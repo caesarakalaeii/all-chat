@@ -72,6 +72,8 @@ https://allch.at/overlay/YOUR_OVERLAY_ID/view?dock=1
 
 In OBS, open **View > Docks > Custom Browser Docks**, give the dock a name, paste the link and click **Apply**. The dock keeps its own browser profile, so it asks you to sign in once inside the panel. Streamlabs Desktop accepts the same link as a custom browser dock.
 
+The dock shows Chat and Activity as tabs. To see both at once, pick **Both**, which stacks chat above activity in the one dock. Or add two docks, ending one link in `?dock=chat` and the other in `?dock=activity`; each shows only that panel.
+
 **One account, several overlays.** Each overlay has its own mix of chat sources, its own theme, its own OBS URL and its own monitor. For example, one overlay for Twitch and TikTok on a gaming stream and a YouTube-only one for a podcast.
 
 **Your moderators can use it too.** Under **Moderators** in the overlay editor you can invite the

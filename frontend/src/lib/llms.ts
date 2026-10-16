@@ -158,6 +158,8 @@ const SETUP = `## Set up an overlay in OBS
 
 Streamlabs custom browser docks take the same URL and the same steps. Without ?dock=1, ${MONITOR_URL} opens the full-width monitor in a browser tab.
 
+The dock shows Chat and Activity as tabs; the Both tab stacks chat above activity in one dock. For two separate docks, end one link in ?dock=chat and the other in ?dock=activity: each shows only that panel, with no tabs.
+
 ## 24/7 and IRL streams
 
 For an OBS instance that runs around the clock, add ?passive=true to the Browser Source URL. A passive overlay shows chat like a normal one but does not start YouTube capture on its own, so YouTube discovery cannot time out while you are offline. When you go live, open the chat monitor and press Rediscover if chat is not flowing yet. Capture keeps running while the monitor stays open.
