@@ -794,10 +794,11 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     themeClassic: 'Klassisch',
     themeCinematic: 'Cinematisch',
     themeModern: 'Modern',
-    scrollSpeedLabel: 'Scroll-Geschwindigkeit (1-100)',
+    scrollSpeedLabel: 'Scroll-Geschwindigkeit (Pixel pro Sekunde, 1-100)',
     currentValue: 'Aktuell: {value}',
     durationLabel: 'Anzeigedauer (Sekunden)',
-    durationHint: 'Wie lange der Abspann gezeigt wird (10-300 Sekunden)',
+    durationHint:
+      'Wie lange der Abspann läuft, bevor er von vorn beginnt (10-300 Sekunden). Ein längerer Abspann scrollt erst bis zum Ende.',
     opacityLabel: 'Hintergrund-Deckkraft (0-1)',
     clipsHeading: 'Twitch Clips',
     clipsHint: 'Zeigt Clips während des Abspanns',
@@ -805,7 +806,8 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     fallbackDaysLabel: 'Fallback-Tage',
     fallbackDaysHint: 'Wenn keine Clips von diesem Stream da sind, Clips der letzten N Tage zeigen',
     muteClipsLabel: 'Clip-Audio stummschalten',
-    muteClipsHint: 'Für Browser-Autoplay nötig. Das Aufheben kann eine Nutzeraktion erfordern.',
+    muteClipsHint:
+      'Ausschalten, um den Clip-Ton in OBS abzuspielen. Ein normaler Browser-Tab spielt Clips weiter stumm ab.',
     cssHeading: 'Benutzerdefinierter CSS-Editor',
     cssEnable: 'Benutzerdefiniertes CSS aktivieren',
     cssBrowseThemes: 'Themes durchsuchen',
