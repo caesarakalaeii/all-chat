@@ -142,6 +142,8 @@ Body: {
 # (migration 108), goal_overlay (110), list_overlay (111):
 # 403 {"error":"Premium required","feature":"<gate>"}. Cloning checks the same
 # gate. Existing overlays of those kinds keep working when premium lapses.
+# The frontend offers these kinds on beta.allch.at only for now
+# (frontend/src/lib/platform-availability.ts); the API accepts them on any host.
 
 # List user's overlays
 GET /api/v1/overlays
