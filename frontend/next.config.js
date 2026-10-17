@@ -90,7 +90,7 @@ const nextConfig = {
       "font-src 'self' data:",
       // frame-src governs which iframes a page may embed. It MUST list 'self' (the
       // editor's same-origin /overlays/:id/preview/embed iframe) plus Twitch's
-      // clip embed, which the credits route plays clips through (audit #3) —
+      // clip embed, the credits route's fallback player (audit #3, ADR-0076) —
       // once frame-src is specified it replaces the default-src 'self' fallback
       // for frames.
       "frame-src 'self' https://clips.twitch.tv",

@@ -28,7 +28,8 @@
  * - Leaderboard categories
  * - User avatars and platform badges
  * - Configurable styling
- * - Twitch clips playing full-screen behind the roll, one after another
+ * - Twitch clips playing full-screen behind the roll, one after another, with
+ *   sound in OBS unless muted (ADR-0076)
  *
  * This is a Client Component for animation and dynamic rendering.
  */
@@ -36,11 +37,12 @@
 'use client'
 
 import Image from 'next/image'
-import { use, useEffect, useLayoutEffect, useState, useRef } from 'react'
+import { type SyntheticEvent, use, useEffect, useLayoutEffect, useState, useRef } from 'react'
 import clsx from 'clsx'
 import { type TFunction, formatDate, formatNumber, useTranslations } from '@/lib/i18n'
 import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay'
 import { creditRollValue } from '@/lib/utils/creditRollValue'
+import { fetchClipVideoUrl } from '@/lib/twitchClipVideo'
 
 // Decoration: the warning triangle sits above copy naming the failure, and the
 // film clapper and camera each precede a heading that says the same in words.
@@ -87,6 +89,10 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
   // Counts clip plays rather than indexing clips, so a single clip replays: the
   // count still changes, which remounts the player.
   const [clipPlay, setClipPlay] = useState(0)
+  // The current clip's MP4 (ADR-0076), tagged with the play it was looked up
+  // for so a previous clip's URL never shows. A null URL means the lookup or
+  // the playback failed, and the clip plays through Twitch's embed instead.
+  const [clipVideo, setClipVideo] = useState<{ play: number; url: string | null }>()
   const rollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -131,17 +137,43 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   const clips = creditData?.clips ?? []
   const currentClip = config?.clips_enabled ? clips[clipPlay % clips.length] : undefined
+  const clipVideoUrl = clipVideo?.play === clipPlay ? clipVideo.url : undefined
+  const nextClip = () => setClipPlay((n) => n + 1)
+
+  // The clip renders muted, since Twitch offers no captions for it (a broadcast
+  // surface, see docs/ACCESSIBILITY.md), and takes the streamer's audio choice
+  // once it can play. OBS lets it play with sound; an ordinary browser tab
+  // refuses, so there it plays muted rather than standing still.
+  const playClip = (e: SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget
+    video.muted = config?.clips_muted ?? true
+    video.play().catch(() => {
+      video.muted = true
+      video.play().catch(() => {})
+    })
+  }
+
+  useEffect(() => {
+    if (!currentClip) return
+    let cancelled = false
+    fetchClipVideoUrl(currentClip.id).then((url) => {
+      if (!cancelled) setClipVideo({ play: clipPlay, url })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [currentClip, clipPlay])
 
   // Twitch's clip embed reports no end event, so the next clip starts once this
   // one's length, plus slack for the player to load, has passed.
   useEffect(() => {
-    if (!currentClip) return
+    if (!currentClip || clipVideoUrl !== null) return
     const timer = setTimeout(
       () => setClipPlay((n) => n + 1),
       (currentClip.duration || 30) * 1000 + 3000
     )
     return () => clearTimeout(timer)
-  }, [currentClip, clipPlay])
+  }, [currentClip, clipPlay, clipVideoUrl])
 
   const scrollSpeed = config?.scroll_speed || 50
   const displaySeconds = config?.display_duration_seconds || 60
@@ -271,14 +303,30 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       {/* Background Clip Video */}
       {currentClip && (
         <div className="fixed inset-0 z-0">
-          <iframe
-            key={clipPlay}
-            id="twitch-clip-player"
-            src={`https://clips.twitch.tv/embed?clip=${encodeURIComponent(currentClip.id)}&parent=${window.location.hostname}&autoplay=true&muted=${config?.clips_muted ?? true}`}
-            title={currentClip.title}
-            allow="autoplay; fullscreen"
-            className="absolute inset-0 h-full w-full border-0"
-          />
+          {clipVideoUrl ? (
+            <video
+              key={clipPlay}
+              id="twitch-clip-player"
+              src={clipVideoUrl}
+              muted
+              playsInline
+              onLoadedData={playClip}
+              onEnded={nextClip}
+              onError={() => setClipVideo({ play: clipPlay, url: null })}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            clipVideoUrl === null && (
+              <iframe
+                key={clipPlay}
+                id="twitch-clip-player"
+                src={`https://clips.twitch.tv/embed?clip=${encodeURIComponent(currentClip.id)}&parent=${window.location.hostname}&autoplay=true&muted=${config?.clips_muted ?? true}`}
+                title={currentClip.title}
+                allow="autoplay; fullscreen"
+                className="absolute inset-0 h-full w-full border-0"
+              />
+            )
+          )}
           {/* Overlay gradient for better text readability */}
           <div
             className="absolute inset-0 z-10"

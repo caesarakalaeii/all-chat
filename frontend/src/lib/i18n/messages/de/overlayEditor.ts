@@ -806,7 +806,8 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     fallbackDaysLabel: 'Fallback-Tage',
     fallbackDaysHint: 'Wenn keine Clips von diesem Stream da sind, Clips der letzten N Tage zeigen',
     muteClipsLabel: 'Clip-Audio stummschalten',
-    muteClipsHint: 'Für Browser-Autoplay nötig. Das Aufheben kann eine Nutzeraktion erfordern.',
+    muteClipsHint:
+      'Ausschalten, um den Clip-Ton in OBS abzuspielen. Ein normaler Browser-Tab spielt Clips weiter stumm ab.',
     cssHeading: 'Benutzerdefinierter CSS-Editor',
     cssEnable: 'Benutzerdefiniertes CSS aktivieren',
     cssBrowseThemes: 'Themes durchsuchen',

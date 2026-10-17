@@ -332,9 +332,11 @@ The OBS source (`/overlay/:id/credits`) scrolls the roll up at `scroll_speed`
 pixels per second, from just below the screen until its last line reaches the
 bottom edge. It holds there until `display_duration_seconds` is up and then
 starts over; a roll too long to fit scrolls to its end first. With
-`clips_enabled`, the session's Twitch clips play full-screen behind the roll
-through Twitch's clip embed (`clips.twitch.tv/embed`), each for its own length,
-one after another.
+`clips_enabled`, the session's Twitch clips play full-screen behind the roll,
+one after another. The browser looks up each clip's MP4 from Twitch's web GQL
+and plays it with sound in OBS unless `clips_muted` (ADR-0076); when that
+lookup fails, the clip plays muted through Twitch's clip embed
+(`clips.twitch.tv/embed`) instead.
 
 ### Health Checks
 

@@ -899,7 +899,8 @@ export const overlayEditor = {
     fallbackDaysLabel: 'Fallback Days',
     fallbackDaysHint: 'If no clips from this stream, show clips from last N days',
     muteClipsLabel: 'Mute Clips Audio',
-    muteClipsHint: 'Required for browser autoplay. Unmuting may require viewer interaction.',
+    muteClipsHint:
+      'Turn off to play clip audio in OBS. A normal browser tab still plays clips muted.',
     cssHeading: 'Custom CSS Editor',
     cssEnable: 'Enable Custom CSS',
     cssBrowseThemes: 'Browse Themes',

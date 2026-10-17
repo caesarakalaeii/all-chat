@@ -20,9 +20,10 @@ import { test, expect, type Page } from '@playwright/test'
 
 /**
  * The credit roll OBS source: the roll scrolls up at the configured speed, and
- * enabled clips play behind it through Twitch's clip embed, one after another.
- * The public config and credit-roll reads are mocked, and the clip embed is
- * stubbed so the test never reaches Twitch.
+ * enabled clips play behind it one after another, as the clip's MP4 when
+ * Twitch's web GQL hands out a signed URL (ADR-0076) and through the muted clip
+ * embed otherwise. The public config and credit-roll reads, the GQL lookup and
+ * the clip embed are mocked, so the test never reaches Twitch.
  */
 
 const OVERLAY_ID = 'credits-e2e-overlay'
@@ -46,6 +47,33 @@ const clip = (id: string, title: string) => ({
   thumbnail_url: '',
   duration: 1,
 })
+
+const CLIP_MEDIA = 'https://clip-media.test'
+
+/** Answers the clip lookup the way gql.twitch.tv does, or fails it. */
+async function mockClipLookup(page: Page, ok: boolean) {
+  await page.route('https://gql.twitch.tv/gql', (route) => {
+    if (!ok) return route.fulfill({ status: 500, body: '' })
+    const { variables } = route.request().postDataJSON()
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          clip: {
+            playbackAccessToken: { signature: 'sig123', value: '{"clip_slug":"x"}' },
+            videoQualities: [
+              { quality: '1080', sourceURL: `${CLIP_MEDIA}/${variables.slug}-1080.mp4` },
+              { quality: '720', sourceURL: `${CLIP_MEDIA}/${variables.slug}-720.mp4` },
+            ],
+          },
+        },
+      }),
+    })
+  })
+  // Never answered: the MP4 stays loading, so only the test ends a clip.
+  await page.route(`${CLIP_MEDIA}/**`, () => {})
+}
 
 async function boot(page: Page, config: Record<string, unknown>) {
   await page.route(`**/api/v1/overlays/public/${OVERLAY_ID}/creditroll`, (route) =>
@@ -89,9 +117,31 @@ test('the roll starts below the screen and scrolls up', async ({ page }) => {
   await expect.poll(() => headingTop(page)).toBeLessThan(first - 50)
 })
 
-test('clips play through the Twitch clip embed and advance after their duration', async ({
+test('clips play as the MP4 from Twitch, with sound unless muted, and advance when one ends', async ({
   page,
 }) => {
+  await mockClipLookup(page, true)
+  await boot(page, { clips_enabled: true, clips_muted: false })
+
+  const video = page.locator('video')
+  await expect(video).toHaveAttribute('src', /ClipOne-1080\.mp4\?sig=sig123&token=/)
+  // Starts muted and takes the streamer's audio choice once the clip can play.
+  const mutedOnceLoaded = () =>
+    video.evaluate((v: HTMLVideoElement) => {
+      v.dispatchEvent(new Event('loadeddata'))
+      return v.muted
+    })
+  expect(await mutedOnceLoaded()).toBe(false)
+  await expect(page.locator('iframe')).toHaveCount(0)
+  await expect(page.getByText('First clip')).toBeVisible()
+
+  await video.evaluate((v) => v.dispatchEvent(new Event('ended')))
+  await expect(video).toHaveAttribute('src', /ClipTwo-1080\.mp4/)
+  await expect(page.getByText('Second clip')).toBeVisible()
+})
+
+test('clips fall back to the muted clip embed when the lookup fails', async ({ page }) => {
+  await mockClipLookup(page, false)
   await boot(page, { scroll_speed: 50, display_duration_seconds: 60, clips_enabled: true })
 
   const player = page.locator('iframe[src^="https://clips.twitch.tv/embed"]')

@@ -1122,7 +1122,7 @@ describe('credit roll settings copy', () => {
     )
     expect(t('overlayEditor.credits.muteClipsLabel')).toBe('Mute Clips Audio')
     expect(t('overlayEditor.credits.muteClipsHint')).toBe(
-      'Required for browser autoplay. Unmuting may require viewer interaction.'
+      'Turn off to play clip audio in OBS. A normal browser tab still plays clips muted.'
     )
   })
 
