@@ -73,6 +73,9 @@ type Config struct {
 	ClientName    string
 	ClientVersion string
 	FlashEnabled  bool
+	// CredentialsURL, when set, is asked for Kick's current app key and
+	// cluster before every connect (see KickRealtimeConnectionURL).
+	CredentialsURL string
 }
 
 func (cfg Config) withDefaults() Config {
@@ -193,6 +196,7 @@ func (c *Client) SetDeletionHandler(handler DeletionHandler) {
 
 // Connect establishes connection to Pusher WebSocket
 func (c *Client) Connect() error {
+	c.refreshCredentials()
 	if c.config.AppKey == "" {
 		return fmt.Errorf("pusher app key is required")
 	}
