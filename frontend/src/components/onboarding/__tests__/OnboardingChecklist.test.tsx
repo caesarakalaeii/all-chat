@@ -47,7 +47,18 @@ function viewedSteps(): string[] {
 }
 
 beforeEach(() => {
-  localStorage.clear()
+  // The unit project's jsdom has no working localStorage; the store persists to it.
+  const store: Record<string, string> = {}
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value
+    },
+    removeItem: (key: string) => {
+      delete store[key]
+    },
+    clear: () => Object.keys(store).forEach((k) => delete store[k]),
+  })
   useOnboardingStore.setState({
     status: 'inactive',
     trigger: null,
@@ -59,7 +70,14 @@ beforeEach(() => {
   mockTrack.mockClear()
 })
 
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+// The extras for the beta-only overlay kinds (lib/platform-availability.ts).
+const betaOnlyStems = ['alertsOverlay', 'alertsEditor', 'goalOverlay', 'listOverlay'] as const
 
 describe('OnboardingChecklist step-viewed tracking', () => {
   it('reports nothing while the guide is inactive', () => {
@@ -141,7 +159,24 @@ describe('OnboardingChecklist optional extras', () => {
     expect(getByText(t('onboarding.extras.youtubeOfficialApiBody'))).toBeInTheDocument()
   })
 
-  it('lists alert overlays among the premium extras', () => {
+  it('omits the alerts, goal and list overlays outside the beta host', () => {
+    useOnboardingStore.setState({
+      status: 'active',
+      sessionSteps: { obsCopied: true, extrasDone: false },
+    })
+    const { queryByText } = render(
+      <OnboardingChecklist surface="editor" sourceCount={1} themeId="neon" overlayCount={1} />
+    )
+    for (const stem of betaOnlyStems) {
+      expect(queryByText(t(`onboarding.extras.${stem}Title`))).not.toBeInTheDocument()
+    }
+  })
+
+  it('lists the alerts, goal and list overlays on beta.allch.at', () => {
+    vi.spyOn(window, 'location', 'get').mockReturnValue({
+      ...window.location,
+      hostname: 'beta.allch.at',
+    })
     useOnboardingStore.setState({
       status: 'active',
       sessionSteps: { obsCopied: true, extrasDone: false },
@@ -149,7 +184,9 @@ describe('OnboardingChecklist optional extras', () => {
     const { getByText } = render(
       <OnboardingChecklist surface="editor" sourceCount={1} themeId="neon" overlayCount={1} />
     )
-    expect(getByText(t('onboarding.extras.alertsOverlayTitle'))).toBeInTheDocument()
-    expect(getByText(t('onboarding.extras.alertsOverlayBody'))).toBeInTheDocument()
+    for (const stem of betaOnlyStems) {
+      expect(getByText(t(`onboarding.extras.${stem}Title`))).toBeInTheDocument()
+      expect(getByText(t(`onboarding.extras.${stem}Body`))).toBeInTheDocument()
+    }
   })
 })

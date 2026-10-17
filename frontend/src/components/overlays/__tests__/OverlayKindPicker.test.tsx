@@ -30,7 +30,14 @@ import type { OverlayType } from '@/lib/types/overlay'
 afterEach(() => {
   cleanup()
   useAuthStore.setState({ user: null })
+  vi.restoreAllMocks()
 })
+
+const onBetaHost = () =>
+  vi.spyOn(window, 'location', 'get').mockReturnValue({
+    ...window.location,
+    hostname: 'beta.allch.at',
+  })
 
 const signIn = (isPremium: boolean) =>
   useAuthStore.setState({ user: { id: 'u', is_premium: isPremium } as User })
@@ -42,14 +49,22 @@ describe('OverlayKindPicker', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('offers alerts, goal and list beside chat to a premium user', () => {
+  it('offers alerts, goal and list beside chat to a premium user on beta.allch.at', () => {
     // The alerts_overlay, goal_overlay and list_overlay gates (ADR-0008).
+    onBetaHost()
     signIn(true)
     render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
     expect(screen.getAllByRole('radio')).toHaveLength(4)
     for (const label of ['Alerts', 'Goal', 'List']) {
       expect(screen.getByRole('radio', { name: new RegExp(`^${label}`) })).toBeInTheDocument()
     }
+  })
+
+  it('offers only chat, so renders nothing, to a premium user outside the beta host', () => {
+    // alerts, goal and list are beta-only kinds (lib/platform-availability.ts).
+    signIn(true)
+    const { container } = render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
+    expect(container).toBeEmptyDOMElement()
   })
 
   it('offers every kind it is given', () => {
