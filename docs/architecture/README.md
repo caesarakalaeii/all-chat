@@ -79,7 +79,7 @@ This directory contains comprehensive architecture documentation for All-Chat, o
 - [emote-service/README.md](../../services/emote-service/README.md) - 7TV, BTTV, FFZ cache
 - [twitch-listener/README.md](../../services/twitch-listener/README.md) - IRC client
 - [youtube-listener/README.md](../../services/youtube-listener/README.md) - API polling, quota
-- [kick-listener/README.md](../../services/kick-listener/README.md) - Pusher WebSocket
+- [kick-listener/README.md](../../services/kick-listener/README.md) - Centrifugo or Pusher WebSocket (ADR-0077)
 - [tiktok-listener/README.md](../../services/tiktok-listener/README.md) - TikTok Live
 - [message-processor/README.md](../../services/message-processor/README.md) - Normalization, enrichment
 - [source-manager/README.md](../../services/source-manager/README.md) - Leader election
