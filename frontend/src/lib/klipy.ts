@@ -23,9 +23,9 @@
  * results shown in the order returned, media URLs used exactly as returned (no
  * re-hosting), and a "Powered by KLIPY" attribution next to the results.
  *
- * The app key is public by nature (it travels in every request URL) and comes
- * from NEXT_PUBLIC_KLIPY_API_KEY at build time (frontend/Dockerfile build arg
- * KLIPY_API_KEY). Without it search is unavailable and the editor says so;
+ * The app key is public by nature (it travels in every request URL). The
+ * server reads KLIPY_API_KEY at runtime and hands it out at /klipy-config
+ * (ADR-0072). Without it search is unavailable and the editor says so;
  * pasting a URL or uploading still works.
  */
 
@@ -54,8 +54,20 @@ interface KlipySearchResponse {
   data?: { data?: KlipyItem[] }
 }
 
-export function klipyApiKey(): string {
-  return process.env.NEXT_PUBLIC_KLIPY_API_KEY ?? ''
+let keyPromise: Promise<string> | undefined
+
+/** The runtime app key, fetched once per page load; a failed fetch is retried next time. */
+export function klipyApiKey(): Promise<string> {
+  keyPromise ??= fetch('/klipy-config')
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`klipy: config HTTP ${res.status}`)
+      return String(((await res.json()) as { apiKey?: unknown }).apiKey ?? '')
+    })
+    .catch((err: unknown) => {
+      keyPromise = undefined
+      throw err
+    })
+  return keyPromise
 }
 
 /**
@@ -64,12 +76,9 @@ export function klipyApiKey(): string {
  */
 export async function searchKlipyGifs(
   query: string,
-  {
-    apiKey = klipyApiKey(),
-    perPage = 24,
-    signal,
-  }: { apiKey?: string; perPage?: number; signal?: AbortSignal } = {}
+  { apiKey, perPage = 24, signal }: { apiKey?: string; perPage?: number; signal?: AbortSignal } = {}
 ): Promise<KlipyGif[]> {
+  apiKey ??= await klipyApiKey()
   if (!apiKey) throw new Error('klipy: no api key')
   const params = new URLSearchParams({
     q: query,

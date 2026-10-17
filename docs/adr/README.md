@@ -779,8 +779,8 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 **Status**: Accepted (2026-10-16)
 **Problem**: Alerts overlays had stored profiles but no editor (the dashboard showed chat appearance sections), and issue #954 asked for premium custom HTML/CSS/JS, KLIPY GIF search and media uploads. Streamer JS needs isolation that holds against hostile code without weakening the strict overlay CSP, and no browser upload could ever have reached MinIO.
-**Decision**: Saving stays premium (`alerts_editor`, ADR-0070); defaults and test alerts are free. Custom code (migration 109, 64 KiB per field) renders in `<iframe sandbox="allow-scripts" srcdoc>` (opaque origin, no other tokens) with a `{type:"alert", profile, event}` postMessage bridge and an injected `onAlert`/`allchat.fill` runtime. It runs under the inherited page CSP, unchanged, through `'unsafe-inline'`; a move to nonces must carry them into the srcdoc. KLIPY search runs in the browser with a build-time public key (`NEXT_PUBLIC_KLIPY_API_KEY`) and degrades to "unavailable". The gateway proxies `/api/v1/media`; media-service presigns for the public host.
-**Impact**: Hostile alert code is contained by the browser's origin boundary; no CSP or host changes. Custom code is inline-only (no external scripts outside the CSP's hosts, no `eval`). Search needs a KLIPY key set as a repository variable.
+**Decision**: Saving stays premium (`alerts_editor`, ADR-0070); defaults and test alerts are free. Custom code (migration 109, 64 KiB per field) renders in `<iframe sandbox="allow-scripts" srcdoc>` (opaque origin, no other tokens) with a `{type:"alert", profile, event}` postMessage bridge and an injected `onAlert`/`allchat.fill` runtime. It runs under the inherited page CSP, unchanged, through `'unsafe-inline'`; a move to nonces must carry them into the srcdoc. KLIPY search runs in the browser with a public key (build-time in this record; delivered at runtime since ADR-0073) and degrades to "unavailable". The gateway proxies `/api/v1/media`; media-service presigns for the public host.
+**Impact**: Hostile alert code is contained by the browser's origin boundary; no CSP or host changes. Custom code is inline-only (no external scripts outside the CSP's hosts, no `eval`). Search needs a KLIPY key (runtime secret since ADR-0073).
 **→ Read**: [0071-alerts-editor-sandboxed-custom-code-and-client-side-gif-search.md](./0071-alerts-editor-sandboxed-custom-code-and-client-side-gif-search.md)
 
 ---
@@ -792,6 +792,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Decision**: The alert-processor polls `followers` (Twitch Helix `channels/followers` `total`, owner token via `moderation-service/tokens`) and `subscribers` (YouTube `channels.list?part=statistics`, 1 unit, reserve/confirm/rollback) every `GOAL_POLL_SECONDS` (60) only for overlays whose `overlay:connected:{id}` demand key exists, behind a per-overlay `SET NX` lock. `bits`/`super_chat` goals are once-per-alert `INCRBYFLOAT` counters. Lists get `list_update` frames debounced to one per board per 2s via a Redis window claim that defers rather than drops. Public `GET /overlays/public/:id/goal` and `GET /overlays/:id/list/top` seed the renderer; the gateway forwards `goal`/`list_update` frames under their own WS types. Creation gated by `goal_overlay` / `list_overlay` (migrations 110/111).
 **Impact**: No new service or coordinator; YouTube polls show up in the existing quota gauge. The alert-processor now needs the token cipher and Twitch/YouTube app credentials. YouTube subscriber counts are rounded by YouTube.
 **→ Read**: [0072-goal-and-list-overlays-polled-goals-and-debounced-leaderboards.md](./0072-goal-and-list-overlays-polled-goals-and-debounced-leaderboards.md)
+
+---
+
+### ADR-0073: The KLIPY app key is delivered at runtime from the cluster secret
+
+**Status**: Accepted (2026-10-17)
+**Problem**: ADR-0071 baked the KLIPY key into the image (`NEXT_PUBLIC_KLIPY_API_KEY`), but the key lives in the `allchat-secrets` Kubernetes secret, which a build-time variable cannot read; KLIPY forbids proxying search through our servers without written approval.
+**Decision**: `GET /klipy-config` (a Next.js route outside `/api/`, which the ingress sends to the gateway) returns `process.env.KLIPY_API_KEY` per request; the browser fetches it once and keeps calling `api.klipy.com` directly. The deployment sets the env from `secretKeyRef allchat-secrets/klipy-api-key`. The search placeholder reads "Search KLIPY" in every locale (KLIPY's REQUIRED attribution).
+**Impact**: Rotating the key needs no rebuild; the build arg and CI variable are gone. The key stays public, as it always was in the search URLs.
+**→ Read**: [0073-klipy-app-key-delivered-at-runtime-from-the-cluster-secret.md](./0073-klipy-app-key-delivered-at-runtime-from-the-cluster-secret.md)
 
 ---
 

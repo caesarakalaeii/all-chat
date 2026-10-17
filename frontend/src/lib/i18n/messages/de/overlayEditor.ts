@@ -594,7 +594,8 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     durationLabel: 'Dauer (Sekunden)',
     volumeLabel: 'Lautstärke',
     gifSearchLabel: 'GIFs suchen',
-    gifSearchPlaceholder: 'KLIPY durchsuchen',
+    // KLIPY attribution rule (REQUIRED): this exact English wording.
+    gifSearchPlaceholder: 'Search KLIPY',
     gifSearch: 'Suchen',
     gifSearching: 'Suche läuft...',
     gifSearchUnavailable:

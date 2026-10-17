@@ -55,3 +55,14 @@ describe('the German catalog', () => {
     expect(mismatches).toEqual([])
   })
 })
+
+describe('KLIPY attribution', () => {
+  it('uses the REQUIRED "Search KLIPY" placeholder verbatim in every locale', () => {
+    // docs.klipy.com/attribution: "Set 'Search KLIPY' as the default
+    // placeholder text in the search input field - REQUIRED". Mandated
+    // wording, so it is not translated.
+    for (const messages of [enMessages, deMessages]) {
+      expect(messages.overlayEditor?.alertsEditor?.gifSearchPlaceholder).toBe('Search KLIPY')
+    }
+  })
+})

@@ -75,3 +75,32 @@ describe('searchKlipyGifs', () => {
     await expect(searchKlipyGifs('x', { apiKey: 'k' })).rejects.toThrow()
   })
 })
+
+describe('klipyApiKey', () => {
+  // Fresh module per test: the key is memoised at module scope.
+  const load = async () => {
+    vi.resetModules()
+    return (await import('../klipy')).klipyApiKey
+  }
+
+  it('fetches the runtime key from /klipy-config and remembers it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ apiKey: 'rt' }) })
+    vi.stubGlobal('fetch', fetchMock)
+    const klipyApiKey = await load()
+    expect(await klipyApiKey()).toBe('rt')
+    expect(await klipyApiKey()).toBe('rt')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toBe('/klipy-config')
+  })
+
+  it('retries after a failed config fetch', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    const klipyApiKey = await load()
+    await expect(klipyApiKey()).rejects.toThrow()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ apiKey: 'k2' }) })
+    )
+    expect(await klipyApiKey()).toBe('k2')
+  })
+})
