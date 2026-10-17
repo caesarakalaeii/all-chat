@@ -68,7 +68,8 @@ func NewKickClient(logger *zap.Logger) *KickClient {
 
 // GetUserID resolves a Kick channel slug to its numeric user_id.
 func (c *KickClient) GetUserID(ctx context.Context, slug string) (string, error) {
-	slug = strings.ToLower(strings.TrimSpace(slug))
+	// Kick slugs use hyphens where usernames have underscores.
+	slug = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(slug)), "_", "-")
 	if slug == "" {
 		return "", fmt.Errorf("kick slug cannot be empty")
 	}

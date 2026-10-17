@@ -138,7 +138,7 @@ func main() {
 	}
 
 	// Configure Pusher connection
-	pusherAppKey := listener.Env("KICK_PUSHER_APP_KEY", "32cbd69e4b950bf97679")
+	pusherAppKey := listener.Env("KICK_PUSHER_APP_KEY", "34bf7a0ff419a2a775b9")
 	if pusherAppKey == "" {
 		log.Fatal("KICK_PUSHER_APP_KEY must be set", zap.Error(fmt.Errorf("missing app key")))
 	}
@@ -148,8 +148,9 @@ func main() {
 	clusterList := buildClusterList(primaryCluster, parseClusterList(fallbackClusterEnv))
 
 	wsConfig := websocket.Config{
-		AppKey:   pusherAppKey,
-		Clusters: clusterList,
+		AppKey:         pusherAppKey,
+		Clusters:       clusterList,
+		CredentialsURL: websocket.KickRealtimeConnectionURL,
 	}
 
 	// Initialize token cipher for kick_oauth_tokens decryption (D-16).

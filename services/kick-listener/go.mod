@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/caesar/all-chat/shared v0.0.0
 	github.com/gin-gonic/gin v1.12.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // S3: pseudo-version; pin to tagged release when gorilla/websocket v1.5.4 is published
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/prometheus/client_golang v1.24.1
@@ -34,7 +35,6 @@ require (
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect

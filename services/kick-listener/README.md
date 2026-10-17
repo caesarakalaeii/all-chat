@@ -50,8 +50,15 @@ Implements the Pusher WebSocket Protocol 7 for connecting to Kick's chat infrast
 
 **Pusher WebSocket URL:**
 ```
-wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false
+wss://ws-{cluster}.pusher.com/app/{app_key}?protocol=7&client=js&version=8.4.0-rc2&flash=false
 ```
+
+**App key resolution:** Kick rotates its Pusher app key without notice. Before every
+connect the client asks `POST https://web.kick.com/api/v1/realtime/connection` (the
+endpoint kick.com's own web client uses, offering only the `pusher` provider) for the
+current `app_key` and `cluster`, and tries that cluster first. If the lookup fails it
+falls back to `KICK_PUSHER_APP_KEY`. A rotated key shows up as Pusher error `4001`
+("App key ... not in this cluster"); the reconnect after it re-resolves the key.
 
 **Channel Format:**
 ```
@@ -91,7 +98,7 @@ Manages dynamic subscription to Kick chat channels based on active overlays in t
 
 **Features:**
 - Syncs active channels from database every 30 seconds
-- Fetches chatroom IDs from Kick API (`https://kick.com/api/v2/channels/{slug}`)
+- Fetches chatroom IDs from Kick API (`https://kick.com/api/v2/channels/{slug}`). The slug is the stored channel name lowercased with `_` replaced by `-` (Kick 404s on `MJ_ARIES`, resolves `mj-aries`)
 - Dynamically subscribes/unsubscribes from channels
 - Stores chatroom ID in database for future use
 - Maps chatroom IDs to overlay IDs for message routing
@@ -151,6 +158,11 @@ REDIS_PORT=6379
 # Source Manager (leadership)
 SOURCE_MANAGER_URL=http://localhost:8088
 SOURCE_MANAGER_SECRET=dev-service-secret
+
+# Kick Pusher (fallbacks; the app key is normally resolved from Kick at connect time)
+KICK_PUSHER_APP_KEY=34bf7a0ff419a2a775b9
+KICK_PUSHER_CLUSTER=us2
+KICK_PUSHER_CLUSTER_FALLBACKS=   # comma-separated extra clusters to try
 
 # Application
 APP_VERSION=dev             # Application version
