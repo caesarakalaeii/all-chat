@@ -23,10 +23,11 @@
  * results shown in the order returned, media URLs used exactly as returned (no
  * re-hosting), and a "Powered by KLIPY" attribution next to the results.
  *
- * The app key is public by nature (it travels in every request URL). The
+ * The app key is visible to whoever may search (it travels in every request URL). The
  * server reads KLIPY_API_KEY at runtime and hands it out at /klipy-config
- * (ADR-0072). Without it search is unavailable and the editor says so;
- * pasting a URL or uploading still works.
+ * (ADR-0072), to signed-in premium or beta users only (ADR-0074). Without it
+ * search is unavailable and the editor says so; pasting a URL or uploading
+ * still works.
  */
 
 const KLIPY_API = 'https://api.klipy.com/api/v1'
@@ -58,7 +59,7 @@ let keyPromise: Promise<string> | undefined
 
 /** The runtime app key, fetched once per page load; a failed fetch is retried next time. */
 export function klipyApiKey(): Promise<string> {
-  keyPromise ??= fetch('/klipy-config')
+  keyPromise ??= fetch('/klipy-config', { credentials: 'same-origin' })
     .then(async (res) => {
       if (!res.ok) throw new Error(`klipy: config HTTP ${res.status}`)
       return String(((await res.json()) as { apiKey?: unknown }).apiKey ?? '')

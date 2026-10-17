@@ -797,11 +797,21 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ### ADR-0073: The KLIPY app key is delivered at runtime from the cluster secret
 
-**Status**: Accepted (2026-10-17)
+**Status**: Accepted (2026-10-17); who receives the key is restricted by ADR-0074
 **Problem**: ADR-0071 baked the KLIPY key into the image (`NEXT_PUBLIC_KLIPY_API_KEY`), but the key lives in the `allchat-secrets` Kubernetes secret, which a build-time variable cannot read; KLIPY forbids proxying search through our servers without written approval.
 **Decision**: `GET /klipy-config` (a Next.js route outside `/api/`, which the ingress sends to the gateway) returns `process.env.KLIPY_API_KEY` per request; the browser fetches it once and keeps calling `api.klipy.com` directly. The deployment sets the env from `secretKeyRef allchat-secrets/klipy-api-key`. The search placeholder reads "Search KLIPY" in every locale (KLIPY's REQUIRED attribution).
 **Impact**: Rotating the key needs no rebuild; the build arg and CI variable are gone. The key stays public, as it always was in the search URLs.
 **→ Read**: [0073-klipy-app-key-delivered-at-runtime-from-the-cluster-secret.md](./0073-klipy-app-key-delivered-at-runtime-from-the-cluster-secret.md)
+
+---
+
+### ADR-0074: The KLIPY app key is served only to entitled sessions
+
+**Status**: Accepted (2026-10-17)
+**Problem**: ADR-0073's `/klipy-config` returned the key to any unauthenticated caller, so one request scraped it; KLIPY still requires browser-side search, so the key must reach the picker user's browser.
+**Decision**: The route forwards only the caller's `Cookie`/`Authorization` to the gateway's `GET /api/v1/auth/me` (`API_GATEWAY_URL`) and answers 401 (no or invalid session, or any check failure), 403 (neither `is_premium` nor `is_beta_tester`) or the key, always `Cache-Control: private, no-store` + `Vary: Cookie, Authorization`. The picker fetches it with `credentials: 'same-origin'`. The frontend pods get `API_GATEWAY_URL` and NetworkPolicy ingress to their gateway.
+**Impact**: Anonymous and free users cannot read the key from All-Chat; entitled users still see it in their own search URLs. One `/auth/me` call per picker load.
+**→ Read**: [0074-klipy-app-key-only-for-entitled-sessions.md](./0074-klipy-app-key-only-for-entitled-sessions.md)
 
 ---
 
