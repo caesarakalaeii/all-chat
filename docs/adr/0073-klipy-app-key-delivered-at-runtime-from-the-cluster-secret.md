@@ -1,7 +1,7 @@
 # ADR-0073: The KLIPY App Key Is Delivered at Runtime from the Cluster Secret
 
 **Date**: 2026-10-17
-**Status**: Accepted
+**Status**: Accepted; who receives the key is restricted by ADR-0074 (2026-10-17)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement

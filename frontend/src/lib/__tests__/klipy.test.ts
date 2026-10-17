@@ -91,6 +91,8 @@ describe('klipyApiKey', () => {
     expect(await klipyApiKey()).toBe('rt')
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0][0]).toBe('/klipy-config')
+    // The route only answers a signed-in, entitled session: send the cookie.
+    expect(fetchMock.mock.calls[0][1]).toEqual({ credentials: 'same-origin' })
   })
 
   it('retries after a failed config fetch', async () => {
