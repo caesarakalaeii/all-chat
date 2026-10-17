@@ -115,11 +115,53 @@ func TestGetAlertProfiles_NoRowsReturnsEveryDefault(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	got := decodeProfiles(t, w)
-	require.Len(t, got, len(alerts.EventTypes()))
-	for i, et := range alerts.EventTypes() {
+	types := append([]string{alerts.AllEvents}, alerts.EventTypes()...)
+	require.Len(t, got, len(types), "the base style first, then every event type")
+	for i, et := range types {
 		want, _ := alerts.DefaultProfile(et)
 		assert.Equal(t, want, got[i])
 	}
+}
+
+func TestPutAlertProfiles_AcceptsTheBaseStyle(t *testing.T) {
+	env := newAlertsTestEnv(t, models.OverlayTypeAlerts)
+	base, _ := alerts.DefaultProfile(alerts.AllEvents)
+	base.ImageURL = "https://static.klipy.com/party.gif"
+
+	w := env.do(http.MethodPut, "/overlay-1/alerts/profiles", gin.H{"profiles": []alerts.Profile{base}})
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.Equal(t, []alerts.Profile{base}, env.store.upserted)
+	env.store.rows = env.store.upserted
+	assert.Equal(t, base, decodeProfiles(t, env.do(http.MethodGet, "/overlay-1/alerts/profiles", nil))[0])
+}
+
+// The editor needs to know which event types run on the base style and which
+// have a saved row of their own.
+func TestGetAlertProfiles_ListsTheSavedEventTypes(t *testing.T) {
+	env := newAlertsTestEnv(t, models.OverlayTypeAlerts)
+	base, _ := alerts.DefaultProfile(alerts.AllEvents)
+	bits, _ := alerts.DefaultProfile("bits")
+	env.store.rows = []alerts.Profile{bits, base}
+
+	w := env.do(http.MethodGet, "/overlay-1/alerts/profiles", nil)
+
+	var body struct {
+		Saved []string `json:"saved"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	assert.ElementsMatch(t, []string{"bits", alerts.AllEvents}, body.Saved)
+
+	empty := newAlertsTestEnv(t, models.OverlayTypeAlerts)
+	assert.JSONEq(t, `[]`, string(mustField(t, empty.do(http.MethodGet, "/overlay-1/alerts/profiles", nil), "saved")))
+}
+
+func mustField(t *testing.T, w *httptest.ResponseRecorder, key string) json.RawMessage {
+	t.Helper()
+	var body map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body), w.Body.String())
+	require.Contains(t, body, key)
+	return body[key]
 }
 
 func TestGetAlertProfiles_StoredRowsOverrideDefaults(t *testing.T) {
@@ -131,7 +173,7 @@ func TestGetAlertProfiles_StoredRowsOverrideDefaults(t *testing.T) {
 
 	got := decodeProfiles(t, env.do(http.MethodGet, "/overlay-1/alerts/profiles", nil))
 
-	require.Len(t, got, len(alerts.EventTypes()))
+	require.Len(t, got, len(alerts.EventTypes())+1)
 	var bits alerts.Profile
 	for _, p := range got {
 		if p.EventType == "bits" {
@@ -236,6 +278,8 @@ func TestTestAlert_RejectsUnknownEventTypeAndChatOverlays(t *testing.T) {
 	env := newAlertsTestEnv(t, models.OverlayTypeAlerts)
 	assert.Equal(t, http.StatusBadRequest, env.do(http.MethodPost, "/overlay-1/alerts/test", gin.H{"event_type": "webcam"}).Code)
 	assert.Equal(t, http.StatusBadRequest, env.do(http.MethodPost, "/overlay-1/alerts/test", gin.H{}).Code)
+	assert.Equal(t, http.StatusBadRequest, env.do(http.MethodPost, "/overlay-1/alerts/test", gin.H{"event_type": alerts.AllEvents}).Code,
+		"the base style is not an event: there is no sample to send")
 
 	chat := newAlertsTestEnv(t, models.OverlayTypeChat)
 	assert.Equal(t, http.StatusBadRequest, chat.do(http.MethodPost, "/overlay-1/alerts/test", gin.H{"event_type": "bits"}).Code,

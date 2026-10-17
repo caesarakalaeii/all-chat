@@ -19,9 +19,16 @@
 'use client'
 
 /**
- * The alert profile editor of an alerts overlay (issue #954, ADR-0070/0071):
- * one profile per event type, loaded from GET /overlays/:id/alerts/profiles
- * (saved rows over the built-in defaults) and saved all-or-nothing with PUT.
+ * The alert profile editor of an alerts overlay (issue #954, ADR-0070/0071/0075):
+ * the "All events" base style first, then one profile per event type, loaded
+ * from GET /overlays/:id/alerts/profiles (saved rows over the built-in
+ * defaults) and saved all-or-nothing with PUT. An event type without a saved
+ * row runs on the base style; a saved one fills only its empty image, sound
+ * and custom code from it.
+ *
+ * "Send test alert" lives here, not in a separate panel: it tests the event
+ * being edited and saves unsaved changes first, because the gateway resolves
+ * the test from the saved profiles.
  *
  * Tiering: the defaults (the built-in preset of every event type) and test
  * alerts are free; SAVING profiles is premium (the alerts_editor gate on the
@@ -65,7 +72,7 @@ import { overlaysApi } from '@/lib/api/overlays'
 import { useTranslations, type TFunction } from '@/lib/i18n'
 import { searchKlipyGifs, type KlipyGif } from '@/lib/klipy'
 import { toastManager } from '@/lib/toast'
-import { ALERT_EVENT_TYPES, type EditableAlertProfile } from '@/lib/types/alert'
+import { ALERT_ALL_EVENTS, ALERT_EVENT_TYPES, type EditableAlertProfile } from '@/lib/types/alert'
 
 /** Server limits (shared/alerts Profile.Validate), mirrored for inline errors. */
 const MAX_TEMPLATE_LENGTH = 500
@@ -115,13 +122,22 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
   const ids = useId()
   const [profiles, setProfiles] = useState<EditableAlertProfile[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
-  const [eventType, setEventType] = useState<string>(ALERT_EVENT_TYPES[0])
+  const [saved, setSaved] = useState<Set<string>>(new Set())
+  const [eventType, setEventType] = useState<string>(ALERT_ALL_EVENTS)
   const [dirty, setDirty] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
   const [status, setStatus] = useState('')
 
   const load = useCallback(
-    () => overlaysApi.getAlertProfiles(overlayId).then(setProfiles, () => setLoadFailed(true)),
+    () =>
+      overlaysApi.getAlertProfiles(overlayId).then(
+        (res) => {
+          setProfiles(res.profiles)
+          setSaved(new Set(res.saved))
+        },
+        () => setLoadFailed(true)
+      ),
     [overlayId]
   )
 
@@ -153,45 +169,84 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
     return <p className="text-sm text-text-sub">{t('overlayEditor.alertsEditor.loading')}</p>
   }
 
-  const profile = profiles.find((p) => p.event_type === eventType) ?? profiles[0]
+  const base = profiles.find((p) => p.event_type === ALERT_ALL_EVENTS)
+  // An overlay-manager older than ADR-0075 sends no base style (it deploys
+  // from :main only, the beta frontend can meet one): the first event type is
+  // edited instead, as before.
+  const stored = profiles.find((p) => p.event_type === eventType) ?? profiles[0]
+  const editing = stored.event_type
+  const isBase = editing === ALERT_ALL_EVENTS
+  // An event type still on the base style plays with the base's timing (the
+  // gateway's alerts.ApplyBase), so that is what the form shows, and what the
+  // first edit saves.
+  const inherits = !isBase && !!base && !saved.has(editing) && !dirty.has(editing)
+  const profile = inherits
+    ? { ...stored, duration_ms: base.duration_ms, volume: base.volume }
+    : stored
   const errors = validateAlertProfile(profile)
   const update = (patch: Partial<EditableAlertProfile>) => {
     setProfiles((prev) =>
-      prev!.map((p) => (p.event_type === profile.event_type ? { ...p, ...patch } : p))
+      prev!.map((p) => (p.event_type === profile.event_type ? { ...profile, ...patch } : p))
     )
     setDirty((prev) => new Set(prev).add(profile.event_type))
     setStatus('')
   }
 
-  async function save() {
+  /** Saves the changed profiles; false when nothing could be saved. */
+  async function save(): Promise<boolean> {
     const changed = profiles!.filter((p) => dirty.has(p.event_type))
     const invalid = changed.find((p) => Object.keys(validateAlertProfile(p)).length > 0)
     if (invalid) {
       setEventType(invalid.event_type)
       setStatus(t('overlayEditor.alertsEditor.fixErrors'))
-      return
+      return false
     }
     setSaving(true)
     try {
-      setProfiles(await overlaysApi.saveAlertProfiles(overlayId, changed))
+      const res = await overlaysApi.saveAlertProfiles(overlayId, changed)
+      setProfiles(res.profiles)
+      setSaved(new Set(res.saved))
       setDirty(new Set())
       setStatus(t('overlayEditor.alertsEditor.saved'))
       toastManager.add({ title: t('overlayEditor.alertsEditor.saved'), type: 'success' })
+      return true
     } catch (err) {
       const reason = err instanceof ApiError || err instanceof Error ? err.message : String(err)
       const message = t('overlayEditor.alertsEditor.saveFailed', { reason })
       setStatus(message)
       toastManager.add({ title: message, type: 'error' })
+      return false
     } finally {
       setSaving(false)
     }
   }
 
-  const items = ALERT_EVENT_TYPES.map((value) => ({
-    value,
-    label: t(`overlayEditor.alertEventTypes.${value}`),
-  }))
   const locked = !isPremium
+  const saveFirst = !locked && dirty.size > 0
+
+  async function sendTest() {
+    if (saveFirst && !(await save())) return
+    setTesting(true)
+    try {
+      // The base style is no event of its own; a subscription shows it.
+      await overlaysApi.sendTestAlert(overlayId, isBase ? 'subscription' : editing)
+      toastManager.add({ title: t('overlayEditor.alertTest.sent'), type: 'success' })
+    } catch {
+      toastManager.add({ title: t('overlayEditor.alertTest.failed'), type: 'error' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const items = [
+    ...(base
+      ? [{ value: ALERT_ALL_EVENTS, label: t('overlayEditor.alertsEditor.allEvents') }]
+      : []),
+    ...ALERT_EVENT_TYPES.map((value) => ({
+      value,
+      label: t(`overlayEditor.alertEventTypes.${value}`),
+    })),
+  ]
 
   return (
     <div className="space-y-5">
@@ -220,45 +275,61 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
             {items.map((item) => (
               <SelectItem key={item.value} value={item.value}>
                 {item.label}
+                {item.value !== ALERT_ALL_EVENTS && saved.has(item.value)
+                  ? ` (${t('overlayEditor.alertsEditor.customizedMark')})`
+                  : ''}
                 {dirty.has(item.value) ? ' •' : ''}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+        <p className="text-xs text-text-sub">
+          {isBase
+            ? t('overlayEditor.alertsEditor.allEventsHint')
+            : inherits
+              ? t('overlayEditor.alertsEditor.inheritsHint')
+              : ''}
+        </p>
       </div>
 
       <fieldset disabled={locked} className="min-w-0 space-y-5">
         <ToggleSwitch
-          label={t('overlayEditor.alertsEditor.enabledLabel')}
+          label={t(
+            isBase
+              ? 'overlayEditor.alertsEditor.allEnabledLabel'
+              : 'overlayEditor.alertsEditor.enabledLabel'
+          )}
           checked={profile.enabled}
           onChange={(enabled) => update({ enabled })}
           disabled={locked}
         />
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor={`${ids}-template`} className="text-xs text-text-sub">
-            {t('overlayEditor.alertsEditor.templateLabel')}
-          </label>
-          <Input
-            id={`${ids}-template`}
-            value={profile.text_template}
-            onChange={(e) => update({ text_template: e.target.value })}
-            aria-invalid={errors.text_template ? true : undefined}
-            aria-describedby={`${ids}-template-help${errors.text_template ? ` ${ids}-template-error` : ''}`}
-          />
-          <FieldError id={`${ids}-template-error`} error={errors.text_template} t={t} />
-          <div id={`${ids}-template-help`} className="text-xs text-text-sub">
-            <p>{t('overlayEditor.alertsEditor.templateHint')}</p>
-            <ul className="mt-1 space-y-0.5">
-              {ALERT_PLACEHOLDERS.map(({ token, key }) => (
-                <li key={token}>
-                  <code className="font-mono text-text">{token}</code>{' '}
-                  {t(`overlayEditor.alertsEditor.${key}`)}
-                </li>
-              ))}
-            </ul>
+        {!isBase && (
+          <div className="flex flex-col gap-1">
+            <label htmlFor={`${ids}-template`} className="text-xs text-text-sub">
+              {t('overlayEditor.alertsEditor.templateLabel')}
+            </label>
+            <Input
+              id={`${ids}-template`}
+              value={profile.text_template}
+              onChange={(e) => update({ text_template: e.target.value })}
+              aria-invalid={errors.text_template ? true : undefined}
+              aria-describedby={`${ids}-template-help${errors.text_template ? ` ${ids}-template-error` : ''}`}
+            />
+            <FieldError id={`${ids}-template-error`} error={errors.text_template} t={t} />
+            <div id={`${ids}-template-help`} className="text-xs text-text-sub">
+              <p>{t('overlayEditor.alertsEditor.templateHint')}</p>
+              <ul className="mt-1 space-y-0.5">
+                {ALERT_PLACEHOLDERS.map(({ token, key }) => (
+                  <li key={token}>
+                    <code className="font-mono text-text">{token}</code>{' '}
+                    {t(`overlayEditor.alertsEditor.${key}`)}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-        </div>
+        )}
 
         <MediaField
           id={`${ids}-image`}
@@ -268,6 +339,7 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
           error={errors.image_url}
           onChange={(image_url) => update({ image_url })}
           locked={locked}
+          inherits={!isBase}
         />
 
         <MediaField
@@ -278,6 +350,7 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
           error={errors.sound_url}
           onChange={(sound_url) => update({ sound_url })}
           locked={locked}
+          inherits={!isBase}
         />
 
         <div className="flex flex-col gap-1">
@@ -361,6 +434,22 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
         >
           {t(saving ? 'overlayEditor.alertsEditor.saving' : 'overlayEditor.alertsEditor.save')}
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() => void sendTest()}
+          disabled={saving || testing}
+        >
+          {t(
+            testing
+              ? 'overlayEditor.alertTest.sending'
+              : saveFirst
+                ? 'overlayEditor.alertsEditor.saveAndTest'
+                : 'overlayEditor.alertTest.send'
+          )}
+        </Button>
+        <p className="text-xs text-text-sub">{t('overlayEditor.alertTest.body')}</p>
         {/* Always mounted so the save result announces (WCAG 4.1.3). */}
         <p role="status" className="text-center text-xs text-text-sub">
           {status || (dirty.size > 0 ? t('overlayEditor.alertsEditor.unsaved') : '')}
@@ -388,6 +477,7 @@ function MediaField({
   error,
   onChange,
   locked,
+  inherits,
 }: {
   id: string
   kind: 'image' | 'sound'
@@ -396,6 +486,8 @@ function MediaField({
   error?: string
   onChange: (url: string) => void
   locked: boolean
+  /** An event type's field: left empty, it uses the All events style. */
+  inherits: boolean
 }) {
   const t = useTranslations()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -439,7 +531,11 @@ function MediaField({
           id={id}
           type="url"
           value={value}
-          placeholder={t('overlayEditor.alertsEditor.urlPlaceholder')}
+          placeholder={t(
+            inherits
+              ? 'overlayEditor.alertsEditor.inheritsPlaceholder'
+              : 'overlayEditor.alertsEditor.urlPlaceholder'
+          )}
           onChange={(e) => onChange(e.target.value.trim())}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy || undefined}
