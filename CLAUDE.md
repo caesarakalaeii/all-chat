@@ -164,7 +164,17 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 ## Shipping a Feature
 
-Shipping a new user-facing feature is not "done" until all three of these release steps are covered:
+**Release cycle** (set by the maintainer; the full version is in [CONTRIBUTING.md](./CONTRIBUTING.md#release-flow)):
+
+1. **Build locally.** Develop and test the feature on a branch.
+2. **Release to beta** by merging into the `beta` branch. A push to `beta` builds `:beta` images (`build-and-push.yml`, tag `type=ref,event=branch`), and Keel deploys `frontend-beta` and `api-gateway-beta`, which serve beta.allch.at.
+3. **Release to `main` (prod)** only after a human has checked beta and greenlit it. **Agents never promote to `main` on their own.**
+
+Fixes may still go to `main` through PRs.
+
+**Gap:** only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in any other service has no beta environment, so a human decides how to stage it.
+
+On top of the cycle, a new user-facing feature is not "done" until all three of these release steps are covered:
 
 1. **Premium toggle.** New features ship behind a premium feature gate (ADR-0008: the `feature_gates` table, enforced via `shared/middleware` RequirePremium/RequireEarlyAccess, managed through the admin feature-gates API). This lets premium/beta access be flipped without a deploy.
 2. **Onboarding extras tour.** Because features are premium-toggled, every new feature must be added to the optional tour in the first-run setup guide: the "Optional: go further" list in `frontend/src/components/onboarding/OnboardingChecklist.tsx` AND the premium features list in `frontend/src/app/upgrade/page.tsx`. The tour copy mirrors `/upgrade` and the two must stay in sync (there is a keep-in-sync comment at both sites).
