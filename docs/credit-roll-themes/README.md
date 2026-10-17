@@ -18,7 +18,7 @@ Credit roll themes customize the appearance of your end-of-stream credits displa
 | Purpose | Chat message display | End-of-stream leaderboards |
 | Content | Messages, emotes, badges | Rankings, avatars, statistics |
 | Update Frequency | Real-time (< 500ms) | Static (shown at stream end) |
-| Duration | Continuous | 10-300 seconds |
+| Duration | Continuous | 10-300 seconds, then the roll starts over |
 
 ## Key CSS Selectors
 
@@ -26,6 +26,10 @@ Credit roll themes customize the appearance of your end-of-stream credits displa
 ```css
 /* Main container */
 .min-h-screen { }
+
+/* The scrolling roll. It moves by an animated `transform`, so a theme must
+   not set `transform` on it (an !important one stops the roll). */
+.container { }
 
 /* Section headers with emoji */
 h2 { }

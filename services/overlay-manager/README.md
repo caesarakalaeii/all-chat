@@ -317,14 +317,26 @@ POST /api/v1/overlays/:overlay_id/creditroll
 Authorization: Bearer <jwt-token>
 Body: {
   "enabled": true,
-  "min_messages": 5,
-  "duration_seconds": 30
+  "scroll_speed": 50,
+  "display_duration_seconds": 60,
+  "clips_enabled": true,
+  "clips_muted": true
 }
 
 # Get credit roll configuration
 GET /api/v1/overlays/:overlay_id/creditroll
 Authorization: Bearer <jwt-token>
 ```
+
+The OBS source (`/overlay/:id/credits`) scrolls the roll up at `scroll_speed`
+pixels per second, from just below the screen until its last line reaches the
+bottom edge. It holds there until `display_duration_seconds` is up and then
+starts over; a roll too long to fit scrolls to its end first. With
+`clips_enabled`, the session's Twitch clips play full-screen behind the roll,
+one after another. The browser looks up each clip's MP4 from Twitch's web GQL
+and plays it with sound in OBS unless `clips_muted` (ADR-0076); when that
+lookup fails, the clip plays muted through Twitch's clip embed
+(`clips.twitch.tv/embed`) instead.
 
 ### Health Checks
 
