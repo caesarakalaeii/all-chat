@@ -66,8 +66,8 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@chromatic-com/storybook": "^5.4.0",
-    "@next/bundle-analyzer": "^16.3.8",
-    "@playwright/test": "^1.63.0",
+    "@next/bundle-analyzer": "^16.4.0",
+    "@playwright/test": "^1.64.0",
     "@storybook/addon-a11y": "^10.6.1",
     "@storybook/addon-docs": "^10.6.1",
     "@storybook/addon-vitest": "^10.6.1",
@@ -75,7 +75,7 @@
     "@tailwindcss/postcss": "^4.3.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@typescript-eslint/parser": "^8.71.1",
@@ -99,7 +99,7 @@
     "storybook": "^10.5.7",
     "tailwindcss": "^4.1.18",
     "typescript": "^6.0.3",
-    "vite": "^8.3.3",
+    "vite": "^8.3.4",
     "vitest": "^4.1.10"
   }
 }
