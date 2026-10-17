@@ -635,9 +635,7 @@ export const overlayEditor = {
     loadFailed: 'Could not load the leaderboard',
   },
   alertTest: {
-    heading: 'Test alerts',
     body: 'Send a test alert to this overlay. It plays in OBS and on every open overlay page, just like a real one.',
-    eventTypeLabel: 'Event type',
     send: 'Send test alert',
     sending: 'Sending...',
     sent: 'Test alert sent',
@@ -697,6 +695,14 @@ export const overlayEditor = {
     saveFailed: 'Could not save the alerts: {reason}',
     unsaved: 'Unsaved changes',
     fixErrors: 'Fix the highlighted fields first.',
+    allEvents: 'All events (default style)',
+    allEventsHint:
+      'Applies to every event. Pick an event to give it its own text, image or sound; whatever it leaves empty comes from here.',
+    allEnabledLabel: 'Show alerts',
+    inheritsHint: 'Uses the All events style. Changes here apply to this event only.',
+    inheritsPlaceholder: 'Empty: All events style',
+    customizedMark: 'own style',
+    saveAndTest: 'Save and send test alert',
   },
   // Event type names (shared/alerts eventDefs) for the alert pickers.
   alertEventTypes: {
@@ -718,6 +724,8 @@ export const overlayEditor = {
     gift: 'TikTok gift',
     share: 'TikTok share',
     tiktok_subscription: 'TikTok subscription',
+    power_up: 'Power-up',
+    gift_received: 'Received gift membership',
   },
   // Injecting a fake chat message so a streamer can see their overlay react.
   testing: {
