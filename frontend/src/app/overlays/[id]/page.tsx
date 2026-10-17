@@ -44,7 +44,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, X, Clipboard, Share2, Puzzle } from 'lucide-react'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { AlertTestPanel } from '@/components/overlays/AlertTestPanel'
 import { GoalEditor, ListEditor } from '@/components/overlays/GoalListEditors'
 import { AlertsEditor } from '@/components/overlays/AlertsEditor'
 import { resolveOverlayKind } from '@/lib/utils/overlayKind'
@@ -3672,10 +3671,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {shownSection === 'list' && <ListEditor overlayId={id} />}
 
                   {shownSection === 'alerts' && (
-                    <div className="space-y-8">
-                      <AlertsEditor overlayId={id} isPremium={user?.is_premium ?? false} />
-                      <AlertTestPanel overlayId={id} />
-                    </div>
+                    <AlertsEditor overlayId={id} isPremium={user?.is_premium ?? false} />
                   )}
 
                   {shownSection === 'theme' && (

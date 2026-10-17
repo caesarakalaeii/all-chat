@@ -815,6 +815,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0075: Alert profiles inherit an all-events base style
+
+**Status**: Accepted (2026-10-17); amends ADR-0070's profile resolution
+**Problem**: One GIF for every alert took one save per event type, and "Send test alert" ignored unsaved editor changes because the gateway resolves tests from saved profiles, so picked GIFs never showed.
+**Decision**: A stored profile with event type `all` is the base style. `alerts.ApplyBase` layers it under each event: an unsaved event takes the base's media, timing and custom code; a saved one fills only its empty image/sound (custom code as a unit); base off silences all. GET/PUT return `all` first plus `saved`. The test button moves into the editor, tests the edited event, and saves unsaved changes first. `power_up` and `gift_received` get profiles.
+**Impact**: One field and one save for a shared GIF; two profile lookups per alert at the gateway; no migration; either side deploys first.
+**→ Read**: [0075-alert-profiles-inherit-an-all-events-base-style.md](./0075-alert-profiles-inherit-an-all-events-base-style.md)
+
+---
+
 
 ## How to Create a New ADR
 

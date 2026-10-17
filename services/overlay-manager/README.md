@@ -219,16 +219,19 @@ DELETE /api/v1/overlays/:overlay_id/sources/:source_id
 Authorization: Bearer <jwt-token>
 ```
 
-### Alert Profiles (alerts overlays, ADR-0070)
+### Alert Profiles (alerts overlays, ADR-0070, ADR-0075)
 
 ```bash
-# Every known event type's profile: the saved row, else the built-in default
-# (shared/alerts). Free.
+# The "all" base style first, then every known event type's profile: the saved
+# row, else the built-in default (shared/alerts). saved lists the event types
+# with a stored row; the others run on the base style. Free.
 GET /api/v1/overlays/:overlay_id/alerts/profiles
-→ { "profiles": [ { "event_type": "bits", "text_template": "{username} cheered {amount}!",
+→ { "profiles": [ { "event_type": "all", "text_template": "", "image_url": "https://...gif", ... },
+                  { "event_type": "bits", "text_template": "{username} cheered {amount}!",
                     "sound_url": "", "image_url": "", "duration_ms": 5000, "volume": 100,
                     "enabled": true, "sort_after": 0,
-                    "custom_html": "", "custom_css": "", "custom_js": "" }, ... ] }
+                    "custom_html": "", "custom_css": "", "custom_js": "" }, ... ],
+    "saved": ["all"] }
 
 # Bulk upsert, all or nothing. Premium (gate alerts_editor). 400 unless the
 # overlay is an alerts overlay, or for an unknown/duplicated event_type, a
@@ -236,12 +239,15 @@ GET /api/v1/overlays/:overlay_id/alerts/profiles
 # a template over 500 characters, or a custom_html/custom_css/custom_js field
 # over 64 KiB (migration 109, ADR-0071; the overlay renders custom code in a
 # sandboxed iframe, see frontend/src/components/overlays/alertSandbox.ts).
+# event_type "all" saves the base style. Returns the same body as GET.
 PUT /api/v1/overlays/:overlay_id/alerts/profiles
 Body: { "profiles": [ { ...full profile as above... } ] }
 
 # Publish a synthetic alert (fresh alert_id, event_data.metadata.test = true)
 # straight to overlay:{overlay_id}:alerts. Free. 400 on a chat overlay or an
-# unknown event_type. → 202 { "alert_id": "..." }
+# unknown event_type ("all" included: it is no event). The gateway resolves it
+# from the SAVED profiles, so the editor saves unsaved changes before it sends
+# one. → 202 { "alert_id": "..." }
 POST /api/v1/overlays/:overlay_id/alerts/test
 Body: { "event_type": "bits" }
 ```

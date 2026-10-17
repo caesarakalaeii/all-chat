@@ -74,6 +74,9 @@ func TestBuildAlertFrame_UsesTheSavedProfile(t *testing.T) {
 	saved.CustomJS = "onAlert(function () {})"
 	lookup := func(_ context.Context, overlayID, eventType string) (alerts.Profile, bool, error) {
 		assert.Equal(t, "o-1", overlayID)
+		if eventType == alerts.AllEvents {
+			return alerts.Profile{}, false, nil
+		}
 		assert.Equal(t, "bits", eventType)
 		return saved, true, nil
 	}
@@ -98,6 +101,65 @@ func TestBuildAlertFrame_DropsDisabledProfiles(t *testing.T) {
 		func(context.Context, string, string) (alerts.Profile, bool, error) { return off, true, nil }, frameTime)
 	require.NoError(t, err)
 	assert.Nil(t, frame, "a streamer who switched an event type off must not see it")
+}
+
+// profileLookup serves saved profiles by event type, AllEvents included.
+func profileLookup(saved ...alerts.Profile) alertProfileLookup {
+	return func(_ context.Context, _, eventType string) (alerts.Profile, bool, error) {
+		for _, p := range saved {
+			if p.EventType == eventType {
+				return p, true, nil
+			}
+		}
+		return alerts.Profile{}, false, nil
+	}
+}
+
+func resolvedProfile(t *testing.T, frame []byte) alerts.ResolvedProfile {
+	t.Helper()
+	require.NotNil(t, frame)
+	_, data := decodeFrame(t, frame)
+	var profile alerts.ResolvedProfile
+	require.NoError(t, json.Unmarshal(data["profile"], &profile))
+	return profile
+}
+
+// One GIF set on the base style reaches every event type the streamer never
+// configured on its own (ADR-0075).
+func TestBuildAlertFrame_UnsavedEventTypesUseTheBaseStyle(t *testing.T) {
+	base, _ := alerts.DefaultProfile(alerts.AllEvents)
+	base.ImageURL = "https://static.klipy.com/party.gif"
+	base.DurationMs = 9000
+
+	frame, err := buildAlertFrame(context.Background(), "o-1", []byte(bitsAlert), profileLookup(base), frameTime)
+	require.NoError(t, err)
+	profile := resolvedProfile(t, frame)
+	assert.Equal(t, "bits", profile.EventType)
+	assert.Equal(t, base.ImageURL, profile.ImageURL)
+	assert.Equal(t, 9000, profile.DurationMs)
+	assert.Equal(t, "SomeChatter cheered 100 bits!", profile.Text, "the text stays per event type")
+}
+
+func TestBuildAlertFrame_ASavedEventTypeOverridesTheBaseStyle(t *testing.T) {
+	base, _ := alerts.DefaultProfile(alerts.AllEvents)
+	base.ImageURL = "https://static.klipy.com/party.gif"
+	base.SoundURL = "https://media.allch.at/ding.mp3"
+	bits, _ := alerts.DefaultProfile("bits")
+	bits.ImageURL = "https://static.klipy.com/bits.gif"
+
+	frame, err := buildAlertFrame(context.Background(), "o-1", []byte(bitsAlert), profileLookup(base, bits), frameTime)
+	require.NoError(t, err)
+	profile := resolvedProfile(t, frame)
+	assert.Equal(t, bits.ImageURL, profile.ImageURL)
+	assert.Equal(t, base.SoundURL, profile.SoundURL)
+}
+
+func TestBuildAlertFrame_ABaseStyleSwitchedOffDropsEveryAlert(t *testing.T) {
+	base, _ := alerts.DefaultProfile(alerts.AllEvents)
+	base.Enabled = false
+	frame, err := buildAlertFrame(context.Background(), "o-1", []byte(bitsAlert), profileLookup(base), frameTime)
+	require.NoError(t, err)
+	assert.Nil(t, frame)
 }
 
 func TestBuildAlertFrame_FallsBackToTheDefaultWhenTheLookupFails(t *testing.T) {

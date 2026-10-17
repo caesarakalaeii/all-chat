@@ -38,9 +38,25 @@ export const ALERT_EVENT_TYPES = [
   'gift',
   'share',
   'tiktok_subscription',
+  'power_up',
+  'gift_received',
 ] as const
 
 export type AlertEventType = (typeof ALERT_EVENT_TYPES)[number]
+
+/**
+ * The pseudo event type of an overlay's base style (shared/alerts AllEvents,
+ * ADR-0075): media, timing and custom code every event type uses until it
+ * saves its own. Never published as an event, so never testable on its own.
+ */
+export const ALERT_ALL_EVENTS = 'all'
+
+/** GET/PUT /overlays/:id/alerts/profiles: the base style, then every event type. */
+export interface AlertProfilesResponse {
+  profiles: EditableAlertProfile[]
+  /** Event types with a saved row; the rest run on the defaults / base style. */
+  saved: string[]
+}
 
 /**
  * One saved (or default) alert profile, as GET/PUT

@@ -19,20 +19,21 @@
 import { test, expect, type Page, type WebSocketRoute } from '@playwright/test'
 
 /**
- * The alerts editor (issue #954): an alerts overlay's dashboard editor edits
- * per-event alert profiles, saves them with PUT /overlays/:id/alerts/profiles,
- * and the test alert plays the change in the editor's preview pane — the same
- * alert box OBS renders, fed over the overlay WebSocket. The API and the
- * gateway are mocked; the mocked test endpoint answers like api-gateway does,
- * with the saved profile resolved into the frame.
+ * The alerts editor (issue #954, ADR-0075): an alerts overlay's dashboard
+ * editor edits the "All events" base style and per-event alert profiles,
+ * saves them with PUT /overlays/:id/alerts/profiles, and the test alert plays
+ * the change in the editor's preview pane — the same alert box OBS renders,
+ * fed over the overlay WebSocket. The API and the gateway are mocked; the
+ * mocked test endpoint answers like api-gateway does, with the SAVED profile
+ * layered over the saved base style (alerts.ApplyBase) resolved into the frame.
  */
 
 const OVERLAY_ID = 'alerts-editor-e2e'
 
-const EVENT_TYPES = ['subscription', 'bits']
+const EVENT_TYPES = ['all', 'subscription', 'bits']
 const defaults = EVENT_TYPES.map((event_type) => ({
   event_type,
-  text_template: '{username} just subscribed!',
+  text_template: event_type === 'all' ? '' : '{username} just subscribed!',
   sound_url: '',
   image_url: '',
   duration_ms: 4000,
@@ -44,13 +45,39 @@ const defaults = EVENT_TYPES.map((event_type) => ({
   custom_js: '',
 }))
 
+const GIF = 'https://static.klipy.com/e2e/party.gif'
+// A 1x1 transparent GIF, so the preview's <img> loads without the network.
+const GIF_BYTES = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')
+
+type Profile = (typeof defaults)[number]
+
+/** Mirror of shared/alerts.ApplyBase: the gateway's resolution of one event. */
+function applyBase(p: Profile, saved: boolean, base: Profile): Profile {
+  const out = { ...p }
+  if (!saved) Object.assign(out, { duration_ms: base.duration_ms, volume: base.volume })
+  out.image_url ||= base.image_url
+  out.sound_url ||= base.sound_url
+  if (!out.custom_html && !out.custom_css && !out.custom_js) {
+    Object.assign(out, {
+      custom_html: base.custom_html,
+      custom_css: base.custom_css,
+      custom_js: base.custom_js,
+    })
+  }
+  out.enabled = out.enabled && base.enabled
+  return out
+}
+
 interface Harness {
   saved: Array<Record<string, unknown>>
+  /** Request order of saves and test sends. */
+  calls: string[]
 }
 
 async function boot(page: Page, { premium = true } = {}): Promise<Harness> {
-  const harness: Harness = { saved: [] }
+  const harness: Harness = { saved: [], calls: [] }
   let profiles = structuredClone(defaults)
+  const savedTypes = new Set<string>()
   const sockets: WebSocketRoute[] = []
 
   await page.route('**/api/v1/**', (route) =>
@@ -96,18 +123,25 @@ async function boot(page: Page, { premium = true } = {}): Promise<Harness> {
     if (route.request().method() === 'PUT') {
       const body = route.request().postDataJSON() as { profiles: typeof defaults }
       harness.saved.push(...body.profiles)
+      harness.calls.push('save')
+      body.profiles.forEach((b) => savedTypes.add(b.event_type))
       profiles = profiles.map((p) => body.profiles.find((b) => b.event_type === p.event_type) ?? p)
     }
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ profiles }),
+      body: JSON.stringify({ profiles, saved: [...savedTypes] }),
     })
   })
   // The gateway's test-alert path: resolve the saved profile into the frame.
   await page.route(`**/api/v1/overlays/${OVERLAY_ID}/alerts/test`, async (route) => {
     const { event_type } = route.request().postDataJSON() as { event_type: string }
-    const profile = profiles.find((p) => p.event_type === event_type)!
+    harness.calls.push(`test:${event_type}`)
+    const profile = applyBase(
+      profiles.find((p) => p.event_type === event_type)!,
+      savedTypes.has(event_type),
+      profiles.find((p) => p.event_type === 'all')!
+    )
     const alertId = `t-${Date.now()}`
     const frame = {
       type: 'alert',
@@ -137,6 +171,11 @@ async function boot(page: Page, { premium = true } = {}): Promise<Harness> {
       body: JSON.stringify({ alert_id: alertId }),
     })
   })
+  await page
+    .context()
+    .route(GIF, (route) =>
+      route.fulfill({ status: 200, contentType: 'image/gif', body: GIF_BYTES })
+    )
   await page.context().routeWebSocket('**/ws/overlay/**', (ws) => {
     sockets.push(ws)
     ws.send(JSON.stringify({ type: 'connected', data: { overlay_id: OVERLAY_ID } }))
@@ -153,13 +192,22 @@ async function boot(page: Page, { premium = true } = {}): Promise<Harness> {
     )
   })
   await page.goto(`/overlays/${OVERLAY_ID}`)
-  await expect(page.getByLabel('Alert text')).toBeVisible({ timeout: 30_000 })
-  // The preview pane's alert box has connected its socket.
-  await expect.poll(() => sockets.length, { timeout: 30_000 }).toBeGreaterThan(0)
+  await expect(page.getByLabel('Image or GIF')).toBeVisible({ timeout: 30_000 })
+  // The preview pane's alert box (the passive socket, preview/alerts/page.tsx)
+  // has connected; the editor's own socket alone would let a test alert go out
+  // before the preview can play it.
+  await expect
+    .poll(() => sockets.some((ws) => ws.url().includes('passive=true')), { timeout: 30_000 })
+    .toBe(true)
   return harness
 }
 
 const preview = (page: Page) => page.frameLocator('iframe[src$="/preview/alerts"]')
+
+async function pickEventType(page: Page, label: string) {
+  await page.getByRole('combobox', { name: 'Event type' }).click()
+  await page.getByRole('option', { name: new RegExp(`^${label}`) }).click()
+}
 
 test.describe('Alerts editor', () => {
   test('replaces the chat editor for an alerts overlay', async ({ page }) => {
@@ -170,9 +218,27 @@ test.describe('Alerts editor', () => {
     await expect(page.getByRole('button', { name: 'Send test alert' })).toBeVisible()
   })
 
-  test('free-tier edit, save, then the test alert shows the change', async ({ page }) => {
+  test('one GIF on All events reaches the test alert, saved first', async ({ page }) => {
+    const harness = await boot(page)
+    // The editor opens on the base style, which has no text of its own.
+    await expect(page.getByRole('combobox', { name: 'Event type' })).toHaveText(/All events/)
+    await expect(page.getByLabel('Alert text')).toHaveCount(0)
+
+    await page.getByLabel('Image or GIF').fill(GIF)
+    await page.getByRole('button', { name: 'Save and send test alert' }).click()
+
+    // The subscription has no row of its own: it plays with the base's GIF.
+    await expect(preview(page).locator(`img[src="${GIF}"]`)).toBeVisible()
+    await expect(preview(page).getByRole('status')).toHaveText('AllChatTester just subscribed!')
+    expect(harness.calls).toEqual(['save', 'test:subscription'])
+    expect(harness.saved).toEqual([expect.objectContaining({ event_type: 'all', image_url: GIF })])
+    await expect(page.getByRole('button', { name: 'Send test alert' })).toBeVisible()
+  })
+
+  test('edit one event, save, then the test alert shows the change', async ({ page }) => {
     const harness = await boot(page)
 
+    await pickEventType(page, 'Subscription')
     await page.getByLabel('Alert text').fill('{username} joined the party!')
     await page.getByLabel('Duration (seconds)').fill('8')
     await page.getByRole('button', { name: 'Save alerts' }).click()
@@ -217,7 +283,7 @@ test.describe('Alerts editor', () => {
 
   test('without premium the editor is read-only behind the upgrade link', async ({ page }) => {
     await boot(page, { premium: false })
-    await expect(page.getByLabel('Alert text')).toBeDisabled()
+    await expect(page.getByLabel('Image or GIF')).toBeDisabled()
     await expect(page.getByText('Custom alert code is a Premium feature.')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Save alerts' })).toBeDisabled()
     // Test alerts stay free.

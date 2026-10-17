@@ -78,8 +78,11 @@ to every non-engagement socket as:
 ```
 
 The profile is resolved here, per alert, from `alert_profiles` (falling back to
-the default in `shared/alerts`, also on a DB error). A disabled profile drops
-the alert, and an event type with no profile (e.g. `like_aggregate`) is sent
+the default in `shared/alerts`, also on a DB error), layered over the overlay's
+`all` base style with `alerts.ApplyBase` (ADR-0075): an event type without a
+saved row takes the base's media, timing and custom code, a saved one fills
+only its empty image and sound from it. A disabled profile, or a disabled base
+style, drops the alert, and an event type with no profile (e.g. `like_aggregate`) is sent
 without `profile`. Alerts are never written to the chat replay buffer, and
 clients dedup on `alert_id`, because a redelivered alert can arrive twice.
 

@@ -560,9 +560,7 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     loadFailed: 'Bestenliste konnte nicht geladen werden',
   },
   alertTest: {
-    heading: 'Test-Alerts',
     body: 'Sende einen Test-Alert an dieses Overlay. Er läuft in OBS und auf jeder offenen Overlay-Seite, genau wie ein echter.',
-    eventTypeLabel: 'Ereignistyp',
     send: 'Test-Alert senden',
     sending: 'Wird gesendet...',
     sent: 'Test-Alert gesendet',
@@ -623,6 +621,15 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     saveFailed: 'Die Alerts konnten nicht gespeichert werden: {reason}',
     unsaved: 'Ungespeicherte Änderungen',
     fixErrors: 'Korrigiere zuerst die markierten Felder.',
+    allEvents: 'Alle Ereignisse (Standardstil)',
+    allEventsHint:
+      'Gilt für jedes Ereignis. Wähle ein Ereignis, um ihm eigenen Text, ein eigenes Bild oder einen eigenen Sound zu geben; was dort leer bleibt, kommt von hier.',
+    allEnabledLabel: 'Alerts anzeigen',
+    inheritsHint:
+      'Nutzt den Stil von „Alle Ereignisse“. Änderungen hier gelten nur für dieses Ereignis.',
+    inheritsPlaceholder: 'Leer: Standardstil',
+    customizedMark: 'eigener Stil',
+    saveAndTest: 'Speichern und Test-Alert senden',
   },
   // Event type names (shared/alerts eventDefs) for the alert pickers.
   alertEventTypes: {
@@ -644,6 +651,8 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     gift: 'TikTok-Geschenk',
     share: 'TikTok-Teilen',
     tiktok_subscription: 'TikTok-Abo',
+    power_up: 'Power-up',
+    gift_received: 'Geschenkte Mitgliedschaft erhalten',
   },
   testing: {
     platformLabel: 'Plattform',
