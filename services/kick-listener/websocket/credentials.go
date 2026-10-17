@@ -29,14 +29,49 @@ import (
 	"go.uber.org/zap"
 )
 
-// KickRealtimeConnectionURL is where kick.com's own web client gets its Pusher
-// credentials. Kick rotates the app key without notice (on 2026-10-17 the old
-// key started failing every connect with Pusher 4001 "App key not in this
-// cluster"), so the client resolves the key before each connect instead of
-// trusting the configured one.
+// KickRealtimeConnectionURL is where kick.com's own web client asks which
+// realtime provider to use (ADR-0077). Kick rotates the Pusher app key without
+// notice (on 2026-10-17 the old key started failing every connect with Pusher
+// 4001 "App key not in this cluster") and answers Centrifugo to any client
+// that accepts it, so nothing about the transport is hardcoded.
 const KickRealtimeConnectionURL = "https://web.kick.com/api/v1/realtime/connection"
 
-var credentialsHTTPClient = &http.Client{Timeout: 10 * time.Second}
+// KickRealtimeTokenURL hands out the guest connection tokens Kick's
+// Centrifugo requires (a 45-minute JWT for guest:<client_id>, no login).
+const KickRealtimeTokenURL = "https://web.kick.com/api/v1/realtime/auth/connection"
+
+// Realtime providers as Kick names them.
+const (
+	ProviderPusher     = "pusher"
+	ProviderCentrifugo = "centrifugo"
+)
+
+var kickAPIClient = &http.Client{Timeout: 10 * time.Second}
+
+// Realtime is what the listener needs from a Kick realtime transport. The
+// Pusher Client and the CentrifugoClient both implement it.
+type Realtime interface {
+	Connect() error
+	Disconnect() error
+	Subscribe(chatroomID int) error
+	SubscribeWithAuth(chatroomID int, authToken string) error
+	Unsubscribe(chatroomID int) error
+	IsConnected() bool
+	GetSocketID() string
+	LastActivityAt() time.Time
+	IsStale() bool
+	ReconnectChan() <-chan struct{}
+	SetDeletionHandler(handler DeletionHandler)
+}
+
+// RealtimeConnection is the provider Kick chose and what it needs:
+// AppKey and Cluster for Pusher, URL for Centrifugo.
+type RealtimeConnection struct {
+	Provider string
+	AppKey   string
+	Cluster  string
+	URL      string
+}
 
 type realtimeConnectionResponse struct {
 	Data struct {
@@ -45,66 +80,99 @@ type realtimeConnectionResponse struct {
 			Credentials struct {
 				AppKey  string `json:"app_key"`
 				Cluster string `json:"cluster"`
+				URL     string `json:"url"`
 			} `json:"credentials"`
 		} `json:"connections"`
 	} `json:"data"`
 }
 
-// fetchPusherCredentials asks Kick for the Pusher app key and cluster its web
-// client would use. Only pusher is offered: offered centrifugo too, Kick
-// answers with a centrifugo URL, which this client does not speak.
-func fetchPusherCredentials(ctx context.Context, client *http.Client, url string) (appKey, cluster string, err error) {
-	reqBody, err := json.Marshal(map[string]any{
-		"client":       map[string]string{"id": uuid.NewString(), "type": "web"},
-		"capabilities": map[string]any{"accepted_providers": []map[string]string{{"provider": "pusher"}}},
-	})
-	if err != nil {
-		return "", "", err
+// ResolveRealtime asks Kick which of the given providers to use, offering them
+// the way kick.com's web client does. Kick picks one; a connection for a
+// provider that was not offered, or with empty credentials, is not usable.
+func ResolveRealtime(ctx context.Context, url string, providers []string) (RealtimeConnection, error) {
+	accepted := make([]map[string]string, 0, len(providers))
+	offered := make(map[string]bool, len(providers))
+	for _, p := range providers {
+		accepted = append(accepted, map[string]string{"provider": p})
+		offered[p] = true
 	}
 
+	var parsed realtimeConnectionResponse
+	err := postKickJSON(ctx, url, map[string]any{
+		"client":       map[string]string{"id": uuid.NewString(), "type": "web"},
+		"capabilities": map[string]any{"accepted_providers": accepted},
+	}, &parsed)
+	if err != nil {
+		return RealtimeConnection{}, err
+	}
+
+	for _, conn := range parsed.Data.Connections {
+		c := conn.Credentials
+		switch {
+		case !offered[conn.Provider]:
+		case conn.Provider == ProviderPusher && c.AppKey != "" && c.Cluster != "":
+			return RealtimeConnection{Provider: ProviderPusher, AppKey: c.AppKey, Cluster: c.Cluster}, nil
+		case conn.Provider == ProviderCentrifugo && c.URL != "":
+			return RealtimeConnection{Provider: ProviderCentrifugo, URL: c.URL}, nil
+		}
+	}
+	return RealtimeConnection{}, fmt.Errorf("realtime connection response has no usable connection for %v", providers)
+}
+
+// fetchCentrifugoToken gets a guest connection token for one connection.
+func fetchCentrifugoToken(ctx context.Context, url, clientID string) (string, error) {
+	var parsed struct {
+		Data struct {
+			Token string `json:"token"`
+		} `json:"data"`
+	}
+	if err := postKickJSON(ctx, url, map[string]string{"client_id": clientID}, &parsed); err != nil {
+		return "", err
+	}
+	if parsed.Data.Token == "" {
+		return "", fmt.Errorf("realtime auth response has no token")
+	}
+	return parsed.Data.Token, nil
+}
+
+func postKickJSON(ctx context.Context, url string, body, out any) error {
+	reqBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
 	if err != nil {
-		return "", "", err
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "AllChat/1.0")
 
-	resp, err := client.Do(req)
+	resp, err := kickAPIClient.Do(req)
 	if err != nil {
-		return "", "", err
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", "", fmt.Errorf("realtime connection endpoint returned %d: %s", resp.StatusCode, body)
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("%s returned %d: %s", url, resp.StatusCode, b)
 	}
-
-	var parsed realtimeConnectionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return "", "", fmt.Errorf("decode realtime connection response: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode %s response: %w", url, err)
 	}
-	for _, conn := range parsed.Data.Connections {
-		if conn.Provider == "pusher" && conn.Credentials.AppKey != "" && conn.Credentials.Cluster != "" {
-			return conn.Credentials.AppKey, conn.Credentials.Cluster, nil
-		}
-	}
-	return "", "", fmt.Errorf("realtime connection response has no pusher credentials")
+	return nil
 }
 
-// refreshCredentials swaps in Kick's current app key and puts its cluster
-// first. On any failure it keeps the configured key, so a Kick API outage
-// degrades to the old behavior rather than blocking the connect.
+// refreshCredentials swaps in Kick's current Pusher app key and puts its
+// cluster first. On any failure it keeps the configured key, so a Kick API
+// outage degrades to the old behavior rather than blocking the connect.
 func (c *Client) refreshCredentials() {
 	if c.config.CredentialsURL == "" {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
-	defer cancel()
-
-	appKey, cluster, err := fetchPusherCredentials(ctx, credentialsHTTPClient, c.config.CredentialsURL)
+	conn, err := ResolveRealtime(c.ctx, c.config.CredentialsURL, []string{ProviderPusher})
 	if err != nil {
 		c.logger.Warn("Could not resolve Kick Pusher credentials, using configured app key",
 			zap.String("app_key", c.config.AppKey),
@@ -113,15 +181,15 @@ func (c *Client) refreshCredentials() {
 		return
 	}
 
-	if appKey != c.config.AppKey {
+	if conn.AppKey != c.config.AppKey {
 		c.logger.Info("Kick Pusher app key changed",
 			zap.String("old_app_key", c.config.AppKey),
-			zap.String("new_app_key", appKey),
-			zap.String("cluster", cluster),
+			zap.String("new_app_key", conn.AppKey),
+			zap.String("cluster", conn.Cluster),
 		)
-		c.config.AppKey = appKey
+		c.config.AppKey = conn.AppKey
 	}
 
 	// clusterAttempts tries activeCluster first, then the configured ones.
-	c.activeCluster = cluster
+	c.activeCluster = conn.Cluster
 }
