@@ -24,7 +24,7 @@
  */
 
 import { apiClient } from './client'
-import type { EditableAlertProfile } from '@/lib/types/alert'
+import type { AlertProfilesResponse, EditableAlertProfile } from '@/lib/types/alert'
 import type { GoalConfig, GoalState, ListConfig } from '@/lib/types/goal'
 import type {
   Overlay,
@@ -210,12 +210,13 @@ export const overlaysApi = {
     })
   },
 
-  /** Every known event type's alert profile: saved rows over the defaults (ADR-0070). */
-  async getAlertProfiles(id: string): Promise<EditableAlertProfile[]> {
-    const res = await apiClient.get<{ profiles: EditableAlertProfile[] }>(
-      `/api/v1/overlays/${id}/alerts/profiles`
-    )
-    return res.profiles
+  /**
+   * The all-events base style and every known event type's alert profile:
+   * saved rows over the defaults (ADR-0070, ADR-0075).
+   */
+  async getAlertProfiles(id: string): Promise<AlertProfilesResponse> {
+    const res = await apiClient.get<AlertProfilesResponse>(`/api/v1/overlays/${id}/alerts/profiles`)
+    return { profiles: res.profiles, saved: res.saved ?? [] }
   },
 
   /**
@@ -225,12 +226,12 @@ export const overlaysApi = {
   async saveAlertProfiles(
     id: string,
     profiles: EditableAlertProfile[]
-  ): Promise<EditableAlertProfile[]> {
-    const res = await apiClient.put<{ profiles: EditableAlertProfile[] }>(
+  ): Promise<AlertProfilesResponse> {
+    const res = await apiClient.put<AlertProfilesResponse>(
       `/api/v1/overlays/${id}/alerts/profiles`,
       { profiles }
     )
-    return res.profiles
+    return { profiles: res.profiles, saved: res.saved ?? [] }
   },
 
   /**

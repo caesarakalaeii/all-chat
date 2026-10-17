@@ -96,6 +96,11 @@ type ResolvedProfile struct {
 
 const maxTemplateLen = 500
 
+// AllEvents is the pseudo event type of an overlay's base style (ADR-0075):
+// the media, timing and custom code every event type uses unless it saves its
+// own. It is stored like a profile but never published as an event.
+const AllEvents = "all"
+
 // MaxCustomCodeLen caps each custom code field: it travels in every alert
 // frame and is stored per event type.
 const MaxCustomCodeLen = 64 * 1024
@@ -128,6 +133,8 @@ var eventDefs = []eventDef{
 	{"gift", "tiktok", "{username} sent {amount}!", Value{1, "diamonds", "Rose (1 diamonds)"}},
 	{"share", "tiktok", "{username} shared the stream!", Value{1, "share", "Shared stream"}},
 	{"tiktok_subscription", "tiktok", "{username} just subscribed!", Value{1, "months", "Subscribed"}},
+	{"power_up", "twitch", "{username} used {amount}!", Value{50, "bits", "On-Screen Celebration"}},
+	{"gift_received", "youtube", "{username} received a gift membership!", Value{1, "gift", "Received gift membership"}},
 }
 
 func lookup(eventType string) (eventDef, bool) {
@@ -148,20 +155,48 @@ func EventTypes() []string {
 	return out
 }
 
-// IsKnownEventType reports whether eventType can carry a profile.
+// IsKnownEventType reports whether eventType can carry a profile: a real
+// event type or the AllEvents base style.
 func IsKnownEventType(eventType string) bool {
 	_, ok := lookup(eventType)
-	return ok
+	return ok || eventType == AllEvents
 }
 
 // DefaultProfile is the built-in profile an alerts overlay uses for eventType
-// until the streamer saves one: a text template and no media.
+// until the streamer saves one: a text template and no media. The AllEvents
+// default has no template either: the text is always per event type.
 func DefaultProfile(eventType string) (Profile, bool) {
+	if eventType == AllEvents {
+		return Profile{EventType: AllEvents, DurationMs: 5000, Volume: 100, Enabled: true}, true
+	}
 	d, ok := lookup(eventType)
 	if !ok {
 		return Profile{}, false
 	}
 	return Profile{EventType: d.eventType, TextTemplate: d.template, DurationMs: 5000, Volume: 100, Enabled: true}, true
+}
+
+// ApplyBase layers an overlay's AllEvents base style under p, one event type's
+// profile (ADR-0075). An unsaved p is the built-in default, which only has a
+// text template, so it takes the base's media, timing and custom code. A saved
+// p keeps its own timing and fills only an empty image or sound from the base;
+// custom code moves as a unit, since mixing one profile's HTML with another's
+// JS breaks both. A base switched off silences every event type.
+func ApplyBase(p Profile, saved bool, base Profile) Profile {
+	if !saved {
+		p.DurationMs, p.Volume = base.DurationMs, base.Volume
+	}
+	if p.ImageURL == "" {
+		p.ImageURL = base.ImageURL
+	}
+	if p.SoundURL == "" {
+		p.SoundURL = base.SoundURL
+	}
+	if p.CustomHTML == "" && p.CustomCSS == "" && p.CustomJS == "" {
+		p.CustomHTML, p.CustomCSS, p.CustomJS = base.CustomHTML, base.CustomCSS, base.CustomJS
+	}
+	p.Enabled = p.Enabled && base.Enabled
+	return p
 }
 
 // Validate rejects a profile the overlay could not safely render.
