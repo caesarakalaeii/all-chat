@@ -152,7 +152,7 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 |----------|-------------|--------------|
 | **Twitch** | IRC + EventSub webhooks | Chat, emotes (native + 7TV/BTTV/FFZ), chat GIFs, badges, colors, channel points, raids, follows, chat notices (watch streaks, announcements, charity donations) |
 | **YouTube** | HTTP polling + InnerTube API; official Data API (gRPC) for premium channels | Chat, Super Chat, member badges, multi-stream selection among public live streams; unlisted streams by pasting the stream link; members-only chat through the streamer's own YouTube account (premium) |
-| **Kick** | Pusher WebSocket | Chat, emotes, badges, message deletion |
+| **Kick** | Centrifugo or Pusher WebSocket, whichever Kick picks (ADR-0077) | Chat, emotes, badges, message deletion |
 | **TikTok** | Reads LIVE chat the way TikTok's own web player does; All-Chat maintains its own open-source signing service | Chat, gifts, follows and likes; add a channel by username |
 | **Discord** | Bot gateway + webhook relay | Channel chat relay to overlay |
 | **Owncast** *(beta)* | Chat websocket, one connection per instance | Chat from any self-hosted Owncast instance; add the instance URL as a source |
@@ -192,7 +192,7 @@ Everything below is for contributors and self-hosters. If you're a streamer, you
 All-Chat is a **Go microservices platform** with a React/Next.js frontend. Services communicate through Redis Streams (raw messages) and Redis Pub/Sub (overlay-specific delivery).
 
 ```
-Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot)
+Platform Listeners (Twitch IRC, YouTube API, Kick Centrifugo/Pusher, TikTok WS, Discord Bot)
        │
        ▼ publish raw messages
   Redis Streams (chat:raw)
@@ -222,7 +222,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Pusher, TikTok WS, Discord Bot
 | `youtube-listener` | YouTube Data API/gRPC chat for channels in premium official-API mode (ADR-0065) |
 | `youtube-listener-innertube` | YouTube InnerTube API polling (zero quota cost) |
 | `youtube-quota-monitor` | Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023) |
-| `kick-listener` | Kick chat via Pusher WebSocket |
+| `kick-listener` | Kick chat via Centrifugo or Pusher WebSocket, whichever Kick picks (ADR-0077) |
 | `tiktok-listener` | TikTok LIVE chat and audience events, read the way TikTok's own web player does |
 | `tiktok-signer` | Self-hosted TikTok webcast signing via TikTok's own SDK in a headless browser (ADR-0052) |
 | `discord-listener` | Discord channel chat relay |
