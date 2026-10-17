@@ -1,7 +1,7 @@
 # ADR-0071: The Alerts Editor — Premium Saving, Sandboxed Custom Code Under the Page CSP, and Client-Side KLIPY Search
 
 **Date**: 2026-10-16
-**Status**: Accepted
+**Status**: Accepted (key delivery superseded by ADR-0073)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
