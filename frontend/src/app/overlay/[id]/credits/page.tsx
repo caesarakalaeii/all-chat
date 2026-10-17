@@ -23,11 +23,13 @@
  * Shows leaderboards for subs, bits, raids, donations, follows, etc.
  *
  * Features:
- * - Scrolling credits with theme support
+ * - Credits that scroll up at the configured speed and start over once the
+ *   configured display duration is up
  * - Leaderboard categories
  * - User avatars and platform badges
  * - Configurable styling
- * - Auto-loop or single-play based on config
+ * - Twitch clips playing full-screen behind the roll, one after another, with
+ *   sound in OBS unless muted (ADR-0076)
  *
  * This is a Client Component for animation and dynamic rendering.
  */
@@ -35,12 +37,12 @@
 'use client'
 
 import Image from 'next/image'
-import { use, useEffect, useState, useRef } from 'react'
+import { type SyntheticEvent, use, useEffect, useLayoutEffect, useState, useRef } from 'react'
 import clsx from 'clsx'
-import Script from 'next/script'
 import { type TFunction, formatDate, formatNumber, useTranslations } from '@/lib/i18n'
 import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/lib/types/overlay'
 import { creditRollValue } from '@/lib/utils/creditRollValue'
+import { fetchClipVideoUrl } from '@/lib/twitchClipVideo'
 
 // Decoration: the warning triangle sits above copy naming the failure, and the
 // film clapper and camera each precede a heading that says the same in words.
@@ -76,12 +78,6 @@ function sessionDuration(t: TFunction, totalSeconds: number): string {
   return t('viewerOverlay.credits.durationJustStarted')
 }
 
-declare global {
-  interface Window {
-    Twitch: any
-  }
-}
-
 export default function CreditRollPage({ params }: { params: Promise<{ id: string }> }) {
   const t = useTranslations()
   const { id } = use(params)
@@ -90,10 +86,14 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
   const [customCss, setCustomCss] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [currentClipIndex, setCurrentClipIndex] = useState(0)
-  const [twitchReady, setTwitchReady] = useState(false)
-  const playerRef = useRef<any>(null)
-  const playerContainerRef = useRef<HTMLDivElement>(null)
+  // Counts clip plays rather than indexing clips, so a single clip replays: the
+  // count still changes, which remounts the player.
+  const [clipPlay, setClipPlay] = useState(0)
+  // The current clip's MP4 (ADR-0076), tagged with the play it was looked up
+  // for so a previous clip's URL never shows. A null URL means the lookup or
+  // the playback failed, and the clip plays through Twitch's embed instead.
+  const [clipVideo, setClipVideo] = useState<{ play: number; url: string | null }>()
+  const rollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const loadCreditRoll = async () => {
@@ -113,7 +113,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
         const data = await dataResponse.json()
         setCreditData(data)
-        setCurrentClipIndex(0)
+        setClipPlay(0)
         setError(null)
       } catch (err) {
         console.error('Failed to load credit roll:', err)
@@ -135,59 +135,70 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
     return () => window.removeEventListener('obsSourceActiveChanged', onActiveChanged)
   }, [id, t])
 
-  // Initialize Twitch Player when clip changes
+  const clips = creditData?.clips ?? []
+  const currentClip = config?.clips_enabled ? clips[clipPlay % clips.length] : undefined
+  const clipVideoUrl = clipVideo?.play === clipPlay ? clipVideo.url : undefined
+  const nextClip = () => setClipPlay((n) => n + 1)
+
+  // The clip renders muted, since Twitch offers no captions for it (a broadcast
+  // surface, see docs/ACCESSIBILITY.md), and takes the streamer's audio choice
+  // once it can play. OBS lets it play with sound; an ordinary browser tab
+  // refuses, so there it plays muted rather than standing still.
+  const playClip = (e: SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget
+    video.muted = config?.clips_muted ?? true
+    video.play().catch(() => {
+      video.muted = true
+      video.play().catch(() => {})
+    })
+  }
+
   useEffect(() => {
-    if (!twitchReady || !creditData?.clips || creditData.clips.length === 0) return
-    if (!playerContainerRef.current) return
-
-    const currentClip = creditData.clips[currentClipIndex]
     if (!currentClip) return
-
-    // Destroy previous player
-    if (playerRef.current) {
-      playerRef.current = null
-    }
-
-    // Clear container
-    playerContainerRef.current.innerHTML = ''
-
-    // Create new player
-    const options = {
-      width: '100%',
-      height: '100%',
-      clip: currentClip.id,
-      parent: [window.location.hostname],
-      autoplay: true,
-      muted: config?.clips_muted ?? true,
-    }
-
-    // ENDED and the fallback timer can both fire for one clip; advancing twice
-    // skipped every other clip. Whichever fires first wins.
-    let advanced = false
-    let fallbackTimer: ReturnType<typeof setTimeout> | undefined
-    const advance = () => {
-      if (advanced) return
-      advanced = true
-      setCurrentClipIndex((prev) => (prev + 1) % creditData.clips.length)
-    }
-
-    try {
-      playerRef.current = new window.Twitch.Embed(playerContainerRef.current, options)
-
-      playerRef.current.addEventListener(window.Twitch.Embed.VIDEO_READY, () => {
-        const player = playerRef.current.getPlayer()
-        player.addEventListener(window.Twitch.Player.ENDED, advance)
-        fallbackTimer = setTimeout(advance, (currentClip.duration || 30) * 1000 + 3000)
-      })
-    } catch (err) {
-      console.error('Failed to initialize Twitch player:', err)
-    }
-
+    let cancelled = false
+    fetchClipVideoUrl(currentClip.id).then((url) => {
+      if (!cancelled) setClipVideo({ play: clipPlay, url })
+    })
     return () => {
-      advanced = true
-      if (fallbackTimer) clearTimeout(fallbackTimer)
+      cancelled = true
     }
-  }, [twitchReady, creditData, currentClipIndex, config?.clips_muted])
+  }, [currentClip, clipPlay])
+
+  // Twitch's clip embed reports no end event, so the next clip starts once this
+  // one's length, plus slack for the player to load, has passed.
+  useEffect(() => {
+    if (!currentClip || clipVideoUrl !== null) return
+    const timer = setTimeout(
+      () => setClipPlay((n) => n + 1),
+      (currentClip.duration || 30) * 1000 + 3000
+    )
+    return () => clearTimeout(timer)
+  }, [currentClip, clipPlay, clipVideoUrl])
+
+  const scrollSpeed = config?.scroll_speed || 50
+  const displaySeconds = config?.display_duration_seconds || 60
+
+  // One pass carries the roll from just below the screen until its last line
+  // reaches the bottom edge, at scroll_speed pixels per second. The roll then
+  // holds until display_duration_seconds is up and starts over, so a short roll
+  // still fills the configured time and a long one is never cut off. A layout
+  // effect, so the roll never paints unmoved at the top first.
+  useLayoutEffect(() => {
+    const roll = rollRef.current
+    if (!roll) return
+    const passMs = (roll.offsetHeight / scrollSpeed) * 1000
+    const cycleMs = Math.max(passMs, displaySeconds * 1000)
+    const end = 'translateY(calc(100vh - 100%))'
+    const animation = roll.animate(
+      [
+        { transform: 'translateY(100vh)' },
+        { transform: end, offset: passMs / cycleMs },
+        { transform: end },
+      ],
+      { duration: cycleMs, iterations: Infinity }
+    )
+    return () => animation.cancel()
+  }, [creditData, scrollSpeed, displaySeconds])
 
   const renderLeaderboard = (
     title: string,
@@ -284,28 +295,38 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
   const theme = config?.theme || 'cinematic'
   const bgOpacity = config?.background_opacity ?? 0.8
 
-  const currentClip = creditData?.clips?.[currentClipIndex]
-
   return (
     <>
-      {/* Load Twitch Embed SDK */}
-      <Script
-        src="https://embed.twitch.tv/embed/v1.js"
-        onLoad={() => setTwitchReady(true)}
-        strategy="afterInteractive"
-      />
-
       {/* Custom CSS Injection */}
       {customCss && customCss.trim() && <style dangerouslySetInnerHTML={{ __html: customCss }} />}
 
       {/* Background Clip Video */}
-      {config?.clips_enabled && currentClip && (
+      {currentClip && (
         <div className="fixed inset-0 z-0">
-          <div
-            ref={playerContainerRef}
-            id="twitch-clip-player"
-            className="absolute inset-0 h-full w-full"
-          />
+          {clipVideoUrl ? (
+            <video
+              key={clipPlay}
+              id="twitch-clip-player"
+              src={clipVideoUrl}
+              muted
+              playsInline
+              onLoadedData={playClip}
+              onEnded={nextClip}
+              onError={() => setClipVideo({ play: clipPlay, url: null })}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            clipVideoUrl === null && (
+              <iframe
+                key={clipPlay}
+                id="twitch-clip-player"
+                src={`https://clips.twitch.tv/embed?clip=${encodeURIComponent(currentClip.id)}&parent=${window.location.hostname}&autoplay=true&muted=${config?.clips_muted ?? true}`}
+                title={currentClip.title}
+                allow="autoplay; fullscreen"
+                className="absolute inset-0 h-full w-full border-0"
+              />
+            )
+          )}
           {/* Overlay gradient for better text readability */}
           <div
             className="absolute inset-0 z-10"
@@ -318,19 +339,18 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       )}
 
       <div
-        className="relative z-10 min-h-screen overflow-hidden"
+        className="relative z-10 h-screen min-h-screen overflow-hidden"
         style={{
-          background:
-            !config?.clips_enabled || !currentClip
-              ? theme === 'cinematic'
-                ? `linear-gradient(to bottom, rgba(17, 24, 39, ${bgOpacity}), rgba(0, 0, 0, ${bgOpacity}))`
-                : theme === 'modern'
-                  ? `linear-gradient(135deg, rgba(99, 102, 241, ${bgOpacity}), rgba(139, 92, 246, ${bgOpacity}))`
-                  : `rgba(17, 24, 39, ${bgOpacity})`
-              : 'transparent',
+          background: !currentClip
+            ? theme === 'cinematic'
+              ? `linear-gradient(to bottom, rgba(17, 24, 39, ${bgOpacity}), rgba(0, 0, 0, ${bgOpacity}))`
+              : theme === 'modern'
+                ? `linear-gradient(135deg, rgba(99, 102, 241, ${bgOpacity}), rgba(139, 92, 246, ${bgOpacity}))`
+                : `rgba(17, 24, 39, ${bgOpacity})`
+            : 'transparent',
         }}
       >
-        <div className="container mx-auto px-8 py-12">
+        <div ref={rollRef} className="container mx-auto px-8 py-12">
           {/* Header */}
           <div className="mb-16 text-center">
             <h1 className="animate-fade-in mb-4 text-6xl font-bold text-white">
@@ -410,34 +430,6 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
             )}
           </div>
 
-          {/* Now Playing Indicator */}
-          {config?.clips_enabled && currentClip && (
-            <div className="fixed right-8 bottom-8 z-50">
-              <div className="max-w-sm rounded-lg border border-slate-700 bg-black/80 p-4 shadow-2xl backdrop-blur-sm">
-                <div className="mb-2 flex items-center gap-3">
-                  <span className="text-2xl">{CAMERA_GLYPH}</span>
-                  <span className="font-semibold text-white">
-                    {t('viewerOverlay.credits.nowPlaying')}
-                  </span>
-                </div>
-                <div className="mb-1 text-lg font-medium text-white">{currentClip.title}</div>
-                <div className="flex items-center justify-between text-sm text-slate-400">
-                  <span>
-                    {t('viewerOverlay.credits.clipViews', {
-                      views: formatNumber(currentClip.view_count),
-                    })}
-                  </span>
-                  <span>
-                    {t('viewerOverlay.credits.clipCounter', {
-                      index: currentClipIndex + 1,
-                      total: creditData?.clips?.length || 0,
-                    })}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Footer */}
           <div className="mt-24 mb-12 text-center">
             <div className="mb-4 text-4xl font-bold text-white">
@@ -447,6 +439,34 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
       </div>
+
+      {/* Now Playing Indicator, outside the roll so its transform cannot move it */}
+      {currentClip && (
+        <div className="fixed right-8 bottom-8 z-50">
+          <div className="max-w-sm rounded-lg border border-slate-700 bg-black/80 p-4 shadow-2xl backdrop-blur-sm">
+            <div className="mb-2 flex items-center gap-3">
+              <span className="text-2xl">{CAMERA_GLYPH}</span>
+              <span className="font-semibold text-white">
+                {t('viewerOverlay.credits.nowPlaying')}
+              </span>
+            </div>
+            <div className="mb-1 text-lg font-medium text-white">{currentClip.title}</div>
+            <div className="flex items-center justify-between text-sm text-slate-400">
+              <span>
+                {t('viewerOverlay.credits.clipViews', {
+                  views: formatNumber(currentClip.view_count),
+                })}
+              </span>
+              <span>
+                {t('viewerOverlay.credits.clipCounter', {
+                  index: (clipPlay % clips.length) + 1,
+                  total: clips.length,
+                })}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/*
        * The roll header's entrance animation. Injected the way the sibling

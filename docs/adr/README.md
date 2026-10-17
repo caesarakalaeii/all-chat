@@ -825,6 +825,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0076: Credit roll clips play the clip MP4 from Twitch's web GQL
+
+**Status**: Accepted (2026-10-17)
+**Problem**: Twitch's clip embed forces every autoplayed clip to `muted`/volume 0, ignores `muted=false` and the SDK's postMessage commands, and forgets a manual unmute on the next load, so "Mute Clips Audio" off never produced sound; the Embed SDK takes no clips at all.
+**Decision**: The credits page looks up each clip's signed MP4 (`playbackAccessToken` + `videoQualities`) from `gql.twitch.tv` in the browser with Twitch's public web client ID and plays it in its own `<video>`, which renders muted and takes `clips_muted` once loaded, advancing on `ended`. A failed lookup or video error plays that clip through the muted clip embed on a timer, as before.
+**Impact**: Clip audio works in OBS (whose CEF autoplay policy allows it); a normal browser tab plays muted. Depends on an undocumented Twitch API; when it changes, clips lose sound but keep playing. No CSP change.
+**→ Read**: [0076-credit-roll-clips-play-the-mp4-from-twitch-web-gql.md](./0076-credit-roll-clips-play-the-mp4-from-twitch-web-gql.md)
+
+---
+
 
 ## How to Create a New ADR
 
@@ -956,7 +966,7 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Last Updated**: 2026-10-16
+**Last Updated**: 2026-10-17
 **Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories)
 
 **Most Referenced**:
@@ -965,4 +975,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-10-16
+**Last Updated**: 2026-10-17
