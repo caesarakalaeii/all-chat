@@ -207,6 +207,20 @@ Closes #123
 
 ---
 
+## Release Flow
+
+1. **Build locally.** Develop and test the feature on a branch.
+2. **Release to beta.** Merge the feature into the `beta` branch. A push to `beta` builds `:beta` images (`.github/workflows/build-and-push.yml` tags images by branch name), and Keel deploys `frontend-beta` and `api-gateway-beta`, which serve [beta.allch.at](https://beta.allch.at).
+3. **Release to prod.** Merge to `main` only after a human has checked beta and greenlit the feature. Pushes to `main` build `:main`, and Keel deploys production (allch.at). Agents never promote a feature to `main` on their own.
+
+Fixes may still go to `main` through PRs.
+
+Beta coverage is incomplete. Only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in one of those services has no beta environment, so a human decides how to stage it.
+
+Frontend-only gating for beta lives in `frontend/src/lib/platform-availability.ts`: platforms and overlay kinds listed there are offered only on beta.allch.at.
+
+---
+
 ## Code Review Guidelines
 
 ### What Reviewers Look For
