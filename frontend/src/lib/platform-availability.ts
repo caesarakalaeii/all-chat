@@ -25,7 +25,6 @@ const BETA_ONLY_PLATFORMS: Partial<Record<string, true>> = {
 }
 
 const BETA_ONLY_OVERLAY_KINDS: Partial<Record<OverlayType, true>> = {
-  alerts: true,
   goal: true,
   list: true,
 }

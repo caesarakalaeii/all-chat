@@ -60,11 +60,14 @@ describe('OverlayKindPicker', () => {
     }
   })
 
-  it('offers only chat, so renders nothing, to a premium user outside the beta host', () => {
-    // alerts, goal and list are beta-only kinds (lib/platform-availability.ts).
+  it('offers chat and alerts, not goal or list, to a premium user outside the beta host', () => {
+    // goal and list are beta-only kinds (lib/platform-availability.ts).
     signIn(true)
-    const { container } = render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
-    expect(container).toBeEmptyDOMElement()
+    render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
+    expect(screen.getAllByRole('radio')).toHaveLength(2)
+    expect(screen.getByRole('radio', { name: /^Alerts/ })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /^Goal/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /^List/ })).not.toBeInTheDocument()
   })
 
   it('offers every kind it is given', () => {
