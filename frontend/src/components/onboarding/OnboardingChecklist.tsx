@@ -48,6 +48,7 @@ import { DISCORD_INVITE_URL, PATREON_JOIN_URL } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useTranslations } from '@/lib/i18n'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useOverlayKindAvailable } from '@/lib/platform-availability'
 import type { SpotlightSection } from '@/components/editor/sectionRegistry'
 
 /**
@@ -108,6 +109,7 @@ export function OnboardingChecklist({
   const dismiss = useOnboardingStore((s) => s.dismiss)
   const finish = useOnboardingStore((s) => s.finish)
   const user = useAuthStore((s) => s.user)
+  const isKindAvailable = useOverlayKindAvailable()
   const [createOpen, setCreateOpen] = useState(false)
   const [confirmDismiss, setConfirmDismiss] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -420,32 +422,46 @@ export function OnboardingChecklist({
                   </span>
                   <p className="text-xs text-text-sub">{t('onboarding.extras.flairsBody')}</p>
                 </li>
-                <li>
-                  <span className="font-medium text-text">
-                    {t('onboarding.extras.alertsOverlayTitle')}
-                  </span>
-                  <p className="text-xs text-text-sub">
-                    {t('onboarding.extras.alertsOverlayBody')}
-                  </p>
-                </li>
-                <li>
-                  <span className="font-medium text-text">
-                    {t('onboarding.extras.alertsEditorTitle')}
-                  </span>
-                  <p className="text-xs text-text-sub">{t('onboarding.extras.alertsEditorBody')}</p>
-                </li>
-                <li>
-                  <span className="font-medium text-text">
-                    {t('onboarding.extras.goalOverlayTitle')}
-                  </span>
-                  <p className="text-xs text-text-sub">{t('onboarding.extras.goalOverlayBody')}</p>
-                </li>
-                <li>
-                  <span className="font-medium text-text">
-                    {t('onboarding.extras.listOverlayTitle')}
-                  </span>
-                  <p className="text-xs text-text-sub">{t('onboarding.extras.listOverlayBody')}</p>
-                </li>
+                {isKindAvailable('alerts') && (
+                  <li>
+                    <span className="font-medium text-text">
+                      {t('onboarding.extras.alertsOverlayTitle')}
+                    </span>
+                    <p className="text-xs text-text-sub">
+                      {t('onboarding.extras.alertsOverlayBody')}
+                    </p>
+                  </li>
+                )}
+                {isKindAvailable('alerts') && (
+                  <li>
+                    <span className="font-medium text-text">
+                      {t('onboarding.extras.alertsEditorTitle')}
+                    </span>
+                    <p className="text-xs text-text-sub">
+                      {t('onboarding.extras.alertsEditorBody')}
+                    </p>
+                  </li>
+                )}
+                {isKindAvailable('goal') && (
+                  <li>
+                    <span className="font-medium text-text">
+                      {t('onboarding.extras.goalOverlayTitle')}
+                    </span>
+                    <p className="text-xs text-text-sub">
+                      {t('onboarding.extras.goalOverlayBody')}
+                    </p>
+                  </li>
+                )}
+                {isKindAvailable('list') && (
+                  <li>
+                    <span className="font-medium text-text">
+                      {t('onboarding.extras.listOverlayTitle')}
+                    </span>
+                    <p className="text-xs text-text-sub">
+                      {t('onboarding.extras.listOverlayBody')}
+                    </p>
+                  </li>
+                )}
                 <li>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-text">

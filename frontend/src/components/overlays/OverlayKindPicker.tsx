@@ -27,6 +27,7 @@
 
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { creatableOverlayKinds } from '@/lib/utils/overlayKind'
+import { useOverlayKindAvailable } from '@/lib/platform-availability'
 import { useTranslations } from '@/lib/i18n'
 import type { OverlayType } from '@/lib/types/overlay'
 
@@ -41,7 +42,8 @@ export function OverlayKindPicker({
 }) {
   const t = useTranslations()
   const isPremium = useAuthStore((s) => s.user?.is_premium ?? false)
-  const kinds = kindsProp ?? creatableOverlayKinds(isPremium)
+  const isKindAvailable = useOverlayKindAvailable()
+  const kinds = kindsProp ?? creatableOverlayKinds(isPremium).filter(isKindAvailable)
 
   if (kinds.length < 2) return null
 

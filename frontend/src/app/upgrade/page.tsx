@@ -32,11 +32,13 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
+import { OverlayKindOffered } from '@/components/overlays/OverlayKindOffered'
 import { cn } from '@/lib/utils'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { PATREON_JOIN_URL } from '@/lib/constants'
 import { getTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
+import type { OverlayType } from '@/lib/types/overlay'
 
 const t = getTranslations()
 
@@ -50,6 +52,8 @@ interface PremiumFeature {
   icon: React.ComponentType<{ className?: string }>
   /** Names this row's pair of `marketing.upgrade.*Title` / `*Body` leaves. */
   messageStem: string
+  /** Set on a row that advertises an overlay kind; hidden where that kind is beta-only. */
+  overlayKind?: OverlayType
 }
 
 // Keep in sync with the onboarding extras tour in
@@ -67,10 +71,10 @@ const features = [
   { icon: BadgeCheck, messageStem: 'youtubeOfficialApi' },
   { icon: MessagesSquare, messageStem: 'sharedChat' },
   { icon: Sparkles, messageStem: 'flairs' },
-  { icon: Bell, messageStem: 'alertsOverlay' },
-  { icon: Code, messageStem: 'alertsEditor' },
-  { icon: Target, messageStem: 'goalOverlay' },
-  { icon: Trophy, messageStem: 'listOverlay' },
+  { icon: Bell, messageStem: 'alertsOverlay', overlayKind: 'alerts' },
+  { icon: Code, messageStem: 'alertsEditor', overlayKind: 'alerts' },
+  { icon: Target, messageStem: 'goalOverlay', overlayKind: 'goal' },
+  { icon: Trophy, messageStem: 'listOverlay', overlayKind: 'list' },
 ] as const satisfies ReadonlyArray<PremiumFeature>
 
 export default function UpgradePage() {
@@ -103,17 +107,27 @@ export default function UpgradePage() {
 
         {/* Feature list */}
         <div className="lanes-panel divide-y divide-white/20 p-0">
-          {features.map(({ icon: Icon, messageStem }) => (
-            <div key={messageStem} className="flex items-start gap-4 p-5">
-              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border-2 border-white text-white">
-                <Icon className="h-5 w-5" />
-              </span>
-              <div className="space-y-1">
-                <h2 className="text-base">{t(`marketing.upgrade.${messageStem}Title`)}</h2>
-                <p className="text-sub text-sm">{t(`marketing.upgrade.${messageStem}Body`)}</p>
+          {features.map((feature) => {
+            const { icon: Icon, messageStem } = feature
+            const row = (
+              <div key={messageStem} className="flex items-start gap-4 p-5">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border-2 border-white text-white">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <div className="space-y-1">
+                  <h2 className="text-base">{t(`marketing.upgrade.${messageStem}Title`)}</h2>
+                  <p className="text-sub text-sm">{t(`marketing.upgrade.${messageStem}Body`)}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            )
+            return 'overlayKind' in feature ? (
+              <OverlayKindOffered key={messageStem} kind={feature.overlayKind}>
+                {row}
+              </OverlayKindOffered>
+            ) : (
+              row
+            )
+          })}
         </div>
 
         {/* How it works */}
