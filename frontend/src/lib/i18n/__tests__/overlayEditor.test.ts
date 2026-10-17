@@ -1099,13 +1099,15 @@ describe('credit roll settings copy', () => {
     expect(t('overlayEditor.credits.themeClassic')).toBe('Classic')
     expect(t('overlayEditor.credits.themeCinematic')).toBe('Cinematic')
     expect(t('overlayEditor.credits.themeModern')).toBe('Modern')
-    expect(t('overlayEditor.credits.scrollSpeedLabel')).toBe('Scroll Speed (1-100)')
+    expect(t('overlayEditor.credits.scrollSpeedLabel')).toBe(
+      'Scroll Speed (pixels per second, 1-100)'
+    )
     // One key with the value in it, shared by the two sliders below it, rather
     // than a bare 'Current:' label glued to a number at the render site.
     expect(t('overlayEditor.credits.currentValue', { value: 50 })).toBe('Current: 50')
     expect(t('overlayEditor.credits.durationLabel')).toBe('Display Duration (seconds)')
     expect(t('overlayEditor.credits.durationHint')).toBe(
-      'How long to show the credit roll (10-300 seconds)'
+      'How long the roll runs before it starts over (10-300 seconds). A roll too long to fit scrolls to its end first.'
     )
     expect(t('overlayEditor.credits.opacityLabel')).toBe('Background Opacity (0-1)')
   })
@@ -1120,7 +1122,7 @@ describe('credit roll settings copy', () => {
     )
     expect(t('overlayEditor.credits.muteClipsLabel')).toBe('Mute Clips Audio')
     expect(t('overlayEditor.credits.muteClipsHint')).toBe(
-      'Required for browser autoplay. Unmuting may require viewer interaction.'
+      'Turn off to play clip audio in OBS. A normal browser tab still plays clips muted.'
     )
   })
 
