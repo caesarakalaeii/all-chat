@@ -49,7 +49,7 @@ func TestEventTypesMatchTheNamesThePipelineEmits(t *testing.T) {
 		"subscription", "resubscription", "gift_subscription", "mystery_gift", "bits", "raid",
 		"follow", "channel_points", "charity_donation", "super_chat", "super_sticker",
 		"new_sponsor", "member_milestone", "membership_gift", "subscriber", "gift", "share",
-		"tiktok_subscription",
+		"tiktok_subscription", "power_up", "gift_received",
 	} {
 		assert.True(t, IsKnownEventType(et), et)
 	}
@@ -162,4 +162,82 @@ func keysOf(m map[string]json.RawMessage) []string {
 		out = append(out, k)
 	}
 	return out
+}
+
+func TestAllEventsIsAStorableProfileButNotAnEventType(t *testing.T) {
+	assert.True(t, IsKnownEventType(AllEvents), "the base style is saved like any profile")
+	assert.NotContains(t, EventTypes(), AllEvents, "nothing is ever published as the base style")
+
+	base, ok := DefaultProfile(AllEvents)
+	require.True(t, ok)
+	assert.Equal(t, Profile{EventType: AllEvents, DurationMs: 5000, Volume: 100, Enabled: true}, base)
+	require.NoError(t, base.Validate())
+
+	_, err := TestAlert("overlay-1", AllEvents, time.Now())
+	assert.Error(t, err, "a test alert needs a real event type")
+}
+
+func TestApplyBaseStylesEveryUnsavedEventType(t *testing.T) {
+	base, _ := DefaultProfile(AllEvents)
+	base.ImageURL = "https://static.klipy.com/party.gif"
+	base.SoundURL = "https://media.allch.at/ding.mp3"
+	base.DurationMs = 8000
+	base.Volume = 40
+	base.CustomCSS = "p { color: red }"
+
+	def, _ := DefaultProfile("raid")
+	got := ApplyBase(def, false, base)
+
+	assert.Equal(t, "raid", got.EventType)
+	assert.Equal(t, def.TextTemplate, got.TextTemplate, "the text stays per event type")
+	assert.Equal(t, base.ImageURL, got.ImageURL)
+	assert.Equal(t, base.SoundURL, got.SoundURL)
+	assert.Equal(t, 8000, got.DurationMs)
+	assert.Equal(t, 40, got.Volume)
+	assert.Equal(t, "p { color: red }", got.CustomCSS)
+	assert.True(t, got.Enabled)
+}
+
+func TestApplyBaseFillsOnlyWhatASavedEventTypeLeavesEmpty(t *testing.T) {
+	base, _ := DefaultProfile(AllEvents)
+	base.ImageURL = "https://static.klipy.com/party.gif"
+	base.SoundURL = "https://media.allch.at/ding.mp3"
+	base.DurationMs = 8000
+	base.CustomHTML = "<p data-alert-text></p>"
+
+	saved, _ := DefaultProfile("bits")
+	saved.TextTemplate = "{username} threw {amount}"
+	saved.ImageURL = "https://static.klipy.com/bits.gif"
+	saved.DurationMs = 3000
+	saved.CustomJS = "onAlert(() => {})"
+
+	got := ApplyBase(saved, true, base)
+	assert.Equal(t, "{username} threw {amount}", got.TextTemplate)
+	assert.Equal(t, saved.ImageURL, got.ImageURL, "the event's own GIF wins")
+	assert.Equal(t, base.SoundURL, got.SoundURL, "an empty sound falls back to the base")
+	assert.Equal(t, 3000, got.DurationMs, "a saved event keeps its own timing")
+	assert.Equal(t, "onAlert(() => {})", got.CustomJS)
+	assert.Empty(t, got.CustomHTML, "custom code is taken as a unit, never mixed with the base's")
+}
+
+func TestApplyBaseSwitchedOffSilencesEveryEventType(t *testing.T) {
+	base, _ := DefaultProfile(AllEvents)
+	base.Enabled = false
+	saved, _ := DefaultProfile("follow")
+	assert.False(t, ApplyBase(saved, true, base).Enabled)
+
+	def, _ := DefaultProfile("follow")
+	assert.False(t, ApplyBase(def, false, base).Enabled)
+
+	base.Enabled = true
+	saved.Enabled = false
+	assert.False(t, ApplyBase(saved, true, base).Enabled, "an event switched off stays off")
+}
+
+func TestApplyBaseWithTheDefaultBaseChangesNothing(t *testing.T) {
+	base, _ := DefaultProfile(AllEvents)
+	for _, et := range EventTypes() {
+		def, _ := DefaultProfile(et)
+		assert.Equal(t, def, ApplyBase(def, false, base), et)
+	}
 }

@@ -58,26 +58,30 @@ func (h *AlertsHandler) ownedOverlay(c *gin.Context) *models.Overlay {
 	return overlay
 }
 
-// mergedProfiles is every known event type's profile: the stored row where
-// there is one, the built-in default otherwise.
-func (h *AlertsHandler) mergedProfiles(ctx context.Context, overlayID string) ([]alerts.Profile, error) {
+// mergedProfiles is the AllEvents base style followed by every known event
+// type's profile: the stored row where there is one, the built-in default
+// otherwise. saved lists the types that have a stored row (ADR-0075).
+func (h *AlertsHandler) mergedProfiles(ctx context.Context, overlayID string) (gin.H, error) {
 	stored, err := h.store.ListAlertProfiles(ctx, overlayID)
 	if err != nil {
 		return nil, err
 	}
 	byType := make(map[string]alerts.Profile, len(stored))
+	saved := make([]string, 0, len(stored))
 	for _, p := range stored {
 		byType[p.EventType] = p
+		saved = append(saved, p.EventType)
 	}
-	out := make([]alerts.Profile, 0, len(alerts.EventTypes()))
-	for _, et := range alerts.EventTypes() {
+	types := append([]string{alerts.AllEvents}, alerts.EventTypes()...)
+	out := make([]alerts.Profile, 0, len(types))
+	for _, et := range types {
 		p, ok := byType[et]
 		if !ok {
 			p, _ = alerts.DefaultProfile(et)
 		}
 		out = append(out, p)
 	}
-	return out, nil
+	return gin.H{"profiles": out, "saved": saved}, nil
 }
 
 // HandleGetProfiles handles GET /:id/alerts/profiles.
@@ -86,12 +90,12 @@ func (h *AlertsHandler) HandleGetProfiles(c *gin.Context) {
 	if overlay == nil {
 		return
 	}
-	profiles, err := h.mergedProfiles(c.Request.Context(), overlay.ID)
+	body, err := h.mergedProfiles(c.Request.Context(), overlay.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load alert profiles"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"profiles": profiles})
+	c.JSON(http.StatusOK, body)
 }
 
 // HandlePutProfiles handles PUT /:id/alerts/profiles: a bulk upsert, all or
@@ -128,12 +132,12 @@ func (h *AlertsHandler) HandlePutProfiles(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save alert profiles"})
 		return
 	}
-	profiles, err := h.mergedProfiles(c.Request.Context(), overlay.ID)
+	body, err := h.mergedProfiles(c.Request.Context(), overlay.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load alert profiles"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"profiles": profiles})
+	c.JSON(http.StatusOK, body)
 }
 
 // HandleTestAlert handles POST /:id/alerts/test: publishes a synthetic alert

@@ -19,6 +19,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,8 +33,9 @@ type alertProfileLookup func(ctx context.Context, overlayID, eventType string) (
 
 // buildAlertFrame wraps one overlay:{id}:alerts payload in a type "alert"
 // WebSocket frame (ADR-0070): the alert envelope unchanged, plus "profile" —
-// the overlay's saved or default profile for the event type with its text
-// template already rendered. Event types without profiles are forwarded with
+// the overlay's saved or default profile for the event type, layered over the
+// overlay's all-events base style (ADR-0075), with its text template already
+// rendered. Event types without profiles are forwarded with
 // no "profile" key. It returns a nil frame for a profile the streamer switched
 // off. A failed lookup falls back to the default profile and is returned as
 // the error alongside a usable frame: losing the alert is worse than showing
@@ -60,13 +62,20 @@ func buildAlertFrame(ctx context.Context, overlayID string, payload []byte, look
 	}
 
 	var lookupErr error
-	if profile, known := alerts.DefaultProfile(alert.EventType); known {
+	if profile, known := alerts.DefaultProfile(alert.EventType); known && alert.EventType != alerts.AllEvents {
 		saved, found, err := lookup(ctx, overlayID, alert.EventType)
 		if err != nil {
 			lookupErr = fmt.Errorf("alert profile lookup: %w", err)
 		} else if found {
 			profile = saved
 		}
+		base, _ := alerts.DefaultProfile(alerts.AllEvents)
+		if savedBase, baseFound, err := lookup(ctx, overlayID, alerts.AllEvents); err != nil {
+			lookupErr = errors.Join(lookupErr, fmt.Errorf("alert base style lookup: %w", err))
+		} else if baseFound {
+			base = savedBase
+		}
+		profile = alerts.ApplyBase(profile, found, base)
 		if !profile.Enabled {
 			return nil, nil
 		}
