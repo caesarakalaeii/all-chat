@@ -27,9 +27,8 @@ import (
 )
 
 // realtimeServer mimics web.kick.com/api/v1/realtime/connection. It fails the
-// test unless the request offers only the pusher provider, because offering
-// centrifugo makes Kick answer with a provider this client cannot speak.
-func realtimeServer(t *testing.T, status int, body string) *httptest.Server {
+// test unless the request offers exactly the wanted providers, in order.
+func realtimeServer(t *testing.T, status int, body string, wantProviders ...string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -45,9 +44,15 @@ func realtimeServer(t *testing.T, status int, body string) *httptest.Server {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Errorf("decode request: %v", err)
 		}
-		p := req.Capabilities.AcceptedProviders
-		if len(p) != 1 || p[0].Provider != "pusher" {
-			t.Errorf("accepted_providers = %+v, want only pusher", p)
+		if len(wantProviders) == 0 {
+			wantProviders = []string{"pusher"}
+		}
+		var got []string
+		for _, p := range req.Capabilities.AcceptedProviders {
+			got = append(got, p.Provider)
+		}
+		if !reflect.DeepEqual(got, wantProviders) {
+			t.Errorf("accepted_providers = %v, want %v", got, wantProviders)
 		}
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(body))
@@ -56,25 +61,43 @@ func realtimeServer(t *testing.T, status int, body string) *httptest.Server {
 	return srv
 }
 
-func TestFetchPusherCredentials(t *testing.T) {
+func TestResolveRealtime_Pusher(t *testing.T) {
 	srv := realtimeServer(t, http.StatusOK,
 		`{"data":{"connections":[{"credentials":{"app_key":"34bf7a0ff419a2a775b9","cluster":"us2"},"provider":"pusher"}],"mode":"websocket"},"message":"success"}`)
 
-	key, cluster, err := fetchPusherCredentials(t.Context(), srv.Client(), srv.URL)
+	got, err := ResolveRealtime(t.Context(), srv.URL, []string{"pusher"})
 	if err != nil {
-		t.Fatalf("fetchPusherCredentials: %v", err)
+		t.Fatalf("ResolveRealtime: %v", err)
 	}
-	if key != "34bf7a0ff419a2a775b9" || cluster != "us2" {
-		t.Fatalf("got (%q, %q), want (34bf7a0ff419a2a775b9, us2)", key, cluster)
+	want := RealtimeConnection{Provider: ProviderPusher, AppKey: "34bf7a0ff419a2a775b9", Cluster: "us2"}
+	if got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
 
-func TestFetchPusherCredentials_NoPusherConnection(t *testing.T) {
+func TestResolveRealtime_Centrifugo(t *testing.T) {
 	srv := realtimeServer(t, http.StatusOK,
-		`{"data":{"connections":[{"credentials":{"url":"wss://realtime.example/connection/websocket"},"provider":"centrifugo"}],"mode":"websocket"}}`)
+		`{"data":{"connections":[{"credentials":{"url":"wss://realtime.us-east-1.platform.kick.com/connection/websocket"},"provider":"centrifugo"}],"mode":"websocket"},"message":"success"}`,
+		"centrifugo", "pusher")
 
-	if _, _, err := fetchPusherCredentials(t.Context(), srv.Client(), srv.URL); err == nil {
-		t.Fatal("expected an error when Kick offers no pusher connection")
+	got, err := ResolveRealtime(t.Context(), srv.URL, []string{"centrifugo", "pusher"})
+	if err != nil {
+		t.Fatalf("ResolveRealtime: %v", err)
+	}
+	want := RealtimeConnection{Provider: ProviderCentrifugo, URL: "wss://realtime.us-east-1.platform.kick.com/connection/websocket"}
+	if got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+// Kick answering with a provider we did not offer, or with empty credentials,
+// must not be mistaken for a usable connection.
+func TestResolveRealtime_NoUsableConnection(t *testing.T) {
+	srv := realtimeServer(t, http.StatusOK,
+		`{"data":{"connections":[{"credentials":{"url":"wss://realtime.example/connection/websocket"},"provider":"centrifugo"},{"credentials":{},"provider":"pusher"}],"mode":"websocket"}}`)
+
+	if _, err := ResolveRealtime(t.Context(), srv.URL, []string{"pusher"}); err == nil {
+		t.Fatal("expected an error when Kick offers no usable connection")
 	}
 }
 
