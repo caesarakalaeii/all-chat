@@ -66,12 +66,10 @@ const nextConfig = {
     const cspBase = [
       "default-src 'self'",
       "img-src 'self' data: https: static-cdn.jtvnw.net yt3.ggpht.com cdn.7tv.app cdn.betterttv.net cdn.frankerfacez.com files.kick.com cdn.discordapp.com",
-      // embed.twitch.tv hosts the Twitch Embed SDK used by the credits/clips
-      // overlay route (audit #3); without it the SDK script is CSP-blocked and
-      // clips never play. analytics.allch.at hosts the self-hosted Umami tracker
+      // analytics.allch.at hosts the self-hosted Umami tracker
       // (components/Analytics.tsx); without it the tracker script is CSP-blocked
       // and no page views or custom events are recorded.
-      "script-src 'self' 'unsafe-inline' https://embed.twitch.tv https://analytics.allch.at",
+      "script-src 'self' 'unsafe-inline' https://analytics.allch.at",
       // worker-src governs Web Worker/SharedWorker creation. The overlay
       // editor's self-hosted Monaco (/monaco/vs, ADR-0040) runs its CSS
       // language services — validation, autocomplete — in workers that Monaco
@@ -91,10 +89,11 @@ const nextConfig = {
       "media-src 'self' https: data: blob:",
       "font-src 'self' data:",
       // frame-src governs which iframes a page may embed. It MUST list 'self' (the
-      // editor's same-origin /overlays/:id/preview/embed iframe) plus the Twitch
-      // player domains the Embed SDK injects (audit #3) — once frame-src is
-      // specified it replaces the default-src 'self' fallback for frames.
-      "frame-src 'self' https://embed.twitch.tv https://player.twitch.tv https://www.twitch.tv https://clips.twitch.tv",
+      // editor's same-origin /overlays/:id/preview/embed iframe) plus Twitch's
+      // clip embed, which the credits route plays clips through (audit #3) —
+      // once frame-src is specified it replaces the default-src 'self' fallback
+      // for frames.
+      "frame-src 'self' https://clips.twitch.tv",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

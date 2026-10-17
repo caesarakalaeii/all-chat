@@ -794,10 +794,11 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     themeClassic: 'Klassisch',
     themeCinematic: 'Cinematisch',
     themeModern: 'Modern',
-    scrollSpeedLabel: 'Scroll-Geschwindigkeit (1-100)',
+    scrollSpeedLabel: 'Scroll-Geschwindigkeit (Pixel pro Sekunde, 1-100)',
     currentValue: 'Aktuell: {value}',
     durationLabel: 'Anzeigedauer (Sekunden)',
-    durationHint: 'Wie lange der Abspann gezeigt wird (10-300 Sekunden)',
+    durationHint:
+      'Wie lange der Abspann läuft, bevor er von vorn beginnt (10-300 Sekunden). Ein längerer Abspann scrollt erst bis zum Ende.',
     opacityLabel: 'Hintergrund-Deckkraft (0-1)',
     clipsHeading: 'Twitch Clips',
     clipsHint: 'Zeigt Clips während des Abspanns',
