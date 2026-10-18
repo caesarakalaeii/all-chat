@@ -28,6 +28,7 @@ import {
   dockTabStorageKey,
   isDockMode,
   loadDockTab,
+  pinnedDockPanel,
   saveDockTab,
 } from '../dockMode'
 
@@ -87,6 +88,30 @@ describe('isDockMode', () => {
   })
 })
 
+// Two docks, one per panel, is how a streamer sees chat and activity at once.
+describe('pinnedDockPanel', () => {
+  it('pins the named panel, and dock mode is on for it', () => {
+    for (const raw of ['chat', 'CHAT', 'activity', 'Activity']) {
+      const params = new URLSearchParams(`dock=${raw}`)
+      expect(isDockMode(params)).toBe(true)
+      expect(pinnedDockPanel(params)).toBe(raw.toLowerCase())
+    }
+  })
+
+  it('pins nothing for the tabbed dock, no dock, or a typo', () => {
+    expect(pinnedDockPanel(new URLSearchParams('dock=1'))).toBeNull()
+    expect(pinnedDockPanel(new URLSearchParams(''))).toBeNull()
+    expect(pinnedDockPanel(new URLSearchParams('dock=chats'))).toBeNull()
+    expect(isDockMode(new URLSearchParams('dock=chats'))).toBe(false)
+  })
+
+  // Both is a tab of the tabbed dock, not a panel a URL can pin.
+  it('does not treat dock=split as a pinned panel', () => {
+    expect(pinnedDockPanel(new URLSearchParams('dock=split'))).toBeNull()
+    expect(isDockMode(new URLSearchParams('dock=split'))).toBe(false)
+  })
+})
+
 describe('dockTab persistence', () => {
   it('defaults to the chat tab when nothing is stored', () => {
     expect(loadDockTab('o1')).toBe(DEFAULT_DOCK_TAB)
@@ -103,6 +128,12 @@ describe('dockTab persistence', () => {
     expect(loadDockTab('o1')).toBe('activity')
     // A different overlay keeps its own tab.
     expect(loadDockTab('o2')).toBe(DEFAULT_DOCK_TAB)
+  })
+
+  // OBS only reopens a dock by reloading it, so Both has to survive that too.
+  it('round-trips the split tab', () => {
+    saveDockTab('o1', 'split')
+    expect(loadDockTab('o1')).toBe('split')
   })
 
   it('falls back to the default for an unknown stored value', () => {

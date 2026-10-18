@@ -36,14 +36,17 @@ import { interpolateElements } from '@/lib/i18n/emphasise'
 export function ObsDockHelpContent() {
   const t = useTranslations()
   return (
-    <ol className="list-decimal space-y-1.5 pl-5 text-sm text-text-sub">
-      <li>
-        {interpolateElements(t('onboarding.obsDock.step1'), {
-          menu: <strong className="text-text">{t('onboarding.obsDock.step1Menu')}</strong>,
-        })}
-      </li>
-      <li>{t('onboarding.obsDock.step2')}</li>
-      <li>{t('onboarding.obsDock.step3')}</li>
-    </ol>
+    <>
+      <ol className="list-decimal space-y-1.5 pl-5 text-sm text-text-sub">
+        <li>
+          {interpolateElements(t('onboarding.obsDock.step1'), {
+            menu: <strong className="text-text">{t('onboarding.obsDock.step1Menu')}</strong>,
+          })}
+        </li>
+        <li>{t('onboarding.obsDock.step2')}</li>
+        <li>{t('onboarding.obsDock.step3')}</li>
+      </ol>
+      <p className="mt-3 text-sm text-text-sub">{t('onboarding.obsDock.splitTip')}</p>
+    </>
   )
 }

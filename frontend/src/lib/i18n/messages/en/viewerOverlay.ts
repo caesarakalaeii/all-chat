@@ -575,6 +575,8 @@ export const viewerOverlay = {
     // width, not the wide view's panel headings.
     chatTab: 'Chat',
     activityTab: 'Activity',
+    // Chat on top, Activity below, in one dock.
+    splitTab: 'Both',
     // The single overflow menu the header's controls collapse into.
     menuLabel: 'Monitor controls',
     // The one compact status row the wide view's stacked notice strips

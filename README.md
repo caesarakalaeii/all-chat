@@ -72,6 +72,8 @@ https://allch.at/overlay/YOUR_OVERLAY_ID/view?dock=1
 
 In OBS, open **View > Docks > Custom Browser Docks**, give the dock a name, paste the link and click **Apply**. The dock keeps its own browser profile, so it asks you to sign in once inside the panel. Streamlabs Desktop accepts the same link as a custom browser dock.
 
+The dock shows Chat and Activity as tabs. To see both at once, pick **Both**, which stacks chat above activity in the one dock. Or add two docks, ending one link in `?dock=chat` and the other in `?dock=activity`; each shows only that panel.
+
 **One account, several overlays.** Each overlay has its own mix of chat sources, its own theme, its own OBS URL and its own monitor. For example, one overlay for Twitch and TikTok on a gaming stream and a YouTube-only one for a podcast.
 
 **Alert overlays (Premium).** Create an overlay of kind **Alerts** to get an alert box as its own OBS browser source: subs, bits, raids, follows, Super Chats, memberships and TikTok gifts pop up one at a time with their text, image or GIF and sound, then the source goes empty again. It uses the same chat sources as a chat overlay. In the overlay editor, the **Alerts** section opens on **All events (default style)**: one image or GIF (search KLIPY, paste a URL or upload), sound, duration and volume for every alert. Pick an event type to give it its own text (with `{username}`, `{amount}`, `{count}` and `{message}` placeholders) or its own media; fields it leaves empty use the default style. **Send test alert** plays the event you are editing in the editor preview and in OBS, and saves unsaved changes first. Premium can also write custom HTML, CSS and JavaScript per alert; it runs in an isolated sandbox on the overlay.
