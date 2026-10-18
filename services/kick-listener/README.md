@@ -59,6 +59,10 @@ Both clients implement `websocket.Realtime`, decode events with the same code
   `POST https://web.kick.com/api/v1/realtime/auth/connection` `{"client_id"}` (a 45-minute
   JWT, no login), refreshes it at three quarters of its ttl, answers the server's `{}`
   pings with `{}`, and reconnects with backoff (1s to 60s), resubscribing its chatrooms.
+- Each connection hands chat messages to its own dispatcher goroutine (queue of 1024), so
+  its read loop keeps answering pings while the message handler waits. Kick drops a
+  connection whose pong is a few seconds late (close `3012 no pong`), and the channel
+  manager holds its subscription lock through a whole channel sync.
 - Readiness is up only when every pooled connection is connected.
 
 #### Pusher client (`websocket/client.go`)

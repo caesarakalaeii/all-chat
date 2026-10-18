@@ -43,6 +43,8 @@ const (
 	// Centrifugo error 105: already subscribed. Harmless when a resubscribe
 	// after reconnect races a fresh Subscribe.
 	centrifugoAlreadySubscribed = 105
+	// Publications queued per connection while the message handler is busy.
+	centrifugoDispatchBuffer = 1024
 )
 
 // CentrifugoClient reads Kick chat from Kick's Centrifugo server (ADR-0077).
@@ -292,6 +294,13 @@ type centrifugoConn struct {
 
 	writeMu sync.Mutex
 	nextID  atomic.Uint32
+
+	pubs chan centrifugoPub // read loop -> dispatcher; set by run
+}
+
+type centrifugoPub struct {
+	channel, event string
+	data           json.RawMessage
 }
 
 type centrifugoError struct {
@@ -332,6 +341,17 @@ func (k *centrifugoConn) run(first chan<- error) {
 			first = nil
 		}
 	}
+	// The handler can block (the channel manager holds its lock through a
+	// whole sync), so publications go through a queue and the read loop
+	// stays free to answer pings.
+	k.pubs = make(chan centrifugoPub, centrifugoDispatchBuffer)
+	defer close(k.pubs)
+	go func() {
+		for p := range k.pubs {
+			k.c.dispatch(p.channel, p.event, p.data)
+		}
+	}()
+
 	backoff := k.c.minBackoff
 	for {
 		started := time.Now()
@@ -469,7 +489,7 @@ func (k *centrifugoConn) handleLine(line string) error {
 
 	switch {
 	case r.Push != nil && r.Push.Pub != nil:
-		k.c.dispatch(r.Push.Channel, r.Push.Pub.Data.Event, r.Push.Pub.Data.Data)
+		k.pubs <- centrifugoPub{r.Push.Channel, r.Push.Pub.Data.Event, r.Push.Pub.Data.Data}
 	case r.Push != nil && r.Push.Disconnect != nil:
 		return fmt.Errorf("server disconnect: %d %s", r.Push.Disconnect.Code, r.Push.Disconnect.Message)
 	case r.Push != nil && r.Push.Unsubscribe != nil:
