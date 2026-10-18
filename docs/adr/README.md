@@ -835,6 +835,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0077: Kick listener follows Kick's realtime provider (Centrifugo or Pusher)
+
+**Status**: Accepted (2026-10-18)
+**Problem**: Kick revoked kick-listener's hardcoded Pusher key on 2026-10-17 (~32.5h of dark Kick chat), and kick.com no longer starts from a fixed Pusher key: it asks `web.kick.com/api/v1/realtime/connection` which provider to use, and answers Centrifugo to any client that accepts it.
+**Decision**: At startup the listener asks that endpoint with `KICK_REALTIME_PROVIDERS` (default `centrifugo,pusher`) and builds the matching client; a failed lookup starts Pusher with the configured key. The new Centrifugo client pools connections at ≤100 chatrooms each (Kick's limit is 128), fetches guest tokens from `/v1/realtime/auth/connection`, refreshes them, answers pings and resubscribes on reconnect. Both clients share one interface, event decoding and the `kick_listener_socket_state` gauge.
+**Impact**: Kick chat survives Kick's move to Centrifugo; `KICK_REALTIME_PROVIDERS=pusher` forces Pusher without a rebuild. Two transports until Kick drops Pusher. Built on undocumented Kick endpoints and limits.
+**→ Read**: [0077-kick-listener-follows-kicks-realtime-provider.md](./0077-kick-listener-follows-kicks-realtime-provider.md)
+
+---
+
 
 ## How to Create a New ADR
 

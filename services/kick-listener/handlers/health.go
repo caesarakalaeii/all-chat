@@ -22,13 +22,12 @@ import (
 
 	"github.com/caesar/all-chat/services/kick-listener/channels"
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
-	"github.com/caesar/all-chat/services/kick-listener/websocket"
 	"github.com/gin-gonic/gin"
 )
 
-// wsConnectionHealth is the subset of websocket.Client used by the health handler.
+// wsConnectionHealth is the subset of websocket.Realtime used by the health handler.
 // Defined as an interface so that tests can inject a stub without constructing a full
-// Pusher WebSocket client.
+// realtime client.
 type wsConnectionHealth interface {
 	IsConnected() bool
 	LastActivityAt() time.Time
@@ -38,20 +37,18 @@ type wsConnectionHealth interface {
 // HealthHandler handles health check endpoints
 type HealthHandler struct {
 	wsConn     wsConnectionHealth
-	wsClient   *websocket.Client
 	publisher  *publisher.StreamPublisher
 	channelMgr *channels.Manager
 }
 
 // NewHealthHandler creates a new health handler
 func NewHealthHandler(
-	wsClient *websocket.Client,
+	wsClient wsConnectionHealth,
 	publisher *publisher.StreamPublisher,
 	channelMgr *channels.Manager,
 ) *HealthHandler {
 	return &HealthHandler{
 		wsConn:     wsClient,
-		wsClient:   wsClient,
 		publisher:  publisher,
 		channelMgr: channelMgr,
 	}
@@ -66,9 +63,9 @@ func (h *HealthHandler) LivenessProbe(c *gin.Context) {
 	if h.wsConn.IsStale() {
 		lastAct := h.wsConn.LastActivityAt()
 		c.JSON(http.StatusServiceUnavailable, gin.H{
-			"status":  "dead",
-			"service": "kick-listener",
-			"reason":  "Pusher WebSocket zombie — no activity for over 5 minutes",
+			"status":                    "dead",
+			"service":                   "kick-listener",
+			"reason":                    "Pusher WebSocket zombie — no activity for over 5 minutes",
 			"last_activity_seconds_ago": int(time.Since(lastAct).Seconds()),
 		})
 		return
@@ -141,7 +138,7 @@ func (h *HealthHandler) Status(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":              "running",
-		"websocket_connected": h.wsClient.IsConnected(),
+		"websocket_connected": h.wsConn.IsConnected(),
 		"redis_healthy":       h.publisher.IsHealthy(c.Request.Context()),
 		"subscribed_channels": len(subscriptions),
 		"channels":            channels,
