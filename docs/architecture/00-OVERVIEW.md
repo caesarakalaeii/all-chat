@@ -70,7 +70,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
          │  • twitch-eventsub-listener (webhooks/WS) │
          │  • youtube-listener (Data API)            │
          │  • youtube-listener-innertube             │
-         │  • kick-listener (Pusher WebSocket)       │
+         │  • kick-listener (Centrifugo/Pusher WS)   │
          │  • tiktok-listener (Node, unofficial lib) │
          │  • discord-listener (gateway WS)          │
          └───────────────┬──────────────────────────┘
@@ -200,8 +200,8 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **→ Documentation**: [services/youtube-listener/README.md](../../services/youtube-listener/README.md)
 
 **Kick Listener** (`:8089`)
-- **Purpose**: Connect to Kick Pusher WebSocket, publish raw messages to Redis Streams
-- **Protocol**: Pusher WebSocket Protocol 7
+- **Purpose**: Connect to Kick's realtime server, publish raw messages to Redis Streams
+- **Protocol**: Centrifugo JSON protocol (pooled connections) or Pusher Protocol 7, whichever Kick picks at startup (ADR-0077)
 - **Capacity**: 200+ concurrent channels per pod
 - **Latency**: ~100ms (real-time WebSocket)
 - **→ Documentation**: [services/kick-listener/README.md](../../services/kick-listener/README.md)
