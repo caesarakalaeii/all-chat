@@ -248,6 +248,38 @@ func TestCentrifugo_AnswersPing(t *testing.T) {
 	}
 }
 
+// The message handler can block for a long time (the channel manager holds
+// its subscription lock through a whole sync), and Kick drops a connection
+// whose pong is a few seconds late. Pings must not wait on the handler.
+func TestCentrifugo_AnswersPingWhileHandlerBlocks(t *testing.T) {
+	f := newFakeCentrifugo(t, 2700)
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	entered := make(chan struct{}, 1)
+	c := newTestCentrifugo(f, func(string, *KickChatMessage) {
+		entered <- struct{}{}
+		<-release
+	})
+	if err := c.Connect(); err != nil {
+		t.Fatalf("Connect: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Disconnect() })
+
+	fc := f.nextConn(t)
+	fc.send(kickChatPush)
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("message never reached the handler")
+	}
+	fc.send(`{}`)
+	select {
+	case <-fc.pongs:
+	case <-time.After(time.Second):
+		t.Fatal("ping not answered while the handler was blocked")
+	}
+}
+
 // Kick refuses the 129th subscription on one connection, so the client must
 // spread chatrooms over several connections and drop the ones it emptied.
 func TestCentrifugo_PoolsConnectionsAtCapacity(t *testing.T) {
