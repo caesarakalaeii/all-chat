@@ -27,7 +27,7 @@
 
 import type { TFunction } from '@/lib/i18n'
 import { viewerOverlay } from '@/lib/i18n/messages/en/viewerOverlay'
-import type { CreditRollResponse } from '@/lib/types/overlay'
+import type { CreditRollConfig, CreditRollResponse, Leaderboards } from '@/lib/types/overlay'
 
 type CreditMessage = keyof typeof viewerOverlay.credits
 
@@ -193,32 +193,70 @@ const sampleEntry = (
 })
 
 /**
- * What the editor preview rolls: the preview must show every element whether or
- * not the streamer has a session, and must not fetch the real roll, which counts
- * as a display.
+ * Which event toggles show each leaderboard. Mirrors aggregateLeaderboards in
+ * overlay-manager/creditroll/handler.go, so the preview drops exactly the
+ * boards the live roll would.
  */
-export const SAMPLE_CREDIT_ROLL: CreditRollResponse = {
-  overlay_id: 'preview',
-  session_id: 'preview',
-  session_started_at: '2026-10-17T18:00:00Z',
-  session_duration_seconds: 2 * 3600 + 35 * 60,
-  leaderboards: {
-    subs: [
-      sampleEntry(1, 'NightOwl', 'twitch', 12, 'months'),
-      sampleEntry(2, 'PixelPilot', 'twitch', 1, 'months'),
-    ],
-    gifts: [
-      sampleEntry(1, 'GiftGoblin', 'twitch', 25, 'gifts'),
-      sampleEntry(2, 'RoseRider', 'tiktok', 1500, 'diamonds'),
-      sampleEntry(3, 'LuckyLlama', 'tiktok', 99, 'diamonds'),
-    ],
-    bits: [sampleEntry(1, 'CheerChamp', 'twitch', 5000, 'bits')],
-    super_chats: [sampleEntry(1, 'TubeFan', 'youtube', 20, 'EUR')],
-    follows: [
-      sampleEntry(1, 'NewFriend', 'twitch', 0, ''),
-      sampleEntry(2, 'HelloThere', 'kick', 0, ''),
-    ],
-  },
-  clips: [],
-  clips_is_fallback: false,
+const LEADERBOARD_TOGGLES: Record<keyof Leaderboards, ReadonlyArray<keyof CreditRollConfig>> = {
+  subs: ['include_subs', 'include_resubs'],
+  gifts: ['include_gift_subs'],
+  bits: ['include_bits'],
+  raids: ['include_raids'],
+  super_chats: ['include_super_chats'],
+  memberships: ['include_memberships'],
+  follows: ['include_follows'],
+  points: ['include_channel_points'],
+  treasure_chests: ['include_treasure_chests'],
+  shares: ['include_shares'],
+  likes: ['include_likes'],
+}
+
+// One sample board per event toggle, so switching any of them visibly adds or
+// removes a board in the preview.
+const SAMPLE_LEADERBOARDS: Required<Leaderboards> = {
+  subs: [
+    sampleEntry(1, 'NightOwl', 'twitch', 12, 'months'),
+    sampleEntry(2, 'PixelPilot', 'twitch', 1, 'months'),
+  ],
+  gifts: [
+    sampleEntry(1, 'GiftGoblin', 'twitch', 25, 'gifts'),
+    sampleEntry(2, 'RoseRider', 'tiktok', 1500, 'diamonds'),
+    sampleEntry(3, 'LuckyLlama', 'tiktok', 99, 'diamonds'),
+  ],
+  bits: [sampleEntry(1, 'CheerChamp', 'twitch', 5000, 'bits')],
+  points: [sampleEntry(1, 'PointHoarder', 'twitch', 12000, 'points')],
+  raids: [sampleEntry(1, 'RaidLeader', 'twitch', 85, 'viewers')],
+  super_chats: [sampleEntry(1, 'TubeFan', 'youtube', 20, 'EUR')],
+  follows: [
+    sampleEntry(1, 'NewFriend', 'twitch', 0, ''),
+    sampleEntry(2, 'HelloThere', 'kick', 0, ''),
+  ],
+  memberships: [sampleEntry(1, 'LoyalMember', 'youtube', 0, '')],
+  treasure_chests: [sampleEntry(1, 'ChestOpener', 'tiktok', 500, 'coins')],
+  shares: [sampleEntry(1, 'ShareBear', 'tiktok', 7, 'share')],
+  likes: [sampleEntry(1, 'TapTapTap', 'tiktok', 2400, 'likes')],
+}
+
+/**
+ * What the editor preview rolls: sample supporters on the boards the config's
+ * event toggles enable. The preview must show a roll whether or not the
+ * streamer has a session, and must not fetch the real roll, which counts as a
+ * display.
+ */
+export function sampleCreditRoll(config: Partial<CreditRollConfig>): CreditRollResponse {
+  const leaderboards: Leaderboards = {}
+  for (const board of Object.keys(SAMPLE_LEADERBOARDS) as Array<keyof Leaderboards>) {
+    if (LEADERBOARD_TOGGLES[board].some((toggle) => config[toggle] === true)) {
+      leaderboards[board] = SAMPLE_LEADERBOARDS[board]
+    }
+  }
+  return {
+    overlay_id: 'preview',
+    session_id: 'preview',
+    session_started_at: '2026-10-17T18:00:00Z',
+    session_duration_seconds: 2 * 3600 + 35 * 60,
+    leaderboards,
+    clips: [],
+    clips_is_fallback: false,
+  }
 }

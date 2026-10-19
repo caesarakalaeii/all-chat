@@ -56,6 +56,8 @@ async function boot(page: Page) {
         enabled: true,
         theme: 'cinematic',
         background_opacity: 0.8,
+        include_gift_subs: true,
+        include_shares: false,
         texts: { subheading: 'Merci à tous !' },
         font_scales: {},
       })
@@ -115,4 +117,18 @@ test('the preview shows saved and unsaved custom text and sizes, and saving send
   })
   expect(saved[0].font_scales).toEqual({ session: 200 })
   expect(rollFetches()).toBe(0)
+})
+
+test('switching an event type adds or removes its board in the preview at once', async ({
+  page,
+}) => {
+  const { preview } = await boot(page)
+  await expect(preview.getByText('GiftGoblin')).toBeVisible({ timeout: 20_000 })
+  await expect(preview.getByText('ShareBear')).toHaveCount(0)
+
+  await page.getByRole('checkbox', { name: 'Gift Subs' }).uncheck()
+  await expect(preview.getByText('GiftGoblin')).toHaveCount(0)
+
+  await page.getByRole('checkbox', { name: 'Shares' }).check()
+  await expect(preview.getByText('ShareBear')).toBeVisible()
 })

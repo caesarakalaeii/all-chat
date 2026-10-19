@@ -44,7 +44,7 @@ import type { CreditRollResponse, CreditRollConfig, LeaderboardEntry } from '@/l
 import { creditRollValue } from '@/lib/utils/creditRollValue'
 import {
   CREDIT_ROLL_PREVIEW_MESSAGE,
-  SAMPLE_CREDIT_ROLL,
+  sampleCreditRoll,
   creditFontSize,
   withCreditTexts,
 } from '@/lib/utils/creditRollCustomization'
@@ -147,7 +147,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       const next = event.data.config as CreditRollConfig
       setConfig(next)
       setCustomCss(next.custom_css || '')
-      setCreditData(SAMPLE_CREDIT_ROLL)
+      setCreditData(sampleCreditRoll(next))
       setLoading(false)
     }
     window.addEventListener('message', onMessage)
