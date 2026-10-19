@@ -148,11 +148,11 @@ export const guides: LocaleNamespace<'guides'> = {
   tiktok: {
     metaTitle: 'TikTok-LIVE-Chat-Overlay für OBS',
     metaDescription:
-      'Zeige TikTok-LIVE-Chat in OBS neben Twitch-, YouTube-, Kick- und Discord-Chat. Wie All-Chat TikTok ohne offizielle API liest und wo die Grenzen liegen.',
+      'Zeige TikTok-LIVE-Chat in OBS neben Twitch-, YouTube-, Kick- und Discord-Chat, ausgelegt auf ein Verfügbarkeitsziel von 99,9 % ohne offizielle TikTok-API.',
     breadcrumb: 'TikTok-LIVE-Chat-Overlay',
     heading: 'TikTok-LIVE-Chat-Overlay für OBS',
     intro:
-      'All-Chat zeigt TikTok-LIVE-Chat im selben OBS-Overlay wie deinen Twitch-, YouTube-, Kick- und Discord-Chat. TikTok macht das schwieriger als jede andere Plattform, also erklärt diese Seite auch, wie es funktioniert und wo es haken kann.',
+      'All-Chat zeigt TikTok-LIVE-Chat im selben OBS-Overlay wie deinen Twitch-, YouTube-, Kick- und Discord-Chat. TikTok ist die am schwierigsten anzubindende und die am wenigsten stabile der Plattformen, mit denen sich All-Chat verbindet, und trotzdem gilt für TikTok-Chat dasselbe Verfügbarkeitsziel von 99,9 % wie für jede andere Plattform. Diese Seite erklärt, wie das geht.',
     stepsHeading: 'TikTok zu einem Overlay hinzufügen',
     stepOpen: 'Öffne dein Overlay im All-Chat-Dashboard.',
     stepConnect:
@@ -174,9 +174,9 @@ export const guides: LocaleNamespace<'guides'> = {
       'Am 09.09.2026 begann TikTok, Browser-Grade-Sessions für Live-Chat-Daten zu verlangen. All-Chat reagierte noch dieselbe Woche; die Updates sind in derselben ADR festgehalten.',
     approachFallback:
       'Räume auf {premium}-Konten bekommen einen zweiten Auslieferungspfad, wenn TikTok die primäre Verbindung verweigert.',
-    approachStory: 'Wie All-Chat dorthin kam, Ausfälle inklusive, ist in {post} aufgeschrieben.',
+    approachStory: 'Die ganze Geschichte steht in {post}.',
     limitInterruptions:
-      'TikTok ist die Plattform, bei der kurze Aussetzer am wahrscheinlichsten sind. Wenn TikTok seinen Web-Player ändert, muss jedes Tool, das TikTok-LIVE-Chat liest, sich anpassen, All-Chat eingeschlossen. Twitch-, YouTube-, Kick- und Discord-Chat im selben Overlay laufen währenddessen weiter.',
+      'TikTok bleibt die am wenigsten stabile Plattform, die All-Chat unterstützt. Wenn TikTok seinen Web-Player ändert, muss jedes Tool, das TikTok-LIVE-Chat liest, sich anpassen, All-Chat eingeschlossen, daher kann es zu kurzen Aussetzern kommen. Twitch-, YouTube-, Kick- und Discord-Chat im selben Overlay laufen währenddessen weiter.',
     limitReadOnly:
       'Du kannst TikTok-Chat aus All-Chat heraus weder beantworten noch moderieren. TikTok bietet dafür keine API.',
     verticalNote:
