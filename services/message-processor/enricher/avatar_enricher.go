@@ -22,10 +22,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/services/message-processor/sessions"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -39,6 +41,11 @@ const (
 
 	// AvatarImageCacheKeyPrefix is the Redis key prefix for cached avatar image bytes
 	AvatarImageCacheKeyPrefix = "avatar:img:"
+
+	// AvatarImageCacheTTL keeps cached image bytes alive as long as the credit-roll
+	// leaderboards that reference them through the proxy URL; a shorter TTL turns a
+	// chatter who stopped talking into a missing picture at the end of the stream.
+	AvatarImageCacheTTL = sessions.LeaderboardTTL
 
 	// AvatarNameCacheKeyPrefix is the Redis key prefix for cached Twitch display names.
 	// A sibling of the avatar URL cache under the same prefix and TTL, needed because a
@@ -79,33 +86,29 @@ const (
 // token HTTP refresh is performed WITHOUT holding the lock (so a slow refresh never
 // serializes unrelated lookups).
 type AvatarEnricher struct {
-	httpClient     *http.Client
-	redisClient    *redis.Client
-	clientID       string
-	clientSecret   string
-	mu             sync.RWMutex
-	accessToken    string
-	tokenURL       string
-	helixUsersURL  string
-	gatewayBaseURL string
-	logger         *zap.Logger
+	httpClient    *http.Client
+	redisClient   *redis.Client
+	clientID      string
+	clientSecret  string
+	mu            sync.RWMutex
+	accessToken   string
+	tokenURL      string
+	helixUsersURL string
+	logger        *zap.Logger
 }
 
 // NewAvatarEnricher creates a new avatar enricher.
-// gatewayBaseURL is the base URL of the API gateway (e.g., "http://api-gateway:8080")
-// used to rewrite TikTok avatar URLs to the proxy endpoint.
-func NewAvatarEnricher(redisClient *redis.Client, clientID, clientSecret, gatewayBaseURL string, logger *zap.Logger) *AvatarEnricher {
+func NewAvatarEnricher(redisClient *redis.Client, clientID, clientSecret string, logger *zap.Logger) *AvatarEnricher {
 	return &AvatarEnricher{
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
-		redisClient:    redisClient,
-		clientID:       clientID,
-		clientSecret:   clientSecret,
-		tokenURL:       defaultTwitchTokenURL,
-		helixUsersURL:  defaultTwitchHelixUsersURL,
-		gatewayBaseURL: gatewayBaseURL,
-		logger:         logger,
+		redisClient:   redisClient,
+		clientID:      clientID,
+		clientSecret:  clientSecret,
+		tokenURL:      defaultTwitchTokenURL,
+		helixUsersURL: defaultTwitchHelixUsersURL,
+		logger:        logger,
 	}
 }
 
@@ -242,12 +245,15 @@ func (e *AvatarEnricher) enrichTikTok(ctx context.Context, msg *models.UnifiedCh
 		return nil
 	}
 
-	proxyURL := fmt.Sprintf("%s/api/avatars/tiktok/%s", e.gatewayBaseURL, msg.User.ID)
+	// Root-relative on purpose: the browser loads it from the page's own origin,
+	// whose /api/* the frontend proxies to the gateway. An absolute in-cluster
+	// gateway URL is unreachable from a browser and blocked by the overlay CSP.
+	proxyURL := "/api/avatars/tiktok/" + url.PathEscape(msg.User.ID)
 
-	// Check if image already cached
+	// A hit also renews the TTL, so the bytes outlive every leaderboard entry
+	// captured with this URL, not just the first message that cached them.
 	cacheKey := fmt.Sprintf("%s%s:%s", AvatarImageCacheKeyPrefix, "tiktok", msg.User.ID)
-	exists, err := e.redisClient.Exists(ctx, cacheKey).Result()
-	if err == nil && exists > 0 {
+	if renewed, err := e.redisClient.Expire(ctx, cacheKey, AvatarImageCacheTTL).Result(); err == nil && renewed {
 		msg.User.AvatarURL = proxyURL
 		return nil
 	}
@@ -291,7 +297,7 @@ func (e *AvatarEnricher) fetchAndCacheImage(ctx context.Context, cacheKey, image
 		return fmt.Errorf("empty image response")
 	}
 
-	return e.redisClient.Set(ctx, cacheKey, imgBytes, AvatarCacheTTL).Err()
+	return e.redisClient.Set(ctx, cacheKey, imgBytes, AvatarImageCacheTTL).Err()
 }
 
 // twitchProfile is the renderable part of a Twitch Helix user, exactly as Helix

@@ -36,7 +36,7 @@
 
 'use client'
 
-import Image from 'next/image'
+import { UserAvatar } from '@/components/UserAvatar'
 import { type SyntheticEvent, use, useEffect, useLayoutEffect, useState, useRef } from 'react'
 import clsx from 'clsx'
 import { type TFunction, formatDate, formatNumber, useTranslations } from '@/lib/i18n'
@@ -236,16 +236,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
               >
                 #{entry.rank}
               </div>
-              {entry.avatar_url && (
-                <div className="relative h-12 w-12 overflow-hidden rounded-full">
-                  <Image
-                    src={entry.avatar_url}
-                    alt={entry.display_name}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              )}
+              <UserAvatar avatarUrl={entry.avatar_url} size={48} displayName={entry.display_name} />
               <div className="flex-1">
                 <div className="text-xl font-semibold text-white">{entry.display_name}</div>
                 <div className="text-sm text-slate-400 capitalize">{entry.platform}</div>
