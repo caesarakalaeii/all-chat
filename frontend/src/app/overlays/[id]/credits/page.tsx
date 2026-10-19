@@ -33,7 +33,7 @@
 
 'use client'
 
-import { use, useEffect, useId, useState } from 'react'
+import { use, useCallback, useEffect, useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -41,6 +41,12 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { overlaysApi } from '@/lib/api/overlays'
 import { trackEvent } from '@/lib/analytics'
 import { AppNav } from '@/components/AppNav'
+import { SplitView } from '@/components/SplitView'
+import {
+  CreditRollSizeSettings,
+  CreditRollTextSettings,
+} from '@/components/overlays/CreditRollTextSettings'
+import { CREDIT_ROLL_PREVIEW_MESSAGE } from '@/lib/utils/creditRollCustomization'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
 import type { Overlay, CreditRollConfig } from '@/lib/types/overlay'
@@ -138,6 +144,29 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
   const [useCustomCss, setUseCustomCss] = useState(false)
   const [showThemeMarketplace, setShowThemeMarketplace] = useState(false)
   const [copiedCreditsUrl, setCopiedCreditsUrl] = useState(false)
+
+  // The preview pane renders the OBS roll with sample data; it gets this page's
+  // unsaved config on load (EMBED_READY) and after every edit.
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
+  const handleIframeReady = useCallback((iframe: HTMLIFrameElement) => {
+    iframeRef.current = iframe
+  }, [])
+
+  useEffect(() => {
+    const previewConfig = { ...config, custom_css: useCustomCss ? customCss : '' }
+    const send = () =>
+      iframeRef.current?.contentWindow?.postMessage(
+        { type: CREDIT_ROLL_PREVIEW_MESSAGE, config: previewConfig },
+        window.location.origin
+      )
+    send()
+    const onEmbedReady = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return
+      if (event.data?.type === 'EMBED_READY') send()
+    }
+    window.addEventListener('message', onEmbedReady)
+    return () => window.removeEventListener('message', onEmbedReady)
+  }, [config, customCss, useCustomCss])
 
   useEffect(() => {
     if (!user) {
@@ -286,389 +315,417 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="container mx-auto max-w-4xl px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <a href={`/overlays/${id}`} className="text-sub mb-4 inline-flex items-center gap-2">
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 19l-7-7m0 0l7-7m-7 7h18"
-              />
-            </svg>
-            {t('overlayEditor.credits.backToOverlay')}
-          </a>
-          <h1 className="text-3xl">{t('overlayEditor.credits.heading')}</h1>
-          <p className="text-sub mt-2">{t('overlayEditor.credits.intro')}</p>
-          <div className="mt-4">
-            <button
-              className="lanes-btn ghost inline-flex items-center gap-2"
-              onClick={() => {
-                const url = `${window.location.origin}/overlay/${id}/credits`
-                navigator.clipboard.writeText(url).then(() => {
-                  trackEvent('obs_url_copied', { surface: 'credits' })
-                  setCopiedCreditsUrl(true)
-                  setTimeout(() => setCopiedCreditsUrl(false), 2000)
-                })
-              }}
-            >
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      {/* Main Content, beside the live preview */}
+      <SplitView
+        overlayId={id}
+        onIframeReady={handleIframeReady}
+        previewPath={`/overlay/${id}/credits?preview=true`}
+      >
+        <div className="@container max-w-none p-6">
+          {/* Header */}
+          <div className="mb-8">
+            <a href={`/overlays/${id}`} className="text-sub mb-4 inline-flex items-center gap-2">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
+                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
                 />
               </svg>
-              {copiedCreditsUrl
-                ? t('overlayEditor.credits.copiedObsUrl')
-                : t('overlayEditor.credits.copyObsUrl')}
-            </button>
-            <p className="text-dim mt-1 text-xs">{t('overlayEditor.credits.obsUrlHint')}</p>
-          </div>
-        </div>
-
-        {/* Main Toggle */}
-        <div className="lanes-panel mb-6 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl">{t('overlayEditor.credits.enableHeading')}</h2>
-              <p className="text-sub mt-1 text-sm">{t('overlayEditor.credits.enableHint')}</p>
-            </div>
-            <Switch.Root
-              checked={config.enabled}
-              onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
-              aria-label={t('overlayEditor.credits.enableHeading')}
-              className="border-2 border-white bg-black data-[checked]:border-kick data-[checked]:bg-kick"
-            >
-              <Switch.Thumb />
-            </Switch.Root>
-          </div>
-        </div>
-
-        {config.enabled && (
-          <>
-            {/* Event Types */}
-            <div className="lanes-panel mb-6 p-6">
-              <h3 className="mb-4 text-lg">{t('overlayEditor.credits.eventTypesHeading')}</h3>
-              <p className="text-sub mb-4 text-sm">{t('overlayEditor.credits.eventTypesHint')}</p>
-              <div className="grid grid-cols-2 gap-4">
-                {CREDIT_EVENT_TYPES.map(({ key, messageStem, icon }) => (
-                  <label
-                    key={key}
-                    className="flex cursor-pointer items-center gap-3 border border-white/40 p-3 transition-colors hover:border-white"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={config[key] as boolean}
-                      onChange={(e) => setConfig({ ...config, [key]: e.target.checked })}
-                      className="h-5 w-5 accent-kick"
-                    />
-                    <span className="text-2xl">{icon}</span>
-                    <span className="font-medium">
-                      {t(`overlayEditor.credits.event${messageStem}`)}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Leaderboard Settings */}
-            <div className="lanes-panel mb-6 p-6">
-              <h3 className="mb-4 text-lg">{t('overlayEditor.credits.leaderboardHeading')}</h3>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor={`${fieldId}-top-n`} className="mb-2 block text-sm font-medium">
-                    {t('overlayEditor.credits.topNLabel')}
-                  </label>
-                  <Input
-                    id={`${fieldId}-top-n`}
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={config.leaderboard_top_n || 10}
-                    onChange={(e) =>
-                      setConfig({ ...config, leaderboard_top_n: parseInt(e.target.value) })
-                    }
-                    aria-describedby={`${fieldId}-top-n-hint`}
-                  />
-                  <p id={`${fieldId}-top-n-hint`} className="text-dim mt-1 text-xs">
-                    {t('overlayEditor.credits.topNHint')}
-                  </p>
-                </div>
-                <div>
-                  <label htmlFor={`${fieldId}-sort-by`} className="mb-2 block text-sm font-medium">
-                    {t('overlayEditor.credits.sortByLabel')}
-                  </label>
-                  <select
-                    id={`${fieldId}-sort-by`}
-                    value={config.leaderboard_sort_by || 'value'}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        leaderboard_sort_by: e.target.value as 'value' | 'count',
-                      })
-                    }
-                    className="w-full px-4 py-2"
-                  >
-                    <option value="value">{t('overlayEditor.credits.sortByTotalValue')}</option>
-                    <option value="count">{t('overlayEditor.credits.sortByCount')}</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Display Settings */}
-            <div className="lanes-panel mb-6 p-6">
-              <h3 className="mb-4 text-lg">{t('overlayEditor.credits.displayHeading')}</h3>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor={`${fieldId}-theme`} className="mb-2 block text-sm font-medium">
-                    {t('overlayEditor.credits.themeLabel')}
-                  </label>
-                  <select
-                    id={`${fieldId}-theme`}
-                    value={config.theme || 'cinematic'}
-                    onChange={(e) =>
-                      setConfig({
-                        ...config,
-                        theme: e.target.value as 'classic' | 'cinematic' | 'modern',
-                      })
-                    }
-                    className="w-full px-4 py-2"
-                  >
-                    <option value="classic">{t('overlayEditor.credits.themeClassic')}</option>
-                    <option value="cinematic">{t('overlayEditor.credits.themeCinematic')}</option>
-                    <option value="modern">{t('overlayEditor.credits.themeModern')}</option>
-                  </select>
-                </div>
-                <div>
-                  <label
-                    htmlFor={`${fieldId}-scroll-speed`}
-                    className="mb-2 block text-sm font-medium"
-                  >
-                    {t('overlayEditor.credits.scrollSpeedLabel')}
-                  </label>
-                  <input
-                    id={`${fieldId}-scroll-speed`}
-                    type="range"
-                    min="1"
-                    max="100"
-                    value={config.scroll_speed || 50}
-                    onChange={(e) =>
-                      setConfig({ ...config, scroll_speed: parseInt(e.target.value) })
-                    }
-                    className="w-full accent-kick"
-                  />
-                  <p className="text-dim mt-1 text-xs">
-                    {t('overlayEditor.credits.currentValue', {
-                      value: config.scroll_speed || 50,
-                    })}
-                  </p>
-                </div>
-                <div>
-                  <label htmlFor={`${fieldId}-duration`} className="mb-2 block text-sm font-medium">
-                    {t('overlayEditor.credits.durationLabel')}
-                  </label>
-                  <Input
-                    id={`${fieldId}-duration`}
-                    type="number"
-                    min="10"
-                    max="300"
-                    value={config.display_duration_seconds || 60}
-                    onChange={(e) =>
-                      setConfig({ ...config, display_duration_seconds: parseInt(e.target.value) })
-                    }
-                    aria-describedby={`${fieldId}-duration-hint`}
-                  />
-                  <p id={`${fieldId}-duration-hint`} className="text-dim mt-1 text-xs">
-                    {t('overlayEditor.credits.durationHint')}
-                  </p>
-                </div>
-                <div>
-                  <label htmlFor={`${fieldId}-opacity`} className="mb-2 block text-sm font-medium">
-                    {t('overlayEditor.credits.opacityLabel')}
-                  </label>
-                  <input
-                    id={`${fieldId}-opacity`}
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={config.background_opacity ?? 0.8}
-                    onChange={(e) =>
-                      setConfig({ ...config, background_opacity: parseFloat(e.target.value) })
-                    }
-                    aria-describedby={`${fieldId}-opacity-hint`}
-                    className="w-full accent-kick"
-                  />
-                  <p className="text-dim mt-1 text-xs">
-                    {t('overlayEditor.credits.currentValue', {
-                      value: config.background_opacity ?? 0.8,
-                    })}
-                  </p>
-                  <p id={`${fieldId}-opacity-hint`} className="text-dim mt-1 text-xs">
-                    {t('overlayEditor.credits.opacityHint')}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Clips Settings */}
-            <div className="lanes-panel mb-6 p-6">
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg">{t('overlayEditor.credits.clipsHeading')}</h3>
-                  <p className="text-sub mt-1 text-sm">{t('overlayEditor.credits.clipsHint')}</p>
-                </div>
-                <Switch.Root
-                  checked={config.clips_enabled}
-                  onCheckedChange={(clips_enabled) => setConfig({ ...config, clips_enabled })}
-                  aria-label={t('overlayEditor.credits.clipsHeading')}
-                  className="border-2 border-white bg-black data-[checked]:border-kick data-[checked]:bg-kick"
-                >
-                  <Switch.Thumb />
-                </Switch.Root>
-              </div>
-
-              {config.clips_enabled && (
-                <div className="space-y-4">
-                  <div>
-                    <label
-                      htmlFor={`${fieldId}-clips-max`}
-                      className="mb-2 block text-sm font-medium"
-                    >
-                      {t('overlayEditor.credits.maxClipsLabel')}
-                    </label>
-                    <Input
-                      id={`${fieldId}-clips-max`}
-                      type="number"
-                      min="1"
-                      max="20"
-                      value={config.clips_max_count || 5}
-                      onChange={(e) =>
-                        setConfig({ ...config, clips_max_count: parseInt(e.target.value) })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor={`${fieldId}-clips-fallback`}
-                      className="mb-2 block text-sm font-medium"
-                    >
-                      {t('overlayEditor.credits.fallbackDaysLabel')}
-                    </label>
-                    <Input
-                      id={`${fieldId}-clips-fallback`}
-                      type="number"
-                      min="1"
-                      max="30"
-                      value={config.clips_fallback_days || 7}
-                      onChange={(e) =>
-                        setConfig({ ...config, clips_fallback_days: parseInt(e.target.value) })
-                      }
-                      aria-describedby={`${fieldId}-clips-fallback-hint`}
-                    />
-                    <p id={`${fieldId}-clips-fallback-hint`} className="text-dim mt-1 text-xs">
-                      {t('overlayEditor.credits.fallbackDaysHint')}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="flex cursor-pointer items-center gap-3 border border-white/40 p-3 transition-colors hover:border-white">
-                      <input
-                        type="checkbox"
-                        checked={config.clips_muted ?? true}
-                        onChange={(e) => setConfig({ ...config, clips_muted: e.target.checked })}
-                        className="h-5 w-5 accent-kick"
-                      />
-                      <span className="flex-1 font-medium">
-                        {t('overlayEditor.credits.muteClipsLabel')}
-                        <span className="text-dim mt-1 block text-xs font-normal">
-                          {t('overlayEditor.credits.muteClipsHint')}
-                        </span>
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-
-        <div className="lanes-panel mb-6 p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h3 className="text-lg">{t('overlayEditor.credits.cssHeading')}</h3>
-              <label className="text-sub flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={useCustomCss}
-                  onChange={(e) => setUseCustomCss(e.target.checked)}
-                  className="h-5 w-5 accent-kick"
-                />
-                {t('overlayEditor.credits.cssEnable')}
-              </label>
-            </div>
-            <div className="flex gap-2">
-              <button className="lanes-btn" onClick={() => setShowThemeMarketplace(true)}>
+              {t('overlayEditor.credits.backToOverlay')}
+            </a>
+            <h1 className="text-3xl">{t('overlayEditor.credits.heading')}</h1>
+            <p className="text-sub mt-2">{t('overlayEditor.credits.intro')}</p>
+            <div className="mt-4">
+              <button
+                className="lanes-btn ghost inline-flex items-center gap-2"
+                onClick={() => {
+                  const url = `${window.location.origin}/overlay/${id}/credits`
+                  navigator.clipboard.writeText(url).then(() => {
+                    trackEvent('obs_url_copied', { surface: 'credits' })
+                    setCopiedCreditsUrl(true)
+                    setTimeout(() => setCopiedCreditsUrl(false), 2000)
+                  })
+                }}
+              >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                    d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"
                   />
                 </svg>
-                {t('overlayEditor.credits.cssBrowseThemes')}
+                {copiedCreditsUrl
+                  ? t('overlayEditor.credits.copiedObsUrl')
+                  : t('overlayEditor.credits.copyObsUrl')}
               </button>
-              <button
-                className="lanes-btn ghost"
-                onClick={() => {
-                  setCustomCss('')
-                  setUseCustomCss(false)
-                }}
-              >
-                {t('overlayEditor.credits.cssReset')}
-              </button>
+              <p className="text-dim mt-1 text-xs">{t('overlayEditor.credits.obsUrlHint')}</p>
+              <p className="text-dim mt-1 text-xs">{t('overlayEditor.credits.previewNote')}</p>
             </div>
           </div>
 
-          <MonacoCSSEditor
-            value={customCss}
-            onChange={setCustomCss}
-            height="400px"
-            placeholder={t('overlayEditor.credits.cssEditorPlaceholder')}
-          />
+          {/* Main Toggle */}
+          <div className="lanes-panel mb-6 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl">{t('overlayEditor.credits.enableHeading')}</h2>
+                <p className="text-sub mt-1 text-sm">{t('overlayEditor.credits.enableHint')}</p>
+              </div>
+              <Switch.Root
+                checked={config.enabled}
+                onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
+                aria-label={t('overlayEditor.credits.enableHeading')}
+                className="border-2 border-white bg-black data-[checked]:border-kick data-[checked]:bg-kick"
+              >
+                <Switch.Thumb />
+              </Switch.Root>
+            </div>
+          </div>
 
-          <p className="text-sub mt-4 text-sm">
-            {interpolateElements(t('overlayEditor.credits.cssHint'), {
-              docsLink: (
-                <a
-                  href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/credit-roll-themes"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-twitch hover:underline"
+          {config.enabled && (
+            <>
+              {/* Event Types */}
+              <div className="lanes-panel mb-6 p-6">
+                <h3 className="mb-4 text-lg">{t('overlayEditor.credits.eventTypesHeading')}</h3>
+                <p className="text-sub mb-4 text-sm">{t('overlayEditor.credits.eventTypesHint')}</p>
+                {/* The config column is user-resizable, so the grid follows its
+                    width rather than the viewport's. */}
+                <div className="grid grid-cols-1 gap-4 @lg:grid-cols-2">
+                  {CREDIT_EVENT_TYPES.map(({ key, messageStem, icon }) => (
+                    <label
+                      key={key}
+                      className="flex cursor-pointer items-center gap-3 border border-white/40 p-3 transition-colors hover:border-white"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={config[key] as boolean}
+                        onChange={(e) => setConfig({ ...config, [key]: e.target.checked })}
+                        className="h-5 w-5 accent-kick"
+                      />
+                      <span className="text-2xl">{icon}</span>
+                      <span className="font-medium">
+                        {t(`overlayEditor.credits.event${messageStem}`)}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Leaderboard Settings */}
+              <div className="lanes-panel mb-6 p-6">
+                <h3 className="mb-4 text-lg">{t('overlayEditor.credits.leaderboardHeading')}</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor={`${fieldId}-top-n`} className="mb-2 block text-sm font-medium">
+                      {t('overlayEditor.credits.topNLabel')}
+                    </label>
+                    <Input
+                      id={`${fieldId}-top-n`}
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={config.leaderboard_top_n || 10}
+                      onChange={(e) =>
+                        setConfig({ ...config, leaderboard_top_n: parseInt(e.target.value) })
+                      }
+                      aria-describedby={`${fieldId}-top-n-hint`}
+                    />
+                    <p id={`${fieldId}-top-n-hint`} className="text-dim mt-1 text-xs">
+                      {t('overlayEditor.credits.topNHint')}
+                    </p>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`${fieldId}-sort-by`}
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      {t('overlayEditor.credits.sortByLabel')}
+                    </label>
+                    <select
+                      id={`${fieldId}-sort-by`}
+                      value={config.leaderboard_sort_by || 'value'}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          leaderboard_sort_by: e.target.value as 'value' | 'count',
+                        })
+                      }
+                      className="w-full px-4 py-2"
+                    >
+                      <option value="value">{t('overlayEditor.credits.sortByTotalValue')}</option>
+                      <option value="count">{t('overlayEditor.credits.sortByCount')}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Display Settings */}
+              <div className="lanes-panel mb-6 p-6">
+                <h3 className="mb-4 text-lg">{t('overlayEditor.credits.displayHeading')}</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor={`${fieldId}-theme`} className="mb-2 block text-sm font-medium">
+                      {t('overlayEditor.credits.themeLabel')}
+                    </label>
+                    <select
+                      id={`${fieldId}-theme`}
+                      value={config.theme || 'cinematic'}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          theme: e.target.value as 'classic' | 'cinematic' | 'modern',
+                        })
+                      }
+                      className="w-full px-4 py-2"
+                    >
+                      <option value="classic">{t('overlayEditor.credits.themeClassic')}</option>
+                      <option value="cinematic">{t('overlayEditor.credits.themeCinematic')}</option>
+                      <option value="modern">{t('overlayEditor.credits.themeModern')}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`${fieldId}-scroll-speed`}
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      {t('overlayEditor.credits.scrollSpeedLabel')}
+                    </label>
+                    <input
+                      id={`${fieldId}-scroll-speed`}
+                      type="range"
+                      min="1"
+                      max="100"
+                      value={config.scroll_speed || 50}
+                      onChange={(e) =>
+                        setConfig({ ...config, scroll_speed: parseInt(e.target.value) })
+                      }
+                      className="w-full accent-kick"
+                    />
+                    <p className="text-dim mt-1 text-xs">
+                      {t('overlayEditor.credits.currentValue', {
+                        value: config.scroll_speed || 50,
+                      })}
+                    </p>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`${fieldId}-duration`}
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      {t('overlayEditor.credits.durationLabel')}
+                    </label>
+                    <Input
+                      id={`${fieldId}-duration`}
+                      type="number"
+                      min="10"
+                      max="300"
+                      value={config.display_duration_seconds || 60}
+                      onChange={(e) =>
+                        setConfig({ ...config, display_duration_seconds: parseInt(e.target.value) })
+                      }
+                      aria-describedby={`${fieldId}-duration-hint`}
+                    />
+                    <p id={`${fieldId}-duration-hint`} className="text-dim mt-1 text-xs">
+                      {t('overlayEditor.credits.durationHint')}
+                    </p>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`${fieldId}-opacity`}
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      {t('overlayEditor.credits.opacityLabel')}
+                    </label>
+                    <input
+                      id={`${fieldId}-opacity`}
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={config.background_opacity ?? 0.8}
+                      onChange={(e) =>
+                        setConfig({ ...config, background_opacity: parseFloat(e.target.value) })
+                      }
+                      aria-describedby={`${fieldId}-opacity-hint`}
+                      className="w-full accent-kick"
+                    />
+                    <p className="text-dim mt-1 text-xs">
+                      {t('overlayEditor.credits.currentValue', {
+                        value: config.background_opacity ?? 0.8,
+                      })}
+                    </p>
+                    <p id={`${fieldId}-opacity-hint`} className="text-dim mt-1 text-xs">
+                      {t('overlayEditor.credits.opacityHint')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <CreditRollSizeSettings
+                fontScales={config.font_scales ?? {}}
+                onFontScalesChange={(font_scales) => setConfig({ ...config, font_scales })}
+              />
+
+              <CreditRollTextSettings
+                texts={config.texts ?? {}}
+                onTextsChange={(texts) => setConfig({ ...config, texts })}
+              />
+
+              {/* Clips Settings */}
+              <div className="lanes-panel mb-6 p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg">{t('overlayEditor.credits.clipsHeading')}</h3>
+                    <p className="text-sub mt-1 text-sm">{t('overlayEditor.credits.clipsHint')}</p>
+                  </div>
+                  <Switch.Root
+                    checked={config.clips_enabled}
+                    onCheckedChange={(clips_enabled) => setConfig({ ...config, clips_enabled })}
+                    aria-label={t('overlayEditor.credits.clipsHeading')}
+                    className="border-2 border-white bg-black data-[checked]:border-kick data-[checked]:bg-kick"
+                  >
+                    <Switch.Thumb />
+                  </Switch.Root>
+                </div>
+
+                {config.clips_enabled && (
+                  <div className="space-y-4">
+                    <div>
+                      <label
+                        htmlFor={`${fieldId}-clips-max`}
+                        className="mb-2 block text-sm font-medium"
+                      >
+                        {t('overlayEditor.credits.maxClipsLabel')}
+                      </label>
+                      <Input
+                        id={`${fieldId}-clips-max`}
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={config.clips_max_count || 5}
+                        onChange={(e) =>
+                          setConfig({ ...config, clips_max_count: parseInt(e.target.value) })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor={`${fieldId}-clips-fallback`}
+                        className="mb-2 block text-sm font-medium"
+                      >
+                        {t('overlayEditor.credits.fallbackDaysLabel')}
+                      </label>
+                      <Input
+                        id={`${fieldId}-clips-fallback`}
+                        type="number"
+                        min="1"
+                        max="30"
+                        value={config.clips_fallback_days || 7}
+                        onChange={(e) =>
+                          setConfig({ ...config, clips_fallback_days: parseInt(e.target.value) })
+                        }
+                        aria-describedby={`${fieldId}-clips-fallback-hint`}
+                      />
+                      <p id={`${fieldId}-clips-fallback-hint`} className="text-dim mt-1 text-xs">
+                        {t('overlayEditor.credits.fallbackDaysHint')}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="flex cursor-pointer items-center gap-3 border border-white/40 p-3 transition-colors hover:border-white">
+                        <input
+                          type="checkbox"
+                          checked={config.clips_muted ?? true}
+                          onChange={(e) => setConfig({ ...config, clips_muted: e.target.checked })}
+                          className="h-5 w-5 accent-kick"
+                        />
+                        <span className="flex-1 font-medium">
+                          {t('overlayEditor.credits.muteClipsLabel')}
+                          <span className="text-dim mt-1 block text-xs font-normal">
+                            {t('overlayEditor.credits.muteClipsHint')}
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          <div className="lanes-panel mb-6 p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg">{t('overlayEditor.credits.cssHeading')}</h3>
+                <label className="text-sub flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={useCustomCss}
+                    onChange={(e) => setUseCustomCss(e.target.checked)}
+                    className="h-5 w-5 accent-kick"
+                  />
+                  {t('overlayEditor.credits.cssEnable')}
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <button className="lanes-btn" onClick={() => setShowThemeMarketplace(true)}>
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"
+                    />
+                  </svg>
+                  {t('overlayEditor.credits.cssBrowseThemes')}
+                </button>
+                <button
+                  className="lanes-btn ghost"
+                  onClick={() => {
+                    setCustomCss('')
+                    setUseCustomCss(false)
+                  }}
                 >
-                  {t('overlayEditor.credits.cssDocsLink')}
-                </a>
-              ),
-            })}
-          </p>
-        </div>
+                  {t('overlayEditor.credits.cssReset')}
+                </button>
+              </div>
+            </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-4">
-          <button className="lanes-btn flex-1" onClick={handleSave} disabled={saving}>
-            {saving ? t('overlayEditor.credits.saving') : t('overlayEditor.credits.save')}
-          </button>
-          <button className="lanes-btn ghost" onClick={() => router.push(`/overlays/${id}`)}>
-            {t('overlayEditor.credits.cancel')}
-          </button>
+            <MonacoCSSEditor
+              value={customCss}
+              onChange={setCustomCss}
+              height="400px"
+              placeholder={t('overlayEditor.credits.cssEditorPlaceholder')}
+            />
+
+            <p className="text-sub mt-4 text-sm">
+              {interpolateElements(t('overlayEditor.credits.cssHint'), {
+                docsLink: (
+                  <a
+                    href="https://github.com/caesarakalaeii/all-chat/tree/main/docs/credit-roll-themes"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-twitch hover:underline"
+                  >
+                    {t('overlayEditor.credits.cssDocsLink')}
+                  </a>
+                ),
+              })}
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-4">
+            <button className="lanes-btn flex-1" onClick={handleSave} disabled={saving}>
+              {saving ? t('overlayEditor.credits.saving') : t('overlayEditor.credits.save')}
+            </button>
+            <button className="lanes-btn ghost" onClick={() => router.push(`/overlays/${id}`)}>
+              {t('overlayEditor.credits.cancel')}
+            </button>
+          </div>
         </div>
-      </div>
+      </SplitView>
 
       {/* Theme Marketplace Modal */}
       <ThemeMarketplaceModal

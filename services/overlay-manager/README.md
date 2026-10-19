@@ -425,15 +425,26 @@ start from Helix `GET /streams`; a completed session is measured to its
 
 Each `include_*` column toggles one leaderboard category; `aggregateLeaderboards` skips disabled categories. `include_treasure_chests`, `include_shares` and `include_likes` were added (migration 105) as opt-in (default false) so existing credit rolls do not change when the new boards ship.
 
-```sql
-CREATE TABLE credit_roll_configs (
+`texts` and `font_scales` (migration 112) hold the streamer's own roll copy and text sizes. `texts` maps a message key (the leaf name under `viewerOverlay.credits` in the frontend catalog, such as `heading` or `valueBitsMany`) to a template that replaces the default copy in every UI language; `font_scales` maps a roll element (`heading`, `session`, `entry`, ...) to a size in percent of its default. The frontend owns which keys exist; `HandleUpdateConfig` only bounds them (letter-only keys, at most 300 characters per text, 50-300 percent) and drops entries that mean "default".
+
+Columns, from migrations 021, 023, 027, 105 and 112 (a summary, not DDL):
+
+```text
+credit_roll_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    overlay_id UUID REFERENCES overlays(id) ON DELETE CASCADE UNIQUE,
-    enabled BOOLEAN DEFAULT false,
-    min_messages INT DEFAULT 5,
-    duration_seconds INT DEFAULT 30,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    overlay_id UUID NOT NULL UNIQUE REFERENCES overlays(id) ON DELETE CASCADE,
+    enabled BOOLEAN,
+    include_subs, include_resubs, include_gift_subs, include_bits, include_raids,
+    include_channel_points, include_super_chats, include_memberships, include_follows,
+    include_treasure_chests, include_shares, include_likes BOOLEAN,
+    leaderboard_top_n INTEGER, leaderboard_sort_by VARCHAR(20), -- 'value' | 'count'
+    scroll_speed INTEGER, display_duration_seconds INTEGER,
+    background_opacity DECIMAL(3,2), theme VARCHAR(50),       -- 'classic' | 'cinematic' | 'modern'
+    clips_enabled BOOLEAN, clips_max_count INTEGER, clips_fallback_days INTEGER, clips_muted BOOLEAN,
+    custom_css TEXT NOT NULL DEFAULT '',
+    texts JSONB NOT NULL DEFAULT '{}',
+    font_scales JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ, updated_at TIMESTAMPTZ
 );
 ```
 

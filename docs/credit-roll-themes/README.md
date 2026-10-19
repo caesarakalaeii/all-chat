@@ -124,6 +124,12 @@ See the `.css` files in this directory for complete examples:
 4. **Use web fonts** - @import from Google Fonts works great
 5. **Provide fallbacks** - users may have different configurations
 6. **Respect user settings** - background opacity should be adjustable
+7. **Leave font sizes adjustable** - streamers set their own text and text
+   sizes in the credit roll editor. A size changed there is applied as an inline
+   `font-size`, which a theme's `font-size: ... !important` overrides, so a theme
+   that forces sizes that way makes those size sliders do nothing. The element
+   classes (`.text-4xl.font-bold` and so on) stay on the roll for themes to
+   select on.
 
 ## Resources
 

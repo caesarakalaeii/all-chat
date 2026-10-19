@@ -210,6 +210,11 @@ func (h *Handler) HandleUpdateConfig(c *gin.Context) {
 		return
 	}
 
+	if err := normalizeCustomization(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
 	// Update config (keep ID and overlay_id from existing)
 	req.ID = config.ID
 	req.OverlayID = config.OverlayID
