@@ -43,6 +43,7 @@ export const marketing = {
     navDashboard: 'dashboard',
     // The logged-in nav chip; '▸' rides inside the key so no JSX carries it.
     navDashboardChip: '▸ dashboard',
+    languageLabel: 'Language',
     kicker: 'A DECLARATION OF WAR ON CHAT TOOLING',
     // Two display lines of one headline, not two sentences.
     titleTop: 'EVERY CHAT.',
