@@ -59,6 +59,13 @@ type CreditRollConfig struct {
 	// Custom CSS
 	CustomCSS string `json:"custom_css" db:"custom_css"`
 
+	// Texts replaces the roll's default copy per message key (the leaf name under
+	// viewerOverlay.credits in the frontend catalog, e.g. "heading"). FontScales
+	// sizes a roll element in percent of its default. Absent keys keep defaults;
+	// the frontend owns which keys exist, the handler only bounds them.
+	Texts      map[string]string `json:"texts" db:"texts"`
+	FontScales map[string]int    `json:"font_scales" db:"font_scales"`
+
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }
