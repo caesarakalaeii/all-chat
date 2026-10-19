@@ -64,3 +64,30 @@ func TestCreditRollTogglesMigrationKeepsChannelPointsBoardOnce(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, reloaded.IncludeChannelPoints, "a pod restart re-ran migration 105 and overrode the streamer's choice")
 }
+
+// texts and font_scales are JSONB maps; a fresh row must read back as empty maps
+// (not nil, which the NOT NULL columns would reject on the next save) and an
+// update must round-trip non-ASCII text exactly.
+func TestCreditRollCustomizationRoundTrip(t *testing.T) {
+	pool, cleanup := setupEventSettingsTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	runMigrations(t, pool, loadUpMigrations(t))
+	overlayID := seedOverlayWithEventSettings(t, pool, "credit_roll_texts")
+
+	repo := NewCreditRollRepository(pool)
+	config, err := repo.GetOrCreate(ctx, overlayID)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{}, config.Texts)
+	assert.Equal(t, map[string]int{}, config.FontScales)
+
+	config.Texts = map[string]string{"heading": "Générique de fin 🎬", "duration": "Durée : {hours} h {minutes}"}
+	config.FontScales = map[string]int{"session": 200}
+	require.NoError(t, repo.Update(ctx, config))
+
+	reloaded, err := repo.GetByOverlayID(ctx, overlayID)
+	require.NoError(t, err)
+	assert.Equal(t, config.Texts, reloaded.Texts)
+	assert.Equal(t, config.FontScales, reloaded.FontScales)
+}
