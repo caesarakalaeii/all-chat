@@ -33,6 +33,7 @@ export const marketing: LocaleNamespace<'marketing'> = {
     navDiscord: 'discord',
     navDashboard: 'dashboard',
     navDashboardChip: '▸ dashboard',
+    languageLabel: 'Sprache',
     kicker: 'EINE KRIEGSERKLÄRUNG AN CHAT-TOOLS',
     titleTop: 'ALLE CHATS.',
     titleBottom: 'EINE URL.',

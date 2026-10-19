@@ -845,6 +845,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0078: Homepage language switch, and German opened to everyone
+
+**Status**: Accepted (2026-10-19)
+**Problem**: ADR-0066 offered German only on `/settings`, behind the `ui_languages` gate, which signed-out visitors can never pass, so the homepage audience could not read it.
+**Decision**: A switch in the homepage lanes nav (`components/home/LanguageToggle.tsx`), one button per supported locale, not gated; the `ui_languages` gate's `early_access` is turned off so `/settings` offers German to everyone as well.
+**Impact**: Signed-out visitors can switch the homepage body to German; both pickers agree. Metadata, JSON-LD and `legal.*` stay English. Re-closing the gate would not hide the homepage switch.
+**→ Read**: [0078-homepage-language-switch-and-german-for-everyone.md](./0078-homepage-language-switch-and-german-for-everyone.md)
+
+---
+
 
 ## How to Create a New ADR
 
