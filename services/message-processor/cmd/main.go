@@ -210,8 +210,7 @@ func main() {
 	// Avatar enricher for Twitch and TikTok users
 	twitchClientID := getEnvOrDefault("TWITCH_CLIENT_ID", "")
 	twitchClientSecret := getEnvOrDefault("TWITCH_CLIENT_SECRET", "")
-	gatewayBaseURL := getEnvOrDefault("GATEWAY_BASE_URL", "http://api-gateway:8080")
-	avatarEnricher := enricher.NewAvatarEnricher(redisClient, twitchClientID, twitchClientSecret, gatewayBaseURL, log)
+	avatarEnricher := enricher.NewAvatarEnricher(redisClient, twitchClientID, twitchClientSecret, log)
 	badgeEnricher := enricher.NewBadgeEnricher(redisClient, twitchClientID, twitchClientSecret, log)
 	viewerBadgeEnricher := enricher.NewViewerBadgeEnricher(redisClient, db, log)
 	log.Info("Initialized ViewerBadge enricher")
