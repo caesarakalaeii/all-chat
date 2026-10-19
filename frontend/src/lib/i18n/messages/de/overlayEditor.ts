@@ -800,6 +800,8 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     durationHint:
       'Wie lange der Abspann läuft, bevor er von vorn beginnt (10-300 Sekunden). Ein längerer Abspann scrollt erst bis zum Ende.',
     opacityLabel: 'Hintergrund-Deckkraft (0-1)',
+    opacityHint:
+      'Mit Clips dunkelt dies nur den Clip hinter dem Abspann ab, höchstens auf halbe Helligkeit, damit der Clip immer sichtbar bleibt.',
     clipsHeading: 'Twitch Clips',
     clipsHint: 'Zeigt Clips während des Abspanns',
     maxClipsLabel: 'Maximale Clips',

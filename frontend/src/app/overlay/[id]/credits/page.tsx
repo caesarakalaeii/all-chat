@@ -36,7 +36,7 @@
 
 'use client'
 
-import Image from 'next/image'
+import { UserAvatar } from '@/components/UserAvatar'
 import { type SyntheticEvent, use, useEffect, useLayoutEffect, useState, useRef } from 'react'
 import clsx from 'clsx'
 import { type TFunction, formatDate, formatNumber, useTranslations } from '@/lib/i18n'
@@ -48,6 +48,9 @@ import { fetchClipVideoUrl } from '@/lib/twitchClipVideo'
 // film clapper and camera each precede a heading that says the same in words.
 const WARNING_GLYPH = '⚠️'
 const CAMERA_GLYPH = '🎥'
+
+// Darkest the scrim over a playing clip gets, at background opacity 1.
+const CLIP_SCRIM_MAX = 0.5
 
 /**
  * Render the session length the way the roll header does: hours and minutes if
@@ -236,16 +239,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
               >
                 #{entry.rank}
               </div>
-              {entry.avatar_url && (
-                <div className="relative h-12 w-12 overflow-hidden rounded-full">
-                  <Image
-                    src={entry.avatar_url}
-                    alt={entry.display_name}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              )}
+              <UserAvatar avatarUrl={entry.avatar_url} size={48} displayName={entry.display_name} />
               <div className="flex-1">
                 <div className="text-xl font-semibold text-white">{entry.display_name}</div>
                 <div className="text-sm text-slate-400 capitalize">{entry.platform}</div>
@@ -327,11 +321,13 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
               />
             )
           )}
-          {/* Overlay gradient for better text readability */}
+          {/* Behind a clip the opacity only dims it, never hides it: at the
+              maximum the clip still shows through at half brightness. The roll
+              keeps its contrast from the text shadow on the content below. */}
           <div
             className="absolute inset-0 z-10"
             style={{
-              background: `linear-gradient(to bottom, rgba(0, 0, 0, ${bgOpacity}), rgba(0, 0, 0, ${bgOpacity * 0.85}))`,
+              background: `rgba(0, 0, 0, ${bgOpacity * CLIP_SCRIM_MAX})`,
               pointerEvents: 'none',
             }}
           />
@@ -348,6 +344,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
                 ? `linear-gradient(135deg, rgba(99, 102, 241, ${bgOpacity}), rgba(139, 92, 246, ${bgOpacity}))`
                 : `rgba(17, 24, 39, ${bgOpacity})`
             : 'transparent',
+          textShadow: currentClip ? '0 2px 6px rgba(0, 0, 0, 0.9)' : undefined,
         }}
       >
         <div ref={rollRef} className="container mx-auto px-8 py-12">

@@ -502,12 +502,16 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     onChange={(e) =>
                       setConfig({ ...config, background_opacity: parseFloat(e.target.value) })
                     }
+                    aria-describedby={`${fieldId}-opacity-hint`}
                     className="w-full accent-kick"
                   />
                   <p className="text-dim mt-1 text-xs">
                     {t('overlayEditor.credits.currentValue', {
                       value: config.background_opacity ?? 0.8,
                     })}
+                  </p>
+                  <p id={`${fieldId}-opacity-hint`} className="text-dim mt-1 text-xs">
+                    {t('overlayEditor.credits.opacityHint')}
                   </p>
                 </div>
               </div>
