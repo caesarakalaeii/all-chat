@@ -376,6 +376,10 @@ export interface CreditRollConfig {
   clips_fallback_days: number
   clips_muted: boolean
   custom_css?: string
+  /** Streamer-written copy per viewerOverlay.credits message (migration 112). */
+  texts?: Record<string, string>
+  /** Text size per roll element, in percent of its default. */
+  font_scales?: Record<string, number>
   created_at: string
   updated_at: string
 }
