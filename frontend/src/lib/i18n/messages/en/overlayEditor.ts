@@ -893,6 +893,8 @@ export const overlayEditor = {
     durationHint:
       'How long the roll runs before it starts over (10-300 seconds). A roll too long to fit scrolls to its end first.',
     opacityLabel: 'Background Opacity (0-1)',
+    opacityHint:
+      'With clips on, this only dims the clip behind the roll, to half brightness at most, so the clip always stays visible.',
     clipsHeading: 'Twitch Clips',
     clipsHint: 'Show clips during credit roll',
     maxClipsLabel: 'Maximum Clips',
