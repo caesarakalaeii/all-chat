@@ -31,9 +31,12 @@ func TestNotifyUser(t *testing.T) {
 func TestExtractWSAuthToken_ReadsAccessCookie(t *testing.T) {
 	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
 	req.AddCookie(&http.Cookie{Name: "access_token", Value: "cookie-jwt"})
-	tok, echo := extractWSAuthToken(req)
+	tok, echo, fromCookie := extractWSAuthToken(req)
 	if tok != "cookie-jwt" {
 		t.Errorf("token=%q want cookie-jwt", tok)
+	}
+	if !fromCookie {
+		t.Error("fromCookie should be true for the cookie path")
 	}
 	if echo != nil {
 		t.Errorf("echo header should be nil for cookie path, got %v", echo)
@@ -44,9 +47,12 @@ func TestExtractWSAuthToken_SubprotocolBeatsCookie(t *testing.T) {
 	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
 	req.Header.Set("Sec-WebSocket-Protocol", "bearer.subproto-jwt")
 	req.AddCookie(&http.Cookie{Name: "access_token", Value: "cookie-jwt"})
-	tok, echo := extractWSAuthToken(req)
+	tok, echo, fromCookie := extractWSAuthToken(req)
 	if tok != "subproto-jwt" {
 		t.Errorf("token=%q want subproto-jwt (subprotocol precedence)", tok)
+	}
+	if fromCookie {
+		t.Error("fromCookie should be false when the subprotocol token wins")
 	}
 	if echo == nil || echo.Get("Sec-WebSocket-Protocol") != "bearer.subproto-jwt" {
 		t.Errorf("echo header should be set for subprotocol path")
@@ -55,12 +61,36 @@ func TestExtractWSAuthToken_SubprotocolBeatsCookie(t *testing.T) {
 
 func TestExtractWSAuthToken_NoTokenNoCookie(t *testing.T) {
 	req := httptest.NewRequest("GET", "/ws/overlay/abc", nil)
-	tok, echo := extractWSAuthToken(req)
+	tok, echo, _ := extractWSAuthToken(req)
 	if tok != "" {
 		t.Errorf("token=%q want empty", tok)
 	}
 	if echo != nil {
 		t.Errorf("echo should be nil")
+	}
+}
+
+// An overlay socket whose only credential is the ambient access cookie must not
+// be refused for that cookie: /overlay/[id] is public, and OBS shares one cookie
+// jar across every browser source and dock. A deliberately presented token and
+// a server error still end the handshake.
+func TestAmbientCookieDegrades(t *testing.T) {
+	cases := []struct {
+		name       string
+		fromCookie bool
+		status     int
+		want       bool
+	}{
+		{"cookie of another account", true, http.StatusForbidden, true},
+		{"expired or revoked cookie", true, http.StatusUnauthorized, true},
+		{"cookie but ownership lookup failed", true, http.StatusInternalServerError, false},
+		{"explicit token of another account", false, http.StatusForbidden, false},
+		{"explicit expired token", false, http.StatusUnauthorized, false},
+	}
+	for _, tc := range cases {
+		if got := ambientCookieDegrades(tc.fromCookie, tc.status); got != tc.want {
+			t.Errorf("%s: got %v want %v", tc.name, got, tc.want)
+		}
 	}
 }
 
