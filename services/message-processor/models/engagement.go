@@ -79,6 +79,11 @@ type CommandJob struct {
 	Username  string    `json:"username"`
 	Text      string    `json:"text"`
 	Timestamp time.Time `json:"timestamp"`
+
+	// Set only on jobs for StreamChatCommands (ADR-0079): the chatter's roles
+	// (ChatRoles) for the command's min_role check, and the name {user} renders.
+	Roles       []string `json:"roles,omitempty"`
+	DisplayName string   `json:"display_name,omitempty"`
 }
 
 // StreamEngagementTwitchNative is the durable Redis Stream carrying normalized

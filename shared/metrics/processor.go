@@ -62,7 +62,7 @@ type ProcessorMetrics struct {
 	PublishRetryTotal  *prometheus.CounterVec
 	DLQWriteFailures   prometheus.Counter
 
-	// Engagement hot-path hook (issue #523): candidate vote/wager forwards.
+	// Engagement hot-path hook (issue #523): candidate vote/wager and chat command forwards.
 	EngagementForwardTotal *prometheus.CounterVec
 }
 
@@ -213,7 +213,7 @@ func NewProcessorMetrics() *ProcessorMetrics {
 		EngagementForwardTotal: promauto.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "processor_engagement_forward_total",
-				Help: "Engagement vote/wager command forwards from the hot path, by result (hit|miss|error|dropped)",
+				Help: "Engagement forwards from the hot path, by result: votes/wagers hit|miss|error, chat commands chatcmd_hit|chatcmd_error (ADR-0079), shared buffer dropped|abandoned, earn earn_dropped",
 			},
 			[]string{"result"},
 		),
