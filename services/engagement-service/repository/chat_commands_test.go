@@ -37,6 +37,9 @@ import (
 func seedTwitchStreamer(t *testing.T, pool *pgxpool.Pool, login string, scopes []string, sources map[string]string) uuid.UUID {
 	t.Helper()
 	ctx := context.Background()
+	if scopes == nil {
+		scopes = []string{} // granted_scopes is NOT NULL; a nil slice would bind as NULL
+	}
 	var userID, overlayID uuid.UUID
 	require.NoError(t, pool.QueryRow(ctx,
 		`INSERT INTO users (twitch_id, username, display_name, access_token, refresh_token, token_expires_at, auth_provider, granted_scopes)
