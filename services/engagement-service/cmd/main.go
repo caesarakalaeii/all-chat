@@ -156,6 +156,11 @@ func main() {
 	cmdConsumer := consumer.NewCommandConsumer(redisClient, repo, pub, consumerName, log)
 	earnConsumer := consumer.NewEarnConsumer(redisClient, repo, log)
 	nativeConsumer := consumer.NewNativeConsumer(redisClient, repo, pub, consumerName, log)
+	// Streamer-defined chat commands (ADR-0079): channelSync publishes which channels
+	// message-processor forwards to chatcmd:jobs; chatCmdConsumer runs the commands and
+	// replies/clips through auth-service via the announcer's service-JWT client.
+	channelSync := consumer.NewChannelSync(redisClient, repo, log)
+	chatCmdConsumer := consumer.NewChatCommandConsumer(redisClient, repo, announce, consumerName, log)
 
 	// Track the background workers so shutdown can wait for them (and their PEL drains) to
 	// stop before the deferred dbPool/redisClient closes run — otherwise SIGTERM closes the
@@ -168,6 +173,8 @@ func main() {
 	runBG(cmdConsumer.Run)
 	runBG(earnConsumer.Run)
 	runBG(nativeConsumer.Run)
+	runBG(channelSync.Run)
+	runBG(chatCmdConsumer.Run)
 	runBG(func(ctx context.Context) {
 		runSweeper(ctx, repo, pub, log, time.Duration(cfg.SweepIntervalSeconds)*time.Second,
 			time.Duration(cfg.NativeStaleTTLSeconds)*time.Second)
@@ -256,6 +263,18 @@ func main() {
 	// Write to the earn config needs the same scope; the read does not (a token that can
 	// authenticate may look at the overlay's own config).
 	auth.PUT("/overlays/:id/points/config", requireEngagementScope, requireDeviceOverlay, h.PutConfig)
+
+	// Chat commands editor (ADR-0079). Account-level, so there is no overlay in the path:
+	// RequireDeviceTokenOverlay("id") therefore refuses every paired device (a Stream Deck
+	// has no business editing commands) while a scoped PAT and a browser session pass.
+	// Writes are gated by GateChatCommands (seeded open); delete never is.
+	cmdH := handler.NewChatCommands(repo, channelSync.Trigger, log)
+	requireChatCommands := middleware.RequirePremium(dbPool, gateCache, featuregates.GateChatCommands, log)
+	auth.GET("/chat-commands", requireDeviceOverlay, cmdH.List)
+	auth.POST("/chat-commands", requireEngagementScope, requireDeviceOverlay, requireChatCommands, cmdH.Create)
+	auth.POST("/chat-commands/preview", requireDeviceOverlay, cmdH.Preview)
+	auth.PUT("/chat-commands/:cid", requireEngagementScope, requireDeviceOverlay, requireChatCommands, cmdH.Update)
+	auth.DELETE("/chat-commands/:cid", requireEngagementScope, requireDeviceOverlay, cmdH.Delete)
 
 	// Viewer participation (web page / extension).
 	auth.POST("/overlays/:id/polls/:pollId/vote", h.WebVote)

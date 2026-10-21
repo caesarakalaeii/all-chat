@@ -340,3 +340,19 @@ func TestOAuthState_Validate(t *testing.T) {
 		})
 	}
 }
+
+// The chat commands editor (ADR-0079) asks the re-consent to return to it. Only that
+// one path is accepted, so the state can never carry an open redirect.
+func TestOAuthState_ReturnPathAllowlist(t *testing.T) {
+	s := NewModerationState("csrf", "overlay-123", "user-456")
+	s.ReturnPath = ChatCommandsReturnPath
+	if err := s.Validate(); err != nil {
+		t.Errorf("Expected the chat commands return path to validate, got %v", err)
+	}
+	for _, bad := range []string{"https://evil.example", "//evil.example", "/commands/../admin", "/dashboard"} {
+		s.ReturnPath = bad
+		if s.Validate() == nil {
+			t.Errorf("Expected return path %q to be rejected", bad)
+		}
+	}
+}
