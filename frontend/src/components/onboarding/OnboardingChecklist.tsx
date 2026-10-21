@@ -48,7 +48,7 @@ import { DISCORD_INVITE_URL, PATREON_JOIN_URL } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useTranslations } from '@/lib/i18n'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { useOverlayKindAvailable } from '@/lib/platform-availability'
+import { useFeatureAvailable, useOverlayKindAvailable } from '@/lib/platform-availability'
 import type { SpotlightSection } from '@/components/editor/sectionRegistry'
 
 /**
@@ -110,6 +110,7 @@ export function OnboardingChecklist({
   const finish = useOnboardingStore((s) => s.finish)
   const user = useAuthStore((s) => s.user)
   const isKindAvailable = useOverlayKindAvailable()
+  const isFeatureAvailable = useFeatureAvailable()
   const [createOpen, setCreateOpen] = useState(false)
   const [confirmDismiss, setConfirmDismiss] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -459,6 +460,31 @@ export function OnboardingChecklist({
                     </span>
                     <p className="text-xs text-text-sub">
                       {t('onboarding.extras.listOverlayBody')}
+                    </p>
+                  </li>
+                )}
+                {isFeatureAvailable('chatCommands') && (
+                  <li>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-text">
+                        {t('onboarding.extras.chatCommandsTitle')}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          trackEvent('cta_click', {
+                            cta: 'chat_commands',
+                            location: 'onboarding-extras',
+                          })
+                          router.push('/commands')
+                        }}
+                      >
+                        {t('onboarding.checklist.showMe')}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-text-sub">
+                      {t('onboarding.extras.chatCommandsBody')}
                     </p>
                   </li>
                 )}

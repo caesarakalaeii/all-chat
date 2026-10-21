@@ -32,6 +32,7 @@ import { a11y } from './a11y'
 import { admin } from './admin'
 import { auth } from './auth'
 import { blog } from './blog'
+import { commands } from './commands'
 import { common } from './common'
 import { dashboard } from './dashboard'
 import { docs } from './docs'
@@ -52,6 +53,7 @@ export const deMessages: LocaleMessages = {
   admin,
   auth,
   blog,
+  commands,
   common,
   dashboard,
   docs,
