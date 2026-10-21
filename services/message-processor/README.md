@@ -371,6 +371,20 @@ channel := fmt.Sprintf("overlay:%s", message.OverlayID)
 err := redis.Publish(ctx, channel, messageJSON).Err()
 ```
 
+### 7. Forward commands to engagement-service
+
+After a message is handled, `consumer/engagement.go` hands it to a background
+forwarder (never blocking the consume loop) when it may be a command:
+
+- **Votes and wagers** (ADR-0028): a `!`-prefixed or bare-number message on a channel
+  with a live poll/prediction (`EXISTS engagement:active:{platform}:{channel}`) goes to
+  the durable stream `engagement:commands`.
+- **Streamer chat commands** (ADR-0079): every chat message on a channel listed in the
+  Redis SET `chatcmd:channels` goes to `chatcmd:jobs`, carrying the chatter's roles
+  (`models.ChatRoles`: Twitch/Kick badges, YouTube owner/moderator/member flags) and
+  display name. engagement-service maintains the SET; the forwarder keeps an
+  in-process copy refreshed every 10s, so other channels pay only a map lookup.
+
 ---
 
 ## Message Format

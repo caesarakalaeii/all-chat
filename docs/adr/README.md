@@ -855,6 +855,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0079: Streamer chat commands in engagement-service, with a sandboxed JS template engine
+
+**Status**: Accepted (2026-10-21)
+**Problem**: Streamers want Nightbot-style commands, keyword triggers (clip on "clip that") and templated replies with JavaScript across every merged chat, replying from their own account, without taxing the message-processor hot path or letting streamer-written code take down a shared service.
+**Decision**: Extend ADR-0028: message-processor forwards every message of a channel in the `chatcmd:channels` SET (kept by engagement-service) to `chatcmd:jobs` with the chatter's roles; engagement-service matches, checks `min_role`, cooldown, per-message dedup and a reply-echo guard in Redis, then clips via a new auth-service `/internal/twitch/clip` (`clips:edit`, new `clip` re-consent action) and replies via `/internal/chat/announce` to the origin channel when it is the streamer's own. Templates use `{user}`-style tokens plus `{js …}` run in QuickJS (`modernc.org/quickjs`) with no host functions, 100 ms, 16 MB. YouTube replies need premium (quota); the `chat_commands` gate is seeded open.
+**Impact**: New stream, SET, `chat_commands` table (migration 113) and editor at `/commands` (beta-only). Twitch replies and clips need a Twitch login; roles exist only on Twitch, Kick and YouTube. Works on beta once the backend services reach main.
+**→ Read**: [0079-streamer-chat-commands-in-engagement-service.md](./0079-streamer-chat-commands-in-engagement-service.md)
+
+---
+
 
 ## How to Create a New ADR
 
@@ -986,8 +996,8 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Last Updated**: 2026-10-17
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories)
+**Last Updated**: 2026-10-21
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories, streamer chat commands)
 
 **Most Referenced**:
 
@@ -995,4 +1005,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-10-17
+**Last Updated**: 2026-10-21
