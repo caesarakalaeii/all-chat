@@ -267,7 +267,7 @@ metrics:
 **Capacity**: 200+ concurrent channels per pod
 
 **Limits**:
-- Pusher WebSocket connections: No hard limit from platform
+- Centrifugo: at most 128 subscriptions per connection on Kick's side; the client pools connections at 100 chatrooms each (ADR-0077)
 - Memory per channel: ~150KB (WebSocket connection)
 - Pod memory limit: 512Mi → ~3,400 channels theoretical max
 - **Safe limit: 200 channels per pod**

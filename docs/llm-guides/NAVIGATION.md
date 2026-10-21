@@ -174,15 +174,17 @@ Four rollout listeners, each premium-gated per ADR-0008 (`platform_*` feature ga
 
 ### Kick Listener (`:8089`) ✅
 
-**Purpose**: Connect to Kick Pusher WebSocket, subscribe to channels, publish messages
+**Purpose**: Connect to Kick's realtime server (Centrifugo or Pusher, ADR-0077), subscribe to channels, publish messages
 
 **Key Files**:
 - `services/kick-listener/cmd/main.go` - Entry point
+- `services/kick-listener/websocket/centrifugo.go` - Centrifugo client (connection pool, token refresh)
 - `services/kick-listener/websocket/client.go` - Pusher Protocol 7 WebSocket client
+- `services/kick-listener/websocket/credentials.go` - Asks Kick which provider to use (`ResolveRealtime`)
 - `services/kick-listener/channels/manager.go` - Channel subscription management
 - `services/kick-listener/publisher/redis.go` - Publish to Redis Stream `chat:raw`
 
-**Read When**: Working on Kick integration, Pusher WebSocket, or chatroom ID resolution.
+**Read When**: Working on Kick integration, the Centrifugo/Pusher transport, or chatroom ID resolution.
 
 **→ Full Docs**: [services/kick-listener/README.md](../../services/kick-listener/README.md)
 

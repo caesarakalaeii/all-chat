@@ -101,7 +101,7 @@ spec:
               name: allchat-secrets
               key: SERVICE_JWT_SECRET
         - name: KICK_PUSHER_APP_KEY
-          value: "32cbd69e4b950bf97679"
+          value: "34bf7a0ff419a2a775b9"
         - name: KICK_PUSHER_CLUSTER
           value: "us2"
         resources:

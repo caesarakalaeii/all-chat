@@ -773,6 +773,15 @@ span.font-semibold.text-sm.username-gradient {
   .lanes-tr .dash-chip {
     padding: 4px 10px;
   }
+  /* The language switch takes the room "themes" had; /docs links to it. Its
+   * divider goes too: at 360px the row has no spare pixels for it. */
+  .lanes-tr .nav-themes {
+    display: none;
+  }
+  .lanes-tr .lanes-lang {
+    padding-left: 0;
+    border-left: 0;
+  }
 }
 /* Logged-in dashboard chip: solid warm white on black ink. */
 .lanes-tr .dash-chip {
@@ -780,6 +789,34 @@ span.font-semibold.text-sm.username-gradient {
   color: #000;
   padding: 5px 12px;
   font-weight: 700;
+}
+
+/* Language switch at the right end of the nav, set off from the links by a
+ * rule. Inactive codes keep full ink (the chip behind is translucent, dimmed
+ * ink would drop below AA over the light bands); the active one is bold and
+ * underlined. */
+.lanes-lang {
+  display: flex;
+  gap: 6px;
+  padding-left: clamp(10px, 3vw, 20px);
+  border-left: 1px solid rgba(244, 243, 239, 0.45);
+}
+.lanes-lang button {
+  font: inherit;
+  color: #f4f3ef;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.lanes-lang button[aria-pressed='true'] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lanes-lang button:focus-visible {
+  outline: 2px solid #f4f3ef;
+  outline-offset: 2px;
 }
 
 /* Proportional platform lanes. */

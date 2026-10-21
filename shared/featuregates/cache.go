@@ -149,6 +149,13 @@ const (
 	// Seeded is_premium=TRUE (migrations 110 and 111).
 	GateGoalOverlay = "goal_overlay"
 	GateListOverlay = "list_overlay"
+
+	// GateChatCommands gates creating and editing chat commands and keyword triggers
+	// (ADR-0079), mounted by engagement-service on POST/PUT /chat-commands. Seeded
+	// is_premium=FALSE (migration 113): the feature ships open, and the one paid part,
+	// replying in YouTube chat (it spends Data API quota), is checked per send on the
+	// owner's premium status, independent of this gate. Deleting is never gated.
+	GateChatCommands = "chat_commands"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate

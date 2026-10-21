@@ -106,6 +106,9 @@ export const onboarding = {
     listOverlayTitle: 'Leaderboard overlays',
     listOverlayBody:
       'Rank your top cheerers, gifters or Super Chatters of the last 30 days on stream, updated with every new one.',
+    chatCommandsTitle: 'Chat commands',
+    chatCommandsBody:
+      'Custom !commands and keyword triggers for every chat: reply as you, clip your Twitch stream on cue, and use variables or JavaScript in replies. Replies in YouTube chat are premium.',
     flairsTitle: 'Viewer flairs',
     flairsBody:
       'Premium cosmetics for chatters, like animated name gradients, under Flairs in the navigation.',

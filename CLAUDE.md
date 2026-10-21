@@ -13,9 +13,10 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 **Architecture**: Standard Go Layout with microservices communicating via Redis Streams (raw messages) → Message Processor (normalization + enrichment) → Redis Pub/Sub (overlay-specific) → API Gateway WebSocket (client delivery).
 
 **Platform Status**:
-- ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Pusher WebSocket) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
+- ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Centrifugo or Pusher, whichever Kick picks; ADR-0077) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
 - 🚧 Beta only: Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Instagram (ADR-0062, Graph API live_comments polling, read-only). The listeners are deployed and the backend is shared, but the frontend offers these platforms only on `beta.allch.at` (`frontend/src/lib/platform-availability.ts`); allch.at hides them. Adding a source is still limited by the ADR-0008 `platform_*` gate (seeded `is_premium=TRUE`, migrations 091-094 and 096; beta testers are granted premium). Release to production by removing the platform from `platform-availability.ts`, then flip its gate via the feature-gate admin endpoint to open it beyond premium.
 - ✅ Alerts overlays (ADR-0070, ADR-0075) are offered on every host; creating one is limited by the `alerts_overlay` premium gate.
+- 🚧 Beta only (feature): the chat commands editor `/commands` (ADR-0079). `BETA_ONLY_FEATURES` in `platform-availability.ts` hides its nav link, onboarding extras entry and `/upgrade` row outside `beta.allch.at`; the page itself works on any host. Its backend (message-processor, engagement-service, auth-service) runs from `:main`. Release by removing `chatCommands` from `BETA_ONLY_FEATURES`.
 - 🚧 Beta only (overlay kinds): Goal and List overlays (ADR-0072). The same `platform-availability.ts` list hides them outside `beta.allch.at`: the create-overlay kind picker, the onboarding "Optional: go further" entries and the `/upgrade` rows. Existing overlays of these kinds still render in OBS (`/overlay/[id]`) and open in the editor on any host, and creating one is still limited by the `goal_overlay` / `list_overlay` premium gates. Release to production by removing the kind from `BETA_ONLY_OVERLAY_KINDS` in `platform-availability.ts`.
 
 ---
@@ -109,7 +110,7 @@ Each service has a detailed README:
 - [youtube-listener](./services/youtube-listener/README.md) - Data API/gRPC chat for premium official-API mode only: opted-in, owner-verified channels (unlisted + members-only streams), claimed away from innertube (ADR-0065)
 - [youtube-listener-innertube](./services/youtube-listener-innertube/README.md) - InnerTube API polling (quota-free chat ingestion for every unclaimed channel, pinned stream links for unlisted streams; optional subscriber-alert polling spends accounted Data API units)
 - [youtube-quota-monitor](./services/youtube-quota-monitor/README.md) - Reads the shared YouTube quota table; exports the quota metric + publishes `quota:alerts` for the discord-bot (ADR-0023)
-- [kick-listener](./services/kick-listener/README.md) - Pusher WebSocket client
+- [kick-listener](./services/kick-listener/README.md) - Kick realtime client: Centrifugo (pooled, ≤100 chatrooms per connection) or Pusher, chosen by Kick at startup (ADR-0077)
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
 - [tiktok-signer](./services/tiktok-signer/README.md) - Self-hosted TikTok webcast signing (X-Bogus/X-Gnarly via TikTok's own SDK in a headless browser; replaces Euler Stream, ADR-0052)
 - [tiktok-relay](./services/tiktok-relay/README.md) - US-region relay for TikTok's live lookup by handle (Cloud Run, not in the cluster); used by tiktok-listener for accounts that only resolve from the US
@@ -128,7 +129,7 @@ Each service has a detailed README:
 - [payment-service](./services/payment-service/README.md) - Patreon premium entitlements; writes users.is_premium (streamer, ADR-0018) + viewers.is_premium (viewer split, ADR-0019)
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 - [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
-- [engagement-service](./services/engagement-service/README.md) - Cross-platform polls, predictions, and per-overlay viewer points economy (#523)
+- [engagement-service](./services/engagement-service/README.md) - Cross-platform polls, predictions, and per-overlay viewer points economy (#523); streamer chat commands and keyword triggers with templated/JS replies and Twitch clips (ADR-0079)
 - [support-bot](./services/support-bot/README.md) - Discord support/admin agent over a locally hosted OpenAI-compatible LLM (Go, replaces the old claude-CLI TypeScript bot)
 
 ### Development Guides
@@ -195,7 +196,7 @@ On top of the cycle, a new user-facing feature is not "done" until all three of 
 
 **Key Libraries**:
 - `gempir/go-twitch-irc/v4` - Twitch IRC client
-- `gorilla/websocket` - Kick Pusher WebSocket, API Gateway WebSocket server
+- `gorilla/websocket` - Kick Centrifugo/Pusher WebSocket, API Gateway WebSocket server
 - `golang-jwt/jwt/v5` - JWT authentication
 
 ---

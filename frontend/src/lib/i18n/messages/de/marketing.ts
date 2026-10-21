@@ -33,6 +33,7 @@ export const marketing: LocaleNamespace<'marketing'> = {
     navDiscord: 'discord',
     navDashboard: 'dashboard',
     navDashboardChip: '▸ dashboard',
+    languageLabel: 'Sprache',
     kicker: 'EINE KRIEGSERKLÄRUNG AN CHAT-TOOLS',
     titleTop: 'ALLE CHATS.',
     titleBottom: 'EINE URL.',
@@ -295,7 +296,7 @@ export const marketing: LocaleNamespace<'marketing'> = {
       'Twitch, YouTube, Kick, TikTok und Discord — in jeder Kombination, alles in einem einzigen Overlay.',
     tiktokQuestion: 'Ist der TikTok LIVE-Chat zuverlässig?',
     tiktokAnswer:
-      'TikTok bietet keine öffentliche API für LIVE-Chats, also liest jedes Tool, das ihn anzeigt — auch All-Chat — den Chat so, wie es TikToks eigener Web-Player tut. All-Chat signiert diese Verbindungen mit seinem eigenen Open-Source-Signing-Dienst, ohne einen Sign-Server von Dritten, und Premium-Räume bekommen einen zweiten Zustellweg, wenn die Hauptverbindung abgewiesen wird. Die Grenze: TikTok ist die Plattform, die am ehesten kurze Unterbrechungen erlebt, wenn TikTok seinen Web-Player ändert.',
+      'Ja. All-Chat betreibt TikTok-LIVE-Chat mit einem Verfügbarkeitsziel von 99,9 %, demselben wie für jede andere Plattform, obwohl TikTok keine öffentliche API für LIVE-Chats bietet. All-Chat liest den Chat so, wie es TikToks eigener Web-Player tut, signiert diese Verbindungen mit seinem eigenen Open-Source-Signing-Dienst, ohne einen Sign-Server von Dritten, und gibt Premium-Räumen einen zweiten Zustellweg, wenn die Hauptverbindung abgewiesen wird. TikTok bleibt trotzdem die am wenigsten stabile Plattform: Wenn TikTok seinen Web-Player ändert, kann es zu kurzen Unterbrechungen kommen.',
     obsQuestion: 'Wie füge ich All-Chat in OBS hinzu?',
     obsAnswer:
       'Erstelle ein Overlay, füge deine Chatquellen hinzu und füge dann die Overlay-URL in eine OBS-Browser-Quelle ein. Keine Plugins oder Bots nötig.',
@@ -359,6 +360,9 @@ export const marketing: LocaleNamespace<'marketing'> = {
     listOverlayTitle: 'Bestenlisten-Overlays',
     listOverlayBody:
       'Zeig deine Top-Cheerer, -Verschenker oder -Super-Chatter der letzten 30 Tage auf dem Stream, aktualisiert bei jedem neuen.',
+    chatCommandsTitle: 'Chat-Befehle',
+    chatCommandsBody:
+      'Eigene !Befehle und Stichwörter für jeden Chat: antworte als du selbst, clippe deinen Twitch-Stream auf Zuruf und nutze Variablen oder JavaScript in Antworten. Antworten im YouTube-Chat sind Premium.',
     flairsTitle: 'Zuschauer-Flairs',
     flairsBody:
       'Hebe dich in jedem Chat, in dem du auftauchst, mit Premium-Kosmetik wie animierten Namensverläufen ab.',

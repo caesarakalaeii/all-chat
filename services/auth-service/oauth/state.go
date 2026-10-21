@@ -46,6 +46,10 @@ const (
 // the overlay monitor (/overlay/{id}/view) instead of the overlay settings page.
 const PurposeModeration = "moderation"
 
+// ChatCommandsReturnPath is the frontend page the chat commands editor's clip-permission
+// re-consent returns to (ADR-0079). The only ReturnPath an OAuthState may carry.
+const ChatCommandsReturnPath = "/commands"
+
 // OAuthState represents the state parameter for OAuth flow
 type OAuthState struct {
 	CSRFToken string      `json:"csrf_token"`           // Random string for CSRF protection
@@ -53,6 +57,9 @@ type OAuthState struct {
 	UserID    string      `json:"user_id,omitempty"`    // Current user ID for account linking
 	Action    OAuthAction `json:"action"`               // Action to take after callback
 	Purpose   string      `json:"purpose,omitempty"`    // Sub-flow marker (e.g. moderation re-consent)
+	// ReturnPath, when set, is where a moderation re-consent returns instead of the
+	// overlay monitor. Validate accepts only ChatCommandsReturnPath.
+	ReturnPath string `json:"return_path,omitempty"`
 	// Origin is the allowlisted frontend origin (e.g. https://beta.allch.at) the
 	// flow was started from. It selects the provider redirect_uri at authorize
 	// and exchange time and the frontend the callback redirects back to. Set
@@ -152,6 +159,9 @@ func (s *OAuthState) Validate() error {
 	}
 	if s.Action == ActionAddSource && s.OverlayID == "" {
 		return fmt.Errorf("overlay_id is required for add_source action")
+	}
+	if s.ReturnPath != "" && s.ReturnPath != ChatCommandsReturnPath {
+		return fmt.Errorf("invalid return_path: %s", s.ReturnPath)
 	}
 	// A moderator's credential is keyed on them, so without a user id there is nobody to
 	// attribute it to — and the callback must never fall back to creating an account here.

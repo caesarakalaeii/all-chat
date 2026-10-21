@@ -63,7 +63,7 @@ func newSharedChatEnricher(t *testing.T, srv *sharedChatHelixServer) (*AvatarEnr
 	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { rc.Close() })
 
-	e := NewAvatarEnricher(rc, "client-id", "client-secret", "http://gateway", zap.NewNop())
+	e := NewAvatarEnricher(rc, "client-id", "client-secret", zap.NewNop())
 	e.tokenURL = srv.server.URL + "/oauth2/token"
 	e.helixUsersURL = srv.server.URL + "/helix/users"
 	return e, rc

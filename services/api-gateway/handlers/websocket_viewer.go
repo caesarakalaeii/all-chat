@@ -122,7 +122,7 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 	// Optional JWT authentication via Sec-WebSocket-Protocol subprotocol
 	// (preferred) or ?token= query param (backward compat). Keeps the token
 	// out of access logs (audit H5).
-	token, echoHeader := extractWSAuthToken(c.Request)
+	token, echoHeader, _ := extractWSAuthToken(c.Request)
 	var viewerID string
 	var viewerUsername string
 	isAuthenticated := false
