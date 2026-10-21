@@ -227,4 +227,45 @@ test.describe('a11y smoke (axe, WCAG 2.2 AA)', () => {
     })
     await expectNoNewA11yViolations(page, 'moderate-accept', testInfo)
   })
+
+  // The chat commands editor (ADR-0079), scanned again with the editor dialog open:
+  // the dialog is where every form control of the feature lives.
+  test('chat commands', async ({ page }, testInfo) => {
+    await mockAuthedApi(page, {
+      '**/api/v1/engagement/chat-commands': {
+        commands: [
+          {
+            id: 'cmd-1',
+            kind: 'keyword',
+            trigger: 'clip that',
+            response: 'Clipped! {clip}',
+            create_clip: true,
+            min_role: 'subscriber',
+            cooldown_seconds: 30,
+            enabled: true,
+            use_count: 3,
+          },
+        ],
+        status: {
+          is_premium: false,
+          twitch_connected: true,
+          twitch_can_send: true,
+          twitch_can_clip: false,
+          consent_overlay_id: OVERLAY.id,
+        },
+      },
+      '**/api/v1/engagement/chat-commands/preview': { output: 'Hello A11y', errors: [] },
+    })
+    // The cookie banner sits over the example buttons at the bottom of the page.
+    await page.addInitScript(() => localStorage.setItem('cookieBannerAcknowledged', 'true'))
+    await page.goto('/commands')
+    await expect(page.getByRole('heading', { name: 'Chat commands', level: 1 })).toBeVisible({
+      timeout: 20_000,
+    })
+    await expectNoNewA11yViolations(page, 'chat-commands', testInfo)
+
+    await page.getByRole('button', { name: 'Greeting' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expectNoNewA11yViolations(page, 'chat-commands-editor', testInfo)
+  })
 })

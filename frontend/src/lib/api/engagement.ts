@@ -26,6 +26,10 @@
 
 import { apiClient } from './client'
 import type {
+  ChatCommand,
+  ChatCommandInput,
+  ChatCommandList,
+  ChatCommandPreview,
   CreatePollRequest,
   CreatePredictionRequest,
   EarnConfig,
@@ -125,6 +129,49 @@ export const engagementApi = {
   async getTwitchMirrorConsentUrl(overlayId: string): Promise<string> {
     const res = await apiClient.get<ConsentUrlResponse>(
       `/api/v1/auth/twitch/moderation/${overlayId}?actions=engagement`
+    )
+    return res.auth_url
+  },
+
+  // --- Chat commands (ADR-0079): account-level, no overlay in the path ---
+
+  listChatCommands(): Promise<ChatCommandList> {
+    return apiClient.get<ChatCommandList>('/api/v1/engagement/chat-commands')
+  },
+
+  createChatCommand(body: ChatCommandInput): Promise<ChatCommand> {
+    return apiClient.post<ChatCommand>(
+      '/api/v1/engagement/chat-commands',
+      body,
+      idempotencyHeader()
+    )
+  },
+
+  updateChatCommand(id: string, body: ChatCommandInput): Promise<ChatCommand> {
+    return apiClient.put<ChatCommand>(`/api/v1/engagement/chat-commands/${id}`, body)
+  },
+
+  deleteChatCommand(id: string): Promise<void> {
+    return apiClient.delete(`/api/v1/engagement/chat-commands/${id}`)
+  },
+
+  /** Renders a response template against sample input, without posting anything. */
+  previewChatCommand(body: {
+    response: string
+    input: string
+    min_role: string
+    create_clip: boolean
+  }): Promise<ChatCommandPreview> {
+    return apiClient.post<ChatCommandPreview>('/api/v1/engagement/chat-commands/preview', body)
+  },
+
+  /**
+   * The Twitch grant for chat commands: clips:edit, with the chat-send scope the
+   * advanced-controls consent always folds in. Twitch sends the user back to /commands.
+   */
+  async getChatCommandsConsentUrl(overlayId: string): Promise<string> {
+    const res = await apiClient.get<ConsentUrlResponse>(
+      `/api/v1/auth/twitch/moderation/${overlayId}?actions=clip&return=commands`
     )
     return res.auth_url
   },
