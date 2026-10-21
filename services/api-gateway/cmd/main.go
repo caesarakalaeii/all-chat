@@ -935,6 +935,14 @@ func main() {
 		// stated reason. The backend remains the authority either way.
 		protectedAPI.GET("/engagement/overlays/:id/points/config", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/engagement/overlays/:id/points/config", requireEngagementScope, proxyHandler.ForwardRequest)
+		// Chat commands editor (ADR-0079): a streamer's commands and keyword triggers.
+		// Writes carry the same PAT scope as the engagement writes; engagement-service adds
+		// the chat_commands gate and refuses paired devices.
+		protectedAPI.GET("/engagement/chat-commands", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/chat-commands", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/chat-commands/preview", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/engagement/chat-commands/:cid", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/engagement/chat-commands/:cid", requireEngagementScope, proxyHandler.ForwardRequest)
 		// Viewer participation (web page / extension):
 		protectedAPI.POST("/engagement/overlays/:id/polls/:pollId/vote", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/wager", proxyHandler.ForwardRequest)

@@ -590,13 +590,15 @@ func main() {
 
 	// Internal service-to-service routes (require a service JWT, validated against the
 	// service key chain). engagement-service calls /internal/chat/announce to post an
-	// opt-in round-start message to chat as the overlay owner (ADR-0028, H4-2). Not
+	// opt-in round-start message or a chat command reply to chat as the streamer
+	// (ADR-0028, ADR-0079), and /internal/twitch/clip when a chat command clips. Not
 	// proxied by the gateway (it only forwards explicit /auth/... routes), so this is
 	// reachable only pod-to-pod within the cluster.
 	if serviceKeyChain != nil {
 		internal := router.Group("/internal")
 		internal.Use(middleware.ServiceJWTAuth(serviceKeyChain, "engagement-service"))
 		internal.POST("/chat/announce", chatSendHandler.HandleInternalAnnounce)
+		internal.POST("/twitch/clip", chatSendHandler.HandleInternalClip)
 	}
 
 	// Public viewer catalog routes (no JWT required — cosmetic catalogs are not sensitive)
