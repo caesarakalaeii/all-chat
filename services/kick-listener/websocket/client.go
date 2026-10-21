@@ -73,6 +73,9 @@ type Config struct {
 	ClientName    string
 	ClientVersion string
 	FlashEnabled  bool
+	// CredentialsURL, when set, is asked for Kick's current app key and
+	// cluster before every connect (see KickRealtimeConnectionURL).
+	CredentialsURL string
 }
 
 func (cfg Config) withDefaults() Config {
@@ -193,6 +196,7 @@ func (c *Client) SetDeletionHandler(handler DeletionHandler) {
 
 // Connect establishes connection to Pusher WebSocket
 func (c *Client) Connect() error {
+	c.refreshCredentials()
 	if c.config.AppKey == "" {
 		return fmt.Errorf("pusher app key is required")
 	}
@@ -725,90 +729,68 @@ func (c *Client) handleMessage(data []byte) {
 	case pusherError:
 		c.handlePusherError(msg.Data)
 
+	default:
+		c.handlerMu.RLock()
+		onDelete := c.deletionHandler
+		c.handlerMu.RUnlock()
+		dispatchKickEvent(c.logger, msg.Event, msg.Channel, msg.Data, c.messageHandler, onDelete)
+	}
+}
+
+// dispatchKickEvent decodes a Kick chat event and hands it to the handlers.
+// Event names and payloads are the same on Pusher and Centrifugo (ADR-0077).
+func dispatchKickEvent(logger *zap.Logger, event, channel string, data json.RawMessage, onMessage MessageHandler, onDelete DeletionHandler) {
+	switch event {
 	case kickChatMessageEvent, kickChatMessageEventAlt:
-		c.handleChatMessage(msg.Channel, msg.Data)
+		var chatMsg KickChatMessage
+		if err := decodeEventData(data, &chatMsg); err != nil {
+			logger.Error("Failed to unmarshal chat message", zap.String("channel", channel), zap.Error(err))
+			return
+		}
+		logger.Debug("Received chat message",
+			zap.String("channel", channel),
+			zap.String("sender", chatMsg.Sender.Username),
+			zap.String("message", chatMsg.Content),
+		)
+		if onMessage != nil {
+			onMessage(channel, &chatMsg)
+		}
 
 	case kickMessageDeletedEvent, kickMessageDeletedEventAlt:
-		c.handleMessageDeleted(msg.Channel, msg.Data)
+		var deletedEvent KickMessageDeletedEvent
+		if err := decodeEventData(data, &deletedEvent); err != nil {
+			logger.Error("Failed to unmarshal deletion event", zap.String("channel", channel), zap.Error(err))
+			return
+		}
+		logger.Debug("Received message deletion",
+			zap.String("channel", channel),
+			zap.String("deleted_message_id", deletedEvent.DeletedMessage.ID),
+			zap.Int("deleted_by", deletedEvent.DeletedMessage.DeletedBy),
+		)
+		if onDelete != nil {
+			onDelete(channel, &deletedEvent)
+		}
 
 	default:
 		// Log any unhandled events containing "delete" or "Delete" for validation
-		if strings.Contains(strings.ToLower(msg.Event), "delete") {
-			c.logger.Warn("Unhandled deletion-related Pusher event",
-				zap.String("event", msg.Event),
-				zap.String("channel", msg.Channel),
+		if strings.Contains(strings.ToLower(event), "delete") {
+			logger.Warn("Unhandled deletion-related Kick event",
+				zap.String("event", event),
+				zap.String("channel", channel),
 			)
 		}
-		c.logger.Debug("Unhandled Pusher event", zap.String("event", msg.Event))
+		logger.Debug("Unhandled Kick event", zap.String("event", event))
 	}
 }
 
-// handleChatMessage processes a Kick chat message
-func (c *Client) handleChatMessage(channel string, data json.RawMessage) {
-	var chatMsg KickChatMessage
-
-	// Pusher may send data as a JSON-encoded string, so try to unmarshal twice
-	var dataStr string
-	if err := json.Unmarshal(data, &dataStr); err == nil {
-		// Data is a string, unmarshal the string as JSON
-		if err := json.Unmarshal([]byte(dataStr), &chatMsg); err != nil {
-			c.logger.Error("Failed to unmarshal chat message from string", zap.Error(err))
-			return
-		}
-	} else {
-		// Data is already an object, unmarshal directly
-		if err := json.Unmarshal(data, &chatMsg); err != nil {
-			c.logger.Error("Failed to unmarshal chat message", zap.Error(err))
-			return
-		}
+// decodeEventData unmarshals an event payload, which Kick sends as a
+// JSON-encoded string (and sometimes as a plain object).
+func decodeEventData(data json.RawMessage, v any) error {
+	var s string
+	if json.Unmarshal(data, &s) == nil {
+		data = json.RawMessage(s)
 	}
-
-	c.logger.Debug("Received chat message",
-		zap.String("channel", channel),
-		zap.String("sender", chatMsg.Sender.Username),
-		zap.String("message", chatMsg.Content),
-	)
-
-	// Call message handler
-	if c.messageHandler != nil {
-		c.messageHandler(channel, &chatMsg)
-	}
-}
-
-// handleMessageDeleted processes a Kick message deletion event
-func (c *Client) handleMessageDeleted(channel string, data json.RawMessage) {
-	var deletedEvent KickMessageDeletedEvent
-
-	// Pusher may send data as a JSON-encoded string, so try to unmarshal twice
-	var dataStr string
-	if err := json.Unmarshal(data, &dataStr); err == nil {
-		// Data is a string, unmarshal the string as JSON
-		if err := json.Unmarshal([]byte(dataStr), &deletedEvent); err != nil {
-			c.logger.Error("Failed to unmarshal deletion event from string", zap.Error(err))
-			return
-		}
-	} else {
-		// Data is already an object, unmarshal directly
-		if err := json.Unmarshal(data, &deletedEvent); err != nil {
-			c.logger.Error("Failed to unmarshal deletion event", zap.Error(err))
-			return
-		}
-	}
-
-	c.logger.Debug("Received message deletion",
-		zap.String("channel", channel),
-		zap.String("deleted_message_id", deletedEvent.DeletedMessage.ID),
-		zap.Int("deleted_by", deletedEvent.DeletedMessage.DeletedBy),
-	)
-
-	// Call deletion handler (wired in main.go)
-	c.handlerMu.RLock()
-	handler := c.deletionHandler
-	c.handlerMu.RUnlock()
-
-	if handler != nil {
-		handler(channel, &deletedEvent)
-	}
+	return json.Unmarshal(data, v)
 }
 
 // triggerReconnect triggers a reconnection attempt

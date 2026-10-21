@@ -29,6 +29,7 @@ export const common: LocaleNamespace<'common'> = {
     settings: 'Einstellungen',
     docs: 'Docs',
     translate: 'Übersetzen',
+    commands: 'Befehle',
     logOut: 'Abmelden',
     signIn: 'Anmelden',
   },

@@ -145,3 +145,21 @@ func TestKickClient_EmptySlug(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 }
+
+// Kick slugs use hyphens where usernames have underscores; the channel API
+// 404s on "MJ_ARIES" but resolves "mj-aries".
+func TestKickClient_UnderscoreUsernameUsesHyphenSlug(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/api/v2/channels/mj-aries", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"user_id": 7}`))
+	}))
+	defer server.Close()
+
+	client := NewKickClient(zaptest.NewLogger(t))
+	client.urlTemplate = server.URL + "/api/v2/channels/%s"
+
+	id, err := client.GetUserID(context.Background(), "MJ_ARIES")
+	require.NoError(t, err)
+	assert.Equal(t, "7", id)
+}

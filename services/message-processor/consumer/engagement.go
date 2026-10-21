@@ -47,11 +47,15 @@ const engagementDrainTimeout = 2 * time.Second
 // consume loop (L-Perf1). Ordinary chat pays only the in-process looksLikeCommand
 // check. Entirely best-effort: if the forwarder buffer is full the candidate is
 // dropped and counted — a missed forward is a missed vote, never corruption.
+//
+// Chat commands (ADR-0079) widen the filter: on a channel whose streamer defined a
+// command or keyword trigger, every chat message is forwarded, because a keyword can
+// match any text. That check is an in-process set lookup too.
 func (c *StreamConsumer) forwardEngagementCommand(raw *models.RawChatMessage) {
 	if raw.EventType != "" && raw.EventType != "chat_message" {
 		return // only real chat messages carry vote/wager commands
 	}
-	if !looksLikeCommand(raw.Text) {
+	if !looksLikeCommand(raw.Text) && !c.hasChatCommands(raw.Platform, raw.ChannelID) {
 		return // fast in-process reject — no Redis call, no channel op, for ordinary chat
 	}
 	select {
@@ -118,6 +122,12 @@ func (c *StreamConsumer) drainEngagementBuffer() {
 // work (grammar parse, viewer resolution, DB writes) still happens off in
 // engagement-service; this only routes the job to the durable stream.
 func (c *StreamConsumer) forwardEngagementNow(ctx context.Context, raw *models.RawChatMessage) {
+	if c.hasChatCommands(raw.Platform, raw.ChannelID) {
+		c.forwardChatCommand(ctx, raw)
+	}
+	if !looksLikeCommand(raw.Text) {
+		return
+	}
 	key := models.EngagementActiveKey(raw.Platform, raw.ChannelID)
 	exists, err := c.client.Exists(ctx, key).Result()
 	if err != nil {
@@ -130,11 +140,20 @@ func (c *StreamConsumer) forwardEngagementNow(ctx context.Context, raw *models.R
 		return // no live poll/prediction on this channel → nothing to forward
 	}
 
+	if err := c.xaddCommandJob(ctx, models.StreamEngagementCommands, commandJob(raw)); err != nil {
+		c.metrics.RecordEngagementForward("error")
+		c.logger.Debug("forward engagement command failed", zap.Error(err))
+		return
+	}
+	c.metrics.RecordEngagementForward("hit")
+}
+
+func commandJob(raw *models.RawChatMessage) models.CommandJob {
 	msgID := raw.Tags["id"] // native (Twitch) id is a stable UUID for replay dedup
 	if msgID == "" {
 		msgID = raw.MessageID
 	}
-	job := models.CommandJob{
+	return models.CommandJob{
 		MessageID: msgID,
 		Platform:  raw.Platform,
 		ChannelID: raw.ChannelID,
@@ -143,22 +162,19 @@ func (c *StreamConsumer) forwardEngagementNow(ctx context.Context, raw *models.R
 		Text:      raw.Text,
 		Timestamp: raw.Timestamp,
 	}
+}
+
+func (c *StreamConsumer) xaddCommandJob(ctx context.Context, stream string, job models.CommandJob) error {
 	data, err := json.Marshal(job)
 	if err != nil {
-		c.metrics.RecordEngagementForward("error")
-		return
+		return err
 	}
-	if err := c.client.XAdd(ctx, &redis.XAddArgs{
-		Stream: models.StreamEngagementCommands,
+	return c.client.XAdd(ctx, &redis.XAddArgs{
+		Stream: stream,
 		MaxLen: engagementCommandsMaxLen,
 		Approx: true,
 		Values: map[string]interface{}{models.FieldEngagementData: string(data)},
-	}).Err(); err != nil {
-		c.metrics.RecordEngagementForward("error")
-		c.logger.Debug("forward engagement command failed", zap.Error(err))
-		return
-	}
-	c.metrics.RecordEngagementForward("hit")
+	}).Err()
 }
 
 // looksLikeCommand is a cheap pre-filter: true when the trimmed text starts with

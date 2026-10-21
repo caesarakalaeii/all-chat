@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Kick Listener is a microservice that connects to Kick.com's chat system via Pusher WebSocket and publishes raw chat messages to Redis Streams for processing by the Message Processor service.
+The Kick Listener is a microservice that connects to Kick.com's chat system over websocket, using whichever realtime provider Kick picks (Centrifugo or Pusher, [ADR-0077](../../docs/adr/0077-kick-listener-follows-kicks-realtime-provider.md)), and publishes raw chat messages to Redis Streams for processing by the Message Processor service.
 
 **Port**: 8089
 
@@ -12,13 +12,13 @@ The Kick Listener uses a different architecture compared to Twitch (IRC) and You
 
 ```
 ┌─────────────────────┐
-│  Kick Pusher        │
-│  WebSocket Server   │
-│  (wss://ws-us2.     │
-│   pusher.com)       │
+│  Kick realtime      │
+│  Centrifugo (pooled │
+│  connections) or    │
+│  Pusher             │
 └──────────┬──────────┘
            │ WebSocket
-           │ Protocol 7
+           │
            ▼
 ┌─────────────────────┐
 │  Kick Listener      │
@@ -36,9 +36,38 @@ The Kick Listener uses a different architecture compared to Twitch (IRC) and You
 
 ## Key Components
 
-### 1. WebSocket Client (`websocket/client.go`)
+### 1. Realtime clients (`websocket/`)
 
-Implements the Pusher WebSocket Protocol 7 for connecting to Kick's chat infrastructure.
+**Provider choice (ADR-0077):** at startup the listener posts to
+`https://web.kick.com/api/v1/realtime/connection`, offering the providers in
+`KICK_REALTIME_PROVIDERS` (default `centrifugo,pusher`, what kick.com itself offers).
+Kick answers with one provider and the listener builds that client
+(`newRealtimeClient` in `cmd/main.go`). If Kick cannot be asked, it starts the Pusher
+client with `KICK_PUSHER_APP_KEY`. Set `KICK_REALTIME_PROVIDERS=pusher` to force Pusher
+without a rebuild. The choice holds for the life of the process; a restart asks again.
+
+Both clients implement `websocket.Realtime`, decode events with the same code
+(`dispatchKickEvent`), and set the `kick_listener_socket_state` gauge.
+
+#### Centrifugo client (`websocket/centrifugo.go`)
+
+- Channels are `chatrooms.{chatroom_id}.v2`, as on Pusher, and are public.
+- **One connection may hold at most 128 subscriptions** (Kick answers error
+  `106 limit exceeded` after that), so chatrooms are spread over a pool of connections,
+  at most 100 each. A connection left empty by unsubscribes is closed, except the first.
+- Each connection gets its own guest token from
+  `POST https://web.kick.com/api/v1/realtime/auth/connection` `{"client_id"}` (a 45-minute
+  JWT, no login), refreshes it at three quarters of its ttl, answers the server's `{}`
+  pings with `{}`, and reconnects with backoff (1s to 60s), resubscribing its chatrooms.
+- Each connection hands chat messages to its own dispatcher goroutine (queue of 1024), so
+  its read loop keeps answering pings while the message handler waits. Kick drops a
+  connection whose pong is a few seconds late (close `3012 no pong`), and the channel
+  manager holds its subscription lock through a whole channel sync.
+- Readiness is up only when every pooled connection is connected.
+
+#### Pusher client (`websocket/client.go`)
+
+Implements the Pusher WebSocket Protocol 7.
 
 **Features:**
 - Pusher protocol handshake and connection management
@@ -50,8 +79,17 @@ Implements the Pusher WebSocket Protocol 7 for connecting to Kick's chat infrast
 
 **Pusher WebSocket URL:**
 ```
-wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false
+wss://ws-{cluster}.pusher.com/app/{app_key}?protocol=7&client=js&version=8.4.0-rc2&flash=false
 ```
+
+**App key resolution:** Kick rotates its Pusher app key without notice. Before every
+connect the client asks `POST https://web.kick.com/api/v1/realtime/connection` (the
+endpoint kick.com's own web client uses, offering only the `pusher` provider) for the
+current `app_key` and `cluster`, and tries that cluster first. If the lookup fails it
+falls back to `KICK_PUSHER_APP_KEY`. A rotated key shows up as Pusher error `4001`
+("App key ... not in this cluster"); the reconnect after it re-resolves the key.
+The Pusher-only private-channel auth (`/broadcasting/auth` with the socket ID) is still
+attempted on Pusher, and skipped on Centrifugo, where `GetSocketID` is empty.
 
 **Channel Format:**
 ```
@@ -91,7 +129,7 @@ Manages dynamic subscription to Kick chat channels based on active overlays in t
 
 **Features:**
 - Syncs active channels from database every 30 seconds
-- Fetches chatroom IDs from Kick API (`https://kick.com/api/v2/channels/{slug}`)
+- Fetches chatroom IDs from Kick API (`https://kick.com/api/v2/channels/{slug}`). The slug is the stored channel name lowercased with `_` replaced by `-` (Kick 404s on `MJ_ARIES`, resolves `mj-aries`)
 - Dynamically subscribes/unsubscribes from channels
 - Stores chatroom ID in database for future use
 - Maps chatroom IDs to overlay IDs for message routing
@@ -152,6 +190,14 @@ REDIS_PORT=6379
 SOURCE_MANAGER_URL=http://localhost:8088
 SOURCE_MANAGER_SECRET=dev-service-secret
 
+# Kick realtime provider (ADR-0077): offered to Kick in this order; Kick picks one
+KICK_REALTIME_PROVIDERS=centrifugo,pusher
+
+# Kick Pusher (fallbacks; the app key is normally resolved from Kick at connect time)
+KICK_PUSHER_APP_KEY=34bf7a0ff419a2a775b9
+KICK_PUSHER_CLUSTER=us2
+KICK_PUSHER_CLUSTER_FALLBACKS=   # comma-separated extra clusters to try
+
 # Application
 APP_VERSION=dev             # Application version
 ```
@@ -204,7 +250,7 @@ The chatroom_id is fetched from Kick API and stored in the metadata JSONB column
 }
 ```
 
-The `chatroom.id` is used to subscribe to the Pusher channel.
+The `chatroom.id` is used to subscribe to the `chatrooms.{id}.v2` channel on either provider.
 
 ## Development
 
@@ -315,10 +361,9 @@ spec:
 ### Scaling
 
 The Kick Listener can scale horizontally:
-- Multiple instances connect to the same Pusher WebSocket
-- Pusher handles fan-out to all connected clients
+- Each instance opens its own connections to Kick's realtime server
+- Source-manager leadership decides which instance subscribes which channel
 - Each instance processes messages independently
-- No coordination needed between instances
 
 ## Message Flow
 
@@ -328,7 +373,7 @@ The Kick Listener can scale horizontally:
 3. Kick Listener syncs from database
 4. Listener fetches chatroom_id from Kick API
 5. Listener subscribes to chatrooms.{chatroom_id} via WebSocket
-6. Chat messages arrive via Pusher WebSocket
+6. Chat messages arrive over the Centrifugo or Pusher websocket
 7. Listener publishes to Redis Streams (chat:raw)
 8. Message Processor consumes from stream
 9. Kick Normalizer converts to unified format
@@ -342,13 +387,14 @@ The Kick Listener can scale horizontally:
 
 ### WebSocket Connection Issues
 
-**Symptom:** Service can't connect to Pusher WebSocket
+**Symptom:** Service can't connect to Kick's realtime server (the `KickListenerDisconnected` alert)
 
 **Solutions:**
-1. Check network connectivity: `curl -I https://ws-us2.pusher.com`
-2. Verify Pusher URL is current (Kick may change app key)
-3. Check logs for connection errors
-4. Ensure no firewall blocking WebSocket connections
+1. Check the startup log line `Using Kick Centrifugo` / `Using Kick Pusher` to see which provider Kick picked.
+2. Ask Kick what it hands out: `curl -s -X POST -H 'Content-Type: application/json' -d '{"client":{"id":"x","type":"web"},"capabilities":{"accepted_providers":[{"provider":"centrifugo"},{"provider":"pusher"}]}}' https://web.kick.com/api/v1/realtime/connection`
+3. Centrifugo: look for `Kick Centrifugo command failed` (code `106` means a connection exceeded 128 subscriptions) and `Kick Centrifugo connection lost`.
+4. Pusher: error `4001` means Kick rotated the app key; the next reconnect re-resolves it.
+5. To switch providers without a rebuild, set `KICK_REALTIME_PROVIDERS` in the deployment.
 
 ### Channel Subscription Failures
 
@@ -444,7 +490,7 @@ curl http://localhost:8089/status
 
 | Feature | Twitch | Kick |
 |---------|--------|------|
-| Protocol | IRC | WebSocket (Pusher) |
+| Protocol | IRC | WebSocket (Centrifugo or Pusher) |
 | Connection | Single IRC connection | WebSocket per instance |
 | Rate Limits | 20 JOIN/10s | No JOIN limits |
 | Reconnection | Built-in IRC reconnect | Custom reconnect logic |
@@ -454,7 +500,7 @@ curl http://localhost:8089/status
 
 | Feature | YouTube | Kick |
 |---------|---------|------|
-| Protocol | HTTP REST | WebSocket (Pusher) |
+| Protocol | HTTP REST | WebSocket (Centrifugo or Pusher) |
 | Latency | 2-5 seconds | Real-time (~100ms) |
 | API Quota | 1,009,000 units/day | No quota (WebSocket) |
 | Authentication | OAuth per user | No auth required |
@@ -466,7 +512,7 @@ curl http://localhost:8089/status
 
 - ✅ Uses TLS (wss://)
 - ✅ No authentication required for public chat
-- ⚠️ Pusher app key is public (embedded in URL)
+- ⚠️ The Pusher app key and Centrifugo guest tokens are public (kick.com hands them to every browser)
 - ℹ️ No sensitive data transmitted
 
 ### Data Privacy
@@ -480,7 +526,7 @@ curl http://localhost:8089/status
 
 1. **Channel Discovery**: Requires additional API call to get chatroom_id
 2. **No Private Channels**: Only public chat supported
-3. **Pusher Protocol**: Dependent on Kick's Pusher configuration
+3. **Undocumented realtime API**: provider choice, guest tokens and the 128-subscription limit are Kick internals, measured, not documented
 4. **API Changes**: Kick may change WebSocket URL or protocol
 5. **Rate Limiting**: Kick API calls for channel info may be rate limited
 
@@ -488,10 +534,8 @@ curl http://localhost:8089/status
 
 - [ ] Batch channel info API calls
 - [ ] Cache chatroom IDs longer (currently per-overlay)
-- [ ] Add Prometheus metrics endpoint
 - [ ] Implement circuit breaker for Kick API calls
 - [ ] Support private/subscriber-only channels
-- [ ] Add reconnection backoff metrics
 - [ ] Implement health check for individual channel subscriptions
 
 ## References
@@ -499,6 +543,7 @@ curl http://localhost:8089/status
 - **Kick Developer Docs**: https://docs.kick.com
 - **Kick Dev API GitHub**: https://github.com/KickEngineering/KickDevDocs
 - **Pusher Protocol**: https://pusher.com/docs/channels/library_auth_reference/pusher-websockets-protocol/
+- **Centrifugo client protocol**: https://centrifugal.dev/docs/transports/client_protocol
 - **Go WebSocket Library**: https://github.com/gorilla/websocket
 
 ## Support

@@ -29,6 +29,7 @@ import { DiscordIcon } from '@/components/icons/DiscordIcon'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { trackEvent } from '@/lib/analytics'
 import { useTranslations } from '@/lib/i18n'
+import { useFeatureAvailable } from '@/lib/platform-availability'
 
 const activeClass =
   'nav-link active relative text-text flex items-center px-3.5 h-full text-sm ' +
@@ -46,6 +47,7 @@ export function AppNav() {
   const t = useTranslations()
   const { user, logout } = useAuthStore()
   const { viewerToken, viewerLogout } = useViewerAuthStore()
+  const isFeatureAvailable = useFeatureAvailable()
 
   const isLoggedIn = !!user || !!viewerToken
 
@@ -89,6 +91,11 @@ export function AppNav() {
         <Link href="/dashboard" className={isActive('/dashboard') ? activeClass : inactiveClass}>
           {t('common.appNav.dashboard')}
         </Link>
+        {user && isFeatureAvailable('chatCommands') && (
+          <Link href="/commands" className={isActive('/commands') ? activeClass : inactiveClass}>
+            {t('common.appNav.commands')}
+          </Link>
+        )}
         <Link
           href="/settings/viewer"
           className={isActive('/settings/viewer') ? activeClass : inactiveClass}

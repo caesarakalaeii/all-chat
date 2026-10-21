@@ -99,3 +99,50 @@ func TestPostAnnounceSurfacesOutcome(t *testing.T) {
 		})
 	}
 }
+
+// Clip and Send are the chat command outputs (ADR-0079): both reach auth-service's
+// internal routes with a service JWT and surface its error_kind.
+func TestClipAndSend(t *testing.T) {
+	t.Setenv("SERVICE_JWT_SECRET_V1", "test-service-secret-0123456789-abcdefghijklmnop")
+	svcKeys, err := sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET")
+	require.NoError(t, err)
+
+	var paths []string
+	clipStatus := http.StatusOK
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		assert.True(t, strings.HasPrefix(r.Header.Get("Authorization"), "Bearer "))
+		switch r.URL.Path {
+		case "/internal/twitch/clip":
+			w.WriteHeader(clipStatus)
+			if clipStatus == http.StatusOK {
+				_, _ = io.WriteString(w, `{"url":"https://clips.twitch.tv/X"}`)
+			} else {
+				_, _ = io.WriteString(w, `{"error":"clip failed","error_kind":"stream_offline"}`)
+			}
+		case "/internal/chat/announce":
+			body, _ := io.ReadAll(r.Body)
+			assert.JSONEq(t, `{"user_id":"u1","message":"hi","platforms":["kick"]}`, string(body))
+			_, _ = io.WriteString(w, `{"success":true,"results":[{"platform":"kick","success":true}]}`)
+		}
+	}))
+	defer srv.Close()
+
+	a := New(stubStore{}, srv.URL, "https://allch.at", svcKeys, zap.NewNop())
+	url, err := a.Clip(context.Background(), "u1")
+	require.NoError(t, err)
+	assert.Equal(t, "https://clips.twitch.tv/X", url)
+
+	clipStatus = http.StatusBadGateway
+	_, err = a.Clip(context.Background(), "u1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "stream_offline")
+
+	require.NoError(t, a.Send(context.Background(), "u1", "hi", "kick"))
+	assert.Equal(t, []string{"/internal/twitch/clip", "/internal/twitch/clip", "/internal/chat/announce"}, paths)
+
+	disabled := New(stubStore{}, "", "https://allch.at", nil, zap.NewNop())
+	_, err = disabled.Clip(context.Background(), "u1")
+	assert.ErrorIs(t, err, ErrDisabled)
+	assert.ErrorIs(t, disabled.Send(context.Background(), "u1", "hi", "kick"), ErrDisabled)
+}

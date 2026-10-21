@@ -119,6 +119,8 @@ var twitchModerationScopesByAction = map[string][]string{
 	"ban":        {"moderator:manage:banned_users"},
 	"unban":      {"moderator:manage:banned_users"},
 	"engagement": {"channel:read:polls", "channel:read:predictions"},
+	// "clip" lets a chat command clip the streamer's stream (ADR-0079, Helix Create Clip).
+	"clip": {"clips:edit"},
 	// The eight moderator:read:* scopes are what channel.moderate v2 requires; Twitch
 	// accepts the corresponding moderator:manage:* as a superset for some of them, but we
 	// request the narrow read form. The order is the order the consent screen shows.

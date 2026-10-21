@@ -73,7 +73,10 @@ const wsBearerPrefix = "bearer."
 // When the token comes from the subprotocol, a response header is returned
 // that echoes the negotiated subprotocol back to the client — the WebSocket
 // spec requires the server to echo one of the offered subprotocols.
-func extractWSAuthToken(r *http.Request) (token string, echoHeader http.Header) {
+//
+// fromCookie reports that the token is the ambient access cookie rather than
+// one the client chose to present.
+func extractWSAuthToken(r *http.Request) (token string, echoHeader http.Header, fromCookie bool) {
 	for _, raw := range r.Header.Values("Sec-WebSocket-Protocol") {
 		for _, proto := range strings.Split(raw, ",") {
 			proto = strings.TrimSpace(proto)
@@ -85,18 +88,66 @@ func extractWSAuthToken(r *http.Request) (token string, echoHeader http.Header) 
 				token = candidate
 				echoHeader = http.Header{}
 				echoHeader.Set("Sec-WebSocket-Protocol", proto)
-				return token, echoHeader
+				return token, echoHeader, false
 			}
 		}
 	}
 	token = r.URL.Query().Get("token")
 	if token != "" {
-		return token, nil
+		return token, nil, false
 	}
 	if ck, err := r.Cookie(auth.CookieAccessToken); err == nil && ck.Value != "" {
-		return ck.Value, nil
+		return ck.Value, nil, true
 	}
-	return "", nil
+	return "", nil, false
+}
+
+// ambientCookieDegrades reports whether a failed owner check lets the overlay
+// socket continue on the anonymous OBS path instead of ending the handshake.
+//
+// /overlay/[id] is public, so the anonymous path is always available. The
+// access cookie is ambient: an OBS browser source shares its cookie jar with
+// every dock and interact window in that OBS, so signing in to All-Chat there
+// with an account that does not own the overlay attaches that account's cookie
+// to every overlay socket. Rejecting it broke every overlay in that OBS. A token
+// the client presented on purpose (subprotocol, ?token=) still fails closed, and
+// so does a server error, which says nothing about the cookie.
+func ambientCookieDegrades(fromCookie bool, failStatus int) bool {
+	return fromCookie && failStatus != http.StatusInternalServerError
+}
+
+// verifyOverlayOwner checks that token is a live, unrevoked user JWT for the
+// owner of overlayID. On failure it returns nil claims and the HTTP status and
+// message the handshake would be rejected with.
+func (h *WebSocketHandler) verifyOverlayOwner(ctx context.Context, overlayID, token string) (*auth.Claims, int, string) {
+	// audit #19: the owner socket also accepts the access cookie (H3), so it
+	// must honor the logout-revocation blacklist like the HTTP routes do —
+	// otherwise a logged-out/revoked token still streams the owner feed until
+	// expiry. Fail-open + log on a Redis error, matching JWTAuthWithRevocation.
+	if h.rdb != nil {
+		if n, bErr := h.rdb.Exists(ctx, "blacklist:"+token).Result(); bErr != nil {
+			h.logger.Warn("WS blacklist check failed (fail-open)", zap.Error(bErr))
+		} else if n > 0 {
+			return nil, http.StatusUnauthorized, "invalid or expired token"
+		}
+	}
+	claims, err := auth.ValidateJWTWithKeyChain(token, h.userKeyChain)
+	if err != nil {
+		return nil, http.StatusUnauthorized, "invalid or expired token"
+	}
+	owns, err := h.repo.VerifyOverlayOwnership(ctx, overlayID, claims.UserID)
+	if err != nil {
+		h.logger.Error("Failed to verify overlay ownership",
+			zap.String("overlay_id", overlayID),
+			zap.String("user_id", claims.UserID),
+			zap.Error(err),
+		)
+		return nil, http.StatusInternalServerError, "failed to verify ownership"
+	}
+	if !owns {
+		return nil, http.StatusForbidden, "you do not own this overlay"
+	}
+	return claims, 0, ""
 }
 
 // WebSocketHandler handles WebSocket connections for overlays
@@ -235,9 +286,12 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// Resolve JWT from Sec-WebSocket-Protocol subprotocol first, then fall
 	// back to ?token= query param (backward compat during client rollout).
 	// The subprotocol path keeps the token out of access logs (audit H5).
-	token, echoHeader := extractWSAuthToken(c.Request)
-	var userID string
-	var username string
+	token, echoHeader, fromCookie := extractWSAuthToken(c.Request)
+
+	// No token (or an ambient cookie that does not own this overlay) is the
+	// anonymous OBS path.
+	userID := "obs"
+	username := "OBS"
 
 	// isOwner stays false for the anonymous OBS path. It is set only after the
 	// token has been validated, checked against the revocation blacklist and
@@ -249,51 +303,22 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
 	defer cancel()
 
-	// If token provided, validate and check ownership
 	if token != "" {
-		// audit #19: the owner socket now also accepts the access cookie (H3), so it
-		// must honor the logout-revocation blacklist like the HTTP routes do —
-		// otherwise a logged-out/revoked token still streams the owner feed until
-		// expiry. Fail-open + log on a Redis error, matching JWTAuthWithRevocation.
-		if h.rdb != nil {
-			if n, bErr := h.rdb.Exists(ctx, "blacklist:"+token).Result(); bErr != nil {
-				h.logger.Warn("WS blacklist check failed (fail-open)", zap.Error(bErr))
-			} else if n > 0 {
-				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
-				return
-			}
-		}
-		claims, err := auth.ValidateJWTWithKeyChain(token, h.userKeyChain)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
-			return
-		}
-
-		userID = claims.UserID
-		username = claims.Username
-
-		// Verify user owns the overlay
-		owns, err := h.repo.VerifyOverlayOwnership(ctx, overlayID, claims.UserID)
-		if err != nil {
-			h.logger.Error("Failed to verify overlay ownership",
+		claims, failStatus, failMsg := h.verifyOverlayOwner(ctx, overlayID, token)
+		switch {
+		case claims != nil:
+			userID = claims.UserID
+			username = claims.Username
+			isOwner = ownershipVerified(token)
+		case ambientCookieDegrades(fromCookie, failStatus):
+			h.logger.Info("Access cookie does not authorize this overlay; connecting anonymously",
 				zap.String("overlay_id", overlayID),
-				zap.String("user_id", claims.UserID),
-				zap.Error(err),
+				zap.String("reason", failMsg),
 			)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify ownership"})
+		default:
+			c.JSON(failStatus, gin.H{"error": failMsg})
 			return
 		}
-
-		if !owns {
-			c.JSON(http.StatusForbidden, gin.H{"error": "you do not own this overlay"})
-			return
-		}
-
-		isOwner = ownershipVerified(token)
-	} else {
-		// No token provided (OBS mode) - use anonymous connection
-		userID = "obs"
-		username = "OBS"
 	}
 
 	// Check if overlay is active

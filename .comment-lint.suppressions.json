@@ -39,7 +39,7 @@
     "restate": 2
   },
   "services/api-gateway/handlers/websocket.go": {
-    "restate": 2
+    "restate": 1
   },
   "services/api-gateway/models/service_config.go": {
     "restate": 3
@@ -105,7 +105,7 @@
     "restate": 7
   },
   "services/kick-listener/websocket/client.go": {
-    "restate": 2
+    "restate": 1
   },
   "services/message-processor/cmd/main.go": {
     "restate": 3

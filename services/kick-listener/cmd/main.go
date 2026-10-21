@@ -138,18 +138,19 @@ func main() {
 	}
 
 	// Configure Pusher connection
-	pusherAppKey := listener.Env("KICK_PUSHER_APP_KEY", "32cbd69e4b950bf97679")
+	pusherAppKey := listener.Env("KICK_PUSHER_APP_KEY", "34bf7a0ff419a2a775b9")
 	if pusherAppKey == "" {
 		log.Fatal("KICK_PUSHER_APP_KEY must be set", zap.Error(fmt.Errorf("missing app key")))
 	}
 
 	primaryCluster := listener.Env("KICK_PUSHER_CLUSTER", "us2")
 	fallbackClusterEnv := os.Getenv("KICK_PUSHER_CLUSTER_FALLBACKS")
-	clusterList := buildClusterList(primaryCluster, parseClusterList(fallbackClusterEnv))
+	clusterList := buildClusterList(primaryCluster, parseList(fallbackClusterEnv))
 
 	wsConfig := websocket.Config{
-		AppKey:   pusherAppKey,
-		Clusters: clusterList,
+		AppKey:         pusherAppKey,
+		Clusters:       clusterList,
+		CredentialsURL: websocket.KickRealtimeConnectionURL,
 	}
 
 	// Initialize token cipher for kick_oauth_tokens decryption (D-16).
@@ -186,8 +187,9 @@ func main() {
 		handleChatMessage(channel, message, streamPublisher, channelMgr, log)
 	}
 
-	// Create WebSocket client with message handler
-	wsClient := websocket.NewClient(wsConfig, messageHandler, log)
+	// Build whichever transport Kick asks for (ADR-0077).
+	providers := parseList(listener.Env("KICK_REALTIME_PROVIDERS", "centrifugo,pusher"))
+	wsClient := newRealtimeClient(ctx, websocket.KickRealtimeConnectionURL, providers, wsConfig, messageHandler, log)
 
 	// Set deletion handler
 	wsClient.SetDeletionHandler(func(channel string, event *websocket.KickMessageDeletedEvent) {
@@ -246,7 +248,7 @@ func main() {
 		}
 	}()
 
-	// Connect to Kick Pusher WebSocket
+	// Connect to Kick's realtime server
 	if err := wsClient.Connect(); err != nil {
 		log.Fatal("Failed to connect to Kick WebSocket", zap.Error(err))
 	}
@@ -516,9 +518,34 @@ func handleDeletionEvent(
 	}
 }
 
-// handleReconnections handles WebSocket reconnection logic
+// newRealtimeClient builds the client for the provider Kick picks from
+// providers (ADR-0077). When Kick cannot be asked, it falls back to Pusher
+// with the configured key, which is how the listener worked before.
+func newRealtimeClient(
+	ctx context.Context,
+	resolveURL string,
+	providers []string,
+	pusherCfg websocket.Config,
+	onMessage websocket.MessageHandler,
+	log *zap.Logger,
+) websocket.Realtime {
+	conn, err := websocket.ResolveRealtime(ctx, resolveURL, providers)
+	switch {
+	case err != nil:
+		log.Warn("Could not ask Kick for its realtime provider, using Pusher", zap.Error(err))
+	case conn.Provider == websocket.ProviderCentrifugo:
+		log.Info("Using Kick Centrifugo", zap.String("url", conn.URL), zap.Strings("offered", providers))
+		return websocket.NewCentrifugoClient(conn.URL, websocket.KickRealtimeTokenURL, onMessage, log)
+	}
+	log.Info("Using Kick Pusher", zap.Strings("offered", providers))
+	return websocket.NewClient(pusherCfg, onMessage, log)
+}
+
+// handleReconnections reconnects a Pusher client after it drops. The
+// Centrifugo client reconnects its connections itself; its ReconnectChan
+// never fires.
 func handleReconnections(
-	wsClient *websocket.Client,
+	wsClient websocket.Realtime,
 	channelMgr *channels.Manager,
 	log *zap.Logger,
 ) {
@@ -557,7 +584,8 @@ func handleReconnections(
 	}
 }
 
-func parseClusterList(raw string) []string {
+// parseList splits a comma-separated env value, dropping blanks.
+func parseList(raw string) []string {
 	if raw == "" {
 		return nil
 	}

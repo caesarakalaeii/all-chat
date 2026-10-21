@@ -113,3 +113,58 @@ export interface CreatePredictionRequest {
   outcomes: string[]
   auto_lock_seconds?: number
 }
+
+// --- Chat commands (ADR-0079) ---
+
+/** command: fires when the message starts with the trigger; keyword: anywhere in it. */
+export type ChatCommandKind = 'command' | 'keyword'
+
+/** The lowest role allowed to use a command; every higher role may use it too. */
+export type ChatCommandRole = 'everyone' | 'subscriber' | 'vip' | 'moderator' | 'broadcaster'
+
+/** Lowest to highest. */
+export const CHAT_COMMAND_ROLES: readonly ChatCommandRole[] = [
+  'everyone',
+  'subscriber',
+  'vip',
+  'moderator',
+  'broadcaster',
+]
+
+/** The editable part of a chat command, as sent on create/update. */
+export interface ChatCommandInput {
+  kind: ChatCommandKind
+  trigger: string
+  response: string
+  create_clip: boolean
+  min_role: ChatCommandRole
+  cooldown_seconds: number
+  enabled: boolean
+}
+
+export interface ChatCommand extends ChatCommandInput {
+  id: string
+  use_count: number
+  created_at: string
+  updated_at: string
+}
+
+/** What the editor shows about where commands can answer. */
+export interface ChatCommandStatus {
+  is_premium: boolean
+  twitch_connected: boolean
+  twitch_can_send: boolean
+  twitch_can_clip: boolean
+  /** Overlay carrying the streamer's own Twitch channel; the Twitch grant flow needs one. */
+  consent_overlay_id: string | null
+}
+
+export interface ChatCommandList {
+  commands: ChatCommand[]
+  status: ChatCommandStatus
+}
+
+export interface ChatCommandPreview {
+  output: string
+  errors: string[]
+}

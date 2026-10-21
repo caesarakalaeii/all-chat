@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,9 +79,9 @@ type Manager struct {
 	httpClient      *http.Client
 	dbConn          DBConnInterface
 	leader          *sourcemanager.LeadershipCoordinator
-	redisClient     *redis.Client               // Redis client for migration confirmations
-	podID           string                      // Pod ID for migration confirmations
-	statusPublisher *status.Publisher           // Publishes platform status to Redis Pub/Sub
+	redisClient     *redis.Client                 // Redis client for migration confirmations
+	podID           string                        // Pod ID for migration confirmations
+	statusPublisher *status.Publisher             // Publishes platform status to Redis Pub/Sub
 	cipher          *encryption.MultiKeyEncryptor // Decrypts versioned kick_oauth_tokens (D-16; nil = no encryption)
 
 	// Coordinator integration
@@ -88,7 +89,7 @@ type Manager struct {
 	demandedSourceIDs       map[string]listener.DemandedSource // nil = no demand filtering
 	filteredAssignmentCount int                                // Number of assigned sources that have database channels
 	migrationMu             sync.RWMutex                       // Protects migration state
-	firstMessageChan        map[int]chan struct{}               // Per-chatroom first message signal (key: chatroom ID)
+	firstMessageChan        map[int]chan struct{}              // Per-chatroom first message signal (key: chatroom ID)
 
 	// Track active subscriptions
 	subscriptions map[string]*trackedChannel // key: channel_slug
@@ -743,7 +744,7 @@ func (m *Manager) handleLeadershipLoss(ctx context.Context, channelSlug string) 
 
 // fetchChatroomID fetches the chatroom ID for a Kick channel from the API
 func (m *Manager) fetchChatroomID(channelSlug string) (int, error) {
-	url := fmt.Sprintf(kickAPIChannelURL, channelSlug)
+	url := fmt.Sprintf(kickAPIChannelURL, kickSlug(channelSlug))
 
 	req, err := http.NewRequestWithContext(m.ctx, "GET", url, nil)
 	if err != nil {
@@ -779,6 +780,13 @@ func (m *Manager) fetchChatroomID(channelSlug string) (int, error) {
 	)
 
 	return channelInfo.Chatroom.ID, nil
+}
+
+// kickSlug turns a stored channel name into the slug Kick's channel API
+// accepts: lowercase, with hyphens where the username has underscores
+// ("MJ_ARIES" 404s, "mj-aries" resolves).
+func kickSlug(channel string) string {
+	return strings.ReplaceAll(strings.ToLower(channel), "_", "-")
 }
 
 // GetSubscriptions returns current subscriptions (for status endpoint)
@@ -822,7 +830,6 @@ func (m *Manager) GetOverlayTargetsForChatroom(chatroomID int) ([]OverlayTarget,
 
 	return targets, true
 }
-
 
 // SignalFirstMessage should be called when a message is received for a chatroom
 // This is used during migrations to confirm connectivity

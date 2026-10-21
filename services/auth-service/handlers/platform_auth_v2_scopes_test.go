@@ -48,6 +48,7 @@ func TestWouldDowngradeScopes(t *testing.T) {
 		{"no stored scopes never downgrades", nil, nil, false},
 		{"adding mod scopes to a chat grant is an upgrade", []string{scopeChat}, []string{scopeChat, scopeDel, scopeBan}, false},
 		{"plain login over the automod grant is a downgrade", []string{scopeAutomod}, []string{"channel:read:subscriptions"}, true},
+		{"plain login over the clip grant is a downgrade (chat commands, ADR-0079)", []string{"clips:edit"}, []string{"channel:read:subscriptions"}, true},
 		{"dropping a modlog read scope is a downgrade", []string{scopeChat, "moderator:read:warnings"}, []string{scopeChat}, true},
 	}
 	for _, tt := range tests {

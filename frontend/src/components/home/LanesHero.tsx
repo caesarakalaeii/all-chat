@@ -50,6 +50,7 @@ import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { usePrideMonth } from '@/hooks/usePrideMonth'
 import { LANE_COUNT, laneBaseWeights, useLaneWaves } from '@/hooks/useLaneWaves'
 import { EMOTE_SRC, type EmoteToken } from '@/components/home/emotes'
+import { LanguageToggle } from '@/components/home/LanguageToggle'
 
 // Static self-hosted artwork, not next/image: the hero renders at 17px where
 // optimization buys nothing (next.config disables it globally anyway) and
@@ -380,7 +381,7 @@ export function LanesHero({
       {/* Fixed mono chrome over the lanes — mix-blend-mode: difference. */}
       <div className="lanes-chrome lanes-tl">{t('marketing.lanes.brand')}</div>
       <nav className="lanes-chrome lanes-tr" aria-label={t('marketing.lanes.navLabel')}>
-        <a href="/docs#themes">{t('marketing.lanes.navThemes')}</a>
+        <a className="nav-themes" href="/docs#themes">{t('marketing.lanes.navThemes')}</a>
         <a href="/docs">{t('marketing.lanes.navDocs')}</a>
         <a href={DISCORD_INVITE_URL}>{t('marketing.lanes.navDiscord')}</a>
         {isLoggedIn ? (
@@ -390,6 +391,7 @@ export function LanesHero({
         ) : (
           <a href="#get-started">{t('marketing.lanes.navDashboard')}</a>
         )}
+        <LanguageToggle />
       </nav>
 
       <header

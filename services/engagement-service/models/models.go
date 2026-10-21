@@ -169,3 +169,29 @@ type ViewerEngagement struct {
 	WagerOutcome  *uuid.UUID `json:"wager_outcome_id,omitempty"`
 	WagerAmount   int64      `json:"wager_amount,omitempty"`
 }
+
+// --- Chat commands (ADR-0079) ---
+
+// Chat command trigger kinds: a command fires when the message's first word equals
+// the trigger ("!hello"); a keyword fires when the trigger appears anywhere in it.
+const (
+	TriggerCommand = "command"
+	TriggerKeyword = "keyword"
+)
+
+// ChatCommand is one streamer-defined command or keyword trigger. It belongs to a
+// user, not an overlay, and fires on that user's own channels.
+type ChatCommand struct {
+	ID              uuid.UUID `json:"id"`
+	UserID          uuid.UUID `json:"-"`
+	Kind            string    `json:"kind"`
+	Trigger         string    `json:"trigger"`
+	Response        string    `json:"response"`
+	CreateClip      bool      `json:"create_clip"`
+	MinRole         string    `json:"min_role"`
+	CooldownSeconds int       `json:"cooldown_seconds"`
+	Enabled         bool      `json:"enabled"`
+	UseCount        int64     `json:"use_count"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
