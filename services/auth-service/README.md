@@ -305,6 +305,32 @@ Things that are deliberate rather than incidental:
   (`middleware.SetAPITokenResolver`), because api-gateway forwards the client's
   `Authorization` header verbatim and each backend re-validates independently.
 
+### Internal service routes
+
+Registered only when `SERVICE_JWT_SECRET_V1` is set, authenticated with a service JWT
+from `engagement-service`, and not proxied by the gateway (pod-to-pod only).
+
+```bash
+# Post a message to chat AS the streamer on the given platforms (poll/prediction
+# round-start announcements, ADR-0028; chat command replies, ADR-0079). Reuses the
+# streamer send path: scope checks, YouTube quota accounting, echo dedup.
+POST /internal/chat/announce
+Body: { "user_id": "uuid", "message": "...", "platforms": ["twitch"] }
+→ 200 { "success": true|false, "results": [{ "platform", "success", "error_kind" }] }
+
+# Clip the streamer's live Twitch stream (chat commands, ADR-0079). Needs a Twitch
+# login with clips:edit, granted through the opt-in re-consent with ?actions=clip.
+POST /internal/twitch/clip
+Body: { "user_id": "uuid" }
+→ 200 { "url": "https://clips.twitch.tv/..." }
+→ 409/502 { "error_kind": "twitch_not_connected|stream_offline|missing_scope|reauth_required|send_failed" }
+```
+
+The opt-in Twitch re-consent `GET /api/v1/auth/twitch/moderation/:overlay_id?actions=…`
+accepts `delete`, `timeout`, `ban`, `unban`, `engagement`, `modlog` and `clip`
+(`clips:edit`), and always folds in `user:write:chat`. `&return=commands` sends the
+user back to `/commands` instead of the overlay monitor.
+
 ### Health Checks
 
 ```bash

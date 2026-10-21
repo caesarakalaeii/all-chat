@@ -16,6 +16,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Centrifugo or Pusher, whichever Kick picks; ADR-0077) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
 - 🚧 Beta only: Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Instagram (ADR-0062, Graph API live_comments polling, read-only). The listeners are deployed and the backend is shared, but the frontend offers these platforms only on `beta.allch.at` (`frontend/src/lib/platform-availability.ts`); allch.at hides them. Adding a source is still limited by the ADR-0008 `platform_*` gate (seeded `is_premium=TRUE`, migrations 091-094 and 096; beta testers are granted premium). Release to production by removing the platform from `platform-availability.ts`, then flip its gate via the feature-gate admin endpoint to open it beyond premium.
 - ✅ Alerts overlays (ADR-0070, ADR-0075) are offered on every host; creating one is limited by the `alerts_overlay` premium gate.
+- 🚧 Beta only (feature): the chat commands editor `/commands` (ADR-0079). `BETA_ONLY_FEATURES` in `platform-availability.ts` hides its nav link, onboarding extras entry and `/upgrade` row outside `beta.allch.at`; the page itself works on any host. Its backend (message-processor, engagement-service, auth-service) runs from `:main`. Release by removing `chatCommands` from `BETA_ONLY_FEATURES`.
 - 🚧 Beta only (overlay kinds): Goal and List overlays (ADR-0072). The same `platform-availability.ts` list hides them outside `beta.allch.at`: the create-overlay kind picker, the onboarding "Optional: go further" entries and the `/upgrade` rows. Existing overlays of these kinds still render in OBS (`/overlay/[id]`) and open in the editor on any host, and creating one is still limited by the `goal_overlay` / `list_overlay` premium gates. Release to production by removing the kind from `BETA_ONLY_OVERLAY_KINDS` in `platform-availability.ts`.
 
 ---
@@ -128,7 +129,7 @@ Each service has a detailed README:
 - [payment-service](./services/payment-service/README.md) - Patreon premium entitlements; writes users.is_premium (streamer, ADR-0018) + viewers.is_premium (viewer split, ADR-0019)
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 - [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
-- [engagement-service](./services/engagement-service/README.md) - Cross-platform polls, predictions, and per-overlay viewer points economy (#523)
+- [engagement-service](./services/engagement-service/README.md) - Cross-platform polls, predictions, and per-overlay viewer points economy (#523); streamer chat commands and keyword triggers with templated/JS replies and Twitch clips (ADR-0079)
 - [support-bot](./services/support-bot/README.md) - Discord support/admin agent over a locally hosted OpenAI-compatible LLM (Go, replaces the old claude-CLI TypeScript bot)
 
 ### Development Guides
