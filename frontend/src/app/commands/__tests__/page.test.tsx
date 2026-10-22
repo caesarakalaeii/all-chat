@@ -65,6 +65,7 @@ function command(over: Partial<ChatCommand> = {}): ChatCommand {
     trigger: '!discord',
     response: 'Join us: https://discord.gg/x',
     create_clip: false,
+    image_url: '',
     min_role: 'everyone',
     cooldown_seconds: 5,
     enabled: true,
@@ -81,6 +82,7 @@ describe('Chat commands page', () => {
     api.listChatCommands.mockResolvedValue({ commands: [command()], status: readyStatus })
     api.previewChatCommand.mockResolvedValue({
       output: 'Hello ExampleViewer, welcome in!',
+      image: '',
       errors: [],
     })
   })
@@ -134,6 +136,26 @@ describe('Chat commands page', () => {
       )
     )
     expect(await screen.findByText('!hello')).toBeInTheDocument()
+  })
+
+  it('previews the image a command shows on the alerts overlay', async () => {
+    const dog = 'https://images.dog.ceo/breeds/akita/1.jpg'
+    api.previewChatCommand.mockResolvedValue({ output: 'A dog for you', image: dog, errors: [] })
+    render(<CommandsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Random dog' }))
+    const dialog = await screen.findByRole('dialog')
+    const image = within(dialog).getByLabelText('Image on stream')
+    expect(image).toHaveValue(
+      '{js JSON.parse({urlfetch https://dog.ceo/api/breeds/image/random}).message}'
+    )
+    expect(await within(dialog).findByRole('img', { name: 'Image preview' })).toHaveAttribute(
+      'src',
+      dog
+    )
+    expect(api.previewChatCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ image: (image as HTMLInputElement).value })
+    )
   })
 
   it('inserts a variable at the cursor', async () => {

@@ -16,19 +16,23 @@
 
 // Package chatcmd is the streamer-defined chat command engine (ADR-0079): matching
 // a chat message to a command or keyword trigger, the role check, and rendering the
-// response template. It does no I/O; the consumer owns delivery.
+// response template. Its only I/O is {urlfetch}, through the Vars.Fetch the caller
+// passes (ADR-0080); the consumer owns delivery.
 package chatcmd
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/rand/v2"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 )
 
-// Vars is everything a response template can read. Every field is data supplied by
-// the chat message or the command, never template syntax.
+// Vars is everything a response template can read. Every field but Fetch is data
+// supplied by the chat message or the command, never template syntax.
 type Vars struct {
 	User     string   // display name of the chatter who fired the command
 	Args     []string // words after the command word ({1}..{9}, {touser})
@@ -39,17 +43,35 @@ type Vars struct {
 	Role     string // the chatter's highest role (see Role)
 	Clip     string // URL of the clip this command made; empty when none
 	Now      time.Time
+
+	// Fetch serves {urlfetch} (HTTPFetch in production); nil leaves the token as
+	// written. It is the one way a render reaches the network.
+	Fetch func(url string) (string, error)
 }
 
 // Render expands the {variable} tokens in tpl. An unknown or malformed token is left
 // as written, so ordinary braces in a response survive. errs carries one entry per
-// failed {js} block (the block itself renders as jsErrorMarker) so the editor preview
-// can show the streamer why; chat delivery ignores them.
+// failed {js} block or {urlfetch} (which render as jsErrorMarker / fetchErrorMarker)
+// so the editor preview can show the streamer why; chat delivery ignores them.
 func Render(tpl string, v Vars) (out string, errs []string) {
-	var b strings.Builder
-	var js *jsSession
-	defer func() { js.close() }()
+	r := &render{v: v}
+	defer func() { r.js.close() }()
+	return r.expand(tpl, nil), r.errs
+}
 
+// render is the state one Render shares across its tokens, including the tokens
+// nested in a {urlfetch} URL: one JS session and one fetch allowance.
+type render struct {
+	v       Vars
+	js      *jsSession
+	fetches int
+	errs    []string
+}
+
+// expand renders tpl. esc, when set, is applied to every substituted value: the
+// query escaping of a {urlfetch} URL.
+func (r *render) expand(tpl string, esc func(string) string) string {
+	var b strings.Builder
 	for i := 0; i < len(tpl); {
 		if tpl[i] != '{' {
 			b.WriteByte(tpl[i])
@@ -58,8 +80,8 @@ func Render(tpl string, v Vars) (out string, errs []string) {
 		}
 		name := tokenName(tpl[i+1:])
 		end := -1
-		if name == "js" {
-			end = jsBlockEnd(tpl, i+1+len(name))
+		if name == "js" || name == "urlfetch" {
+			end = blockEnd(tpl, i+1+len(name))
 		} else if j := strings.IndexByte(tpl[i+1:], '}'); j >= 0 {
 			end = i + 1 + j
 		}
@@ -68,28 +90,98 @@ func Render(tpl string, v Vars) (out string, errs []string) {
 			i++
 			continue
 		}
-		arg := strings.TrimSpace(tpl[i+1+len(name) : end])
-
-		if name == "js" {
-			if js == nil {
-				js = newJSSession(v)
-			}
-			val, err := js.eval(arg)
-			if err != nil {
-				errs = append(errs, err.Error())
-				val = jsErrorMarker
-			}
-			b.WriteString(val)
-		} else if val, ok := v.resolve(name, arg); ok {
-			b.WriteString(val)
-		} else {
+		val, ok := r.token(name, strings.TrimSpace(tpl[i+1+len(name):end]))
+		if !ok {
 			b.WriteByte('{')
 			i++
 			continue
 		}
+		if esc != nil {
+			val = esc(val)
+		}
+		b.WriteString(val)
 		i = end + 1
 	}
-	return b.String(), errs
+	return b.String()
+}
+
+func (r *render) token(name, arg string) (string, bool) {
+	switch name {
+	case "js":
+		if r.js == nil {
+			r.js = newJSSession(r.v)
+		}
+		code := r.inlineFetches(arg)
+		val, err := r.js.eval(code)
+		if err != nil {
+			r.errs = append(r.errs, err.Error())
+			return jsErrorMarker, true
+		}
+		return val, true
+	case "urlfetch":
+		if r.v.Fetch == nil || arg == "" {
+			return "", false
+		}
+		body, err := r.fetch(arg)
+		if err != nil {
+			return fetchErrorMarker, true
+		}
+		return body, true
+	}
+	return r.v.resolve(name, arg)
+}
+
+// fetch renders a {urlfetch} URL template, checks it against the urlfetch rules and
+// fetches it. A failure is recorded in errs.
+func (r *render) fetch(urlTpl string) (body string, err error) {
+	defer func() {
+		if err != nil {
+			r.errs = append(r.errs, err.Error())
+		}
+	}()
+	if r.fetches >= maxFetches {
+		return "", fmt.Errorf("urlfetch: at most %d per reply", maxFetches)
+	}
+	r.fetches++
+	raw := r.expand(urlTpl, url.QueryEscape)
+	if err := CheckFetchURL(raw); err != nil {
+		return "", err
+	}
+	if body, err = r.v.Fetch(raw); err != nil {
+		return "", fmt.Errorf("urlfetch %s: %w", raw, err)
+	}
+	return strings.TrimSpace(body), nil
+}
+
+// inlineFetches replaces each {urlfetch} in a {js} block's code with the response as
+// a JS string literal, or null when the fetch failed. JSON quoting keeps the body
+// data: it can never end the literal and become code.
+func (r *render) inlineFetches(code string) string {
+	const open = "{urlfetch"
+	if r.v.Fetch == nil {
+		return code
+	}
+	var b strings.Builder
+	for {
+		i := strings.Index(code, open)
+		if i < 0 || i+len(open) >= len(code) || code[i+len(open)] != ' ' {
+			break
+		}
+		end := blockEnd(code, i+len(open))
+		if end < 0 {
+			break
+		}
+		lit := "null"
+		if body, err := r.fetch(strings.TrimSpace(code[i+len(open) : end])); err == nil {
+			q, _ := json.Marshal(body)
+			lit = string(q)
+		}
+		b.WriteString(code[:i])
+		b.WriteString(lit)
+		code = code[end+1:]
+	}
+	b.WriteString(code)
+	return b.String()
 }
 
 // tokenName returns the leading identifier of a token body ("user" in "user}",
@@ -169,10 +261,11 @@ func (v Vars) now() time.Time {
 	return v.Now
 }
 
-// jsBlockEnd finds the '}' closing a {js ...} block that starts scanning at from. It
-// tracks brace depth and skips JS string and template literals, so object literals,
-// blocks and "}" inside strings do not end the token early. -1 when unclosed.
-func jsBlockEnd(s string, from int) int {
+// blockEnd finds the '}' closing a {js ...} or {urlfetch ...} block that starts
+// scanning at from. It tracks brace depth and skips JS string and template literals,
+// so object literals, nested tokens and "}" inside strings do not end the token
+// early. -1 when unclosed.
+func blockEnd(s string, from int) int {
 	depth := 0
 	for i := from; i < len(s); i++ {
 		switch c := s[i]; c {
