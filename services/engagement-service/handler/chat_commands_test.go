@@ -161,12 +161,16 @@ func TestChatCommandsValidation(t *testing.T) {
 		`{"kind":"command","trigger":"!x","response":"y","min_role":"admin"}`,
 		`{"kind":"command","trigger":"!x","response":"y","min_role":"everyone","cooldown_seconds":-1}`,
 		`{"kind":"command","trigger":"!x","response":"` + strings.Repeat("y", 2001) + `","min_role":"everyone"}`,
+		`{"kind":"command","trigger":"!x","image_url":"` + strings.Repeat("y", 1001) + `","min_role":"everyone"}`,
+		`{"kind":"command","trigger":"!x","image_url":"   ","min_role":"everyone"}`,
 	}
 	for _, body := range bad {
 		assert.Equal(t, http.StatusBadRequest, do(r, http.MethodPost, "/chat-commands", body).Code, body[:min(len(body), 80)])
 	}
 	ok := `{"kind":"keyword","trigger":"clip that","create_clip":true,"min_role":"everyone"}`
 	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", ok).Code)
+	imageOnly := `{"kind":"command","trigger":"!hype","image_url":"https://img.example.com/hype.gif","min_role":"everyone"}`
+	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", imageOnly).Code)
 }
 
 func TestChatCommandsCap(t *testing.T) {
@@ -196,4 +200,28 @@ func TestChatCommandsPreview(t *testing.T) {
 	assert.Equal(t, "hi Friend 4 [js error]", out.Output)
 	require.Len(t, out.Errors, 1)
 	assert.Contains(t, out.Errors[0], "nope")
+}
+
+// The preview renders the image the way chat would: with the chatter's input
+// withheld, and empty (with the reason) when it is not an https URL.
+func TestChatCommandsPreviewImage(t *testing.T) {
+	r := newCmdRouter(&memCmdStore{}, new(int), testOwner.String())
+	for body, want := range map[string]struct {
+		image string
+		errs  int
+	}{
+		`{"response":"","image":"https://img.example.com/{1}.gif","input":"evil"}`: {"https://img.example.com/.gif", 0},
+		`{"response":"hi","image":"http://img.example.com/x.gif"}`:                 {"", 1},
+		`{"response":"hi"}`: {"", 0},
+	} {
+		w := do(r, http.MethodPost, "/chat-commands/preview", body)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var out struct {
+			Image  string   `json:"image"`
+			Errors []string `json:"errors"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+		assert.Equal(t, want.image, out.Image, body)
+		assert.Len(t, out.Errors, want.errs, body)
+	}
 }

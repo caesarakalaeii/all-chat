@@ -22,14 +22,17 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/caesar/all-chat/services/engagement-service/announcer"
 	"github.com/caesar/all-chat/services/engagement-service/chatcmd"
+	"github.com/caesar/all-chat/services/engagement-service/models"
 	"github.com/caesar/all-chat/services/engagement-service/repository"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/shared/alerts"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -56,6 +59,7 @@ type chatCmdStore interface {
 	ChatCommandsForChannel(ctx context.Context, platform, channelID string) ([]repository.ChannelCommands, error)
 	IncrementChatCommandUse(ctx context.Context, id uuid.UUID) (int64, error)
 	OwnerStatus(ctx context.Context, userID uuid.UUID) (repository.ChatCommandOwnerStatus, error)
+	AlertsOverlays(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error)
 }
 
 // chatOutput is auth-service's send and clip paths (announcer.Announcer).
@@ -76,6 +80,7 @@ type ChatCommandConsumer struct {
 	rdb          *redis.Client
 	store        chatCmdStore
 	out          chatOutput
+	fetch        *http.Client // {urlfetch}
 	log          *zap.Logger
 	consumerName string
 
@@ -85,8 +90,8 @@ type ChatCommandConsumer struct {
 
 // NewChatCommandConsumer creates the consumer. consumerName should be unique per pod.
 func NewChatCommandConsumer(rdb *redis.Client, store chatCmdStore, out chatOutput, consumerName string, log *zap.Logger) *ChatCommandConsumer {
-	return &ChatCommandConsumer{rdb: rdb, store: store, out: out, log: log, consumerName: consumerName,
-		cache: map[string]cachedCommands{}}
+	return &ChatCommandConsumer{rdb: rdb, store: store, out: out, fetch: chatcmd.FetchClient(), log: log,
+		consumerName: consumerName, cache: map[string]cachedCommands{}}
 }
 
 // Run blocks consuming chatcmd:jobs until ctx is cancelled, then waits for running
@@ -228,7 +233,7 @@ func (c *ChatCommandConsumer) run(ctx context.Context, o repository.ChannelComma
 		user = job.Username
 	}
 	vars := chatcmd.Vars{User: user, Args: m.Args, Query: m.Query, Platform: job.Platform,
-		Channel: job.ChannelID, Count: count, Role: role.String()}
+		Channel: job.ChannelID, Count: count, Role: role.String(), Fetch: chatcmd.HTTPFetch(ctx, c.fetch)}
 
 	if cmd.CreateClip {
 		url, err := c.out.Clip(ctx, owner)
@@ -239,24 +244,65 @@ func (c *ChatCommandConsumer) run(ctx context.Context, o repository.ChannelComma
 		vars.Clip = url
 	}
 
-	if cmd.Response == "" || !o.Owned || !announcer.SendablePlatforms[job.Platform] {
-		return
-	}
-	if job.Platform == "youtube" {
+	// A reply goes only to the streamer's own channel on a platform with a send path.
+	sendable := o.Owned && announcer.SendablePlatforms[job.Platform]
+	if sendable && job.Platform == "youtube" {
 		// A YouTube send spends Data API quota, which is a premium capability.
-		if st, err := c.store.OwnerStatus(ctx, o.UserID); err != nil || !st.IsPremium {
-			return
-		}
+		st, err := c.store.OwnerStatus(ctx, o.UserID)
+		sendable = err == nil && st.IsPremium
 	}
-	text, _ := chatcmd.Render(cmd.Response, vars)
-	if text = chatcmd.Line(text); text == "" {
-		return
+	var reply string
+	if cmd.Response != "" && (sendable || cmd.ImageURL != "") {
+		text, _ := chatcmd.Render(cmd.Response, vars)
+		reply = chatcmd.Line(text)
 	}
-	if err := c.rdb.Set(ctx, echoKey(o.UserID, text), 1, echoTTL).Err(); err != nil {
+	if sendable && reply != "" {
+		c.send(ctx, o.UserID, reply, job.Platform)
+	}
+	if cmd.ImageURL != "" {
+		c.showImage(ctx, o.UserID, cmd, job, vars, reply)
+	}
+}
+
+func (c *ChatCommandConsumer) send(ctx context.Context, ownerID uuid.UUID, text, platform string) {
+	if err := c.rdb.Set(ctx, echoKey(ownerID, text), 1, echoTTL).Err(); err != nil {
 		return // without the echo guard a self-matching reply could loop
 	}
-	if err := c.out.Send(ctx, owner, text, job.Platform); err != nil {
-		c.log.Info("chat command reply failed", zap.String("user", owner), zap.String("platform", job.Platform), zap.Error(err))
+	if err := c.out.Send(ctx, ownerID.String(), text, platform); err != nil {
+		c.log.Info("chat command reply failed", zap.String("user", ownerID.String()), zap.String("platform", platform), zap.Error(err))
+	}
+}
+
+// showImage puts the command's image on every alerts overlay of the streamer as a
+// chat_command alert (ADR-0080). Like a clip it fires from any chat in the
+// streamer's overlays: it shows on their own stream, not in someone else's chat.
+func (c *ChatCommandConsumer) showImage(ctx context.Context, ownerID uuid.UUID, cmd models.ChatCommand, job mpmodels.CommandJob, vars chatcmd.Vars, reply string) {
+	overlays, err := c.store.AlertsOverlays(ctx, ownerID)
+	if err != nil {
+		c.log.Warn("chat command alerts overlays", zap.String("user", ownerID.String()), zap.Error(err))
+		return
+	}
+	if len(overlays) == 0 {
+		return // no overlay to show it on: skip the render and its fetches
+	}
+	img, _ := chatcmd.ImageURL(cmd.ImageURL, vars)
+	if img == "" {
+		return
+	}
+	msg := reply
+	if msg == "" {
+		msg = job.Text
+	}
+	a := alerts.Alert{AlertID: uuid.NewString(), Platform: job.Platform, EventType: alerts.ChatCommandEvent,
+		EventData: &alerts.EventData{Type: alerts.ChatCommandEvent,
+			Value: &alerts.Value{Amount: float64(vars.Count), Currency: "uses", DisplayText: cmd.Trigger}},
+		User: alerts.User{ID: job.UserID, Name: vars.User}, Message: msg, ImageURL: img, OccurredAt: time.Now().UTC()}
+	for _, id := range overlays {
+		a.OverlayID = id.String()
+		payload, _ := json.Marshal(a)
+		if err := c.rdb.Publish(ctx, "overlay:"+a.OverlayID+":alerts", payload).Err(); err != nil {
+			c.log.Warn("publish chat command alert", zap.String("overlay", a.OverlayID), zap.Error(err))
+		}
 	}
 }
 
