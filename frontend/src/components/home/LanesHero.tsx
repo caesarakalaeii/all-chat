@@ -288,7 +288,11 @@ export function LanesHero({
   // Lane elements are addressed by index every frame; a ref array avoids
   // re-querying the DOM from the animation loop.
   const laneRefs = useRef<(HTMLDivElement | null)[]>([])
-  const [scrollY, setScrollY] = useState(0)
+  // Hero progress: 0 at rest, 1 by the time the stage has scrolled one
+  // viewport height. Drives the sink/dim via CSS custom properties. Computed
+  // in the scroll handler, where reading the stage height is allowed; the
+  // prerender pass keeps the initial 0.
+  const [progress, setProgress] = useState(0)
   const isLoggedIn = userName !== undefined
 
   // The label splits into spans so no JSX carries a literal space between the
@@ -326,7 +330,9 @@ export function LanesHero({
       if (raf !== 0) return
       raf = window.requestAnimationFrame(() => {
         raf = 0
-        setScrollY(window.scrollY)
+        const y = window.scrollY
+        const stageH = stageRef.current?.offsetHeight ?? 0
+        setProgress(y > 0 ? Math.min(y / Math.max(stageH, 1), 1) : 0)
       })
     }
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -369,19 +375,14 @@ export function LanesHero({
     }, 250)
   }, [reducedMotion, activeRef])
 
-  // Hero progress: 0 at rest, 1 by the time the stage has scrolled one
-  // viewport height. Drives the sink/dim via CSS custom properties. The
-  // prerender pass runs this with scrollY 0 on the server, where neither
-  // stageRef nor window exists — both fall back to a safe 0 progress.
-  const stageH = stageRef.current?.offsetHeight ?? 0
-  const progress = scrollY > 0 ? Math.min(scrollY / Math.max(stageH, 1), 1) : 0
-
   return (
     <>
       {/* Fixed mono chrome over the lanes — mix-blend-mode: difference. */}
       <div className="lanes-chrome lanes-tl">{t('marketing.lanes.brand')}</div>
       <nav className="lanes-chrome lanes-tr" aria-label={t('marketing.lanes.navLabel')}>
-        <a className="nav-themes" href="/docs#themes">{t('marketing.lanes.navThemes')}</a>
+        <a className="nav-themes" href="/docs#themes">
+          {t('marketing.lanes.navThemes')}
+        </a>
         <a href="/docs">{t('marketing.lanes.navDocs')}</a>
         <a href={DISCORD_INVITE_URL}>{t('marketing.lanes.navDiscord')}</a>
         {isLoggedIn ? (
@@ -412,63 +413,63 @@ export function LanesHero({
             else, so its bands and the DOM lanes share one height (the CTA bar
             below used to sit inside the canvas and skew every boundary). */}
         <div className="lanes-track">
-        {/* WebGL lane fills; the DOM lanes below carry only text. */}
-        <canvas className="lanes-canvas" ref={canvasRef} aria-hidden="true" />
-        {marqueeRows.map(({ platform, rows }, laneIndex) => (
-          <div
-            key={platform}
-            ref={(el) => {
-              laneRefs.current[laneIndex] = el
-            }}
-            className="lane"
-            data-p={platform}
-            style={{ flexGrow: laneBases[laneIndex] }}
-          >
-            <div className="wordmark" aria-hidden="true">
-              {platform.toUpperCase()}
-            </div>
-            {rows.map(({ items, duration }, i) => (
-              <div
-                key={i}
-                className="flow"
-                aria-hidden="true"
-                style={{ animationDuration: `${duration}s` }}
-              >
-                {items.map((item, j) => (
-                  <span key={j}>
-                    {j > 0 && <span className="sep">·</span>}
-                    <b>{item.user}</b> {t(item.messageKey)}
-                    {item.emote !== undefined && (
-                      <img
-                        className="emote"
-                        src={EMOTE_SRC[item.emote]}
-                        alt={item.emote}
-                        width={17}
-                        height={17}
-                      />
-                    )}
-                  </span>
-                ))}
-                <span className="sep">·</span>
-                {items.map((item, j) => (
-                  <span key={`d${j}`}>
-                    {j > 0 && <span className="sep">·</span>}
-                    <b>{item.user}</b> {t(item.messageKey)}
-                    {item.emote !== undefined && (
-                      <img
-                        className="emote"
-                        src={EMOTE_SRC[item.emote]}
-                        alt={item.emote}
-                        width={17}
-                        height={17}
-                      />
-                    )}
-                  </span>
-                ))}
+          {/* WebGL lane fills; the DOM lanes below carry only text. */}
+          <canvas className="lanes-canvas" ref={canvasRef} aria-hidden="true" />
+          {marqueeRows.map(({ platform, rows }, laneIndex) => (
+            <div
+              key={platform}
+              ref={(el) => {
+                laneRefs.current[laneIndex] = el
+              }}
+              className="lane"
+              data-p={platform}
+              style={{ flexGrow: laneBases[laneIndex] }}
+            >
+              <div className="wordmark" aria-hidden="true">
+                {platform.toUpperCase()}
               </div>
-            ))}
-          </div>
-        ))}
+              {rows.map(({ items, duration }, i) => (
+                <div
+                  key={i}
+                  className="flow"
+                  aria-hidden="true"
+                  style={{ animationDuration: `${duration}s` }}
+                >
+                  {items.map((item, j) => (
+                    <span key={j}>
+                      {j > 0 && <span className="sep">·</span>}
+                      <b>{item.user}</b> {t(item.messageKey)}
+                      {item.emote !== undefined && (
+                        <img
+                          className="emote"
+                          src={EMOTE_SRC[item.emote]}
+                          alt={item.emote}
+                          width={17}
+                          height={17}
+                        />
+                      )}
+                    </span>
+                  ))}
+                  <span className="sep">·</span>
+                  {items.map((item, j) => (
+                    <span key={`d${j}`}>
+                      {j > 0 && <span className="sep">·</span>}
+                      <b>{item.user}</b> {t(item.messageKey)}
+                      {item.emote !== undefined && (
+                        <img
+                          className="emote"
+                          src={EMOTE_SRC[item.emote]}
+                          alt={item.emote}
+                          width={17}
+                          height={17}
+                        />
+                      )}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
 
         {/* Headline chips over the lanes. */}

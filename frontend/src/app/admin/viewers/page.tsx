@@ -392,9 +392,7 @@ export default function AdminViewersPage() {
             className="truncate text-sm font-medium text-text"
           />
           <div className="truncate text-xs text-text-sub">@{viewer.username}</div>
-          <div className="truncate font-mono text-xs text-text-dim">
-            {viewer.platform_user_id}
-          </div>
+          <div className="truncate font-mono text-xs text-text-dim">{viewer.platform_user_id}</div>
         </div>
       </div>
     )

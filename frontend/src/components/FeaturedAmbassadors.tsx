@@ -77,12 +77,12 @@ export function FeaturedAmbassadors() {
                 <span className="truncate font-bold">{a.display_name}</span>
                 <PlatformBadge platform={a.platform} size="sm" />
               </div>
-              {a.tagline && <p className="mt-1 text-sm dim">{a.tagline}</p>}
+              {a.tagline && <p className="dim mt-1 text-sm">{a.tagline}</p>}
               <ChannelLink
                 platform={a.platform}
                 channelId={a.username}
                 channelHandle={a.username}
-                className="mt-2 text-sm dim"
+                className="dim mt-2 text-sm"
               />
             </div>
           </li>

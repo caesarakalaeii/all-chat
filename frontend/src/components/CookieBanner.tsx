@@ -158,7 +158,7 @@ export default function CookieBanner() {
                 emoji read as clip art). aria-label keeps the accessible
                 name on the translated string. */}
             <Cookie
-              className="mt-1 h-8 w-8 flex-shrink-0 text-text-sub sm:h-10 sm:w-10"
+              className="mt-1 h-8 w-8 shrink-0 text-text-sub sm:h-10 sm:w-10"
               role="img"
               aria-label={t('legal.cookieBanner.iconLabel')}
               color={pride ? 'url(#pride-cookie)' : undefined}

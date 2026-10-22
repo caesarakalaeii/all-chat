@@ -74,14 +74,10 @@ export const localizationApi = {
       .then((r) => r.translations)
   },
 
-  submit(
-    code: string,
-    translations: SubmitRow[]
-  ): Promise<SubmitResult> {
-    return apiClient.post(
-      `/api/v1/localization/locales/${encodeURIComponent(code)}/translations`,
-      { translations }
-    )
+  submit(code: string, translations: SubmitRow[]): Promise<SubmitResult> {
+    return apiClient.post(`/api/v1/localization/locales/${encodeURIComponent(code)}/translations`, {
+      translations,
+    })
   },
 }
 
@@ -113,14 +109,10 @@ export const localizationAdminApi = {
       .then((r) => r.locales)
   },
 
-  reviewLocaleRequest(
-    code: string,
-    approved: boolean
-  ): Promise<{ message: string; code: string }> {
-    return apiClient.post(
-      `/api/v1/admin/localization/locales/${encodeURIComponent(code)}/review`,
-      { approved }
-    )
+  reviewLocaleRequest(code: string, approved: boolean): Promise<{ message: string; code: string }> {
+    return apiClient.post(`/api/v1/admin/localization/locales/${encodeURIComponent(code)}/review`, {
+      approved,
+    })
   },
 
   reviewQueue(): Promise<AdminTranslation[]> {
@@ -141,10 +133,10 @@ export const localizationAdminApi = {
     )
   },
 
-  exportLocale(code: string): Promise<{ locale: string; translations: Array<{ key: string; value: string }> }> {
-    return apiClient.get(
-      `/api/v1/admin/localization/export/${encodeURIComponent(code)}`
-    )
+  exportLocale(
+    code: string
+  ): Promise<{ locale: string; translations: Array<{ key: string; value: string }> }> {
+    return apiClient.get(`/api/v1/admin/localization/export/${encodeURIComponent(code)}`)
   },
 
   progress(): Promise<LocaleProgress[]> {

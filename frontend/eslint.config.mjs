@@ -145,6 +145,9 @@ export default defineConfig([
         'error',
         ...DESIGN_SYSTEM_RULES.filter((rule) => !rule.message.startsWith('Use focus-visible:')),
       ],
+      // Same reason: a canonical-class rewrite would fork these files from the
+      // registry copy that `npx shadcn@4 diff` compares against.
+      'tailwindcss/enforces-canonical-classname': 'off',
     },
   },
 
@@ -208,5 +211,8 @@ export default defineConfig([
     // output — linting it only ever yields false positives (react-hooks
     // rules-of-hooks fires on mangled identifiers like `J.useCaseSensitive…`).
     'public/monaco/**',
+    // Emitted by scripts/generate-bundled-themes.mjs (`npm run generate:themes`);
+    // mirrored in .prettierignore.
+    'src/lib/theme-marketplace/bundled-themes.generated.ts',
   ]),
 ])

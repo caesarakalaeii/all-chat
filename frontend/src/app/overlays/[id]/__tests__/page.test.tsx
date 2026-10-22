@@ -287,7 +287,10 @@ describe('overlay editor TikTok source', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add' }))
 
     await waitFor(() =>
-      expect(api.addSource).toHaveBeenCalledWith('o1', { platform: 'tiktok', channel_id: 'creator' })
+      expect(api.addSource).toHaveBeenCalledWith('o1', {
+        platform: 'tiktok',
+        channel_id: 'creator',
+      })
     )
     await waitFor(() => expect(dialog).not.toBeInTheDocument())
   })

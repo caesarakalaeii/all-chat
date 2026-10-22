@@ -25,13 +25,7 @@
  * component so the property name and unit cannot drift apart; the preview
  * passes an id because its style tags are addressed by contract id.
  */
-export function LegacyFontSizeStyle({
-  fontSize,
-  id,
-}: {
-  fontSize: number | null
-  id?: string
-}) {
+export function LegacyFontSizeStyle({ fontSize, id }: { fontSize: number | null; id?: string }) {
   if (fontSize === null) {
     return null
   }

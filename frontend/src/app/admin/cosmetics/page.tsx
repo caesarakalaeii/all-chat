@@ -212,7 +212,7 @@ export default function AdminCosmeticsPage() {
                 {currentEntries.map((entry) => (
                   <div key={entry.id} className="flex items-center gap-3 px-4 py-3">
                     {/* Thumbnail */}
-                    <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-surface-2">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-2">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={entry.image_url}
@@ -286,7 +286,7 @@ export default function AdminCosmeticsPage() {
                   className="flex-1"
                 />
                 {addPreviewUrl && (
-                  <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-surface-2">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded bg-surface-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={addPreviewUrl}

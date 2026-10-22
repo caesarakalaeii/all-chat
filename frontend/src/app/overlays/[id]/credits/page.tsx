@@ -269,7 +269,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
             <div className="flex items-center gap-3">
               {notification.type === 'success' ? (
                 <svg
-                  className="h-5 w-5 flex-shrink-0"
+                  className="h-5 w-5 shrink-0"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -283,7 +283,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                 </svg>
               ) : (
                 <svg
-                  className="h-5 w-5 flex-shrink-0"
+                  className="h-5 w-5 shrink-0"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -377,7 +377,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                 checked={config.enabled}
                 onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
                 aria-label={t('overlayEditor.credits.enableHeading')}
-                className="border-2 border-white bg-black data-[checked]:border-kick data-[checked]:bg-kick"
+                className="border-2 border-white bg-black data-checked:border-kick data-checked:bg-kick"
               >
                 <Switch.Thumb />
               </Switch.Root>
@@ -584,7 +584,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     checked={config.clips_enabled}
                     onCheckedChange={(clips_enabled) => setConfig({ ...config, clips_enabled })}
                     aria-label={t('overlayEditor.credits.clipsHeading')}
-                    className="border-2 border-white bg-black data-[checked]:border-kick data-[checked]:bg-kick"
+                    className="border-2 border-white bg-black data-checked:border-kick data-checked:bg-kick"
                   >
                     <Switch.Thumb />
                   </Switch.Root>
