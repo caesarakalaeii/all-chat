@@ -32,14 +32,14 @@ import (
 // the same trigger (case-insensitive).
 var ErrDuplicateTrigger = errors.New("a chat command with this trigger already exists")
 
-const chatCommandCols = `id, user_id, kind, trigger, response, create_clip, min_role,
+const chatCommandCols = `id, user_id, kind, trigger, response, create_clip, image_url, min_role,
 	cooldown_seconds, enabled, use_count, created_at, updated_at`
 
 // scanChatCommand scans chatCommandCols, after any leading columns into lead.
 func scanChatCommand(row pgx.Row, lead ...any) (models.ChatCommand, error) {
 	var c models.ChatCommand
 	err := row.Scan(append(lead, &c.ID, &c.UserID, &c.Kind, &c.Trigger, &c.Response, &c.CreateClip,
-		&c.MinRole, &c.CooldownSeconds, &c.Enabled, &c.UseCount, &c.CreatedAt, &c.UpdatedAt)...)
+		&c.ImageURL, &c.MinRole, &c.CooldownSeconds, &c.Enabled, &c.UseCount, &c.CreatedAt, &c.UpdatedAt)...)
 	return c, err
 }
 
@@ -77,9 +77,9 @@ func (r *Repository) CountChatCommands(ctx context.Context, userID uuid.UUID) (i
 // CreateChatCommand inserts c for c.UserID.
 func (r *Repository) CreateChatCommand(ctx context.Context, c models.ChatCommand) (models.ChatCommand, error) {
 	out, err := scanChatCommand(r.db.QueryRow(ctx, `INSERT INTO chat_commands
-		(user_id, kind, trigger, response, create_clip, min_role, cooldown_seconds, enabled)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING `+chatCommandCols,
-		c.UserID, c.Kind, c.Trigger, c.Response, c.CreateClip, c.MinRole, c.CooldownSeconds, c.Enabled))
+		(user_id, kind, trigger, response, create_clip, image_url, min_role, cooldown_seconds, enabled)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING `+chatCommandCols,
+		c.UserID, c.Kind, c.Trigger, c.Response, c.CreateClip, c.ImageURL, c.MinRole, c.CooldownSeconds, c.Enabled))
 	return out, mapChatCommandErr(err)
 }
 
@@ -87,10 +87,10 @@ func (r *Repository) CreateChatCommand(ctx context.Context, c models.ChatCommand
 // ErrNotFound when the id does not exist or belongs to someone else.
 func (r *Repository) UpdateChatCommand(ctx context.Context, c models.ChatCommand) (models.ChatCommand, error) {
 	out, err := scanChatCommand(r.db.QueryRow(ctx, `UPDATE chat_commands SET
-		kind = $3, trigger = $4, response = $5, create_clip = $6, min_role = $7,
-		cooldown_seconds = $8, enabled = $9, updated_at = now()
+		kind = $3, trigger = $4, response = $5, create_clip = $6, image_url = $7, min_role = $8,
+		cooldown_seconds = $9, enabled = $10, updated_at = now()
 		WHERE id = $1 AND user_id = $2 RETURNING `+chatCommandCols,
-		c.ID, c.UserID, c.Kind, c.Trigger, c.Response, c.CreateClip, c.MinRole, c.CooldownSeconds, c.Enabled))
+		c.ID, c.UserID, c.Kind, c.Trigger, c.Response, c.CreateClip, c.ImageURL, c.MinRole, c.CooldownSeconds, c.Enabled))
 	return out, mapChatCommandErr(err)
 }
 
@@ -125,6 +125,17 @@ func mapChatCommandErr(err error) error {
 		return ErrDuplicateTrigger
 	}
 	return fmt.Errorf("save chat command: %w", err)
+}
+
+// AlertsOverlays returns the ids of the user's alerts overlays, where a chat
+// command's image shows (ADR-0080).
+func (r *Repository) AlertsOverlays(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := r.db.Query(ctx, `SELECT id FROM overlays WHERE user_id = $1 AND overlay_type = 'alerts'
+		ORDER BY created_at`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("alerts overlays: %w", err)
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
 }
 
 // chatSourceMatch matches a chat source row s against a raw message's channel ($2).

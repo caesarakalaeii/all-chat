@@ -35,6 +35,7 @@ import (
 // Alert is the envelope on overlay:{overlay_id}:alerts. It mirrors
 // services/alert-processor/models.Alert key for key; the alert-processor keeps
 // its own copy because its event_data is the message-processor's EventInfo.
+// ImageURL is the one extra: only chat command alerts set it.
 type Alert struct {
 	AlertID    string     `json:"alert_id"`
 	OverlayID  string     `json:"overlay_id"`
@@ -44,7 +45,15 @@ type Alert struct {
 	User       User       `json:"user"`
 	Message    string     `json:"message"`
 	OccurredAt time.Time  `json:"occurred_at"`
+	// ImageURL replaces the profile's image for this one alert: a chat command's
+	// own image (ADR-0080). engagement-service publishes those directly.
+	ImageURL string `json:"image_url,omitempty"`
 }
+
+// ChatCommandEvent is the event type of a chat command that shows an image
+// (ADR-0080). Its {message} is the command's reply, or what the chatter typed
+// when the command has none; {amount} is the trigger and {count} its uses.
+const ChatCommandEvent = "chat_command"
 
 // EventData is the message-processor's EventInfo as it appears on the wire.
 type EventData struct {
@@ -135,6 +144,8 @@ var eventDefs = []eventDef{
 	{"tiktok_subscription", "tiktok", "{username} just subscribed!", Value{1, "months", "Subscribed"}},
 	{"power_up", "twitch", "{username} used {amount}!", Value{50, "bits", "On-Screen Celebration"}},
 	{"gift_received", "youtube", "{username} received a gift membership!", Value{1, "gift", "Received gift membership"}},
+	// Fired from any platform's chat; the platform here is only the test alert's.
+	{"chat_command", "twitch", "{username} used {amount}", Value{1, "uses", "!hype"}},
 }
 
 func lookup(eventType string) (eventDef, bool) {
@@ -256,6 +267,9 @@ func RenderText(template string, a Alert) string {
 
 // Resolve renders p for a.
 func Resolve(p Profile, a Alert) ResolvedProfile {
+	if a.ImageURL != "" {
+		p.ImageURL = a.ImageURL
+	}
 	return ResolvedProfile{Profile: p, Text: RenderText(p.TextTemplate, a)}
 }
 
