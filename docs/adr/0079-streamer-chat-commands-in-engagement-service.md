@@ -1,7 +1,7 @@
 # ADR-0079: Streamer Chat Commands in engagement-service, With a Sandboxed JS Template Engine
 
 **Date**: 2026-10-21
-**Status**: Accepted
+**Status**: Accepted; `{urlfetch}` and command images added by [ADR-0080](./0080-chat-command-urlfetch-and-images.md)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
