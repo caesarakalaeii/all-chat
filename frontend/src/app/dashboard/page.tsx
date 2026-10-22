@@ -20,6 +20,7 @@
 
 import { useEffect, useState } from 'react'
 import { overlaysApi } from '@/lib/api/overlays'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { MonitorPlay, Plus, Trash2, Puzzle } from 'lucide-react'
 import { useOverlayStore } from '@/lib/stores/overlay-store'
@@ -320,24 +321,27 @@ function DashboardContent() {
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {overlaysWithSources.map((overlay) => (
+              // The title link stretches over the card (its ::after), so the whole
+              // card still opens the editor. A card-sized role="link" named
+              // "Open …" failed WCAG 2.5.3 (its visible text is the whole card)
+              // and wrapped the buttons; those sit above the stretch via `relative`.
+              // Focus shows as an outline: .lanes-panel's unlayered box-shadow
+              // overrides a ring utility, so the old ring never rendered.
               <div
                 key={overlay.id}
-                role="link"
-                tabIndex={0}
-                aria-label={t('dashboard.overlays.openLabel', { name: overlay.name })}
-                className="lanes-panel group cursor-pointer overflow-hidden focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none"
-                onClick={() => router.push(`/overlays/${overlay.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    router.push(`/overlays/${overlay.id}`)
-                  }
-                }}
+                className="lanes-panel group relative overflow-hidden has-[h3>a:focus-visible]:outline-2 has-[h3>a:focus-visible]:outline-twitch"
               >
                 <div className="p-6">
                   <div className="mb-3 flex items-start justify-between">
                     <div className="flex min-w-0 items-center gap-2">
-                      <h3 className="truncate">{overlay.name}</h3>
+                      <h3 className="truncate">
+                        <Link
+                          href={`/overlays/${overlay.id}`}
+                          className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none"
+                        >
+                          {overlay.name}
+                        </Link>
+                      </h3>
                       <OverlayKindBadge kind={resolveOverlayKind(overlay.overlay_type)} />
                       {overlay.is_public_for_viewers && (
                         <span className="lanes-chip shrink-0 text-twitch">
@@ -351,7 +355,7 @@ function DashboardContent() {
                       onDelete={() => handleDelete(overlay.id)}
                     >
                       <button
-                        className="lanes-btn ghost sm shrink-0"
+                        className="lanes-btn ghost sm relative shrink-0"
                         onClick={(e: React.MouseEvent) => e.stopPropagation()}
                         aria-label={t('dashboard.overlays.deleteLabel', { name: overlay.name })}
                       >
@@ -361,7 +365,9 @@ function DashboardContent() {
                   </div>
                   {/* A parked YouTube channel, which nothing on this page used to show.
                       Above the badges so it is the first thing read on the card. */}
-                  <DiscoveryPausedNotice overlayId={overlay.id} sources={overlay.sources} />
+                  <div className="relative">
+                    <DiscoveryPausedNotice overlayId={overlay.id} sources={overlay.sources} />
+                  </div>
                   <div className="mb-4 flex flex-wrap gap-1.5">
                     {overlay.sources?.map((source) => (
                       <PlatformBadge
@@ -382,7 +388,7 @@ function DashboardContent() {
                     </p>
                     {overlay.is_public_for_viewers ? (
                       <button
-                        className="lanes-btn ghost -mr-2 px-3 py-1 text-xs text-youtube"
+                        className="lanes-btn ghost relative -mr-2 px-3 py-1 text-xs text-youtube"
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleUnsetPublic(overlay.id)
@@ -392,7 +398,7 @@ function DashboardContent() {
                       </button>
                     ) : (
                       <button
-                        className="lanes-btn ghost -mr-2 px-3 py-1 text-xs text-twitch"
+                        className="lanes-btn ghost relative -mr-2 px-3 py-1 text-xs text-twitch"
                         onClick={(e: React.MouseEvent) => {
                           e.stopPropagation()
                           handleSetPublic(overlay.id)
