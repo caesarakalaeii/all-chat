@@ -653,6 +653,7 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     tiktok_subscription: 'TikTok-Abo',
     power_up: 'Power-up',
     gift_received: 'Geschenkte Mitgliedschaft erhalten',
+    chat_command: 'Chat-Befehl',
   },
   testing: {
     platformLabel: 'Plattform',

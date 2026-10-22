@@ -32,6 +32,7 @@ import (
 	"github.com/caesar/all-chat/services/owncast-listener/status"
 	"github.com/caesar/all-chat/services/owncast-listener/websocket"
 	"github.com/caesar/all-chat/shared/listener"
+	"github.com/caesar/all-chat/shared/safehttp"
 	"github.com/caesar/all-chat/shared/sourcemanager"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
@@ -102,7 +103,7 @@ func NewManager(
 		publisher:   pub,
 		statusPub:   statusPub,
 		logger:      log,
-		httpClient:  &http.Client{Timeout: registerTimeout},
+		httpClient:  safehttp.Client(registerTimeout), // instance URLs are user input (ADR-0080)
 		redisClient: redisClient,
 		leader:      leader,
 		podID:       podID,

@@ -18,14 +18,17 @@ package consumer
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/caesar/all-chat/services/engagement-service/models"
 	"github.com/caesar/all-chat/services/engagement-service/repository"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/shared/alerts"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -34,9 +37,14 @@ import (
 )
 
 type fakeCmdStore struct {
-	owners  []repository.ChannelCommands
-	premium bool
-	uses    map[uuid.UUID]int64
+	owners         []repository.ChannelCommands
+	premium        bool
+	uses           map[uuid.UUID]int64
+	alertsOverlays []uuid.UUID
+}
+
+func (f *fakeCmdStore) AlertsOverlays(_ context.Context, _ uuid.UUID) ([]uuid.UUID, error) {
+	return f.alertsOverlays, nil
 }
 
 func (f *fakeCmdStore) ChatCommandsForChannel(_ context.Context, _, _ string) ([]repository.ChannelCommands, error) {
@@ -191,4 +199,97 @@ func TestChatCommand_Clip(t *testing.T) {
 	c.handle(ctx, job("2", "twitch", "!clip"))
 	require.Len(t, out.sent, 2)
 	assert.Equal(t, "Clip: "+clipFailedText, out.sent[1].text)
+}
+
+// subscribeAlerts listens on the alerts channels of the given overlays.
+func subscribeAlerts(t *testing.T, c *ChatCommandConsumer, ids ...uuid.UUID) <-chan *redis.Message {
+	t.Helper()
+	chans := make([]string, len(ids))
+	for i, id := range ids {
+		chans[i] = "overlay:" + id.String() + ":alerts"
+	}
+	sub := c.rdb.Subscribe(context.Background(), chans...)
+	_, err := sub.Receive(context.Background())
+	require.NoError(t, err)
+	t.Cleanup(func() { sub.Close() })
+	return sub.Channel()
+}
+
+func nextAlert(t *testing.T, ch <-chan *redis.Message) (string, alerts.Alert) {
+	t.Helper()
+	select {
+	case m := <-ch:
+		var a alerts.Alert
+		require.NoError(t, json.Unmarshal([]byte(m.Payload), &a))
+		return m.Channel, a
+	case <-time.After(2 * time.Second):
+		t.Fatal("no alert published")
+	}
+	return "", alerts.Alert{}
+}
+
+func noAlert(t *testing.T, ch <-chan *redis.Message) {
+	t.Helper()
+	select {
+	case m := <-ch:
+		t.Fatalf("unexpected alert on %s: %s", m.Channel, m.Payload)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// A command with an image shows it on every alerts overlay of the streamer
+// (ADR-0080), alongside the chat reply.
+func TestChatCommand_ImageShowsOnAlertsOverlays(t *testing.T) {
+	c, store, out := newCmdTest(t, true, models.ChatCommand{Kind: models.TriggerCommand, Trigger: "!hype",
+		Response: "HYPE {user}", ImageURL: "https://img.example.com/hype.gif"})
+	a1, a2 := uuid.New(), uuid.New()
+	store.alertsOverlays = []uuid.UUID{a1, a2}
+	ch := subscribeAlerts(t, c, a1, a2)
+
+	c.handle(context.Background(), job("1", "twitch", "!hype"))
+	require.Len(t, out.sent, 1)
+	got := map[string]alerts.Alert{}
+	for range 2 {
+		channel, a := nextAlert(t, ch)
+		got[channel] = a
+	}
+	a := got["overlay:"+a1.String()+":alerts"]
+	assert.Equal(t, a1.String(), a.OverlayID)
+	assert.Equal(t, alerts.ChatCommandEvent, a.EventType)
+	assert.Equal(t, "twitch", a.Platform)
+	assert.Equal(t, "Bob", a.User.Name)
+	assert.Equal(t, "HYPE Bob", a.Message)
+	assert.Equal(t, "https://img.example.com/hype.gif", a.ImageURL)
+	require.NotNil(t, a.EventData)
+	require.NotNil(t, a.EventData.Value)
+	assert.Equal(t, "!hype", a.EventData.Value.DisplayText)
+	assert.Equal(t, float64(1), a.EventData.Value.Amount)
+	assert.Contains(t, got, "overlay:"+a2.String()+":alerts")
+}
+
+// An image fires from any chat in the streamer's overlays, like a clip: TikTok has
+// no send path and the channel is not the streamer's, but the image still shows.
+func TestChatCommand_ImageFromAnyChat(t *testing.T) {
+	c, store, out := newCmdTest(t, false, models.ChatCommand{Kind: models.TriggerKeyword, Trigger: "hype",
+		ImageURL: "https://img.example.com/hype.gif"})
+	overlay := uuid.New()
+	store.alertsOverlays = []uuid.UUID{overlay}
+	ch := subscribeAlerts(t, c, overlay)
+
+	c.handle(context.Background(), job("1", "tiktok", "so much hype"))
+	assert.Empty(t, out.sent)
+	_, a := nextAlert(t, ch)
+	assert.Equal(t, "so much hype", a.Message, "without a reply, the chatter's text")
+	assert.Equal(t, "tiktok", a.Platform)
+}
+
+func TestChatCommand_InvalidImageShowsNothing(t *testing.T) {
+	c, store, _ := newCmdTest(t, true, models.ChatCommand{Kind: models.TriggerCommand, Trigger: "!img",
+		ImageURL: "http://img.example.com/plain-http.gif"})
+	overlay := uuid.New()
+	store.alertsOverlays = []uuid.UUID{overlay}
+	ch := subscribeAlerts(t, c, overlay)
+
+	c.handle(context.Background(), job("1", "twitch", "!img"))
+	noAlert(t, ch)
 }

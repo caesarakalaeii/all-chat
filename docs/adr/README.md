@@ -865,6 +865,15 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0080: Chat command urlfetch and images, with a guarded outbound HTTP client
+
+**Status**: Accepted (2026-10-22)
+**Problem**: Streamers want Nightbot's `$(urlfetch)` and commands that put an image on stream, but a server-side fetch of a user-chosen URL is SSRF in a cluster whose egress is open, and Twitch/Kick/YouTube chats only take text.
+**Decision**: Fetch on the server through new `shared/safehttp` (dial-time refusal of every non-public IP, no proxy, ≤3 redirects); `{urlfetch}` is https on port 443 only, ≤3 per reply, 3 s, 32 KB, with variables query-escaped and bodies inserted into `{js}` as string literals. Running JS/urlfetch in the overlay was rejected: overlay sockets are anonymous (anyone with the URL could post as the streamer) and streamer JS on allch.at is stored XSS. A command's `image_url` (migration 114, rendered without chatter input) fires a `chat_command` alert on the owner's alerts overlays. The Owncast listener now dials through safehttp too.
+**Impact**: Images need an alerts overlay (premium-gated today). Any new user-URL dial must use `shared/safehttp`. Works on beta once engagement-service, overlay-manager and api-gateway reach main; the Owncast fix ships with beta.
+**→ Read**: [0080-chat-command-urlfetch-and-images.md](./0080-chat-command-urlfetch-and-images.md)
+
+---
 
 ## How to Create a New ADR
 
@@ -997,7 +1006,7 @@ Create a new ADR if:
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
 **Last Updated**: 2026-10-21
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories, streamer chat commands)
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories, streamer chat commands, guarded outbound fetches for user URLs)
 
 **Most Referenced**:
 

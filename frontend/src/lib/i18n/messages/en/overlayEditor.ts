@@ -726,6 +726,7 @@ export const overlayEditor = {
     tiktok_subscription: 'TikTok subscription',
     power_up: 'Power-up',
     gift_received: 'Received gift membership',
+    chat_command: 'Chat command',
   },
   // Injecting a fake chat message so a streamer can see their overlay react.
   testing: {

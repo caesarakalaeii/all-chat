@@ -48,13 +48,14 @@ type chatCommandStore interface {
 // authenticated streamer; there is no overlay in the path.
 type ChatCommands struct {
 	store    chatCommandStore
-	onChange func() // resyncs chatcmd:channels after a write
+	onChange func()       // resyncs chatcmd:channels after a write
+	fetch    *http.Client // {urlfetch} in previews
 	log      *zap.Logger
 }
 
 // NewChatCommands creates the handler. onChange runs after every successful write.
 func NewChatCommands(store chatCommandStore, onChange func(), log *zap.Logger) *ChatCommands {
-	return &ChatCommands{store: store, onChange: onChange, log: log}
+	return &ChatCommands{store: store, onChange: onChange, fetch: chatcmd.FetchClient(), log: log}
 }
 
 type chatCommandBody struct {
@@ -62,6 +63,7 @@ type chatCommandBody struct {
 	Trigger         string `json:"trigger"`
 	Response        string `json:"response"`
 	CreateClip      bool   `json:"create_clip"`
+	ImageURL        string `json:"image_url"`
 	MinRole         string `json:"min_role"`
 	CooldownSeconds int    `json:"cooldown_seconds"`
 	Enabled         *bool  `json:"enabled"`
@@ -71,6 +73,7 @@ type chatCommandBody struct {
 // The DB checks the same bounds; this turns them into a readable 400.
 func (b chatCommandBody) command(userID uuid.UUID) (models.ChatCommand, string) {
 	trigger := strings.TrimSpace(b.Trigger)
+	image := strings.TrimSpace(b.ImageURL)
 	switch {
 	case b.Kind != models.TriggerCommand && b.Kind != models.TriggerKeyword:
 		return models.ChatCommand{}, "kind must be command or keyword"
@@ -82,8 +85,10 @@ func (b chatCommandBody) command(userID uuid.UUID) (models.ChatCommand, string) 
 		return models.ChatCommand{}, "a keyword must be at least 2 characters"
 	case len(b.Response) > 2000:
 		return models.ChatCommand{}, "response must be at most 2000 characters"
-	case strings.TrimSpace(b.Response) == "" && !b.CreateClip:
-		return models.ChatCommand{}, "a command needs a response, a clip, or both"
+	case len(image) > 1000:
+		return models.ChatCommand{}, "image must be at most 1000 characters"
+	case strings.TrimSpace(b.Response) == "" && !b.CreateClip && image == "":
+		return models.ChatCommand{}, "a command needs a response, a clip or an image"
 	case b.CooldownSeconds < 0 || b.CooldownSeconds > 86400:
 		return models.ChatCommand{}, "cooldown must be between 0 and 86400 seconds"
 	}
@@ -92,7 +97,7 @@ func (b chatCommandBody) command(userID uuid.UUID) (models.ChatCommand, string) 
 	}
 	enabled := b.Enabled == nil || *b.Enabled
 	return models.ChatCommand{UserID: userID, Kind: b.Kind, Trigger: trigger, Response: b.Response,
-		CreateClip: b.CreateClip, MinRole: b.MinRole, CooldownSeconds: b.CooldownSeconds, Enabled: enabled}, ""
+		CreateClip: b.CreateClip, ImageURL: image, MinRole: b.MinRole, CooldownSeconds: b.CooldownSeconds, Enabled: enabled}, ""
 }
 
 func streamerID(c *gin.Context) (uuid.UUID, bool) {
@@ -201,35 +206,41 @@ func (h *ChatCommands) Delete(c *gin.Context) {
 
 type previewBody struct {
 	Response   string `json:"response"`
+	Image      string `json:"image"`
 	Input      string `json:"input"` // what the viewer typed after the command
 	MinRole    string `json:"min_role"`
 	CreateClip bool   `json:"create_clip"`
 }
 
-// Preview renders a response template against sample chat input, returning the line
-// chat would see plus any {js} errors, so the streamer can debug a template without
-// firing it in their chat.
+// Preview renders a response and image template against sample chat input, returning
+// the line chat would see, the image the alerts overlay would show, and any {js},
+// {urlfetch} or image errors, so the streamer can debug a template without firing it
+// in their chat. {urlfetch} really fetches, bounded like a fired command and by the
+// route's per-user rate limit.
 func (h *ChatCommands) Preview(c *gin.Context) {
 	if _, ok := streamerID(c); !ok {
 		return
 	}
 	var b previewBody
-	if err := c.ShouldBindJSON(&b); err != nil || len(b.Response) > 2000 || len(b.Input) > 500 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "response (max 2000) and input (max 500) are required"})
+	if err := c.ShouldBindJSON(&b); err != nil || len(b.Response) > 2000 || len(b.Image) > 1000 || len(b.Input) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "response (max 2000), image (max 1000) and input (max 500) are required"})
 		return
 	}
 	role, _ := chatcmd.ParseRole(b.MinRole)
 	input := strings.TrimSpace(b.Input)
 	vars := chatcmd.Vars{User: "ExampleViewer", Args: strings.Fields(input), Query: input,
-		Platform: "twitch", Channel: "yourchannel", Count: 1, Role: role.String()}
+		Platform: "twitch", Channel: "yourchannel", Count: 1, Role: role.String(),
+		Fetch: chatcmd.HTTPFetch(c.Request.Context(), h.fetch)}
 	if b.CreateClip {
 		vars.Clip = "https://clips.twitch.tv/ExampleClip"
 	}
 	out, errs := chatcmd.Render(b.Response, vars)
+	image, imgErrs := chatcmd.ImageURL(b.Image, vars)
+	errs = append(errs, imgErrs...)
 	if errs == nil {
 		errs = []string{}
 	}
-	c.JSON(http.StatusOK, gin.H{"output": chatcmd.Line(out), "errors": errs})
+	c.JSON(http.StatusOK, gin.H{"output": chatcmd.Line(out), "image": image, "errors": errs})
 }
 
 func (h *ChatCommands) bind(c *gin.Context, userID uuid.UUID) (models.ChatCommand, bool) {
