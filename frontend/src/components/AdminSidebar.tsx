@@ -98,7 +98,6 @@ export const ADMIN_LINKS: AdminLink[] = [
   { href: '/admin/localization', messageStem: 'localization', icon: Languages },
 ]
 
-
 /**
  * The rail entries that are not the dashboard itself, in rail order. The grid on
  * /admin renders these; deriving it from ADMIN_LINKS rather than repeating the

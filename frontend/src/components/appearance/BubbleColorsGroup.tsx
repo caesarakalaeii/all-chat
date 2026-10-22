@@ -131,14 +131,14 @@ export function BubbleColorsGroup({
             <h3 className="text-sm font-medium text-text">
               {t('overlayEditor.bubbleColors.userColorHeading')}
             </h3>
-            <p className="text-xs text-text-dim">
-              {t('overlayEditor.bubbleColors.userColorBody')}
-            </p>
+            <p className="text-xs text-text-dim">{t('overlayEditor.bubbleColors.userColorBody')}</p>
           </div>
           <ToggleSwitch
             label={t('overlayEditor.bubbleColors.userColorToggle')}
-            checked={visualSettings.bubbleColorFromUser === 'background' ||
-              visualSettings.bubbleColorFromUser === 'border'}
+            checked={
+              visualSettings.bubbleColorFromUser === 'background' ||
+              visualSettings.bubbleColorFromUser === 'border'
+            }
             onChange={(checked) =>
               onChange({ bubbleColorFromUser: checked ? 'background' : undefined })
             }

@@ -220,7 +220,7 @@ export default function SourcesPage() {
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 rounded-lg bg-twitch/20 p-2">
+            <div className="shrink-0 rounded-lg bg-twitch/20 p-2">
               <svg
                 aria-hidden="true"
                 className="h-5 w-5 text-twitch"
@@ -240,7 +240,7 @@ export default function SourcesPage() {
 
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 rounded-lg bg-youtube/20 p-2">
+            <div className="shrink-0 rounded-lg bg-youtube/20 p-2">
               <svg
                 aria-hidden="true"
                 className="h-5 w-5 text-youtube"
@@ -259,7 +259,7 @@ export default function SourcesPage() {
 
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 rounded-lg bg-kick/20 p-2">
+            <div className="shrink-0 rounded-lg bg-kick/20 p-2">
               <svg
                 aria-hidden="true"
                 className="h-5 w-5 text-kick"
@@ -282,7 +282,7 @@ export default function SourcesPage() {
 
         <Card className="p-4">
           <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 rounded-lg bg-tiktok/20 p-2">
+            <div className="shrink-0 rounded-lg bg-tiktok/20 p-2">
               <svg
                 aria-hidden="true"
                 className="h-5 w-5 text-tiktok"

@@ -232,7 +232,9 @@ describe('toModActionEntry', () => {
   // action must reach the log as kind 'clear' (not the generic 'action'
   // fallback), or the pair never matches and one clear renders two rows.
   it('maps a clear to the clear kind', () => {
-    expect(toModActionEntry({ action: 'clear', moderator_login: 'modperson' }, 'live', 1)).toMatchObject({
+    expect(
+      toModActionEntry({ action: 'clear', moderator_login: 'modperson' }, 'live', 1)
+    ).toMatchObject({
       kind: 'clear',
       action: 'clear',
       moderator: 'modperson',

@@ -62,10 +62,7 @@ import {
 import { getBundledTheme } from '@/lib/theme-marketplace/bundled-themes'
 import { rewriteThemeFontImports } from '@/lib/theme-marketplace/font-proxy'
 import { wrapThemeCss } from '@/lib/theme-marketplace/wrap-theme-css'
-import {
-  overlayContainerStyle,
-  userBubbleStyle,
-} from '@/lib/utils/visual-inline-styles'
+import { overlayContainerStyle, userBubbleStyle } from '@/lib/utils/visual-inline-styles'
 import { LegacyFontSizeStyle } from '@/components/overlay/LegacyFontSizeStyle'
 import { PronounPill } from '@/components/overlay/PronounPill'
 import { AllChatBadge } from '@/components/AllChatBadge'
@@ -219,7 +216,16 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
       // Instagram mark: camera outline (functional glyph, no brand path).
       return (
         <svg viewBox="0 0 24 24" className={iconClass}>
-          <rect x="3.5" y="3.5" width="17" height="17" rx="5" fill="none" stroke="#ED6FA4" strokeWidth="2" />
+          <rect
+            x="3.5"
+            y="3.5"
+            width="17"
+            height="17"
+            rx="5"
+            fill="none"
+            stroke="#ED6FA4"
+            strokeWidth="2"
+          />
           <circle cx="12" cy="12" r="4" fill="none" stroke="#ED6FA4" strokeWidth="2" />
           <circle cx="17.2" cy="6.8" r="1.2" fill="#ED6FA4" />
         </svg>
@@ -369,7 +375,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     if (ttsFallbackToastShownRef.current) return
     ttsFallbackToastShownRef.current = true
     toastManager.add({ title: t('common.toast.elevenLabsFallback') })
-  }, [])
+  }, [t])
 
   const wsClientRef = useRef<WebSocketClient | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -473,8 +479,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       if (event.data?.type === 'CUSTOM_CSS_UPDATE') {
         const theme = wrapThemeCss(
           rewriteThemeFontImports(
-            typeof event.data.themeCss === 'string' ? event.data.themeCss : '',
-          ),
+            typeof event.data.themeCss === 'string' ? event.data.themeCss : ''
+          )
         )
         const custom = typeof event.data.customCss === 'string' ? event.data.customCss : ''
         setThemeCss(theme)
@@ -557,8 +563,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
     return () => {
       window.removeEventListener('message', handleMessage)
     }
-    // handleTTSFallback is a useCallback with no dependencies, so it is stable for
-    // the lifetime of this component and listing it keeps the effect mount-only.
+    // handleTTSFallback depends only on `t`, which keeps its identity for the
+    // life of the page, so listing it keeps the effect mount-only.
     // That matters: re-running it would re-post EMBED_READY and make the editor
     // replay its whole settings handshake.
   }, [handleTTSFallback])
@@ -614,7 +620,9 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
         setVisualSettingsCss(vcCss)
         setContainerStyle(overlayContainerStyle(vs))
         setBubblePalette(resolveBubblePalette(vs))
-        setBubbleColorFromUser(isBubbleColorFromUser(vs.bubbleColorFromUser) ? vs.bubbleColorFromUser : 'none')
+        setBubbleColorFromUser(
+          isBubbleColorFromUser(vs.bubbleColorFromUser) ? vs.bubbleColorFromUser : 'none'
+        )
         if (typeof vs.bubbleUserColorOpacity === 'string') {
           setBubbleUserColorOpacity(vs.bubbleUserColorOpacity)
         }
@@ -946,7 +954,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                         : bubbleSlot(bubbleSlots, message.id, bubblePalette.length),
                       // Marks the row for the by-username bubble rule; the
                       // colour rides in the style below.
-                      'data-user-bubble': isEvent || bubbleColorFromUser === 'none' ? undefined : '',
+                      'data-user-bubble':
+                        isEvent || bubbleColorFromUser === 'none' ? undefined : '',
                     }}
                     className={
                       isEvent
@@ -978,7 +987,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                   >
                     <div className="flex items-start gap-3">
                       {/* Avatar */}
-                      <div className="flex-shrink-0" style={{ overflow: 'visible' }}>
+                      <div className="shrink-0" style={{ overflow: 'visible' }}>
                         <UserAvatar
                           avatarUrl={message.user.avatar_url}
                           frameUrl={message.user.avatar_frame_url}
@@ -1171,7 +1180,7 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                             )}
                         </div>
                         {/* Message Text or Event Content */}
-                        <div className="break-words text-white">
+                        <div className="wrap-break-word text-white">
                           {message.event
                             ? renderEventContent(message)
                             : renderMessageContent(message)}

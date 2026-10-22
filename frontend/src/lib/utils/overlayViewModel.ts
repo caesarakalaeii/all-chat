@@ -323,7 +323,12 @@ export function mergeAutoModResolution<T extends ModEntryData>(log: T[], entry: 
 const PAIR_FOLD_WINDOW_MS = 120_000
 
 export function mergeDeletionPair<T extends ModEntryData>(log: T[], entry: T): T[] {
-  if (entry.kind !== 'delete' && entry.kind !== 'timeout' && entry.kind !== 'ban' && entry.kind !== 'clear') {
+  if (
+    entry.kind !== 'delete' &&
+    entry.kind !== 'timeout' &&
+    entry.kind !== 'ban' &&
+    entry.kind !== 'clear'
+  ) {
     return [...log, entry]
   }
   // The pair's join key: the native message id for a delete, the moderated

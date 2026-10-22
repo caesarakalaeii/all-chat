@@ -245,7 +245,7 @@ export default function ThemeMarketplaceModal({
             >
               <div className="flex items-start gap-3">
                 <svg
-                  className="h-6 w-6 flex-shrink-0 text-yellow-500"
+                  className="h-6 w-6 shrink-0 text-yellow-500"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
