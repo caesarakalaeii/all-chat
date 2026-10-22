@@ -267,13 +267,16 @@ func main() {
 	// Chat commands editor (ADR-0079). Account-level, so there is no overlay in the path:
 	// RequireDeviceTokenOverlay("id") therefore refuses every paired device (a Stream Deck
 	// has no business editing commands) while a scoped PAT and a browser session pass.
-	// Writes are gated by GateChatCommands (seeded open); delete never is.
+	// Writes are gated by GateChatCommands on both dimensions: early access (seeded on, so
+	// beta testers and ambassadors only until it graduates) and premium (seeded off);
+	// delete never is.
 	cmdH := handler.NewChatCommands(repo, channelSync.Trigger, log)
+	requireChatCommandsEarlyAccess := middleware.RequireEarlyAccess(dbPool, gateCache, featuregates.GateChatCommands, log)
 	requireChatCommands := middleware.RequirePremium(dbPool, gateCache, featuregates.GateChatCommands, log)
 	auth.GET("/chat-commands", requireDeviceOverlay, cmdH.List)
-	auth.POST("/chat-commands", requireEngagementScope, requireDeviceOverlay, requireChatCommands, cmdH.Create)
+	auth.POST("/chat-commands", requireEngagementScope, requireDeviceOverlay, requireChatCommandsEarlyAccess, requireChatCommands, cmdH.Create)
 	auth.POST("/chat-commands/preview", requireDeviceOverlay, cmdH.Preview)
-	auth.PUT("/chat-commands/:cid", requireEngagementScope, requireDeviceOverlay, requireChatCommands, cmdH.Update)
+	auth.PUT("/chat-commands/:cid", requireEngagementScope, requireDeviceOverlay, requireChatCommandsEarlyAccess, requireChatCommands, cmdH.Update)
 	auth.DELETE("/chat-commands/:cid", requireEngagementScope, requireDeviceOverlay, cmdH.Delete)
 
 	// Viewer participation (web page / extension).

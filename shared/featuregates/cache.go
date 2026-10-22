@@ -151,10 +151,12 @@ const (
 	GateListOverlay = "list_overlay"
 
 	// GateChatCommands gates creating and editing chat commands and keyword triggers
-	// (ADR-0079), mounted by engagement-service on POST/PUT /chat-commands. Seeded
-	// is_premium=FALSE (migration 113): the feature ships open, and the one paid part,
-	// replying in YouTube chat (it spends Data API quota), is checked per send on the
-	// owner's premium status, independent of this gate. Deleting is never gated.
+	// (ADR-0079), mounted by engagement-service on POST/PUT /chat-commands through both
+	// RequireEarlyAccess and RequirePremium. Seeded early_access=TRUE, is_premium=FALSE
+	// (migration 113): beta testers and ambassadors first, free; flip early_access off
+	// to open it to everyone. The one paid part, replying in YouTube chat (it spends
+	// Data API quota), is checked per send on the owner's premium status, independent
+	// of this gate. Deleting is never gated.
 	GateChatCommands = "chat_commands"
 )
 
