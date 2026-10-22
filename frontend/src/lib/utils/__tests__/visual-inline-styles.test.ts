@@ -17,11 +17,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import {
-  hexToRgba,
-  overlayContainerStyle,
-  userBubbleStyle,
-} from '../visual-inline-styles'
+import { hexToRgba, overlayContainerStyle, userBubbleStyle } from '../visual-inline-styles'
 import type { UserInfo } from '@/lib/types/message'
 
 /** Only the colour fields matter here; the rest of UserInfo is payload. */

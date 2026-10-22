@@ -144,7 +144,7 @@ export default function ThemePreview({
             >
               <div className="flex items-start gap-3">
                 {/* Avatar */}
-                <div className="flex-shrink-0">
+                <div className="shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={msg.user.avatar_url}
@@ -208,7 +208,7 @@ export default function ThemePreview({
                   {/* Message text — or the shared event renderer, exactly as the
                       live overlay nests it (inside `.break-words`), so an event
                       previews with the theme's own message colour and typography. */}
-                  <div className="break-words text-white" style={{ fontSize: '16px' }}>
+                  <div className="wrap-break-word text-white" style={{ fontSize: '16px' }}>
                     {msg.event ? <EventContent message={toChatMessage(msg)} /> : msg.message.text}
                   </div>
 

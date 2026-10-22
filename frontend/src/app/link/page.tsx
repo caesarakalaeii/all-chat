@@ -303,7 +303,7 @@ function ApproveForm({
               {overlays.map((overlay) => (
                 <label
                   key={overlay.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-border px-4 py-3 text-sm text-text has-[:focus-visible]:border-twitch"
+                  className="flex cursor-pointer items-center gap-3 rounded-lg border border-border px-4 py-3 text-sm text-text has-focus-visible:border-twitch"
                 >
                   <input
                     type="radio"

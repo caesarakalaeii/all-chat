@@ -174,7 +174,6 @@ export interface VisualSettings {
   pronounPosition?: 'before' | 'after'
   pronounColor?: string
 
-
   // Sizing
   avatarSize?: string // --chat-avatar-size
   badgeSize?: string // --chat-badge-size

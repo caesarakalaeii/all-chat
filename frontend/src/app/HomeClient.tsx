@@ -114,14 +114,17 @@ export default function HomeClient({ initialStats }: { initialStats: LandingStat
   // All-time counter, ticking. The hero total and the numbers row share this
   // state, so both stay in lockstep; the tick is JS motion, so it stops under
   // prefers-reduced-motion (the CSS drift marquee is gated globally already).
+  // Keyed on whether a count exists, not on the count, so each tick does not
+  // tear the interval down and start a new one.
+  const hasCount = totalCount > 0
   useEffect(() => {
-    if (reducedMotion || totalCount === 0) return
+    if (reducedMotion || !hasCount) return
     const timer = window.setInterval(
       () => setTotalCount((count) => count + 1 + Math.floor(Math.random() * 5)),
       1200
     )
     return () => window.clearInterval(timer)
-  }, [reducedMotion, totalCount === 0])
+  }, [reducedMotion, hasCount])
 
   const isLoggedIn = !!user
   const totalDisplay = formatNumber(totalCount)

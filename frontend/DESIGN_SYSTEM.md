@@ -274,7 +274,7 @@ chrome and follows this document.
 | Broken utilities | `npx vitest run --project unit src/__tests__/no-broken-tailwind-utilities.test.ts`               | Class names Tailwind v4 silently drops                                         |
 | Design rules     | `npx eslint .`                                                                                   | `gray-*`/`slate-*`, template `className`s, bare `focus:`                       |
 | Accessibility    | `npx eslint -c eslint.a11y.config.mjs --suppressions-location eslint.a11y.suppressions.json src` | New a11y violations (shrink-only ratchet)                                      |
-| Pixel baselines  | `npm run test:visual` (`.github/workflows/frontend-visual.yml` on every PR)                       | A chrome route rendering differently than its committed baseline               |
+| Pixel baselines  | `npm run test:visual` (`.github/workflows/frontend-visual.yml` on every PR)                      | A chrome route rendering differently than its committed baseline               |
 | Types            | `npx tsc --noEmit`                                                                               |                                                                                |
 | Format           | `npx prettier --check .`                                                                         | Also sorts Tailwind classes                                                    |
 

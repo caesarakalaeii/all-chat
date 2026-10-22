@@ -65,7 +65,12 @@ interface ProtectedRouteProps {
 // says the same thing in words, so not part of the catalog.
 const FORBIDDEN_GLYPH = '\u{1F6AB}'
 
-export function ProtectedRoute({ children, requireAdmin = false, requireBetaTester = false, fallback }: ProtectedRouteProps) {
+export function ProtectedRoute({
+  children,
+  requireAdmin = false,
+  requireBetaTester = false,
+  fallback,
+}: ProtectedRouteProps) {
   const t = useTranslations()
   const router = useRouter()
   const { user, loading, init } = useAuthStore()

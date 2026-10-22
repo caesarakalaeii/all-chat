@@ -242,7 +242,9 @@ export function useLaneWaves(
   // bases arrive as a prop; mirror into a ref so a stats refetch never
   // re-creates the GL context (effect deps stay [canvasRef, reducedMotion, pride]).
   const basesRef = useRef(bases)
-  basesRef.current = bases
+  useEffect(() => {
+    basesRef.current = bases
+  }, [bases])
 
   useEffect(() => {
     const canvas = canvasRef.current

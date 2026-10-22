@@ -150,7 +150,7 @@ export function TypographyGroup({
                     <Select.Item
                       key={weight}
                       value={weight}
-                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text hover:bg-surface-2 data-[highlighted]:bg-surface-2"
+                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-text hover:bg-surface-2 data-highlighted:bg-surface-2"
                     >
                       <Select.ItemIndicator className="w-4">
                         <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
