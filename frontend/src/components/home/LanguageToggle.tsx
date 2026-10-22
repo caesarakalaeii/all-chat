@@ -43,7 +43,10 @@ export function LanguageToggle() {
           key={code}
           type="button"
           lang={code}
-          aria-label={LOCALE_NATIVE_NAMES[code]}
+          // The visible label is the code, so the name must start with it (WCAG
+          // 2.5.3): a voice-control user says what they see. Not "English (en)":
+          // axe drops parentheticals before comparing.
+          aria-label={`${code}, ${LOCALE_NATIVE_NAMES[code]}`}
           aria-pressed={code === locale}
           onClick={() => void chooseLocale(code)}
         >
