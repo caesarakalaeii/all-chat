@@ -18,9 +18,11 @@ package featuregates
 
 import "testing"
 
-// The chat commands gate ships OPEN (ADR-0079): only YouTube replies are premium, and
-// that is a per-send check. A seed typo would leave the key unknown, which the cache
-// reads as premium, silently closing the feature.
+// The chat commands gate ships early access and free (ADR-0079): beta testers and
+// ambassadors first, and only YouTube replies are premium, as a per-send check. A seed
+// with early_access FALSE would open the feature to every user the moment the backend
+// reaches main; a key typo would leave it unknown, which the cache reads as closed and
+// the admin UI cannot flip.
 func TestChatCommandsGateSeed(t *testing.T) {
-	assertSeed(t, "113_chat_commands.sql", GateChatCommands, false)
+	assertSeed(t, "113_chat_commands.sql", GateChatCommands, false, true)
 }
