@@ -128,7 +128,7 @@ describe('ModeratorsPanel roster', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /delete messages/i }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/at least one action/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent('at least one action')
     expect(api.updateGrant).not.toHaveBeenCalled()
   })
 

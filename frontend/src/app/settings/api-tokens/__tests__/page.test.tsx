@@ -189,7 +189,7 @@ describe('Settings → API tokens page', () => {
 
     const row = (await screen.findByText('Living room deck')).closest('li')
     expect(row).not.toBeNull()
-    expect(row).toHaveTextContent(/Last used/)
+    expect(row).toHaveTextContent('Last used')
     expect(row).toHaveTextContent('chat:write')
     // Metadata only: no shape of a plaintext token anywhere on the page.
     expect(screen.queryByText(/allchat_pat_/)).not.toBeInTheDocument()
