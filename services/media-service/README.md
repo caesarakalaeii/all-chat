@@ -100,5 +100,5 @@ Handler-level tests run against in-memory mocks of the registry and object-store
 or Postgres needed:
 
 ```sh
-GOTOOLCHAIN=go1.26.9 go test ./...
+GOTOOLCHAIN=go1.26.10 go test ./...
 ```
