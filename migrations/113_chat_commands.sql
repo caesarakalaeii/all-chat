@@ -6,10 +6,12 @@
 --   reply with a rendered template (sent as the streamer) and/or create a Twitch
 --   clip. engagement-service owns the table.
 --
--- Also seeds the chat_commands feature gate (ADR-0008), OPEN (is_premium=FALSE):
---   only replies that spend YouTube Data API quota are premium, and that is a
---   per-send check on the owner, not this gate. The gate exists so the admin UI
---   can make the feature an upsell without a deploy.
+-- Also seeds the chat_commands feature gate (ADR-0008) as early access
+--   (early_access=TRUE, is_premium=FALSE): beta testers and ambassadors only
+--   until an admin flips early_access off. Only replies that spend YouTube Data
+--   API quota are premium, and that is a per-send check on the owner, not this
+--   gate. The premium dimension exists so the admin UI can make the feature an
+--   upsell without a deploy.
 --
 -- Idempotent throughout: the migration runner re-applies every migration on
 --   each pod start (CREATE ... IF NOT EXISTS, ON CONFLICT DO NOTHING).
@@ -43,7 +45,7 @@ INSERT INTO feature_gates (feature_key, is_premium, early_access, description)
 VALUES (
     'chat_commands',
     FALSE,
-    FALSE,
+    TRUE,
     'Create and edit chat commands and keyword triggers (replies, Twitch clips). Replies in YouTube chat always need premium because they spend YouTube API quota'
 )
 ON CONFLICT (feature_key) DO NOTHING;
