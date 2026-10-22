@@ -58,7 +58,7 @@ A modern Discord bot that monitors YouTube API quota usage and posts beautiful, 
 
 ## Technology Stack
 
-- **Runtime**: Node.js 20
+- **Runtime**: Node.js 22
 - **Discord Library**: discord.js v14 (modern, type-safe)
 - **Redis Client**: redis v4 (async/await, connection pooling)
 - **HTTP Client**: axios v1 (for YouTube Listener API)
@@ -174,7 +174,7 @@ Processes incoming Redis pub/sub messages.
 
 ### Size
 - **Installed**: ~15MB (node_modules)
-- **Docker Image**: ~150MB (Alpine + Node 20)
+- **Docker Image**: ~390MB uncompressed (Alpine + Node 22)
 - **Runtime Memory**: ~50-80MB
 
 ## Integration Points
