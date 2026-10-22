@@ -29,7 +29,7 @@ import (
 // with no host functions registered: no require, fetch, timers, file or network
 // access exist inside it. The limits bound what is left, CPU and memory.
 const (
-	jsBudget      = 100 * time.Millisecond // CPU wall time for ALL {js} blocks of one render
+	jsBudget      = 100 * time.Millisecond // eval time for ALL {js} blocks of one render
 	jsMemoryLimit = 16 << 20
 	jsStackLimit  = 256 << 10
 	jsErrorMarker = "[js error]"
@@ -38,13 +38,13 @@ const (
 // jsSession is one QuickJS VM shared by the {js} blocks of a single render, so a
 // variable set in one block is visible in the next. Never reused across renders.
 type jsSession struct {
-	vm       *quickjs.VM
-	err      error
-	deadline time.Time
+	vm   *quickjs.VM
+	err  error
+	left time.Duration // of jsBudget; only time inside Eval counts, not a {urlfetch}
 }
 
 func newJSSession(v Vars) *jsSession {
-	s := &jsSession{deadline: time.Now().Add(jsBudget)}
+	s := &jsSession{left: jsBudget}
 	vm, err := quickjs.NewVM()
 	if err != nil {
 		s.err = fmt.Errorf("start js engine: %w", err)
@@ -91,13 +91,14 @@ func (s *jsSession) eval(code string) (string, error) {
 }
 
 func (s *jsSession) run(code string) (any, error) {
-	left := time.Until(s.deadline)
-	if left <= 0 {
+	if s.left <= 0 {
 		return nil, errors.New("js time budget exhausted")
 	}
-	if err := s.vm.SetEvalTimeout(left); err != nil {
+	if err := s.vm.SetEvalTimeout(s.left); err != nil {
 		return nil, err
 	}
+	start := time.Now()
+	defer func() { s.left -= time.Since(start) }()
 	return s.vm.Eval(code, quickjs.EvalGlobal)
 }
 

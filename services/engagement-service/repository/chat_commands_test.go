@@ -154,3 +154,39 @@ func TestChatCommandsForChannel(t *testing.T) {
 	assert.False(t, st.TwitchCanClip)
 	assert.Nil(t, st.ConsentOverlayID, "the fan's overlay carries someone else's channel")
 }
+
+// A command may be image-only (migration 114, ADR-0080), and its image shows on the
+// owner's alerts overlays only: not on their chat overlays, not on anyone else's.
+func TestChatCommandImagesAndAlertsOverlays(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.New(pool)
+	ctx := context.Background()
+	owner := seedTwitchStreamer(t, pool, "ci"+uuid.NewString()[:8], nil, nil)
+	other := seedTwitchStreamer(t, pool, "co"+uuid.NewString()[:8], nil, nil)
+
+	cmd := newChatCmd(owner, models.TriggerCommand, "!hype")
+	cmd.Response, cmd.ImageURL = "", "https://img.example.com/hype.gif"
+	saved, err := repo.CreateChatCommand(ctx, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, cmd.ImageURL, saved.ImageURL)
+
+	saved.ImageURL = ""
+	_, err = repo.UpdateChatCommand(ctx, saved)
+	assert.Error(t, err, "a command with no reply, clip or image does nothing")
+
+	var alertsOverlay uuid.UUID
+	for _, o := range []struct {
+		user uuid.UUID
+		kind string
+	}{{owner, "alerts"}, {owner, "goal"}, {other, "alerts"}} {
+		var id uuid.UUID
+		require.NoError(t, pool.QueryRow(ctx, `INSERT INTO overlays (user_id, name, overlay_type, is_public_for_viewers)
+			VALUES ($1, 'x', $2, FALSE) RETURNING id`, o.user, o.kind).Scan(&id))
+		if o.user == owner && o.kind == "alerts" {
+			alertsOverlay = id
+		}
+	}
+	ids, err := repo.AlertsOverlays(ctx, owner)
+	require.NoError(t, err)
+	assert.Equal(t, []uuid.UUID{alertsOverlay}, ids)
+}
