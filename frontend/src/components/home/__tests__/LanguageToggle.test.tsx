@@ -33,13 +33,19 @@ afterEach(async () => {
 describe('LanguageToggle', () => {
   it('switches to German without a gate probe and remembers the choice', async () => {
     render(<LanguageToggle />)
-    expect(screen.getByRole('button', { name: 'English' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'en, English' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Deutsch' }))
+    fireEvent.click(screen.getByRole('button', { name: 'de, Deutsch' }))
 
     // The group label is itself catalog copy, so it proves the re-render too.
     expect(await screen.findByRole('group', { name: 'Sprache' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Deutsch' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'de, Deutsch' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
     expect(document.documentElement.lang).toBe('de')
     expect(localStorage.getItem('allchat_locale')).toBe('de')
   })
