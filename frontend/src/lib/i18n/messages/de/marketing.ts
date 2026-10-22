@@ -362,7 +362,7 @@ export const marketing: LocaleNamespace<'marketing'> = {
       'Zeig deine Top-Cheerer, -Verschenker oder -Super-Chatter der letzten 30 Tage auf dem Stream, aktualisiert bei jedem neuen.',
     chatCommandsTitle: 'Chat-Befehle',
     chatCommandsBody:
-      'Eigene !Befehle und Stichwörter für jeden Chat: antworte als du selbst, clippe deinen Twitch-Stream auf Zuruf und nutze Variablen oder JavaScript in Antworten. Antworten im YouTube-Chat sind Premium.',
+      'Eigene !Befehle und Stichwörter für jeden Chat: antworte als du selbst, clippe deinen Twitch-Stream auf Zuruf, zeige ein Bild auf deinem Alert-Overlay und nutze Variablen, Web-Abfragen oder JavaScript in Antworten. Antworten im YouTube-Chat sind Premium.',
     flairsTitle: 'Zuschauer-Flairs',
     flairsBody:
       'Hebe dich in jedem Chat, in dem du auftauchst, mit Premium-Kosmetik wie animierten Namensverläufen ab.',

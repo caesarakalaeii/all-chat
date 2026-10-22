@@ -21,7 +21,7 @@ import type { LocaleNamespace } from '../../translate'
 export const commands: LocaleNamespace<'commands'> = {
   heading: 'Chat-Befehle',
   intro:
-    'Beantworte den Chat automatisch und clippe auf Zuruf. Ein Befehl reagiert, wenn eine Nachricht mit seinem Auslöser beginnt, ein Stichwort, wenn der Auslöser irgendwo in der Nachricht steht. Antworten kommen von deinem eigenen Konto, in dem Chat, aus dem die Nachricht kam.',
+    'Beantworte den Chat automatisch, clippe auf Zuruf und zeige Bilder im Stream. Ein Befehl reagiert, wenn eine Nachricht mit seinem Auslöser beginnt, ein Stichwort, wenn der Auslöser irgendwo in der Nachricht steht. Antworten kommen von deinem eigenen Konto, in dem Chat, aus dem die Nachricht kam.',
   newCommand: 'Neuer Befehl',
   loading: 'Chat-Befehle werden geladen',
   loadFailed: 'Deine Chat-Befehle konnten nicht geladen werden.',
@@ -33,14 +33,16 @@ export const commands: LocaleNamespace<'commands'> = {
     clip: 'Clip auf Zuruf',
     dice: 'Würfelwurf',
     shoutout: 'Shoutout (Mods)',
+    dog: 'Zufälliger Hund',
   },
   list: {
     kindCommand: 'Befehl',
     kindKeyword: 'Stichwort',
     clips: 'Clippt',
+    image: 'Bild',
     cooldown: '{seconds} s Abklingzeit',
     uses: '{count}× benutzt',
-    noReply: 'Keine Antwort, nur Clip',
+    noReply: 'Keine Antwort im Chat',
     edit: 'Bearbeiten',
     editLabel: '{trigger} bearbeiten',
     delete: 'Löschen',
@@ -87,8 +89,13 @@ export const commands: LocaleNamespace<'commands'> = {
     triggerHintKeyword:
       'Ein Wort oder eine Phrase, zum Beispiel clip das. Wird überall in einer Nachricht erkannt.',
     responseLabel: 'Antwort',
-    responseHint: 'Leer lassen, um nur zu clippen. Klicke auf eine Variable, um sie einzufügen.',
+    responseHint:
+      'Leer lassen, um nur zu clippen oder ein Bild zu zeigen. Klicke auf eine Variable, um sie einzufügen.',
     insertVariable: '{token} einfügen',
+    imageLabel: 'Bild im Stream',
+    imageHint:
+      'Ein https-Link zu einem Bild oder GIF. Es erscheint auf deinen Alert-Overlays, sobald der Befehl auslöst, egal aus welchem Chat. Vorlagen funktionieren hier, aber was Zuschauer tippen, erreicht das Bild nie.',
+    imagePreviewAlt: 'Bildvorschau',
     clipLabel: 'Twitch-Clip erstellen',
     clipHint:
       'Clippt deinen Twitch-Livestream. Setze {token} in die Antwort, um den Link zu posten.',
@@ -109,8 +116,11 @@ export const commands: LocaleNamespace<'commands'> = {
     referenceHeading: 'Vorlagen-Referenz',
     jsHeading: 'JavaScript',
     jsBody:
-      'Schreibe Code in einen js-Block, um eine Antwort zu berechnen. Der Wert des letzten Ausdrucks wird eingefügt. Die Variablen user, touser, query, args, count, platform, channel, role und clip stehen bereit. Es gibt keinen Netzwerk- oder Dateizugriff, und jede Antwort bekommt 100 ms und 16 MB.',
+      'Schreibe Code in einen js-Block, um eine Antwort zu berechnen. Der Wert des letzten Ausdrucks wird eingefügt. Die Variablen user, touser, query, args, count, platform, channel, role und clip stehen bereit. Der Code selbst hat keinen Netzwerk- oder Dateizugriff, und jede Antwort bekommt 100 ms und 16 MB.',
     jsExample: 'Beispiel',
+    urlfetchHeading: 'Eine Webadresse abrufen',
+    urlfetchBody:
+      '{token} fügt den Text ein, mit dem eine Webadresse antwortet. In einem js-Block kommt er als String an, bereit für JSON.parse. Nur öffentliche https-Adressen funktionieren, höchstens 3 pro Antwort und je 3 Sekunden. Variablen in der Adresse werden maskiert, damit Zuschauer nicht ändern können, wohin sie zeigt.',
   },
   reference: {
     user: 'Name der Person, die den Befehl benutzt hat',
@@ -123,6 +133,7 @@ export const commands: LocaleNamespace<'commands'> = {
     time: 'Die Uhrzeit (24 h) in einer Zeitzone; ohne Angabe UTC',
     where: 'Plattform und Kanal, aus denen die Nachricht kam',
     clip: 'Link zum Clip, den dieser Befehl erstellt hat',
+    urlfetch: 'Der Text, mit dem eine Webadresse antwortet',
   },
   delete: {
     title: '{trigger} löschen?',

@@ -19,9 +19,10 @@
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * The chat commands editor (/commands, ADR-0079) against a stateful mock of the
- * engagement-service API: create a clip trigger from an example, see the reply
- * previewed, find it in the list, switch it off and delete it.
+ * The chat commands editor (/commands, ADR-0079, ADR-0080) against a stateful mock
+ * of the engagement-service API: create a clip trigger from an example, see the
+ * reply previewed, find it in the list, switch it off and delete it; create an
+ * image command and see its image previewed.
  *
  * The chat side (a message arriving, the reply and the clip) needs live platform
  * chats and accounts, so it is covered by the Go tests of message-processor and
@@ -36,6 +37,11 @@ const USER = {
   is_premium: false,
   onboarding_completed_at: '2026-01-02T00:00:00Z',
 }
+
+/** What the preview mock says the image template rendered to, served as a 1x1 PNG. */
+const DOG = 'https://images.dog.example/akita.png'
+const PIXEL =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=='
 
 const json = (body: unknown, status = 200) => ({
   status,
@@ -72,12 +78,15 @@ async function boot(page: Page) {
     )
   })
   await page.route('**/api/v1/engagement/chat-commands/preview', async (route) => {
-    const { response } = route.request().postDataJSON()
+    const { response, image } = route.request().postDataJSON()
     const output = String(response)
       .replace('{user}', 'ExampleViewer')
       .replace('{clip}', 'https://clips.twitch.tv/ExampleClip')
-    return route.fulfill(json({ output, errors: [] }))
+    return route.fulfill(json({ output, image: image ? DOG : '', errors: [] }))
   })
+  await page.route(DOG, (route) =>
+    route.fulfill({ contentType: 'image/png', body: Buffer.from(PIXEL, 'base64') })
+  )
   await page.route('**/api/v1/engagement/chat-commands/cmd-*', async (route) => {
     const req = route.request()
     const id = req.url().split('/').pop()
@@ -137,6 +146,24 @@ test('creates a clip trigger from an example, then switches it off and deletes i
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click()
   await expect(row).toHaveCount(0)
   expect(writes[writes.length - 1]?.method).toBe('DELETE')
+})
+
+test('creates an image command and previews the image it shows on stream', async ({ page }) => {
+  const { writes } = await boot(page)
+
+  await page.getByRole('button', { name: 'Random dog' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByLabel('Image on stream')).toHaveValue(/urlfetch https:\/\/dog\.ceo/)
+  await expect(dialog.getByRole('img', { name: 'Image preview' })).toHaveAttribute('src', DOG)
+  await expect(dialog.getByText('A dog for ExampleViewer!')).toBeVisible()
+  await dialog.getByRole('button', { name: 'Save' }).click()
+  await expect(dialog).toBeHidden()
+
+  expect(writes[0]?.body).toEqual(
+    expect.objectContaining({ trigger: '!dog', image_url: expect.stringContaining('urlfetch') })
+  )
+  const row = page.getByRole('listitem').filter({ hasText: '!dog' })
+  await expect(row.getByText('Image', { exact: true })).toBeVisible()
 })
 
 test('has no horizontal scroll at phone width, with the editor open', async ({ page }) => {

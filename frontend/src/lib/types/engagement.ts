@@ -137,6 +137,8 @@ export interface ChatCommandInput {
   trigger: string
   response: string
   create_clip: boolean
+  /** Template rendering to an https image shown on the alerts overlays (ADR-0080). */
+  image_url: string
   min_role: ChatCommandRole
   cooldown_seconds: number
   enabled: boolean
@@ -166,5 +168,7 @@ export interface ChatCommandList {
 
 export interface ChatCommandPreview {
   output: string
+  /** The rendered image URL; empty when there is none or it is not https. */
+  image: string
   errors: string[]
 }
