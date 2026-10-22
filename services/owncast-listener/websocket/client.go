@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/owncast-listener/metrics"
+	"github.com/caesar/all-chat/shared/safehttp"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
@@ -105,6 +106,14 @@ func NewClient(instanceURL, token string, handler MessageHandler, logger *zap.Lo
 	}
 }
 
+// dialer is gorilla's default dialer refusing non-public addresses: the instance URL
+// is user input and the cluster leaves egress open (ADR-0080).
+var dialer = &websocket.Dialer{
+	Proxy:            nil,
+	NetDialContext:   safehttp.DialContext,
+	HandshakeTimeout: websocket.DefaultDialer.HandshakeTimeout,
+}
+
 // buildWSURL derives the chat websocket URL and auth query parameter from the
 // instance base URL and a registered access token. Owncast serves the socket
 // at /ws and requires accessToken as a query param (services/chat/server.go
@@ -126,7 +135,7 @@ func (c *Client) Connect(token string) error {
 	c.token = token
 	c.wsURL = buildWSURL(c.instanceURL, token)
 
-	conn, _, err := websocket.DefaultDialer.Dial(c.wsURL, nil)
+	conn, _, err := dialer.Dial(c.wsURL, nil)
 	if err != nil {
 		return err
 	}
