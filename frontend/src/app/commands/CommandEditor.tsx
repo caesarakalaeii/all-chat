@@ -56,9 +56,11 @@ const VARIABLES = [
   { token: '{time Europe/Berlin}', ref: 'time' },
   { token: '{platform}', ref: 'where' },
   { token: '{clip}', ref: 'clip' },
+  { token: '{urlfetch https://}', ref: 'urlfetch' },
 ] as const
 
 const JS_EXAMPLE = '{js user.length > 10 ? "long name!" : "hi " + user}'
+const URLFETCH_EXAMPLE = '{js JSON.parse({urlfetch https://api.example.com/data}).value}'
 
 const PREVIEW_DEBOUNCE_MS = 400
 
@@ -83,20 +85,22 @@ export function CommandEditor({
   const [sample, setSample] = useState('')
   const [preview, setPreview] = useState<ChatCommandPreview | null>(null)
   const [previewFailed, setPreviewFailed] = useState(false)
-  // An emptied reply shows the placeholder, not the last render of the old text.
-  const shown = form.response.trim() === '' ? null : preview
+  const empty = form.response.trim() === '' && form.image_url.trim() === ''
+  // An emptied form shows the placeholder, not the last render of the old text.
+  const shown = empty ? null : preview
 
   const set = <K extends keyof ChatCommandInput>(key: K, value: ChatCommandInput[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
 
   // Render the reply server-side (the same engine chat uses) a moment after typing stops.
   useEffect(() => {
-    if (form.response.trim() === '') return
+    if (empty) return
     let stale = false
     const timer = setTimeout(() => {
       engagementApi
         .previewChatCommand({
           response: form.response,
+          image: form.image_url,
           input: sample,
           min_role: form.min_role,
           create_clip: form.create_clip,
@@ -112,7 +116,7 @@ export function CommandEditor({
       stale = true
       clearTimeout(timer)
     }
-  }, [form.response, form.min_role, form.create_clip, sample])
+  }, [empty, form.response, form.image_url, form.min_role, form.create_clip, sample])
 
   function insert(token: string) {
     const el = responseRef.current
@@ -238,6 +242,24 @@ export function CommandEditor({
             </div>
           </div>
 
+          <div className="flex flex-col gap-1">
+            <label htmlFor={`${ids}-image`} className="text-sm font-medium text-text">
+              {t('commands.editor.imageLabel')}
+            </label>
+            <Input
+              id={`${ids}-image`}
+              className="font-mono"
+              maxLength={1000}
+              placeholder="https://"
+              value={form.image_url}
+              aria-describedby={`${ids}-image-hint`}
+              onChange={(e) => set('image_url', e.target.value)}
+            />
+            <p id={`${ids}-image-hint`} className="text-xs text-text-sub">
+              {t('commands.editor.imageHint')}
+            </p>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label htmlFor={`${ids}-role`} className="text-sm font-medium text-text">
@@ -328,6 +350,14 @@ export function CommandEditor({
                     <span className="text-text-dim">{t('commands.editor.previewEmpty')}</span>
                   )}
             </output>
+            {shown?.image && (
+              // eslint-disable-next-line @next/next/no-img-element -- any https host the streamer picks
+              <img
+                src={shown.image}
+                alt={t('commands.editor.imagePreviewAlt')}
+                className="max-h-32 max-w-full rounded-md border border-border"
+              />
+            )}
             {shown && shown.errors.length > 0 && (
               <ul className="space-y-1 text-xs text-destructive">
                 {shown.errors.map((e, i) => (
@@ -356,6 +386,14 @@ export function CommandEditor({
             <p className="mt-2 flex flex-wrap gap-2 text-text-sub">
               <span>{t('commands.editor.jsExample')}</span>
               <code className="font-mono break-all text-text">{JS_EXAMPLE}</code>
+            </p>
+            <h4 className="mt-4 font-semibold text-text">{t('commands.editor.urlfetchHeading')}</h4>
+            <p className="mt-1 text-text-sub">
+              {t('commands.editor.urlfetchBody', { token: '{urlfetch https://…}' })}
+            </p>
+            <p className="mt-2 flex flex-wrap gap-2 text-text-sub">
+              <span>{t('commands.editor.jsExample')}</span>
+              <code className="font-mono break-all text-text">{URLFETCH_EXAMPLE}</code>
             </p>
           </details>
 

@@ -155,9 +155,10 @@ export const engagementApi = {
     return apiClient.delete(`/api/v1/engagement/chat-commands/${id}`)
   },
 
-  /** Renders a response template against sample input, without posting anything. */
+  /** Renders a response and image template against sample input, without posting anything. */
   previewChatCommand(body: {
     response: string
+    image: string
     input: string
     min_role: string
     create_clip: boolean

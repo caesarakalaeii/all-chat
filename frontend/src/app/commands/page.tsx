@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Check, CircleAlert, Plus, Scissors } from 'lucide-react'
+import { Check, CircleAlert, ImageIcon, Plus, Scissors } from 'lucide-react'
 import { AppNav } from '@/components/AppNav'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AlertDialog } from '@/components/ui/alert-dialog'
@@ -41,13 +41,17 @@ const BLANK: ChatCommandInput = {
   trigger: '!',
   response: '',
   create_clip: false,
+  image_url: '',
   min_role: 'everyone',
   cooldown_seconds: 5,
   enabled: true,
 }
 
 /** Starting points, in the spirit of the classic chat-bot defaults. */
-const EXAMPLES: { key: 'hello' | 'clip' | 'dice' | 'shoutout'; command: ChatCommandInput }[] = [
+const EXAMPLES: {
+  key: 'hello' | 'clip' | 'dice' | 'shoutout' | 'dog'
+  command: ChatCommandInput
+}[] = [
   { key: 'hello', command: { ...BLANK, trigger: '!hello', response: 'Hello {user}, welcome in!' } },
   {
     key: 'clip',
@@ -71,11 +75,21 @@ const EXAMPLES: { key: 'hello' | 'clip' | 'dice' | 'shoutout'; command: ChatComm
       cooldown_seconds: 10,
     },
   },
+  {
+    key: 'dog',
+    command: {
+      ...BLANK,
+      trigger: '!dog',
+      response: 'A dog for {user}!',
+      image_url: '{js JSON.parse({urlfetch https://dog.ceo/api/breeds/image/random}).message}',
+      cooldown_seconds: 30,
+    },
+  },
 ]
 
 function inputOf(c: ChatCommand): ChatCommandInput {
-  const { kind, trigger, response, create_clip, min_role, cooldown_seconds, enabled } = c
-  return { kind, trigger, response, create_clip, min_role, cooldown_seconds, enabled }
+  const { kind, trigger, response, create_clip, image_url, min_role, cooldown_seconds, enabled } = c
+  return { kind, trigger, response, create_clip, image_url, min_role, cooldown_seconds, enabled }
 }
 
 export default function CommandsPage() {
@@ -289,6 +303,12 @@ function CommandRow({
               <Badge size="sm" className="gap-1">
                 <Scissors className="size-3" aria-hidden="true" />
                 {t('commands.list.clips')}
+              </Badge>
+            )}
+            {c.image_url && (
+              <Badge size="sm" className="gap-1">
+                <ImageIcon className="size-3" aria-hidden="true" />
+                {t('commands.list.image')}
               </Badge>
             )}
           </div>

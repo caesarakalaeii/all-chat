@@ -26,7 +26,7 @@
 export const commands = {
   heading: 'Chat commands',
   intro:
-    'Answer chat automatically and clip on cue. A command fires when a message starts with its trigger, a keyword when the trigger appears anywhere in a message. Replies are posted from your own account, in the chat the message came from.',
+    'Answer chat automatically, clip on cue and put images on stream. A command fires when a message starts with its trigger, a keyword when the trigger appears anywhere in a message. Replies are posted from your own account, in the chat the message came from.',
   newCommand: 'New command',
   loading: 'Loading chat commands',
   loadFailed: 'Could not load your chat commands.',
@@ -38,14 +38,16 @@ export const commands = {
     clip: 'Clip on cue',
     dice: 'Dice roll',
     shoutout: 'Shoutout (mods)',
+    dog: 'Random dog',
   },
   list: {
     kindCommand: 'Command',
     kindKeyword: 'Keyword',
     clips: 'Clips',
+    image: 'Image',
     cooldown: '{seconds}s cooldown',
     uses: '{count} uses',
-    noReply: 'No reply, clip only',
+    noReply: 'No reply in chat',
     edit: 'Edit',
     editLabel: 'Edit {trigger}',
     delete: 'Delete',
@@ -89,8 +91,12 @@ export const commands = {
     triggerHintCommand: 'One word, for example !hello. Upper and lower case do not matter.',
     triggerHintKeyword: 'A word or phrase, for example clip that. Matched anywhere in a message.',
     responseLabel: 'Reply',
-    responseHint: 'Leave empty to only clip. Click a variable to insert it.',
+    responseHint: 'Leave empty to only clip or show an image. Click a variable to insert it.',
     insertVariable: 'Insert {token}',
+    imageLabel: 'Image on stream',
+    imageHint:
+      'An https link to a picture or GIF, shown on your alerts overlays whenever the command fires, from any chat. Templates work here, but what viewers type never reaches the image.',
+    imagePreviewAlt: 'Image preview',
     clipLabel: 'Create a Twitch clip',
     clipHint: 'Clips your live Twitch stream. Put {token} in the reply to post the link.',
     roleLabel: 'Who can use it',
@@ -110,8 +116,11 @@ export const commands = {
     referenceHeading: 'Template reference',
     jsHeading: 'JavaScript',
     jsBody:
-      'Wrap code in a js block to compute a reply. The value of the last expression is inserted. The variables user, touser, query, args, count, platform, channel, role and clip are available. There is no network or file access, and each reply gets 100 ms and 16 MB.',
+      'Wrap code in a js block to compute a reply. The value of the last expression is inserted. The variables user, touser, query, args, count, platform, channel, role and clip are available. The code itself has no network or file access, and each reply gets 100 ms and 16 MB.',
     jsExample: 'Example',
+    urlfetchHeading: 'Fetching a web address',
+    urlfetchBody:
+      '{token} inserts the text a web address answers with. Inside a js block it arrives as a string, ready for JSON.parse. Only public https addresses work, at most 3 per reply and 3 seconds each. Variables in the address are escaped, so viewers cannot change where it points.',
   },
   reference: {
     user: 'Name of the chatter who used the command',
@@ -124,6 +133,7 @@ export const commands = {
     time: 'The time (24h) in a time zone; UTC when left out',
     where: 'The platform and channel the message came from',
     clip: 'Link to the clip this command made',
+    urlfetch: 'The text a web address answers with',
   },
   delete: {
     title: 'Delete {trigger}?',
