@@ -250,7 +250,6 @@ export function CommandEditor({
               id={`${ids}-image`}
               className="font-mono"
               maxLength={1000}
-              placeholder="https://"
               value={form.image_url}
               aria-describedby={`${ids}-image-hint`}
               onChange={(e) => set('image_url', e.target.value)}
