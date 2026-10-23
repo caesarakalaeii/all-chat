@@ -172,3 +172,70 @@ export interface ChatCommandPreview {
   image: string
   errors: string[]
 }
+// --- Chat command sender and chat timers (ADR-0081) ---
+
+/** Whose account a command reply or timer message is posted from. */
+export type ChatBotSender = 'bot' | 'self'
+
+/** Platforms a bot account can live on. */
+export type ChatBotPlatform = 'twitch' | 'kick' | 'youtube'
+
+/** Name of a connected bot account, or null when that slot is empty. */
+export interface ChatBotIdentity {
+  login: string
+  display_name: string
+}
+
+/** One All-Chat Bot slot; login and display_name are empty while not connected. */
+export interface ChatBotSlot extends ChatBotIdentity {
+  connected: boolean
+}
+
+/**
+ * GET /api/v1/auth/chat-bots. The All-Chat Bot needs no row on Kick (it is the
+ * bot configured on the Kick app), so kick.connected is always true there.
+ */
+export interface ChatBotStatus {
+  allchat: {
+    twitch: ChatBotSlot
+    kick: { connected: boolean }
+    youtube: ChatBotSlot
+  }
+  custom: {
+    twitch: ChatBotIdentity | null
+    kick: ChatBotIdentity | null
+    youtube: ChatBotIdentity | null
+  }
+  /** The streamer granted channel:bot on Twitch; without it bot sends fall back to them. */
+  twitch_bot_granted: boolean
+  premium: boolean
+}
+
+/** GET/PUT /api/v1/engagement/chat-commands/settings. No row = 'bot'. */
+export interface ChatCommandSenderSettings {
+  sender: ChatBotSender
+}
+
+export interface ChatTimer {
+  id: string
+  name: string
+  message: string
+  interval_minutes: number | null
+  min_messages: number | null
+  enabled: boolean
+  last_fired_at: string | null
+  fire_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatTimerInput {
+  name: string
+  message: string
+  interval_minutes: number | null
+  min_messages: number | null
+}
+
+export interface ChatTimerList {
+  timers: ChatTimer[]
+}

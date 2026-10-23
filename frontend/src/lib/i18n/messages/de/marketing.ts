@@ -363,6 +363,9 @@ export const marketing: LocaleNamespace<'marketing'> = {
     chatCommandsTitle: 'Chat-Befehle',
     chatCommandsBody:
       'Eigene !Befehle und Stichwörter für jeden Chat: antworte als du selbst, clippe deinen Twitch-Stream auf Zuruf, zeige ein Bild auf deinem Alert-Overlay und nutze Variablen, Web-Abfragen oder JavaScript in Antworten. Antworten im YouTube-Chat sind Premium.',
+    customChatBotTitle: 'Dein eigener Chat-Bot',
+    customChatBotBody:
+      'Verbinde dein eigenes Bot-Konto auf Twitch, Kick oder YouTube, und jede Befehlsantwort und jeder Timer geht unter dem Namen deines Bots raus statt unter deinem.',
     flairsTitle: 'Zuschauer-Flairs',
     flairsBody:
       'Hebe dich in jedem Chat, in dem du auftauchst, mit Premium-Kosmetik wie animierten Namensverläufen ab.',

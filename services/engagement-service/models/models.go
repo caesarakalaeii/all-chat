@@ -196,3 +196,31 @@ type ChatCommand struct {
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
+
+// ChatTimer is one streamer-defined recurring chat message (ADR-0081). It fires on
+// the owner's own channels when its trigger is due: an interval elapsed since it
+// last fired, and/or at least MinMessages chat lines since then (both set = every
+// interval, but only when enough lines arrived). The reply is sent by the sender
+// the owner chose in ChatBotSettings (auth-service resolves which account posts).
+type ChatTimer struct {
+	ID              uuid.UUID  `json:"id"`
+	UserID          uuid.UUID  `json:"-"`
+	Name            string     `json:"name"`
+	Message         string     `json:"message"`
+	IntervalMinutes *int       `json:"interval_minutes"` // nil = no interval (messages only)
+	MinMessages     *int       `json:"min_messages"`     // nil = no line threshold (interval only)
+	Enabled         bool       `json:"enabled"`
+	LastFiredAt     *time.Time `json:"last_fired_at"`
+	LinesAtLastFire int64      `json:"-"`
+	FireCount       int64      `json:"fire_count"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+// EnabledChatTimer is one enabled timer as the ADR-0081 scheduler loads them per
+// tick: the timer row plus the owner's premium flag (YouTube sends spend Data API
+// quota, so only a premium owner's timers ask YouTube).
+type EnabledChatTimer struct {
+	Timer   ChatTimer `json:"timer"`
+	Premium bool      `json:"premium"`
+}

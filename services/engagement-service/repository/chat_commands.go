@@ -159,26 +159,35 @@ const channelOwned = `CASE s.platform
 		AND LOWER(k.channel_id) = LOWER($2))
 	ELSE FALSE END`
 
-// ChannelCommands is the chat commands one user has on a channel's chat.
+// ChannelCommands is the chat commands (and message-counting timers, ADR-0081) one
+// user has on a channel's chat.
 type ChannelCommands struct {
 	UserID uuid.UUID
-	// Owned: the channel is the user's own, so a reply (sent as the user to their own
-	// channel) lands in the chat the command came from. Commands on someone else's
-	// channel in the user's overlay still fire, but only their clip runs.
-	Owned    bool
-	Commands []models.ChatCommand
+	// Owned: the channel is the user's own, so a reply (sent to their own channel)
+	// lands in the chat the command came from. Commands on someone else's channel in
+	// the user's overlay still fire, but only their clip runs.
+	Owned bool
+	// TimerMessages: the user runs an enabled timer with min_messages on the channel
+	// they own, so every chat line here counts toward that timer (ADR-0081). The
+	// channel arrives in chatcmd:channels because of the timer even with no command.
+	TimerMessages bool
+	Commands      []models.ChatCommand
 }
 
 // ChatCommandsForChannel returns, per user whose overlays carry this channel, that
-// user's enabled commands (oldest first). One query: it runs for every forwarded
-// message of a chat-command channel.
+// user's enabled commands (oldest first) and whether an enabled message-counting
+// timer of theirs watches their own channel here (ADR-0081). One query: it runs for
+// every forwarded message of a chat-command channel.
 func (r *Repository) ChatCommandsForChannel(ctx context.Context, platform, channelID string) ([]ChannelCommands, error) {
 	rows, err := r.db.Query(ctx, `WITH owners AS (
-			SELECT o.user_id, bool_or(`+channelOwned+`) AS owned
+			SELECT o.user_id,
+				bool_or(`+channelOwned+`) AS owned,
+				bool_or(`+channelOwned+` AND EXISTS (SELECT 1 FROM chat_timers t
+					WHERE t.user_id = o.user_id AND t.enabled AND t.min_messages IS NOT NULL)) AS counts
 			FROM overlay_chat_sources s JOIN overlays o ON o.id = s.overlay_id
 			WHERE `+chatSourceMatch+`
 			GROUP BY o.user_id)
-		SELECT owned, `+chatCommandCols+`
+		SELECT owned, counts, `+chatCommandCols+`
 		FROM chat_commands JOIN owners USING (user_id)
 		WHERE enabled
 		ORDER BY user_id, created_at, id`, platform, channelID)
@@ -188,13 +197,13 @@ func (r *Repository) ChatCommandsForChannel(ctx context.Context, platform, chann
 	defer rows.Close()
 	var out []ChannelCommands
 	for rows.Next() {
-		var owned bool
-		c, err := scanChatCommand(rows, &owned)
+		var owned, counts bool
+		c, err := scanChatCommand(rows, &owned, &counts)
 		if err != nil {
 			return nil, fmt.Errorf("scan channel chat command: %w", err)
 		}
 		if n := len(out); n == 0 || out[n-1].UserID != c.UserID {
-			out = append(out, ChannelCommands{UserID: c.UserID, Owned: owned})
+			out = append(out, ChannelCommands{UserID: c.UserID, Owned: owned, TimerMessages: counts})
 		}
 		out[len(out)-1].Commands = append(out[len(out)-1].Commands, c)
 	}
@@ -202,14 +211,18 @@ func (r *Repository) ChatCommandsForChannel(ctx context.Context, platform, chann
 }
 
 // ChatCommandChannels returns the chatcmd:channels members: every active chat source,
-// as platform:channel, on an overlay whose owner has an enabled command. Kick sources
+// as platform:channel, on an overlay whose owner has an enabled command, or whose
+// owner runs an enabled timer that counts chat messages (ADR-0081: the counter lives
+// where the messages are forwarded, so those channels must arrive too). Kick sources
 // also contribute their slug, which is what the Kick listener stamps on messages.
 func (r *Repository) ChatCommandChannels(ctx context.Context) ([]string, error) {
 	rows, err := r.db.Query(ctx, `SELECT DISTINCT s.platform, s.channel_id,
 			COALESCE(s.channel_handle, s.channel_name, '')
 		FROM overlay_chat_sources s JOIN overlays o ON o.id = s.overlay_id
 		WHERE s.is_active AND s.platform <> $1
-		  AND EXISTS (SELECT 1 FROM chat_commands c WHERE c.user_id = o.user_id AND c.enabled)`,
+		  AND (EXISTS (SELECT 1 FROM chat_commands c WHERE c.user_id = o.user_id AND c.enabled)
+		   OR EXISTS (SELECT 1 FROM chat_timers t WHERE t.user_id = o.user_id
+			AND t.enabled AND t.min_messages IS NOT NULL))`,
 		sharedOverlayPlatform)
 	if err != nil {
 		return nil, fmt.Errorf("chat command channels: %w", err)

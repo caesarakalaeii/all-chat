@@ -100,6 +100,12 @@ func (m *MockUserRepository) UpdateTokens(ctx context.Context, userID, accessTok
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) GetPlatformGrantedScopes(ctx context.Context, userID, platform string) ([]string, error) {
+	args := m.Called(ctx, userID, platform)
+	scopes, _ := args.Get(0).([]string)
+	return scopes, args.Error(1)
+}
+
 type MockOAuthProvider struct {
 	mock.Mock
 }

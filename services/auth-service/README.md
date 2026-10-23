@@ -17,6 +17,7 @@ The Auth Service handles multi-platform OAuth authentication (Twitch, YouTube, K
 - **Token Encryption**: Basic encryption for OAuth tokens at rest
 - **Health Checks**: Liveness and readiness probes for Kubernetes
 - **Metrics**: Prometheus metrics for OAuth flows, token generation, errors
+- **Chat Bots (ADR-0081)**: stores custom + All-Chat bot credentials and sends command/timer messages as a bot sender via the internal bot-send route
 
 ---
 
@@ -318,12 +319,74 @@ POST /internal/twitch/clip
 Body: { "user_id": "uuid" }
 → 200 { "url": "https://clips.twitch.tv/..." }
 → 409/502 { "error_kind": "twitch_not_connected|stream_offline|missing_scope|reauth_required|send_failed" }
+
+# Post a chat-command reply or a timer message AS a bot sender (ADR-0081).
+# Sender per platform is resolved per-user: the streamer's own account, their
+# custom bot, or the All-Chat Bot — see "Chat bots (ADR-0081)" below.
+POST /internal/chat/bot-send
+Body: { "user_id": "uuid", "message": "...", "platforms": ["twitch","kick","youtube"],
+        "purpose": "command" | "timer" }
+→ 200 { "success": true|false,
+        "results": [{ "platform", "success", "sender": "allchat_bot"|"custom_bot"|"self",
+                      "error_kind" }] }
 ```
 
 The opt-in Twitch re-consent `GET /api/v1/auth/twitch/moderation/:overlay_id?actions=…`
 accepts `delete`, `timeout`, `ban`, `unban`, `engagement`, `modlog` and `clip`
 (`clips:edit`), and always folds in `user:write:chat`. `&return=commands` sends the
 user back to `/commands` instead of the overlay monitor.
+
+### Chat bots (ADR-0081)
+
+Chat-command replies and timer messages (engagement-service) are sent by a *bot
+sender* rather than the streamer's own account. Auth-service stores bot credentials
+in `chat_bot_accounts` (migration 115): one row per (owner, platform); a NULL owner
+is the global All-Chat Bot, a user owner is that streamer's *custom bot*
+(premium, gate `custom_chat_bot`).
+
+Connections:
+
+| Action | Endpoint | Gating |
+|---|---|---|
+| List my bots + the global ones | `GET /api/v1/auth/chat-bots` | any JWT user |
+| Start a bot consent (returns `auth_url`) | `GET /api/v1/auth/{twitch,kick,youtube}/bot-connect?scope=custom` | EarlyAccess + Premium (`custom_chat_bot`) |
+| Same, for the global All-Chat Bot | `GET /api/v1/auth/{twitch,youtube}/bot-connect?scope=allchat` | admin only (Kick → 400) |
+| Remove my custom bot | `DELETE /api/v1/auth/chat-bots/custom/:platform` | the bot's owner |
+| Remove the global bot | `DELETE /api/v1/auth/chat-bots/allchat/:platform` | admin only |
+
+Consent scopes: Twitch `user:bot user:write:chat`, Kick `chat:write user:read`,
+YouTube `youtube.force-ssl` (+ identity). The callback stores the credential row and
+never logs the bot account in (same pattern as the delegated-moderator consent).
+Re-consenting replaces the row. The Twitch re-consent that grants the *broadcaster*
+side is the existing moderation re-consent with `actions=bot&return=commands` — the
+`bot` action folds in `channel:bot`, the grant a streamer must hold for ANY bot
+identity (All-Chat or custom) to send into their chat.
+
+Sender resolution for each bot-send call, per platform, first match wins:
+
+1. The streamer's per-user setting (`chat_bot_settings`, written by
+   engagement-service) says `self` → the streamer's own account.
+2. The streamer is premium and has a custom row for the platform → their
+   custom bot (`custom_bot`).
+3. Otherwise the All-Chat Bot (`allchat_bot`): Twitch and YouTube need a global
+   row, Kick needs none — its bot is the one configured on our Kick app.
+
+Fallback to self (reported as `sender:"self"`): the streamer lacks the Twitch
+`channel:bot` grant, or the needed bot row is missing. Platforms without a
+sendable streamer identity are skipped, like `/internal/chat/announce`.
+
+Platform mechanics: a Twitch bot send goes through Helix `chat/messages` with our
+**app access token** (client-credentials, cached pre-expiry) and `sender_id` set to
+the bot's platform user id. Kick: All-Chat Bot posts with the streamer's own token
+and `type=bot`; a custom bot posts with the bot account's own token and
+`type=user` addressed to the streamer's Kick id. YouTube: `liveChatMessages.insert`
+with the bot's own OAuth token (refreshed proactively and rotated back into the
+row); timer sends resolve the live chat id **only** from the Redis stream state
+(`youtube:stream:state:{channel}`) so an offline channel costs no quota.
+
+Operator prerequisite: an admin must connect the All-Chat Bot accounts for Twitch
+and YouTube from `/admin/chat-bots` (Kick's bot is configured on the Kick
+developer app instead — no connection step here).
 
 ### Health Checks
 

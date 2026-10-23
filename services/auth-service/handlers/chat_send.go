@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/quota"
 	"github.com/caesar/all-chat/shared/sendall"
 	"github.com/caesar/all-chat/shared/youtubetoken"
@@ -183,6 +184,9 @@ type ViewerRepositoryInterface interface {
 type UserRepositoryInterface interface {
 	GetByID(ctx context.Context, id string) (*models.User, error)
 	GetByUsername(ctx context.Context, username string) (*models.User, error)
+	// GetPlatformGrantedScopes feeds the bot-send Twitch channel:bot grant check
+	// (ADR-0081); implemented by *repository.UserRepository, stubbed in tests.
+	GetPlatformGrantedScopes(ctx context.Context, userID, platform string) ([]string, error)
 	UpdateTokens(ctx context.Context, userID, accessToken, refreshToken string, expiresAt time.Time) error
 }
 
@@ -217,6 +221,41 @@ type ChatSendHandler struct {
 	// youtube-quota-monitor reflects send usage and a depleted quota blocks sends.
 	// Nil ⇒ accounting skipped (fail-open).
 	ytQuota *quota.Reserver
+
+	// botRepo resolves chat bot accounts and per-user sender settings for
+	// /internal/chat/bot-send (ADR-0081). Nil ⇒ bot sends fall back to self.
+	botRepo chatBotAccountStore
+	// twitchAppTokens caches the app access token bot Twitch sends present.
+	twitchAppTokens *twitchAppTokenCache
+	// ytBotChat resolves the YouTube live chat id used by bot sends; nil in
+	// production (the standard logic runs), replaced in tests.
+	ytBotChat ytBotChatResolver
+	// ytBotChatChannel pins the streamer's YouTube channel in tests where the
+	// DB pool is nil and the resolver seam needs the channel id that production
+	// resolves from getActiveYouTubeChannelID. Empty outside tests.
+	ytBotChatChannel string
+}
+
+// chatBotAccountStore is the repository surface /internal/chat/bot-send needs.
+// Declared as an interface (not the concrete struct) so tests can supply a stub.
+type chatBotAccountStore interface {
+	GetChatBotSenderSetting(ctx context.Context, userID string) (string, error)
+	GetChatBotAccount(ctx context.Context, ownerUserID, platform string) (*repository.ChatBotAccount, error)
+	StoreRefreshedBotToken(ctx context.Context, ownerUserID, platform, login, accessToken, refreshToken string, expiresAt time.Time) error
+}
+
+// WithChatBotStore wires the chat bot account store used by bot-send sender
+// resolution and the Twitch app-token cache. Nil degrades bot sends to self.
+func (h *ChatSendHandler) WithChatBotStore(store chatBotAccountStore, clientSecret string) *ChatSendHandler {
+	h.botRepo = store
+	if clientSecret != "" {
+		h.twitchAppTokens = &twitchAppTokenCache{
+			client:       h.httpClient,
+			clientID:     h.clientID,
+			clientSecret: clientSecret,
+		}
+	}
+	return h
 }
 
 // NewChatSendHandler creates a new chat send handler
