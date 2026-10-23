@@ -1065,7 +1065,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
               <div className="flex items-start gap-3">
                 {/* Avatar */}
                 {showAvatars && (
-                  <div className="shrink-0" style={{ overflow: 'visible' }}>
+                  <div className="flex-shrink-0" style={{ overflow: 'visible' }}>
                     <UserAvatar
                       avatarUrl={message.user?.avatar_url}
                       frameUrl={message.user?.avatar_frame_url}
@@ -1250,7 +1250,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
                   </div>
 
                   {/* Message Text with Emotes (or Event Content) */}
-                  <div className="wrap-break-word text-white">
+                  <div className="break-words text-white">
                     {message.event ? renderEventContent(message) : renderMessageContent(message)}
                   </div>
 

@@ -192,6 +192,11 @@ export default defineConfig([
         'error',
         ...DESIGN_SYSTEM_RULES.filter((rule) => !rule.message.includes('gray-*/slate-*')),
       ],
+      // Class names here are a public selector API: themes and streamers' custom
+      // CSS target `.flex-shrink-0`, `.break-words` and friends (documented in
+      // docs/overlay-themes/README.md). A canonical rename compiles to the same
+      // utility CSS but silently unhooks every stylesheet written against it.
+      'tailwindcss/enforces-canonical-classname': 'off',
     },
   },
 
