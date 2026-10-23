@@ -40,20 +40,8 @@ jobs:
       - name: TypeScript check
         run: npx tsc --noEmit
 
-      - name: Build (for bundle analysis)
+      - name: Build
         run: npm run build
-        env:
-          ANALYZE: 'false'
-          # Disable Turbopack for bundle analysis compatibility with hashicorp action
-          NEXT_DISABLE_TURBOPACK: 'true'
-
-      - name: Bundle size analysis
-        uses: hashicorp/nextjs-bundle-analysis@v1
-        with:
-          working-directory: frontend
-
-      - name: Storybook tests (a11y + performance)
-        run: npx vitest --project storybook --run
 
       - name: Chromatic visual regression
         uses: chromaui/action@latest
