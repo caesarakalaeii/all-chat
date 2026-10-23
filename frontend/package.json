@@ -54,7 +54,7 @@
   "overrides": {
     "postcss": "$postcss",
     "sharp": "$sharp",
-    "dompurify": "^3.4.13",
+    "dompurify": "^3.4.17",
     "monaco-editor": "0.55.1",
     "tsconfck": {
       "typescript": "$typescript"
