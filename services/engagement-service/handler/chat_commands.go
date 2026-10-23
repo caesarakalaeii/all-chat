@@ -133,7 +133,7 @@ func (h *ChatCommands) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"commands": cmds, "status": status})
 }
 
-// Create adds a command. Gated by RequirePremium(GateChatCommands) in main.go.
+// Create adds a command. Gated by RequireEarlyAccess and RequirePremium(GateChatCommands) in main.go.
 func (h *ChatCommands) Create(c *gin.Context) {
 	userID, ok := streamerID(c)
 	if !ok {

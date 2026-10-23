@@ -88,7 +88,7 @@ chatcmd consumer (NOACK, at most once): match → min_role → echo guard → pe
 | `DELETE /chat-commands/:cid` | streamer | delete (never gated) |
 | `POST /chat-commands/preview` | streamer | render a `response` and `image` against sample `input` without sending (urlfetch really fetches); returns `output`, `image` + `errors` |
 
-Writes take the `engagement:write` PAT scope; paired devices are refused (the routes have no overlay to bind to). The `chat_commands` gate is seeded **open**: the only paid part is the YouTube reply check above.
+Writes take the `engagement:write` PAT scope; paired devices are refused (the routes have no overlay to bind to). The `chat_commands` gate is enforced on both dimensions (`RequireEarlyAccess` and `RequirePremium`) and seeded `early_access=TRUE, is_premium=FALSE`: beta testers and ambassadors only, free. Flip `early_access` off in the admin feature-gates UI to open it to everyone with no redeploy. The only paid part is the YouTube reply check above.
 
 ## Configuration
 
