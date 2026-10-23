@@ -29,6 +29,7 @@ import {
   Code,
   Target,
   Terminal,
+  Bot,
   Trophy,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -81,6 +82,7 @@ const features = [
   { icon: Target, messageStem: 'goalOverlay', overlayKind: 'goal' },
   { icon: Trophy, messageStem: 'listOverlay', overlayKind: 'list' },
   { icon: Terminal, messageStem: 'chatCommands', feature: 'chatCommands' },
+  { icon: Bot, messageStem: 'customChatBot', feature: 'customChatBot' },
 ] as const satisfies ReadonlyArray<PremiumFeature>
 
 export default function UpgradePage() {

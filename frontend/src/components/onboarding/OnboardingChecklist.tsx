@@ -488,6 +488,31 @@ export function OnboardingChecklist({
                     </p>
                   </li>
                 )}
+                {isFeatureAvailable('customChatBot') && (
+                  <li>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-text">
+                        {t('onboarding.extras.customChatBotTitle')}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          trackEvent('cta_click', {
+                            cta: 'custom_chat_bot',
+                            location: 'onboarding-extras',
+                          })
+                          router.push('/upgrade')
+                        }}
+                      >
+                        {t('onboarding.checklist.showMe')}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-text-sub">
+                      {t('onboarding.extras.customChatBotBody')}
+                    </p>
+                  </li>
+                )}
                 <li>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-text">
