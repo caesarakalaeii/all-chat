@@ -35,14 +35,13 @@ import (
 
 // Internal bot send (ADR-0081). engagement-service calls POST /internal/chat/bot-send
 // (service JWT, same group as /internal/chat/announce) to post a chat-command reply
-// or a timer message AS a bot sender. Sender resolution per platform:
-//
-//  1. chat_bot_settings.sender = 'self' → the streamer's own account (existing send path).
-//  2. the streamer is premium AND has a custom chat_bot_accounts row for the platform
-//     → their bot (sender "custom_bot").
-//  3. otherwise the All-Chat Bot (sender "allchat_bot"): Twitch and YouTube need a
-//     global row, Kick needs none (the message goes through the streamer's own user
-//     token with type=bot; the bot identity is the one configured on our Kick app).
+// or a timer message AS a bot sender. The sender is picked per platform, first match
+// wins: the streamer's own account when chat_bot_settings.sender is 'self'; their
+// custom bot (sender "custom_bot") when they are premium and have a chat_bot_accounts
+// row for the platform; otherwise the All-Chat Bot (sender "allchat_bot"). Twitch and
+// YouTube need a global row for it, Kick needs none, because the message goes through
+// the streamer's own user token with type=bot and the bot identity is the one
+// configured on our Kick app.
 //
 // A Twitch bot send additionally requires the streamer's channel:bot grant. Without
 // that grant, or when the needed bot row is missing, the send falls back to self —
