@@ -61,6 +61,9 @@ type PlatformAuthHandlerV2 struct {
 	frontendURL       string
 	overlayManagerURL string
 	metrics           *metrics.BusinessMetrics
+	// botRepo persists chat-bot OAuth rows for the bot-connect flow (ADR-0081);
+	// nil ⇒ bot-connect endpoints answer with a plain error.
+	botRepo *repository.ChatBotAccountStore
 }
 
 // NewPlatformAuthHandlerV2 creates a new platform auth handler v2
@@ -440,7 +443,7 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 			return
 		}
 		if len(modScopes) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban,engagement,modlog,clip"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban,engagement,modlog,clip,bot"})
 			return
 		}
 		// This opt-in is the unified "advanced controls" consent: a single re-consent
@@ -923,6 +926,16 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 		// overlay-manager 404s for a non-owner.
 		if oauthState.IsModConsent() {
 			h.completeModConsent(c, platform, oauthState, platformUser, token)
+			return
+		}
+
+		// Chat-bot consent (ADR-0081) is handled here and returns, BEFORE any of the
+		// login / account-link / add-source machinery below, for the same reasons
+		// mod-consent is: the consenting account is a bot, not a session — no
+		// account may be created or linked, the consenter's login grant is never
+		// touched, and the row lands in chat_bot_accounts.
+		if oauthState.IsBotConnect() {
+			h.completeBotConnect(c, platform, oauthState, provider, platformUser, token)
 			return
 		}
 

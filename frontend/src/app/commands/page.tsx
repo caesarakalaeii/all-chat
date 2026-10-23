@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Check, CircleAlert, ImageIcon, Plus, Scissors } from 'lucide-react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { AppNav } from '@/components/AppNav'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AlertDialog } from '@/components/ui/alert-dialog'
@@ -29,12 +30,24 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { engagementApi } from '@/lib/api/engagement'
+import { authApi } from '@/lib/api/auth'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { useTranslations } from '@/lib/i18n'
 import { toastManager } from '@/lib/toast'
 import { cn } from '@/lib/utils'
-import type { ChatCommand, ChatCommandInput, ChatCommandStatus } from '@/lib/types/engagement'
+import type {
+  ChatBotSender,
+  ChatBotStatus,
+  ChatCommand,
+  ChatCommandInput,
+  ChatCommandStatus,
+  ChatTimer,
+  ChatTimerInput,
+} from '@/lib/types/engagement'
 import { CommandEditor } from './CommandEditor'
+import { BotSection } from './BotSection'
+import { TimersSection } from './TimersSection'
+import { TimerEditor } from './TimerEditor'
 
 const BLANK: ChatCommandInput = {
   kind: 'command',
@@ -102,11 +115,19 @@ export default function CommandsPage() {
 
 function CommandsContent() {
   const t = useTranslations()
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [commands, setCommands] = useState<ChatCommand[]>([])
   const [status, setStatus] = useState<ChatCommandStatus | null>(null)
+  const [botStatus, setBotStatus] = useState<ChatBotStatus | null>(null)
+  const [botSender, setBotSender] = useState<ChatBotSender>('bot')
+  const [timers, setTimers] = useState<ChatTimer[]>([])
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const [editing, setEditing] = useState<{ initial: ChatCommandInput; id?: string } | null>(null)
+  const [editingTimer, setEditingTimer] = useState<{ initial: ChatTimerInput; id?: string } | null>(
+    null
+  )
   const [deleting, setDeleting] = useState<ChatCommand | null>(null)
 
   const fetchList = useCallback(async () => {
@@ -120,6 +141,22 @@ function CommandsContent() {
     } finally {
       setLoading(false)
     }
+    // Bot and timers load independently of the command list: a failure in one
+    // must not blank the others. A failure leaves the sections hidden
+    // (they are additive to the commands themselves).
+    try {
+      const [bots, timerList, settings] = await Promise.all([
+        authApi.getChatBotsStatus(),
+        engagementApi.getChatTimers(),
+        engagementApi.getChatBotSettings(),
+      ])
+      setBotStatus(bots)
+      setBotSender(settings.sender)
+      setTimers(timerList.timers)
+    } catch {
+      setBotStatus(null)
+      setTimers([])
+    }
   }, [])
 
   useEffect(() => {
@@ -127,6 +164,23 @@ function CommandsContent() {
       await fetchList()
     })()
   }, [fetchList])
+
+  // `?bot=connected|error` from the bot-connect OAuth callback. `replace` keeps
+  // a reload from re-firing the toast.
+  useEffect(() => {
+    const bot = searchParams.get('bot')
+    if (bot === 'connected') {
+      toastManager.add({ title: t('commands.bot.connectedToast'), type: 'success' })
+      router.replace('/commands')
+    } else if (bot === 'error') {
+      toastManager.add({
+        title: t('commands.bot.connectFailedToast'),
+        description: t('common.toast.tryAgain'),
+        type: 'error',
+      })
+      router.replace('/commands')
+    }
+  }, [searchParams, router, t])
 
   function retry() {
     setLoading(true)
@@ -235,6 +289,23 @@ function CommandsContent() {
             </div>
           </section>
         )}
+
+        {botStatus && (
+          <BotSection
+            status={botStatus}
+            sender={botSender}
+            consentOverlayId={status?.consent_overlay_id ?? null}
+            onSenderChanged={setBotSender}
+          />
+        )}
+
+        {!loading && !loadFailed && (
+          <TimersSection
+            timers={timers}
+            setTimers={setTimers}
+            onEdit={(initial, id) => setEditingTimer({ initial, id })}
+          />
+        )}
       </main>
 
       {editing && (
@@ -243,6 +314,23 @@ function CommandsContent() {
           editingId={editing.id}
           onClose={() => setEditing(null)}
           onSaved={onSaved}
+        />
+      )}
+
+      {editingTimer && (
+        <TimerEditor
+          initial={editingTimer.initial}
+          editingId={editingTimer.id}
+          onClose={() => setEditingTimer(null)}
+          onSaved={(saved) => {
+            setTimers((list) =>
+              list.some((x) => x.id === saved.id)
+                ? list.map((x) => (x.id === saved.id ? saved : x))
+                : [...list, saved]
+            )
+            setEditingTimer(null)
+            toastManager.add({ title: t('commands.timers.saved'), type: 'success' })
+          }}
         />
       )}
 

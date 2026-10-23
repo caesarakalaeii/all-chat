@@ -64,7 +64,7 @@ type chatCmdStore interface {
 
 // chatOutput is auth-service's send and clip paths (announcer.Announcer).
 type chatOutput interface {
-	Send(ctx context.Context, userID, message, platform string) error
+	BotSend(ctx context.Context, userID, message, platform string, purpose announcer.SendPurpose) error
 	Clip(ctx context.Context, userID string) (string, error)
 }
 
@@ -155,7 +155,8 @@ func (c *ChatCommandConsumer) Run(ctx context.Context) {
 }
 
 // handle fires, for every streamer whose overlays carry the message's channel, the
-// first of their commands the message matches.
+// first of their commands the message matches, and counts the message toward each
+// of their message-counting timers (ADR-0081).
 func (c *ChatCommandConsumer) handle(ctx context.Context, job mpmodels.CommandJob) {
 	owners, err := c.commandsFor(ctx, job.Platform, job.ChannelID)
 	if err != nil {
@@ -164,6 +165,9 @@ func (c *ChatCommandConsumer) handle(ctx context.Context, job mpmodels.CommandJo
 	}
 	role := chatcmd.HighestRole(job.Roles)
 	for _, o := range owners {
+		if o.TimerMessages {
+			c.countTimerLine(ctx, o.UserID, job)
+		}
 		m, ok := chatcmd.Match(o.Commands, job.Text)
 		if !ok {
 			continue
@@ -175,6 +179,41 @@ func (c *ChatCommandConsumer) handle(ctx context.Context, job mpmodels.CommandJo
 			continue
 		}
 		c.run(ctx, o, m, job, role)
+	}
+}
+
+// chattimerCountTTL keeps an idle owner's counter from growing unboundedly; the
+// scheduler reads it with lines_at_last_fire on every claim, so a counter that
+// resurfaces at zero now and then is harmless.
+const chattimerCountTTL = 30 * 24 * time.Hour
+
+// chattimerLinesKey is the Redis counter of chat lines one owner's own channels saw
+// since its message-counting timers last fired.
+func chattimerLinesKey(owner uuid.UUID) string { return "chattimer:lines:" + owner.String() }
+
+// countTimerLine adds one chat line to the owner's counter. Dedup on the platform
+// message id collapses the per-overlay copies Kick listeners publish (a message id
+// arrives many times for one real chat line), and an echo of the streamer's own
+// reply or timer post — carried by the same echo guard command replies register —
+// is not a viewer's line and must not count. Without a message id there is nothing
+// to collapse on; the line counts as best-effort.
+func (c *ChatCommandConsumer) countTimerLine(ctx context.Context, owner uuid.UUID, job mpmodels.CommandJob) {
+	if n, err := c.rdb.Exists(ctx, echoKey(owner, job.Text)).Result(); err != nil || n > 0 {
+		return
+	}
+	if job.MessageID != "" {
+		seen := "chattimer:seen:" + owner.String() + ":" + job.Platform + ":" + job.MessageID
+		ok, err := c.rdb.SetNX(ctx, seen, 1, seenTTL).Result()
+		if err != nil || !ok {
+			return
+		}
+	}
+	key := chattimerLinesKey(owner)
+	pipe := c.rdb.Pipeline()
+	pipe.Incr(ctx, key)
+	pipe.Expire(ctx, key, chattimerCountTTL)
+	if _, err := pipe.Exec(ctx); err != nil {
+		c.log.Warn("count chat timer line", zap.String("owner", owner.String()), zap.Error(err))
 	}
 }
 
@@ -264,11 +303,14 @@ func (c *ChatCommandConsumer) run(ctx context.Context, o repository.ChannelComma
 	}
 }
 
+// send posts a command reply through the sender the streamer chose (All-Chat Bot by
+// default, ADR-0081) and registers it as this account's own output, so a keyword
+// trigger inside the reply cannot fire on its echo.
 func (c *ChatCommandConsumer) send(ctx context.Context, ownerID uuid.UUID, text, platform string) {
 	if err := c.rdb.Set(ctx, echoKey(ownerID, text), 1, echoTTL).Err(); err != nil {
 		return // without the echo guard a self-matching reply could loop
 	}
-	if err := c.out.Send(ctx, ownerID.String(), text, platform); err != nil {
+	if err := c.out.BotSend(ctx, ownerID.String(), text, platform, announcer.PurposeCommand); err != nil {
 		c.log.Info("chat command reply failed", zap.String("user", ownerID.String()), zap.String("platform", platform), zap.Error(err))
 	}
 }
@@ -311,4 +353,11 @@ func (c *ChatCommandConsumer) showImage(ctx context.Context, ownerID uuid.UUID, 
 func echoKey(owner uuid.UUID, text string) string {
 	sum := sha256.Sum256([]byte(strings.ToLower(chatcmd.Line(text))))
 	return "chatcmd:echo:" + owner.String() + ":" + hex.EncodeToString(sum[:12])
+}
+
+// RegisterEcho adds a text the streamer's channel just posted under the same echo
+// guard command replies use, so a keyword trigger inside a timer post (ADR-0081)
+// cannot fire on its own echo. The timer scheduler calls it before the send.
+func (c *ChatCommandConsumer) RegisterEcho(ctx context.Context, owner uuid.UUID, text string) error {
+	return c.rdb.Set(ctx, echoKey(owner, text), 1, echoTTL).Err()
 }

@@ -39,6 +39,31 @@ export const admin: LocaleNamespace<'admin'> = {
     maintenanceDescription: 'Wartungsmodus und Betrieb',
     localizationLabel: 'Lokalisierung',
     localizationDescription: 'Community-Übersetzungen prüfen',
+    chatBotsLabel: 'Chat-Bots',
+    chatBotsDescription: 'Den All-Chat-Bot mit Twitch und YouTube verbinden',
+  },
+  chatBots: {
+    heading: 'Chat-Bots',
+    intro:
+      'Der All-Chat-Bot beantwortet Chat-Befehle für alle Streamer, die keinen eigenen verbunden haben. Verbinde ihn hier auf Twitch und YouTube; auf Kick ist der Bot bereits über die Kick-App angemeldet.',
+    loadError:
+      'Laden des Chat-Bot-Status fehlgeschlagen. Lade die Seite neu, um es erneut zu versuchen.',
+    allchatHeading: 'All-Chat-Bot-Konten',
+    kickNote: 'Kick nutzt den Bot der Kick-App; hier gibt es nichts zu verbinden.',
+    notConnected: 'Nicht verbunden',
+    connected: 'Verbunden als {name}',
+    connect: 'Auf {platform} verbinden',
+    connecting: '{platform} wird geöffnet',
+    connectFailed: 'Die {platform}-Verbindung konnte nicht gestartet werden.',
+    disconnect: 'Trennen',
+    disconnecting: 'Wird getrennt',
+    disconnectFailed: 'Das Trennen auf {platform} ist fehlgeschlagen.',
+    disconnected: 'Bot getrennt.',
+    removeTitle: 'Den All-Chat-Bot auf {platform} trennen?',
+    removeBody:
+      'Antworten fallen auf das eigene Konto des Streamers zurück, bis er wieder verbunden ist.',
+    removeCancel: 'Behalten',
+    removeConfirm: 'Trennen',
   },
   sidebar: {
     brandSuffix: 'Admin',

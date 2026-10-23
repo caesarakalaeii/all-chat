@@ -121,6 +121,12 @@ var twitchModerationScopesByAction = map[string][]string{
 	"engagement": {"channel:read:polls", "channel:read:predictions"},
 	// "clip" lets a chat command clip the streamer's stream (ADR-0079, Helix Create Clip).
 	"clip": {"clips:edit"},
+	// "bot" grants channel:bot on the STREAMER's channel (ADR-0081): the broadcaster
+	// grant that lets a bot chat identity (the All-Chat Bot or the streamer's custom
+	// bot) send into this channel via Helix chat/messages. Bot consents themselves
+	// carry user:bot + user:write:chat; this is the broadcaster side of that pair.
+	"bot": {"channel:bot"},
+
 	// The eight moderator:read:* scopes are what channel.moderate v2 requires; Twitch
 	// accepts the corresponding moderator:manage:* as a superset for some of them, but we
 	// request the narrow read form. The order is the order the consent screen shows.
