@@ -66,7 +66,7 @@ frontend/
 
 ### Prerequisites
 
-- Node.js 22+ (`@testing-library/jest-dom` 7 and `chromatic` 18 declare `engines.node >= 22`;
+- Node.js 22+ (`@testing-library/jest-dom` 7 declares `engines.node >= 22`;
   `lint-staged` 17 needs >= 22.22.1 for the pre-commit hook. Node 20 went EOL 2026-04-30.)
 - npm (comes with Node.js)
 - Backend services running (see main repository)

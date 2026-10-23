@@ -65,7 +65,6 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
-    "@chromatic-com/storybook": "^5.5.1",
     "@next/bundle-analyzer": "^16.4.2",
     "@playwright/test": "^1.64.1",
     "@storybook/addon-a11y": "^10.6.2",
