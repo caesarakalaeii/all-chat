@@ -5,8 +5,8 @@
 # node:26-alpine ships npm 11.x. The lockfile (lockfileVersion 3) is also installable
 # by the npm 10.x in node:22-alpine — verified with `npm@10.9.4 ci` — so this pin is a
 # "stay current" choice, not a hard requirement. The floor is Node 22 (see
-# frontend/README.md): @testing-library/jest-dom 7 and chromatic 18 declare engines
-# node >= 22, and Node 20 went EOL 2026-04-30.
+# frontend/README.md): @testing-library/jest-dom 7 declares engines node >= 22,
+# and Node 20 went EOL 2026-04-30.
 FROM node:26-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
