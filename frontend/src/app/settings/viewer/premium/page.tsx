@@ -90,7 +90,7 @@ function ViewerPremiumContent() {
       })
       router.replace('/settings/viewer/premium')
     }
-  }, [searchParams, router, fetchStatus])
+  }, [searchParams, router, fetchStatus, t])
 
   async function handleConnect() {
     setConnecting(true)

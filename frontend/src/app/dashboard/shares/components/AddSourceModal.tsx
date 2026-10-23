@@ -71,7 +71,7 @@ export function AddSourceModal({
     }
 
     fetchOverlays()
-  }, [])
+  }, [t])
 
   const handleAdd = async () => {
     if (!selectedOverlay) return

@@ -66,7 +66,7 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
       <Dialog.Content showCloseButton={false}>
         {/* Warning header */}
         <div className="mb-4 flex items-start gap-4">
-          <div className="mt-0.5 flex-shrink-0">
+          <div className="mt-0.5 shrink-0">
             <svg
               className="h-6 w-6 text-yellow-400"
               fill="none"

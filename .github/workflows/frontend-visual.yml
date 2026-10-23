@@ -2,13 +2,10 @@ name: Frontend Visual Gate
 
 # Pixel-baseline gate for app chrome (frontend/tests/e2e/visual-regression.spec.ts).
 #
-# Why a separate workflow: the Chromatic step that used to carry visual
-# regression lives in frontend-quality.yml, which is workflow_dispatch-only —
-# a gate that never runs on a PR. Every layout-class UI defect that reached
-# production sailed past it. This workflow runs on every PR, like
-# frontend-a11y.yml, and uses the same paths-filter skip shim so backend-only
-# PRs report present-but-skipped (branch protection treats that as passing —
-# see the rationale in frontend-a11y.yml, ADR-0033 / PR #577).
+# Why a separate workflow: it runs on every PR, like frontend-a11y.yml, and
+# uses the same paths-filter skip shim so backend-only PRs report
+# present-but-skipped (branch protection treats that as passing — see the
+# rationale in frontend-a11y.yml, ADR-0033 / PR #577).
 #
 # Baselines are generated HERE, never on a dev host: the committed PNGs must
 # come from the exact browser/font stack CI pins. To update baselines after a

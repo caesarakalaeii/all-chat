@@ -38,12 +38,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  DialogRoot,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { DialogRoot, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
 import { useTranslations } from '@/lib/i18n'
 import { enMessages } from '@/lib/i18n/messages/en'
@@ -143,10 +138,7 @@ export default function AdminLocalizationPage() {
         })
         setReviewTarget(null)
         setReviewNote('')
-        return Promise.all([
-          localizationAdminApi.reviewQueue(),
-          localizationAdminApi.progress(),
-        ])
+        return Promise.all([localizationAdminApi.reviewQueue(), localizationAdminApi.progress()])
       })
       .then(([q, p]) => {
         setQueue(q)
@@ -200,9 +192,7 @@ export default function AdminLocalizationPage() {
             <Skeleton className="h-10 w-full rounded-lg" />
           </div>
         ) : requests.length === 0 ? (
-          <p className="px-4 py-3 text-sm text-text-sub">
-            {t('admin.localization.requestsEmpty')}
-          </p>
+          <p className="px-4 py-3 text-sm text-text-sub">{t('admin.localization.requestsEmpty')}</p>
         ) : (
           <div className="divide-y divide-border">
             {requests.map((req) => (
@@ -212,11 +202,7 @@ export default function AdminLocalizationPage() {
                     {req.native_name} ({req.english_name}, {req.code})
                   </span>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => reviewLocale(req.code, true)}
-                >
+                <Button size="sm" variant="outline" onClick={() => reviewLocale(req.code, true)}>
                   {t('admin.localization.approveLocale', { code: req.code })}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => reviewLocale(req.code, false)}>
@@ -231,9 +217,7 @@ export default function AdminLocalizationPage() {
       {/* Review queue */}
       <Card className="overflow-hidden">
         <div className="border-b border-border px-4 py-3">
-          <h2 className="text-base font-bold text-text">
-            {t('admin.localization.queueHeading')}
-          </h2>
+          <h2 className="text-base font-bold text-text">{t('admin.localization.queueHeading')}</h2>
         </div>
         {queue === null ? (
           <div className="space-y-2 p-4">
@@ -297,7 +281,7 @@ export default function AdminLocalizationPage() {
               {progress.map((p) => (
                 <div
                   key={p.code}
-                  className="flex min-h-[44px] flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2"
+                  className="flex min-h-11 flex-wrap items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2"
                 >
                   <span className="font-mono text-sm text-text">{p.code}</span>
                   <span className="text-xs text-text-sub">
@@ -347,7 +331,11 @@ export default function AdminLocalizationPage() {
                 />
               </div>
               <div className="mt-6 flex justify-end gap-3">
-                <Button variant="outline" disabled={reviewing} onClick={() => reviewSubmission(false)}>
+                <Button
+                  variant="outline"
+                  disabled={reviewing}
+                  onClick={() => reviewSubmission(false)}
+                >
                   {t('admin.localization.rejectButton')}
                 </Button>
                 <Button disabled={reviewing} onClick={() => reviewSubmission(true)}>

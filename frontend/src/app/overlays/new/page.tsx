@@ -105,7 +105,9 @@ function NewOverlayContent() {
                 {t('overlayEditor.create.cancel')}
               </button>
               <button type="submit" className="lanes-btn" disabled={isSubmitting || !name.trim()}>
-                {t(isSubmitting ? 'overlayEditor.create.submitting' : 'overlayEditor.create.submit')}
+                {t(
+                  isSubmitting ? 'overlayEditor.create.submitting' : 'overlayEditor.create.submit'
+                )}
               </button>
             </div>
           </form>

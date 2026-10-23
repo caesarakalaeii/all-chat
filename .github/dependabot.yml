@@ -177,6 +177,11 @@ updates:
       - "dependencies"
       - "frontend"
     open-pull-requests-limit: 10
+    ignore:
+      # typescript-eslint pins typescript <6.1, so a TypeScript major breaks
+      # `npm ci` until it ships support. Drop this once it does.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       react:
         patterns:
@@ -190,6 +195,9 @@ updates:
           - "@testing-library/*"
           - "@playwright/*"
           - "vitest"
+          # vitest pins its @vitest/* plugins to its exact version, so they
+          # must move in the same PR or npm ci fails with ERESOLVE.
+          - "@vitest/*"
       development:
         dependency-type: "development"
         update-types:

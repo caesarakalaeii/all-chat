@@ -29,7 +29,6 @@ export const dashboard = {
     deactivateExtension: 'Deactivate Extension',
     setAsExtension: 'Set as Extension Overlay',
     deleteLabel: 'Delete {name}',
-    openLabel: 'Open {name}',
     // Two keys rather than a concatenated 's': see the comment in
     // __tests__/dashboard.test.ts. The caller picks by count.
     sourceCountOne: '{count} source',
