@@ -875,6 +875,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0081: Chat command replies from an All-Chat Bot, premium custom bots, and timers
+
+**Status**: Accepted (2026-10-23)
+**Problem**: Streamers want command replies from a branded bot instead of their own account, a custom bot name as a premium option (like Wizebot), and timers that post every X minutes, every X messages, or both.
+**Decision**: New auth-service `/internal/chat/bot-send` resolves the sender per platform: the streamer's choice of `self`, else a premium custom bot, else the All-Chat Bot, falling back to the streamer when a grant or bot row is missing. Twitch bots post via Helix with an app access token (`user:bot` from the bot, `channel:bot` from the broadcaster through a new `bot` re-consent action); Kick uses `type: "bot"` with the streamer's token; YouTube posts with the bot's Google token. Bot accounts live in `chat_bot_accounts` (migration 115), connected through a consent flow that reuses each platform's callback. Timers (`chat_timers`, migration 116) count lines per owner in Redis and fire from a 15 s tick on every replica, claimed by a conditional `UPDATE` so exactly one replica posts. Timer YouTube sends read the live chat id only from Redis.
+**Impact**: Operator connects the All-Chat Bot on `/admin/chat-bots` and configures the Kick app bot; streamers grant `channel:bot` once. New gate `custom_chat_bot` (premium, early access). Time-only timers can post into offline Twitch/Kick chats. Works on beta once auth-service and engagement-service reach main.
+**→ Read**: [0081-chat-command-bot-sender-custom-bots-and-timers.md](./0081-chat-command-bot-sender-custom-bots-and-timers.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
