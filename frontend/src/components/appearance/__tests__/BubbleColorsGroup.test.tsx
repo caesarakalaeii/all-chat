@@ -135,7 +135,6 @@ describe('BubbleColorsGroup', () => {
       expect(onChange).toHaveBeenCalledWith({ bubbleColorFromUser: undefined })
     })
 
-
     it('picking Outline patches the mode without touching the opacity', () => {
       const { onChange } = renderGroup({
         bubbleColorFromUser: 'background',

@@ -115,6 +115,19 @@ function apiErrorDetail(err: unknown, fallback: string): string {
   return fallback
 }
 
+// Index the caller's submissions by key and seed the drafts from them, so
+// revising is not retyping. Approved rows are not seeded: they are already
+// accepted, and re-editing one would reset it to pending for a cosmetic change.
+function indexSubmissions(rows: LocalizationTranslation[]) {
+  const byKey: Record<string, LocalizationTranslation> = {}
+  const drafts: Record<string, string> = {}
+  for (const row of rows) {
+    byKey[row.key] = row
+    if (row.status !== 'approved') drafts[row.key] = row.value
+  }
+  return { byKey, drafts }
+}
+
 function TranslatePageInner() {
   const t = useTranslations()
 
@@ -147,39 +160,28 @@ function TranslatePageInner() {
       .catch(() => setLocales([]))
   }, [])
 
-  // Load the caller's own submissions when a locale is picked.
+  // Load the caller's own submissions when a locale is picked. Clearing them
+  // when the locale is unset happens in the picker's change handler.
   useEffect(() => {
-    if (!localeCode) {
-      setMine({})
-      return
-    }
+    if (!localeCode) return
     let cancelled = false
     localizationApi
       .myTranslations(localeCode)
       .then((rows) => {
         if (cancelled) return
-        const byKey: Record<string, LocalizationTranslation> = {}
-        for (const row of rows) byKey[row.key] = row
+        const { byKey, drafts } = indexSubmissions(rows)
         setMine(byKey)
+        setDrafts(drafts)
       })
       .catch(() => {
-        if (!cancelled) setMine({})
+        if (cancelled) return
+        setMine({})
+        setDrafts({})
       })
     return () => {
       cancelled = true
     }
   }, [localeCode])
-
-  // Seed drafts from the caller's previous submissions so revising is not
-  // retyping. Approved rows are excluded: they are already accepted, and
-  // re-editing one would reset it to pending for a cosmetic change.
-  useEffect(() => {
-    const seeded: Record<string, string> = {}
-    for (const row of Object.values(mine)) {
-      if (row.status !== 'approved') seeded[row.key] = row.value
-    }
-    setDrafts(seeded)
-  }, [mine])
 
   const nsProgress = useMemo(() => {
     const done = nsKeys.filter((k) => mine[k]?.status === 'approved').length
@@ -214,9 +216,9 @@ function TranslatePageInner() {
         return localizationApi.myTranslations(localeCode)
       })
       .then((rows) => {
-        const byKey: Record<string, LocalizationTranslation> = {}
-        for (const row of rows) byKey[row.key] = row
+        const { byKey, drafts } = indexSubmissions(rows)
         setMine(byKey)
+        setDrafts(drafts)
       })
       .catch((err: unknown) =>
         toastManager.add({
@@ -271,6 +273,10 @@ function TranslatePageInner() {
                 onValueChange={(v) => {
                   setLocaleCode(v ?? '')
                   setNamespaceId('')
+                  if (!v) {
+                    setMine({})
+                    setDrafts({})
+                  }
                 }}
               >
                 <SelectTrigger id="translate-locale" className="w-full">

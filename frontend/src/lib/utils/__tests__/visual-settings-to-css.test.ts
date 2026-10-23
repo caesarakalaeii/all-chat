@@ -365,9 +365,7 @@ describe('visualSettingsToCss flat bubble background', () => {
     const css = visualSettingsToCss({
       bubbleBgColor: 'linear-gradient(90deg, #111111, #222222)',
     })
-    expect(css).toContain(
-      'background-color: linear-gradient(90deg, #111111, #222222);'
-    )
+    expect(css).toContain('background-color: linear-gradient(90deg, #111111, #222222);')
   })
 
   it('emits the flat fill before the palette rules so the palette wins ties', () => {
