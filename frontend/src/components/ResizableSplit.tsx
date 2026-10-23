@@ -223,12 +223,7 @@ export function ResizableSplit({
           classifies `separator` as non-interactive structure, so the focusable
           window-splitter separator cannot satisfy the a11y gate; `slider`
           carries the same value/min/max/orientation + arrow-key semantics. */}
-      <div
-        className={clsx(
-          'relative hidden flex-shrink-0 md:block',
-          isVertical ? 'h-1 w-full' : 'w-1'
-        )}
-      >
+      <div className={clsx('relative hidden shrink-0 md:block', isVertical ? 'h-1 w-full' : 'w-1')}>
         <div
           role="slider"
           aria-label={t('common.splitPane.resizeLabel')}

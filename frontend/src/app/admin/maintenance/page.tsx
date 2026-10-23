@@ -84,7 +84,7 @@ export default function AdminMaintenancePage() {
           toastManager.add({ title: t('admin.maintenance.loadFailedToast'), type: 'error' })
         })
         .finally(() => setLoading(false)),
-    []
+    [t]
   )
 
   useEffect(() => {

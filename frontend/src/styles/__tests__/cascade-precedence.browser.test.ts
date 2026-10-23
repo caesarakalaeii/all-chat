@@ -17,7 +17,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest'
-import { page } from '@vitest/browser/context'
+import { page } from 'vitest/browser'
 
 /**
  * Real-Chromium guard for the overlay CSS precedence hierarchy:

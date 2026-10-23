@@ -2890,7 +2890,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
     ) {
       window.history.replaceState({}, '', `/overlays/${id}`)
     }
-  }, [id, searchParams])
+  }, [id, searchParams, t])
 
   // --- Source handlers ---
 

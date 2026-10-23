@@ -22,6 +22,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
+  Bot,
   LayoutDashboard,
   Search,
   Users,
@@ -61,6 +62,7 @@ type DescribedStem =
   | 'viewers'
   | 'cosmetics'
   | 'features'
+  | 'chatBots'
   | 'maintenance'
   | 'localization'
 
@@ -94,10 +96,10 @@ export const ADMIN_LINKS: AdminLink[] = [
   { href: '/admin/viewers', messageStem: 'viewers', icon: Eye },
   { href: '/admin/cosmetics', messageStem: 'cosmetics', icon: Sparkles },
   { href: '/admin/features', messageStem: 'features', icon: Flag },
+  { href: '/admin/chat-bots', messageStem: 'chatBots', icon: Bot },
   { href: '/admin/maintenance', messageStem: 'maintenance', icon: Wrench },
   { href: '/admin/localization', messageStem: 'localization', icon: Languages },
 ]
-
 
 /**
  * The rail entries that are not the dashboard itself, in rail order. The grid on

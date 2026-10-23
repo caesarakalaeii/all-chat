@@ -204,7 +204,7 @@ export default function AdminFeaturesPage() {
                   </div>
 
                   {/* Premium dimension */}
-                  <div className="flex flex-shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     <span
                       className={cn(
                         'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold',
@@ -243,7 +243,7 @@ export default function AdminFeaturesPage() {
                   </div>
 
                   {/* Early-access dimension */}
-                  <div className="flex flex-shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
                     <span
                       className={cn(
                         'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold',

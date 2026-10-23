@@ -27,23 +27,43 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import CommandsPage from '@/app/commands/page'
-import type { ChatCommand, ChatCommandStatus } from '@/lib/types/engagement'
-
+import type { ChatBotStatus, ChatCommand, ChatCommandStatus } from '@/lib/types/engagement'
 const api = vi.hoisted(() => ({
+  toastAdd: vi.fn(),
   listChatCommands: vi.fn(),
   createChatCommand: vi.fn(),
   updateChatCommand: vi.fn(),
   deleteChatCommand: vi.fn(),
   previewChatCommand: vi.fn(),
   getChatCommandsConsentUrl: vi.fn(),
+  getChatBotSettings: vi.fn(),
+  updateChatBotSettings: vi.fn(),
+  getChatTimers: vi.fn(),
+  createChatTimer: vi.fn(),
+  updateChatTimer: vi.fn(),
+  deleteChatTimer: vi.fn(),
 }))
 
-vi.mock('@/lib/api/engagement', () => ({ engagementApi: api }))
-vi.mock('@/lib/toast', () => ({ toastManager: { add: vi.fn() } }))
+const auth = vi.hoisted(() => ({
+  getChatBotsStatus: vi.fn(),
+  disconnectChatBot: vi.fn(),
+  getChatBotGrantUrl: vi.fn(),
+}))
+
+const connect = vi.hoisted(() => ({ startChatBotConnect: vi.fn() }))
+vi.mock('@/lib/api/engagement', () => ({
+  engagementApi: api,
+  startChatBotConnect: connect.startChatBotConnect,
+}))
+vi.mock('@/lib/api/auth', () => ({ authApi: auth }))
+vi.mock('@/lib/toast', () => ({ toastManager: { add: api.toastAdd } }))
+
+// The `?bot=` param drives the redirect toast; tests override per case.
+let mockSearchParams = new URLSearchParams()
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/commands',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mockSearchParams,
 }))
 vi.mock('@/components/ProtectedRoute', () => ({
   ProtectedRoute: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -76,15 +96,33 @@ function command(over: Partial<ChatCommand> = {}): ChatCommand {
   }
 }
 
+function chatBotStatus(over: Partial<ChatBotStatus> = {}): ChatBotStatus {
+  return {
+    allchat: {
+      twitch: { connected: true, login: 'allchatbot', display_name: 'AllChatBot' },
+      kick: { connected: true },
+      youtube: { connected: true, login: 'allchatbot', display_name: 'AllChatBot' },
+    },
+    custom: { twitch: null, kick: null, youtube: null },
+    twitch_bot_granted: true,
+    premium: true,
+    ...over,
+  }
+}
+
 describe('Chat commands page', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockSearchParams = new URLSearchParams()
     api.listChatCommands.mockResolvedValue({ commands: [command()], status: readyStatus })
     api.previewChatCommand.mockResolvedValue({
       output: 'Hello ExampleViewer, welcome in!',
       image: '',
       errors: [],
     })
+    api.getChatBotSettings.mockResolvedValue({ sender: 'bot' })
+    api.getChatTimers.mockResolvedValue({ timers: [] })
+    auth.getChatBotsStatus.mockResolvedValue(chatBotStatus())
   })
 
   afterEach(() => cleanup())
@@ -204,5 +242,68 @@ describe('Chat commands page', () => {
     fireEvent.click(within(confirm).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(api.deleteChatCommand).toHaveBeenCalledWith(command().id))
     await waitFor(() => expect(screen.queryByText('!discord')).not.toBeInTheDocument())
+  })
+
+  it('shows the Twitch grant button while channel:bot is not granted, and hides it once granted', async () => {
+    auth.getChatBotsStatus.mockResolvedValue(chatBotStatus({ twitch_bot_granted: false }))
+    auth.getChatBotGrantUrl.mockRejectedValue(new Error('no redirect in jsdom'))
+    render(<CommandsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Allow in Twitch chat' }))
+    await waitFor(() =>
+      expect(auth.getChatBotGrantUrl).toHaveBeenCalledWith(readyStatus.consent_overlay_id)
+    )
+
+    cleanup()
+    auth.getChatBotsStatus.mockResolvedValue(chatBotStatus({ twitch_bot_granted: true }))
+    render(<CommandsPage />)
+    await screen.findByText('!discord')
+    expect(screen.queryByRole('button', { name: 'Allow in Twitch chat' })).not.toBeInTheDocument()
+    expect(screen.getByText('The All-Chat Bot is allowed in your Twitch chat.')).toBeInTheDocument()
+  })
+
+  it('offers custom bot connect to premium users and the upgrade link otherwise', async () => {
+    auth.getChatBotsStatus.mockResolvedValue(chatBotStatus({ premium: true }))
+    connect.startChatBotConnect.mockResolvedValue(undefined)
+    render(<CommandsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect Kick bot' }))
+    await waitFor(() => expect(connect.startChatBotConnect).toHaveBeenCalledWith('kick', 'custom'))
+
+    cleanup()
+    auth.getChatBotsStatus.mockResolvedValue(chatBotStatus({ premium: false }))
+    render(<CommandsPage />)
+    const upsell = (await screen.findByText(/Custom bot accounts are a premium feature/))
+      .parentElement as HTMLElement
+    expect(within(upsell).getByRole('link', { name: 'See premium' })).toHaveAttribute(
+      'href',
+      '/upgrade'
+    )
+    expect(screen.queryByRole('button', { name: 'Connect Kick bot' })).not.toBeInTheDocument()
+  })
+
+  it('rejects a timer with neither trigger set', async () => {
+    render(<CommandsPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'New timer' }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Shoutouts' } })
+    fireEvent.change(within(dialog).getByLabelText('Message'), {
+      target: { value: 'Come say hi' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Set an interval, a minimum message count, or both.'
+    )
+    expect(api.createChatTimer).not.toHaveBeenCalled()
+  })
+
+  it('toasts after the ?bot= redirect', async () => {
+    mockSearchParams = new URLSearchParams('bot=connected')
+    render(<CommandsPage />)
+    expect(await screen.findByText('!discord')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(api.toastAdd).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Bot connected.', type: 'success' })
+      )
+    )
   })
 })

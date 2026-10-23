@@ -49,7 +49,7 @@ export function ToggleSwitch({
         checked={checked}
         onCheckedChange={onChange}
         disabled={disabled}
-        className="data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50"
+        className="data-disabled:cursor-not-allowed data-disabled:opacity-50"
       >
         <Switch.Thumb />
       </Switch.Root>

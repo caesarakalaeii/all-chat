@@ -16,12 +16,16 @@
 
 // Package announcer is engagement-service's client for auth-service's internal chat
 // routes, called with a short-lived service JWT. engagement-service has no platform
-// credentials of its own, so every message it posts as the streamer and every clip it
-// makes goes through here:
+// credentials of its own, so every message it posts to chat and every clip it makes
+// goes through here:
 //   - an opt-in "round started" message when a poll/prediction opens (issue #523,
-//     H4-2), posted to the overlay owner's sendable source platforms. Best-effort: a
-//     failed or disabled announce never blocks or fails the round.
-//   - chat command replies (Send) and Twitch clips (Clip), ADR-0079.
+//     H4-2), posted as the streamer to her sendable source platforms
+//     (/internal/chat/announce). Best-effort: a failed or disabled announce never
+//     blocks or fails the round.
+//   - chat command replies and chat timer posts (BotSend), ADR-0079/0081: auth-service
+//     resolves the sender the streamer chose (All-Chat Bot by default, else their
+//     own account) and posts with it.
+//   - Twitch clips (Clip).
 package announcer
 
 import (
@@ -189,12 +193,65 @@ func (a *Announcer) buildMessage(icon, title string, options []string, cta strin
 	return msg
 }
 
-// Send posts a chat command reply as the streamer to one platform (ADR-0079).
-func (a *Announcer) Send(ctx context.Context, userID, message, platform string) error {
+// SendPurpose distinguishes what a BotSend carries; anything not the timer purpose
+// defaults to the command one.
+type SendPurpose string
+
+const (
+	PurposeCommand SendPurpose = "command"
+	PurposeTimer   SendPurpose = "timer"
+)
+
+// BotSend posts a chat command reply or a timer message on one platform (ADR-0079,
+// ADR-0081). auth-service resolves the sender the streamer chose — the All-Chat Bot
+// by default, else their own account — and falls back per platform on its own, so
+// engagement-service only names the target user and platform. The response shape is
+// announce's, so the outcome handling is the same code.
+func (a *Announcer) BotSend(ctx context.Context, userID, message, platform string, purpose SendPurpose) error {
 	if a == nil || !a.enabled {
 		return ErrDisabled
 	}
-	return a.postAnnounce(ctx, userID, message, []string{platform})
+	if purpose != PurposeTimer {
+		purpose = PurposeCommand
+	}
+	resp, err := a.callAuth(ctx, "/internal/chat/bot-send", botSendRequest{
+		UserID: userID, Message: message, Platforms: []string{platform}, Purpose: string(purpose),
+	})
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("bot-send endpoint returned %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+	}
+	// 200 with success=false means nothing was posted; the real outcome is per
+	// platform in the body. Replies and timers are best-effort, so a failure here is
+	// exactly as loud as a failed announce.
+	var out announceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fmt.Errorf("decode bot-send response: %w", err)
+	}
+	if !out.Success {
+		detail := failedResults(out.Results)
+		if detail == "" {
+			detail = "no sendable platform connected"
+		}
+		return fmt.Errorf("bot-send not delivered (%s)", detail)
+	}
+	if partial := failedResults(out.Results); partial != "" {
+		a.log.Warn("engagement bot-send partially delivered",
+			zap.String("user", userID), zap.String("failed", partial))
+	}
+	return nil
+}
+
+// botSendRequest is the body of POST /internal/chat/bot-send on auth-service.
+type botSendRequest struct {
+	UserID    string   `json:"user_id"`
+	Message   string   `json:"message"`
+	Platforms []string `json:"platforms"`
+	Purpose   string   `json:"purpose"`
 }
 
 // Clip clips the streamer's live Twitch stream and returns the clip URL (ADR-0079).

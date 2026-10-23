@@ -27,7 +27,6 @@ export const dashboard: LocaleNamespace<'dashboard'> = {
     deactivateExtension: 'Extension deaktivieren',
     setAsExtension: 'Als Extension-Overlay festlegen',
     deleteLabel: '{name} löschen',
-    openLabel: '{name} öffnen',
     sourceCountOne: '{count} Quelle',
     sourceCountOther: '{count} Quellen',
   },

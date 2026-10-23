@@ -161,7 +161,10 @@ func main() {
 	// replies/clips through auth-service via the announcer's service-JWT client.
 	channelSync := consumer.NewChannelSync(redisClient, repo, log)
 	chatCmdConsumer := consumer.NewChatCommandConsumer(redisClient, repo, announce, consumerName, log)
-
+	// Streamer-defined chat timers (ADR-0081): every replica ticks and fires due timers
+	// (the claim is a conditional DB UPDATE, so replicas race harmlessly); the posts
+	// take the same bot-send path replies take.
+	timerScheduler := consumer.NewTimerScheduler(redisClient, repo, announce, chatCmdConsumer, log, 15*time.Second)
 	// Track the background workers so shutdown can wait for them (and their PEL drains) to
 	// stop before the deferred dbPool/redisClient closes run — otherwise SIGTERM closes the
 	// pool out from under an in-flight consumer, logging spurious "closed pool" errors (P3-13).
@@ -175,6 +178,7 @@ func main() {
 	runBG(nativeConsumer.Run)
 	runBG(channelSync.Run)
 	runBG(chatCmdConsumer.Run)
+	runBG(timerScheduler.Run)
 	runBG(func(ctx context.Context) {
 		runSweeper(ctx, repo, pub, log, time.Duration(cfg.SweepIntervalSeconds)*time.Second,
 			time.Duration(cfg.NativeStaleTTLSeconds)*time.Second)
@@ -278,6 +282,17 @@ func main() {
 	auth.POST("/chat-commands/preview", requireDeviceOverlay, cmdH.Preview)
 	auth.PUT("/chat-commands/:cid", requireEngagementScope, requireDeviceOverlay, requireChatCommandsEarlyAccess, requireChatCommands, cmdH.Update)
 	auth.DELETE("/chat-commands/:cid", requireEngagementScope, requireDeviceOverlay, cmdH.Delete)
+
+	// Chat timers and the bot-sender setting (ADR-0081). The same account-level shape
+	// as the commands editor above: no overlay in the path so paired devices are
+	// refused, writes behind the chat_commands gate, the GETs and delete not gated.
+	timerH := handler.NewChatTimers(repo, channelSync.Trigger, log)
+	auth.GET("/chat-commands/settings", requireDeviceOverlay, timerH.GetSender)
+	auth.PUT("/chat-commands/settings", requireEngagementScope, requireDeviceOverlay, requireChatCommandsEarlyAccess, requireChatCommands, timerH.PutSender)
+	auth.GET("/chat-timers", requireDeviceOverlay, timerH.List)
+	auth.POST("/chat-timers", requireEngagementScope, requireDeviceOverlay, requireChatCommandsEarlyAccess, requireChatCommands, timerH.Create)
+	auth.PUT("/chat-timers/:tid", requireEngagementScope, requireDeviceOverlay, requireChatCommandsEarlyAccess, requireChatCommands, timerH.Update)
+	auth.DELETE("/chat-timers/:tid", requireEngagementScope, requireDeviceOverlay, timerH.Delete)
 
 	// Viewer participation (web page / extension).
 	auth.POST("/overlays/:id/polls/:pollId/vote", h.WebVote)

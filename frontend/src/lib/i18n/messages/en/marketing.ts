@@ -398,6 +398,9 @@ export const marketing = {
     chatCommandsTitle: 'Chat commands',
     chatCommandsBody:
       'Custom !commands and keyword triggers for every chat: reply as you, clip your Twitch stream on cue, show an image on your alerts overlay, and use variables, web lookups or JavaScript in replies. Replies in YouTube chat are premium.',
+    customChatBotTitle: 'Your own chat bot',
+    customChatBotBody:
+      'Connect your own bot account on Twitch, Kick or YouTube and every command reply and timer goes out under your bot’s name instead of yours.',
     flairsTitle: 'Viewer flairs',
     flairsBody:
       'Stand out in any chat you appear in with premium cosmetics like animated name gradients.',
