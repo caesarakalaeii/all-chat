@@ -34,10 +34,11 @@ const BETA_ONLY_OVERLAY_KINDS: Partial<Record<OverlayType, true>> = {
 }
 
 /** App features (not platforms or overlay kinds) offered only on the beta host. */
-export type BetaFeature = 'chatCommands'
+export type BetaFeature = 'chatCommands' | 'customChatBot'
 
 const BETA_ONLY_FEATURES: Partial<Record<BetaFeature, true>> = {
   chatCommands: true,
+  customChatBot: true,
 }
 
 const BETA_HOST = 'beta.allch.at'

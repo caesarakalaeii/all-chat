@@ -109,7 +109,7 @@ function SettingsContent() {
     if (!justConnected) return
     toastManager.add({ title: t('settings.index.discordServerConnectedToast'), type: 'success' })
     router.replace('/settings')
-  }, [justConnected, router])
+  }, [justConnected, router, t])
 
   // The account link is fetched separately from the guilds: a user can have servers connected and
   // no link, or the reverse, and conflating them would hide whichever is missing.
@@ -159,7 +159,7 @@ function SettingsContent() {
       type: 'error',
     })
     router.replace('/settings')
-  }, [justLinked, searchParams, router])
+  }, [justLinked, searchParams, router, t])
 
   async function handleUnlinkDiscordAccount() {
     try {

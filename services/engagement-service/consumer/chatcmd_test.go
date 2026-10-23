@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/caesar/all-chat/services/engagement-service/announcer"
 	"github.com/caesar/all-chat/services/engagement-service/models"
 	"github.com/caesar/all-chat/services/engagement-service/repository"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
@@ -60,7 +61,10 @@ func (f *fakeCmdStore) OwnerStatus(_ context.Context, _ uuid.UUID) (repository.C
 	return repository.ChatCommandOwnerStatus{IsPremium: f.premium}, nil
 }
 
-type sent struct{ user, text, platform string }
+type sent struct {
+	user, text, platform string
+	purpose              announcer.SendPurpose
+}
 
 type fakeOutput struct {
 	mu      sync.Mutex
@@ -69,10 +73,10 @@ type fakeOutput struct {
 	clipErr error
 }
 
-func (f *fakeOutput) Send(_ context.Context, userID, message, platform string) error {
+func (f *fakeOutput) BotSend(_ context.Context, userID, message, platform string, purpose announcer.SendPurpose) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.sent = append(f.sent, sent{userID, message, platform})
+	f.sent = append(f.sent, sent{userID, message, platform, purpose})
 	return nil
 }
 
@@ -116,7 +120,7 @@ func TestChatCommand_RepliesWithTemplate(t *testing.T) {
 
 	c.handle(ctx, job("1", "twitch", "!hello"))
 	require.Len(t, out.sent, 1)
-	assert.Equal(t, sent{ownerID.String(), "Hello Bob, #1!", "twitch"}, out.sent[0])
+	assert.Equal(t, sent{user: ownerID.String(), text: "Hello Bob, #1!", platform: "twitch", purpose: announcer.PurposeCommand}, out.sent[0])
 	assert.Len(t, store.uses, 1)
 
 	c.handle(ctx, job("2", "twitch", "hello there"))

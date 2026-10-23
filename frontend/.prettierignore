@@ -15,6 +15,10 @@ storybook-static/
 # `copy:monaco` pre-dev/pre-build step and gitignored. Minified upstream code.
 public/monaco/
 
+# Emitted by scripts/generate-bundled-themes.mjs; formatting it by hand only
+# churns against the next `npm run generate:themes`.
+src/lib/theme-marketplace/bundled-themes.generated.ts
+
 # Test/report artifacts
 coverage/
 playwright-report/

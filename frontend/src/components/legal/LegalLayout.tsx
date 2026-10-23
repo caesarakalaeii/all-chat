@@ -46,7 +46,7 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
                 pushed the page ~280px past a 375px viewport. */}
             <div className="min-w-0 space-y-2">
               <span className="mono-label">{t('legal.layout.eyebrow')}</span>
-              <h1 className="text-2xl break-words sm:text-3xl">{title}</h1>
+              <h1 className="text-2xl wrap-break-word sm:text-3xl">{title}</h1>
               <p className="text-dim text-sm">
                 {t('legal.layout.lastUpdated', { date: lastUpdated })}
               </p>

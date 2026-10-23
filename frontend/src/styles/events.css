@@ -609,10 +609,7 @@
        than the other way round for a reason: --chat-font-size comes from the
        GUI customizer, and a set control must beat the legacy display setting,
        not merge with it. */
-    font-size: var(
-      --chat-font-size,
-      var(--theme-font-size, var(--chat-legacy-font-size, 1rem))
-    );
+    font-size: var(--chat-font-size, var(--theme-font-size, var(--chat-legacy-font-size, 1rem)));
     font-family: var(--chat-font-family, inherit);
     font-weight: var(--chat-font-weight, inherit);
     line-height: calc(var(--chat-line-height, 1.5) * 1em);
@@ -797,10 +794,7 @@
        --theme-avatar-gap): with no control set, a theme's message font size
        (Comic Speech 15px, Cyberpunk 17px) wins over the 1rem platform default
        instead of being flattened by it. */
-    font-size: var(
-      --chat-font-size,
-      var(--theme-font-size, var(--chat-legacy-font-size, 1rem))
-    );
+    font-size: var(--chat-font-size, var(--theme-font-size, var(--chat-legacy-font-size, 1rem)));
     font-family: var(--chat-font-family, inherit);
     font-weight: var(--chat-font-weight, inherit);
     line-height: calc(var(--chat-line-height, 1.5) * 1em);

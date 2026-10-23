@@ -229,7 +229,6 @@ describe('visual customizer property coverage', () => {
     }
   })
 
-
   /**
    * `data-bubble-slot` is assigned from arrival order by BubbleSlotTracker, so a
    * theme keying off it would be styling "the 3rd message ever seen", not a

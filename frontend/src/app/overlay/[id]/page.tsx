@@ -290,7 +290,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     if (ttsFallbackToastShownRef.current) return
     ttsFallbackToastShownRef.current = true
     toastManager.add({ title: t('common.toast.elevenLabsFallback') })
-  }, [])
+  }, [t])
 
   useEffect(() => {
     return () => {

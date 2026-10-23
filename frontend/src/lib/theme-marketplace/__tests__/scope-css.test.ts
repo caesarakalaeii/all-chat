@@ -83,8 +83,9 @@ describe('scopeCustomCss', () => {
 
 describe('joinPreviewCss', () => {
   it('hoists a user @import above the theme layer body (live-overlay parity)', () => {
-    const theme = "@layer marketplace-themes {\n.chat-username { color: red; }\n}"
-    const custom = "@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');\n.chat-username { text-shadow: none; }"
+    const theme = '@layer marketplace-themes {\n.chat-username { color: red; }\n}'
+    const custom =
+      "@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&display=swap');\n.chat-username { text-shadow: none; }"
     const out = joinPreviewCss(theme, custom)
     const importIdx = out.indexOf('@import')
     const layerIdx = out.indexOf('@layer')
@@ -95,11 +96,10 @@ describe('joinPreviewCss', () => {
   })
 
   it('keeps theme imports before user imports and drops empty tiers', () => {
-    const theme = "@import url('/font-proxy/css?family=Theme');\n@layer marketplace-themes {\n.x { color: red; }\n}"
+    const theme =
+      "@import url('/font-proxy/css?family=Theme');\n@layer marketplace-themes {\n.x { color: red; }\n}"
     const out = joinPreviewCss(theme, '')
-    expect(out.indexOf("url('/font-proxy/css?family=Theme')")).toBeLessThan(
-      out.indexOf('@layer')
-    )
+    expect(out.indexOf("url('/font-proxy/css?family=Theme')")).toBeLessThan(out.indexOf('@layer'))
     expect(out).toContain('.x { color: red; }')
   })
 })

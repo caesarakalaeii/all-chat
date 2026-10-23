@@ -649,6 +649,13 @@ func main() {
 		publicAPI.GET("/auth/tiktok/login", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/callback", proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/tiktok/add-source/:overlay_id", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
+		// All-Chat Bot and custom chat-bot accounts (ADR-0081). bot-connect returns an
+		// auth_url from the caller's JWT session, so like the consent reflows above it
+		// lives in publicAPI with CookieToBearer; auth-service resolves the scope,
+		// premium/early-access gate (custom) or admin gate (allchat).
+		publicAPI.GET("/auth/twitch/bot-connect", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/youtube/bot-connect", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
+		publicAPI.GET("/auth/kick/bot-connect", localmiddleware.CookieToBearer(), proxyHandler.ForwardRequest)
 		publicAPI.GET("/auth/discord/callback", proxyHandler.ForwardRequest)
 
 		// Viewer OAuth routes (for sending messages)
@@ -781,6 +788,13 @@ func main() {
 		protectedAPI.GET("/auth/discord/identity/connect", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/auth/discord/identity", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/discord/identity", proxyHandler.ForwardRequest)
+
+		// All-Chat Bot and custom chat-bot accounts (ADR-0081). The GET feeds the
+		// /commands bot section; the DELETEs disconnect a custom bot (owner) or a
+		// platform's All-Chat Bot (admin; auth-service enforces its own admin gate).
+		protectedAPI.GET("/auth/chat-bots", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/chat-bots/custom/:platform", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/chat-bots/allchat/:platform", proxyHandler.ForwardRequest)
 
 		// Viewer protected routes
 		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
@@ -943,6 +957,15 @@ func main() {
 		protectedAPI.POST("/engagement/chat-commands/preview", proxyHandler.ForwardRequest)
 		protectedAPI.PUT("/engagement/chat-commands/:cid", requireEngagementScope, proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/engagement/chat-commands/:cid", requireEngagementScope, proxyHandler.ForwardRequest)
+		// Chat timers and the bot-sender setting (ADR-0081): the WRITES carry the same
+		// PAT scope as the command writes above; the reads and delete mirror what
+		// engagement-service enforces.
+		protectedAPI.GET("/engagement/chat-commands/settings", proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/engagement/chat-commands/settings", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.GET("/engagement/chat-timers", proxyHandler.ForwardRequest)
+		protectedAPI.POST("/engagement/chat-timers", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.PUT("/engagement/chat-timers/:tid", requireEngagementScope, proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/engagement/chat-timers/:tid", requireEngagementScope, proxyHandler.ForwardRequest)
 		// Viewer participation (web page / extension):
 		protectedAPI.POST("/engagement/overlays/:id/polls/:pollId/vote", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/engagement/overlays/:id/predictions/:pid/wager", proxyHandler.ForwardRequest)

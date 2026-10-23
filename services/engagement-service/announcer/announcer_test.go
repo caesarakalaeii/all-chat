@@ -18,6 +18,7 @@ package announcer
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -100,9 +101,9 @@ func TestPostAnnounceSurfacesOutcome(t *testing.T) {
 	}
 }
 
-// Clip and Send are the chat command outputs (ADR-0079): both reach auth-service's
-// internal routes with a service JWT and surface its error_kind.
-func TestClipAndSend(t *testing.T) {
+// Clip and BotSend are the chat command outputs (ADR-0079/0081): both reach
+// auth-service's internal routes with a service JWT and surface its error_kind.
+func TestClipAndBotSend(t *testing.T) {
 	t.Setenv("SERVICE_JWT_SECRET_V1", "test-service-secret-0123456789-abcdefghijklmnop")
 	svcKeys, err := sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET")
 	require.NoError(t, err)
@@ -120,10 +121,10 @@ func TestClipAndSend(t *testing.T) {
 			} else {
 				_, _ = io.WriteString(w, `{"error":"clip failed","error_kind":"stream_offline"}`)
 			}
-		case "/internal/chat/announce":
+		case "/internal/chat/bot-send":
 			body, _ := io.ReadAll(r.Body)
-			assert.JSONEq(t, `{"user_id":"u1","message":"hi","platforms":["kick"]}`, string(body))
-			_, _ = io.WriteString(w, `{"success":true,"results":[{"platform":"kick","success":true}]}`)
+			assert.JSONEq(t, `{"user_id":"u1","message":"hi","platforms":["kick"],"purpose":"command"}`, string(body))
+			_, _ = io.WriteString(w, `{"success":true,"results":[{"platform":"kick","success":true,"sender":"allchat_bot"}]}`)
 		}
 	}))
 	defer srv.Close()
@@ -138,11 +139,33 @@ func TestClipAndSend(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "stream_offline")
 
-	require.NoError(t, a.Send(context.Background(), "u1", "hi", "kick"))
-	assert.Equal(t, []string{"/internal/twitch/clip", "/internal/twitch/clip", "/internal/chat/announce"}, paths)
+	require.NoError(t, a.BotSend(context.Background(), "u1", "hi", "kick", PurposeCommand))
+	assert.Equal(t, []string{"/internal/twitch/clip", "/internal/twitch/clip", "/internal/chat/bot-send"}, paths)
 
 	disabled := New(stubStore{}, "", "https://allch.at", nil, zap.NewNop())
 	_, err = disabled.Clip(context.Background(), "u1")
 	assert.ErrorIs(t, err, ErrDisabled)
-	assert.ErrorIs(t, disabled.Send(context.Background(), "u1", "hi", "kick"), ErrDisabled)
+	assert.ErrorIs(t, disabled.BotSend(context.Background(), "u1", "hi", "kick", PurposeCommand), ErrDisabled)
+}
+
+// A timer post travels the same bot-send route with the timer purpose, so
+// auth-service can tell a recurring post from a command reply.
+func TestBotSendTimerPurpose(t *testing.T) {
+	t.Setenv("SERVICE_JWT_SECRET_V1", "test-service-secret-0123456789-abcdefghijklmnop")
+	svcKeys, err := sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET")
+	require.NoError(t, err)
+
+	var purpose string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/internal/chat/bot-send", r.URL.Path)
+		var req botSendRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		purpose = req.Purpose
+		_, _ = io.WriteString(w, `{"success":true,"results":[{"platform":"twitch","success":true}]}`)
+	}))
+	defer srv.Close()
+
+	a := New(stubStore{}, srv.URL, "https://allch.at", svcKeys, zap.NewNop())
+	require.NoError(t, a.BotSend(context.Background(), "u1", "gg", "twitch", PurposeTimer))
+	assert.Equal(t, "timer", purpose)
 }
