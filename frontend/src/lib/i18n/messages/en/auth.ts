@@ -88,6 +88,8 @@ export const auth = {
     noCode: 'No authentication code received',
     exchangeFailed: 'Authentication failed. The code may have expired — please try again.',
     failed: 'Authentication failed. Please try again.',
+    duplicateAccount:
+      'Your {platform} channel is already connected to the All-Chat account "{username}". Sign in with that account instead. You do not need a separate {platform} login.',
     returnHome: 'Return to Home',
   },
   viewerSuccess: {

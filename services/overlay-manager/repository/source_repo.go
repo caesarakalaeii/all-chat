@@ -87,7 +87,37 @@ func (r *SourceRepository) Create(ctx context.Context, source *models.ChatSource
 // the OAuth flow is idempotent: re-connecting an already-configured channel (e.g. to grant
 // the EventSub chat scopes) succeeds instead of failing on the UNIQUE constraint. The
 // existing config (e.g. TTS/relay settings) is intentionally preserved.
+//
+// Kick slugs are case-insensitive and older Kick sources were stored under the account's
+// display name ("Hedisaurus") rather than the slug ("hedisaurus"), so a Kick source matches
+// an existing row on the overlay case-insensitively and keeps that row's channel id.
+// Without this, the first consent that resolves the real slug adds a second Kick source
+// for the same channel.
 func (r *SourceRepository) CreateOrUpdateAuto(ctx context.Context, source *models.ChatSource) error {
+	if source.Platform == "kick" {
+		err := r.pool.QueryRow(ctx, `
+			UPDATE overlay_chat_sources SET
+				channel_name   = $4,
+				channel_handle = $5,
+				is_active      = true,
+				updated_at     = NOW()
+			WHERE id = (
+				SELECT id FROM overlay_chat_sources
+				WHERE overlay_id = $1 AND platform = $2 AND LOWER(channel_id) = LOWER($3)
+				ORDER BY (channel_id = $3) DESC, created_at ASC
+				LIMIT 1
+			)
+			RETURNING id, channel_id, created_at, updated_at`,
+			source.OverlayID, source.Platform, source.ChannelID, source.ChannelName, source.ChannelHandle,
+		).Scan(&source.ID, &source.ChannelID, &source.CreatedAt, &source.UpdatedAt)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("failed to update existing kick source: %w", err)
+		}
+	}
+
 	if source.ID == "" {
 		source.ID = uuid.New().String()
 	}
