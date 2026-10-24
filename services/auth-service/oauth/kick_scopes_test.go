@@ -125,6 +125,59 @@ func TestGetChannelInfoReturnsSlugNotDisplayName(t *testing.T) {
 		"the channel slug — not the users-endpoint display name — must be stored as channel_id")
 }
 
+// Kick hands back only the scopes it agrees to, and in production a consent that asked for
+// channel:read came back with user:read alone, so the user-token lookup above 401s. The
+// broadcaster-id lookup must work without any user scope: it uses an app access token
+// (client_credentials), which Kick accepts on GET /public/v1/channels with no scope at all.
+func TestGetChannelInfoByBroadcasterIDUsesAnAppAccessToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/oauth/token":
+			require.NoError(t, r.ParseForm())
+			assert.Equal(t, "client_credentials", r.PostForm.Get("grant_type"))
+			assert.Equal(t, "cid", r.PostForm.Get("client_id"))
+			assert.Equal(t, "secret", r.PostForm.Get("client_secret"))
+			_, _ = w.Write([]byte(`{"access_token":"app-tok","token_type":"Bearer","expires_in":3600}`))
+		case "/public/v1/channels":
+			assert.Equal(t, "Bearer app-tok", r.Header.Get("Authorization"))
+			assert.Equal(t, "130554250", r.URL.Query().Get("broadcaster_user_id"))
+			_, _ = w.Write([]byte(`{"data":[{"broadcaster_user_id":130554250,"slug":"scuffed-onigiri"}],"message":"OK"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	o := NewKickOAuth("cid", "secret", "http://localhost/cb")
+	o.tokenURL = srv.URL + "/oauth/token"
+	o.channelsURL = srv.URL + "/public/v1/channels"
+
+	info, err := o.GetChannelInfoByBroadcasterID(context.Background(), "130554250")
+	require.NoError(t, err)
+	assert.Equal(t, "scuffed-onigiri", info.Slug)
+}
+
+// A failed app-token grant must surface as an error, never as a lookup with an empty bearer.
+func TestGetChannelInfoByBroadcasterIDFailsWhenTheAppTokenIsRefused(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth/token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"invalid_client"}`))
+			return
+		}
+		t.Errorf("no channel lookup may run without an app token, got %s", r.URL.Path)
+	}))
+	defer srv.Close()
+
+	o := NewKickOAuth("cid", "secret", "http://localhost/cb")
+	o.tokenURL = srv.URL + "/oauth/token"
+	o.channelsURL = srv.URL + "/public/v1/channels"
+
+	_, err := o.GetChannelInfoByBroadcasterID(context.Background(), "130554250")
+	assert.Error(t, err)
+}
+
 // The channels URL seam must default to Kick's real endpoint so a stale copy of
 // the struct cannot silently point the flow elsewhere.
 func TestKickOAuthDefaultsToTheRealChannelsEndpoint(t *testing.T) {

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/quota"
 	"github.com/caesar/all-chat/shared/sendall"
 	"github.com/caesar/all-chat/shared/youtubetoken"
@@ -56,6 +57,20 @@ const (
 type YouTubeTokenSource interface {
 	Resolve(ctx context.Context, userID, channelID string) (*youtubetoken.YouTubeCredential, error)
 	Refresh(ctx context.Context, cred *youtubetoken.YouTubeCredential) error
+}
+
+// KickTokenSource resolves a non-Kick-login streamer's own linked Kick credential
+// (kick_oauth_tokens) for sending chat, and persists a refreshed token pair back to it.
+// *repository.UserRepository satisfies it.
+type KickTokenSource interface {
+	GetLinkedKickSendCredential(ctx context.Context, userID string) (*repository.LinkedKickCredential, error)
+	UpdateLinkedKickTokens(ctx context.Context, id int64, accessToken, refreshToken string, expiry time.Time) error
+}
+
+// WithKickTokenSource wires the linked Kick credential source used by streamer Kick sends.
+func (h *ChatSendHandler) WithKickTokenSource(ts KickTokenSource) *ChatSendHandler {
+	h.kickTokenSource = ts
+	return h
 }
 
 // WithYouTubeTokenSource wires the shared YouTube broadcaster-credential source used by
@@ -212,6 +227,10 @@ type ChatSendHandler struct {
 	// the users row, which 401s against the YouTube Data API. Nil ⇒ YouTube sends surface
 	// reauth_required (the monitor prompts Reconnect) rather than using the wrong token.
 	ytTokenSource YouTubeTokenSource
+	// kickTokenSource resolves a linked Kick credential (kick_oauth_tokens) for streamers
+	// whose All-Chat login is not Kick: their users row holds a different platform's token
+	// and no kick_id, which Kick rejects. Nil ⇒ their Kick sends surface reauth_required.
+	kickTokenSource KickTokenSource
 	// ytQuota accounts YouTube sends (5 units each) against the shared
 	// youtube_quota_usage table via reserve-confirm-rollback (ADR-0006), so the
 	// youtube-quota-monitor reflects send usage and a depleted quota blocks sends.
@@ -725,16 +744,60 @@ func (h *ChatSendHandler) resolveYouTubeAccessToken(ctx context.Context, userID,
 	return cred.AccessToken, nil
 }
 
+// resolveKickSender returns the access token and numeric broadcaster id a streamer sends to
+// their own Kick chat with. A Kick-login account uses its users row. Any other account uses
+// its linked Kick credential: the users row carries a different platform's token (Kick
+// answers it with 401) and no kick_id, which is why Kick sending stayed broken for
+// Twitch-login streamers even after the advanced-controls consent. A credential expiring
+// within 5 minutes is refreshed and written back; a failed refresh is non-fatal (Kick's own
+// 401 then surfaces as reauth_required).
+func (h *ChatSendHandler) resolveKickSender(ctx context.Context, user *models.User) (accessToken, broadcasterID string, err error) {
+	if user.AuthProvider == "kick" {
+		if user.KickID == nil || *user.KickID == "" {
+			return "", "", fmt.Errorf("no Kick account linked")
+		}
+		return user.AccessToken, *user.KickID, nil
+	}
+
+	if h.kickTokenSource == nil {
+		return "", "", &streamerSendError{kind: sendErrReauth, msg: "kick token source not configured"}
+	}
+	cred, err := h.kickTokenSource.GetLinkedKickSendCredential(ctx, user.ID)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve linked kick credential: %w", err)
+	}
+	if cred == nil {
+		return "", "", &streamerSendError{kind: sendErrMissingScope, msg: "no Kick credential with chat:write; enable sending for Kick"}
+	}
+
+	if cred.RefreshToken != "" && time.Until(cred.Expiry) < 5*time.Minute {
+		if newToken, rerr := h.kickProvider.RefreshToken(ctx, cred.RefreshToken); rerr != nil {
+			h.log.Warn("proactive kick token refresh failed; attempting with current token", zap.Error(rerr))
+		} else {
+			refresh := newToken.RefreshToken
+			if refresh == "" {
+				refresh = cred.RefreshToken
+			}
+			if uerr := h.kickTokenSource.UpdateLinkedKickTokens(ctx, cred.ID, newToken.AccessToken, refresh, newToken.Expiry); uerr != nil {
+				h.log.Warn("failed to persist refreshed kick token", zap.Error(uerr))
+			}
+			cred.AccessToken = newToken.AccessToken
+		}
+	}
+	return cred.AccessToken, cred.KickUserID, nil
+}
+
 // sendStreamerKickMessage sends a message to Kick chat as the streamer
 func (h *ChatSendHandler) sendStreamerKickMessage(ctx context.Context, user *models.User, message string) error {
-	if user.KickID == nil || *user.KickID == "" {
-		return fmt.Errorf("no Kick account linked")
+	accessToken, broadcasterID, err := h.resolveKickSender(ctx, user)
+	if err != nil {
+		return err
 	}
 
 	reqBody := map[string]interface{}{
 		"type":                "user",
 		"content":             message,
-		"broadcaster_user_id": *user.KickID,
+		"broadcaster_user_id": broadcasterID,
 	}
 
 	bodyBytes, err := json.Marshal(reqBody)
@@ -747,7 +810,7 @@ func (h *ChatSendHandler) sendStreamerKickMessage(ctx context.Context, user *mod
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", user.AccessToken))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", accessToken))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
@@ -852,8 +915,8 @@ func (h *ChatSendHandler) handleStreamerSendToAll(c *gin.Context, ctx context.Co
 	if user.TwitchID != nil && *user.TwitchID != "" {
 		idsByPlatform["twitch"] = *user.TwitchID
 	}
-	if user.KickID != nil && *user.KickID != "" {
-		idsByPlatform["kick"] = *user.KickID
+	if _, kickID, kickErr := h.resolveKickSender(ctx, user); kickErr == nil {
+		idsByPlatform["kick"] = kickID
 	}
 	if ytChannelID, ytErr := h.getActiveYouTubeChannelID(ctx, user.ID); ytErr == nil && ytChannelID != "" {
 		idsByPlatform["youtube"] = ytChannelID
