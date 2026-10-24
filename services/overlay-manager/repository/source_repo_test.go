@@ -187,6 +187,56 @@ func TestCreateOrUpdateAuto_Idempotent(t *testing.T) {
 	require.True(t, sources[0].IsActive)
 }
 
+// Kick slugs are case-insensitive, and older Kick sources were stored under the account's
+// display name ("Hedisaurus") when the slug lookup failed. Once the lookup succeeds the
+// re-consent sends the real slug ("hedisaurus"); the auto path must update the existing
+// source instead of adding a second Kick source for the same channel.
+func TestCreateOrUpdateAuto_KickMatchesExistingSourceCaseInsensitively(t *testing.T) {
+	repo, cleanup := setupSourceTestDatabase(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	overlayID := createTestOverlay(t, repo)
+
+	legacy := &models.ChatSource{
+		OverlayID: overlayID, Platform: "kick", ChannelID: "Hedisaurus", ChannelName: "Hedisaurus",
+		Config: map[string]interface{}{}, IsActive: true,
+	}
+	require.NoError(t, repo.CreateOrUpdateAuto(ctx, legacy))
+
+	slug := &models.ChatSource{
+		OverlayID: overlayID, Platform: "kick", ChannelID: "hedisaurus", ChannelName: "hedisaurus",
+		Config: map[string]interface{}{}, IsActive: true,
+	}
+	require.NoError(t, repo.CreateOrUpdateAuto(ctx, slug))
+	require.Equal(t, legacy.ID, slug.ID, "must reuse the existing Kick source")
+	require.Equal(t, "Hedisaurus", slug.ChannelID, "the existing row keeps its channel id")
+
+	sources, err := repo.ListByOverlayID(ctx, overlayID)
+	require.NoError(t, err)
+	require.Len(t, sources, 1, "a case-only difference must not add a second Kick source")
+}
+
+// YouTube channel ids are case-sensitive, so the Kick case folding must not apply to them.
+func TestCreateOrUpdateAuto_YouTubeStaysCaseSensitive(t *testing.T) {
+	repo, cleanup := setupSourceTestDatabase(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	overlayID := createTestOverlay(t, repo)
+
+	for _, id := range []string{"UCabc", "UCABC"} {
+		require.NoError(t, repo.CreateOrUpdateAuto(ctx, &models.ChatSource{
+			OverlayID: overlayID, Platform: "youtube", ChannelID: id, ChannelName: id,
+			Config: map[string]interface{}{}, IsActive: true,
+		}))
+	}
+
+	sources, err := repo.ListByOverlayID(ctx, overlayID)
+	require.NoError(t, err)
+	require.Len(t, sources, 2)
+}
+
 // TestListByOverlayID_NonSharedSource verifies that a regular (non-shared_overlay) source
 // has ShareStatus == nil and the JSON omitempty tag keeps share_status absent.
 func TestListByOverlayID_NonSharedSource(t *testing.T) {

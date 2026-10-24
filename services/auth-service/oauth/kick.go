@@ -397,10 +397,70 @@ type KickChannelInfo struct {
 // name, not the slug — this call is how the flow stores the identifier the
 // kick-listener can actually look up.
 func (k *KickOAuth) GetChannelInfo(ctx context.Context, accessToken string) (*KickChannelInfo, error) {
-	channelsURL := k.channelsURL
-	if channelsURL == "" {
-		channelsURL = kickChannelsURL
+	return k.fetchChannel(ctx, k.channelsEndpoint(), accessToken)
+}
+
+// GetChannelInfoByBroadcasterID resolves a channel by its numeric broadcaster id with an
+// app access token (client_credentials), which Kick accepts on GET /public/v1/channels
+// without any user scope. It is the fallback for when the user's token cannot read the
+// channel: Kick hands back only the scopes it agrees to, and in production a consent that
+// asked for channel:read came back with user:read alone, so GetChannelInfo 401'd and the
+// display name was stored where the slug belongs.
+func (k *KickOAuth) GetChannelInfoByBroadcasterID(ctx context.Context, broadcasterID string) (*KickChannelInfo, error) {
+	appToken, err := k.appAccessToken(ctx)
+	if err != nil {
+		return nil, err
 	}
+	return k.fetchChannel(ctx, k.channelsEndpoint()+"?broadcaster_user_id="+url.QueryEscape(broadcasterID), appToken)
+}
+
+func (k *KickOAuth) channelsEndpoint() string {
+	if k.channelsURL == "" {
+		return kickChannelsURL
+	}
+	return k.channelsURL
+}
+
+// appAccessToken obtains a Kick app access token via the client_credentials grant.
+// ponytail: one grant per call, cache it if a hot path ever needs it (today: OAuth callbacks only).
+func (k *KickOAuth) appAccessToken(ctx context.Context) (string, error) {
+	data := url.Values{}
+	data.Set("client_id", k.clientID)
+	data.Set("client_secret", k.clientSecret)
+	data.Set("grant_type", "client_credentials")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, k.tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return "", fmt.Errorf("failed to create app token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := k.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to request app token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("kick app token endpoint returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("failed to decode app token response: %w", err)
+	}
+	if result.AccessToken == "" {
+		return "", fmt.Errorf("kick app token endpoint returned an empty access token")
+	}
+	return result.AccessToken, nil
+}
+
+// fetchChannel GETs a channels endpoint URL with the given bearer token and returns the
+// first channel in the response.
+func (k *KickOAuth) fetchChannel(ctx context.Context, channelsURL, accessToken string) (*KickChannelInfo, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", channelsURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create channel request: %w", err)
@@ -430,7 +490,7 @@ func (k *KickOAuth) GetChannelInfo(ctx context.Context, accessToken string) (*Ki
 		return nil, fmt.Errorf("failed to decode channel response: %w", err)
 	}
 	if len(response.Data) == 0 {
-		return nil, fmt.Errorf("kick channels API returned no channel for the authenticated user")
+		return nil, fmt.Errorf("kick channels API returned no channel")
 	}
 
 	return &response.Data[0], nil
