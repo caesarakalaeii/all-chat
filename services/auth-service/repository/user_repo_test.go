@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"golang.org/x/oauth2"
 )
 
 const testEncryptionKey = "0123456789abcdef0123456789abcdef"
@@ -149,6 +150,22 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			overlay_id UUID NOT NULL REFERENCES overlays(id) ON DELETE CASCADE,
 			platform VARCHAR(50) NOT NULL,
 			created_at TIMESTAMP DEFAULT NOW()
+		);
+
+		CREATE TABLE IF NOT EXISTS kick_oauth_tokens (
+			id SERIAL PRIMARY KEY,
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			channel_id VARCHAR(255) NOT NULL,
+			access_token TEXT NOT NULL,
+			refresh_token TEXT NOT NULL,
+			token_type VARCHAR(50) DEFAULT 'Bearer',
+			expiry TIMESTAMP NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			encryption_version SMALLINT NOT NULL DEFAULT 0,
+			kick_user_id VARCHAR(255),
+			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
+			UNIQUE(user_id, channel_id)
 		);
 	`
 
@@ -848,5 +865,103 @@ func TestUserRepository_SetOnboardingCompleted(t *testing.T) {
 	// Unknown user surfaces ErrUserNotFound.
 	if _, err := repo.SetOnboardingCompleted(ctx, "550e8400-e29b-41d4-a716-446655440000", true); err != ErrUserNotFound {
 		t.Errorf("SetOnboardingCompleted(unknown) error = %v, want ErrUserNotFound", err)
+	}
+}
+
+// A Twitch-login streamer's Kick send credential is the linked kick_oauth_tokens row that
+// carries chat:write. A row without it (plain add-source, or a listener-only row without the
+// numeric broadcaster id) must not be picked, and a refreshed pair must round-trip encrypted.
+func TestUserRepository_LinkedKickSendCredential(t *testing.T) {
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := newTestUserRepository(t, pool)
+	ctx := context.Background()
+
+	twitchID := "123456"
+	user := &models.User{
+		TwitchID: &twitchID, AuthProvider: "twitch", Username: "streamer", DisplayName: "Streamer",
+		AccessToken: "twitch-token", RefreshToken: "twitch-refresh", TokenExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := repo.Create(ctx, user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	got, err := repo.GetLinkedKickSendCredential(ctx, user.ID)
+	if err != nil || got != nil {
+		t.Fatalf("no linked row yet: got %+v, err %v; want nil, nil", got, err)
+	}
+
+	token := &oauth2.Token{AccessToken: "kick-access", RefreshToken: "kick-refresh", Expiry: time.Now().Add(time.Hour)}
+	if err := repo.StoreKickToken(ctx, user.ID, "streamer-slug", "130554250", token, []string{"user:read"}); err != nil {
+		t.Fatalf("store read-only kick token: %v", err)
+	}
+	if got, err := repo.GetLinkedKickSendCredential(ctx, user.ID); err != nil || got != nil {
+		t.Fatalf("a credential without chat:write must not be returned: got %+v, err %v", got, err)
+	}
+
+	if err := repo.StoreKickToken(ctx, user.ID, "streamer-slug", "130554250", token, []string{"user:read", "chat:write"}); err != nil {
+		t.Fatalf("store send kick token: %v", err)
+	}
+	got, err = repo.GetLinkedKickSendCredential(ctx, user.ID)
+	if err != nil || got == nil {
+		t.Fatalf("expected the chat:write credential, got %+v, err %v", got, err)
+	}
+	if got.AccessToken != "kick-access" || got.RefreshToken != "kick-refresh" || got.KickUserID != "130554250" {
+		t.Fatalf("unexpected credential %+v", got)
+	}
+
+	if err := repo.UpdateLinkedKickTokens(ctx, got.ID, "rotated-access", "rotated-refresh", time.Now().Add(2*time.Hour)); err != nil {
+		t.Fatalf("update linked kick tokens: %v", err)
+	}
+	got, err = repo.GetLinkedKickSendCredential(ctx, user.ID)
+	if err != nil || got == nil || got.AccessToken != "rotated-access" || got.RefreshToken != "rotated-refresh" {
+		t.Fatalf("refreshed tokens must round-trip, got %+v, err %v", got, err)
+	}
+}
+
+// Older linked Kick credentials were stored under the account's display name ("Hedisaurus")
+// because the slug lookup failed. When a later consent resolves the slug ("hedisaurus"), the
+// grant must merge into that row, not start a second one: the moderation service resolves
+// case-insensitively with LIMIT 1, so two rows would make the send/moderation check pick
+// either the old grant or the new one at random.
+func TestUserRepository_StoreKickToken_MergesCaseVariantOfChannel(t *testing.T) {
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := newTestUserRepository(t, pool)
+	ctx := context.Background()
+
+	twitchID := "123456"
+	user := &models.User{
+		TwitchID: &twitchID, AuthProvider: "twitch", Username: "streamer", DisplayName: "Streamer",
+		AccessToken: "twitch-token", RefreshToken: "twitch-refresh", TokenExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := repo.Create(ctx, user); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	token := &oauth2.Token{AccessToken: "a1", RefreshToken: "r1", Expiry: time.Now().Add(time.Hour)}
+	if err := repo.StoreKickToken(ctx, user.ID, "Hedisaurus", "9890044", token, []string{"user:read"}); err != nil {
+		t.Fatalf("store display-name row: %v", err)
+	}
+	token2 := &oauth2.Token{AccessToken: "a2", RefreshToken: "r2", Expiry: time.Now().Add(time.Hour)}
+	if err := repo.StoreKickToken(ctx, user.ID, "hedisaurus", "9890044", token2, []string{"user:read", "chat:write"}); err != nil {
+		t.Fatalf("store slug row: %v", err)
+	}
+
+	var rows int
+	var channel string
+	var scopes []string
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) OVER (), channel_id, granted_scopes FROM kick_oauth_tokens WHERE user_id = $1`, user.ID).
+		Scan(&rows, &channel, &scopes); err != nil {
+		t.Fatalf("read kick rows: %v", err)
+	}
+	if rows != 1 || channel != "Hedisaurus" {
+		t.Fatalf("want one row kept under its original channel id, got %d rows, channel %q", rows, channel)
+	}
+	got, err := repo.GetLinkedKickSendCredential(ctx, user.ID)
+	if err != nil || got == nil || got.AccessToken != "a2" {
+		t.Fatalf("the merged row must carry the new token and chat:write, got %+v (scopes %v), err %v", got, scopes, err)
 	}
 }
