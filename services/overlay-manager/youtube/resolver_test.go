@@ -16,7 +16,15 @@
 
 package youtube
 
-import "testing"
+import (
+	"context"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+
+	"go.uber.org/zap"
+)
 
 func TestParseVideoID(t *testing.T) {
 	const id = "dQw4w9WgXcQ"
@@ -70,5 +78,58 @@ func TestParseVideoID(t *testing.T) {
 				t.Errorf("ParseVideoID(%q) = (%q, %v), want (%q, %v)", tt.input, got, ok, tt.want, tt.ok)
 			}
 		})
+	}
+}
+
+// roundTripFunc answers the resolver's requests in-process, so tests never reach youtube.com.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func jsonResolver(t *testing.T, wantPath, body string) *Resolver {
+	t.Helper()
+	return &Resolver{
+		logger: zap.NewNop(),
+		httpClient: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.URL.Path != wantPath {
+				t.Errorf("request path = %s, want %s", r.URL.Path, wantPath)
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
+		})},
+	}
+}
+
+// A scheduled (upcoming) stream is exactly what gets pinned ahead of time, and oEmbed
+// answers it without author_url. /next still carries the owner, trimmed here from a real
+// response for an unlisted upcoming stream.
+func TestVideoChannelID_UpcomingStream(t *testing.T) {
+	const next = `{"contents":{"twoColumnWatchNextResults":{"results":{"results":{"contents":[
+		{"videoPrimaryInfoRenderer":{}},
+		{"videoSecondaryInfoRenderer":{"owner":{"videoOwnerRenderer":{
+			"navigationEndpoint":{"browseEndpoint":{"browseId":"UCfNrtZ10vygsR76sn2cJgKA","canonicalBaseUrl":"/@JRussellRetroGaming"}}}}}}
+	]}},"secondaryResults":{"secondaryResults":{"results":[
+		{"lockupViewModel":{"metadata":{"browseEndpoint":{"browseId":"UC03GgKZsRnecyOYU_pRWANg"}}}}
+	]}}}}}`
+	r := jsonResolver(t, "/youtubei/v1/next", next)
+
+	got, err := r.VideoChannelID(context.Background(), "Mk_mnfWzTvE")
+	if err != nil {
+		t.Fatalf("VideoChannelID: %v", err)
+	}
+	if got != "UCfNrtZ10vygsR76sn2cJgKA" {
+		t.Errorf("VideoChannelID = %q, want the owner UCfNrtZ10vygsR76sn2cJgKA", got)
+	}
+}
+
+// A private or removed video has no owner block; that must be an error, never a guess
+// taken from the recommendations sidebar.
+func TestVideoChannelID_NoOwner(t *testing.T) {
+	const next = `{"contents":{"twoColumnWatchNextResults":{"secondaryResults":{"secondaryResults":{"results":[
+		{"lockupViewModel":{"metadata":{"browseEndpoint":{"browseId":"UC03GgKZsRnecyOYU_pRWANg"}}}}
+	]}}}}}`
+	r := jsonResolver(t, "/youtubei/v1/next", next)
+
+	if got, err := r.VideoChannelID(context.Background(), "aaaaaaaaaaa"); err == nil {
+		t.Errorf("VideoChannelID = %q, want an error", got)
 	}
 }

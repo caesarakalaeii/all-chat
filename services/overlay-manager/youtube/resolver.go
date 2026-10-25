@@ -156,8 +156,9 @@ func ParseVideoID(input string) (string, bool) {
 	return id, true
 }
 
-// VideoChannelID returns the channel id that uploaded videoID. oEmbed answers for
-// unlisted videos too, which is what lets a pinned unlisted stream be verified.
+// VideoChannelID returns the channel id that uploaded videoID. The watch page answers for
+// unlisted and scheduled (upcoming) streams too, which is what lets a stream be pinned
+// before it goes live.
 func (r *Resolver) VideoChannelID(ctx context.Context, videoID string) (string, error) {
 	return r.resolveVideoToChannelID(ctx, videoID)
 }
@@ -165,49 +166,11 @@ func (r *Resolver) VideoChannelID(ctx context.Context, videoID string) (string, 
 // resolveHandleToChannelID resolves a YouTube @handle to a channel ID via the
 // InnerTube navigation/resolve_url endpoint. No YouTube Data API v3 quota consumed.
 func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) (string, error) {
-	channelURL := "https://www.youtube.com/@" + handle
-
-	resolveURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/navigation/resolve_url?key=%s", innertubeAPIKey)
-	payload := map[string]interface{}{
-		"context": map[string]interface{}{
-			"client": map[string]interface{}{
-				"clientName":    "WEB",
-				"clientVersion": innertubeClientVersion,
-			},
-		},
-		"url": channelURL,
-	}
-
-	jsonPayload, err := json.Marshal(payload)
+	result, err := r.innertubePost(ctx, "navigation/resolve_url", map[string]interface{}{
+		"url": "https://www.youtube.com/@" + handle,
+	})
 	if err != nil {
-		return "", fmt.Errorf("marshal resolve_url payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, resolveURL, bytes.NewReader(jsonPayload))
-	if err != nil {
-		return "", fmt.Errorf("create resolve_url request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("execute resolve_url request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("resolve_url returned status %d for @%s", resp.StatusCode, handle)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // audit #30: cap upstream body at 10 MiB
-	if err != nil {
-		return "", fmt.Errorf("read resolve_url response: %w", err)
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("parse resolve_url response: %w", err)
+		return "", fmt.Errorf("resolve @%s: %w", handle, err)
 	}
 
 	// Response path: endpoint.browseEndpoint.browseId
@@ -221,51 +184,49 @@ func (r *Resolver) resolveHandleToChannelID(ctx context.Context, handle string) 
 	return channelID, nil
 }
 
-// resolveVideoToChannelID resolves a video ID to its channel ID via YouTube oEmbed.
-// oEmbed returns the author_url which contains the channel URL.
+// resolveVideoToChannelID resolves a video ID to its channel ID via the InnerTube /next
+// (watch page) API. oEmbed was used before but omits author_url for scheduled streams.
 func (r *Resolver) resolveVideoToChannelID(ctx context.Context, videoID string) (string, error) {
-	oembedURL := fmt.Sprintf("https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=%s&format=json", videoID)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, oembedURL, nil)
+	data, err := r.innertubePost(ctx, "next", map[string]interface{}{"videoId": videoID})
 	if err != nil {
-		return "", fmt.Errorf("create oembed request: %w", err)
+		return "", fmt.Errorf("watch page for video %s: %w", videoID, err)
 	}
+	// Only the owner block counts: the rest of the page is recommendations from other channels.
+	owner, _ := findKey(data, "videoOwnerRenderer").(map[string]interface{})
+	nav, _ := owner["navigationEndpoint"].(map[string]interface{})
+	browse, _ := nav["browseEndpoint"].(map[string]interface{})
+	channelID, _ := browse["browseId"].(string)
+	if !channelIDPattern.MatchString(channelID) {
+		return "", fmt.Errorf("no owner channel on the watch page for video %s", videoID)
+	}
+	return channelID, nil
+}
 
-	resp, err := r.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("fetch oembed: %w", err)
+// findKey returns the value of the first key named key in a depth-first walk of v, or nil.
+func findKey(v interface{}, key string) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		if found, ok := t[key]; ok {
+			return found
+		}
+		for _, child := range t {
+			if found := findKey(child, key); found != nil {
+				return found
+			}
+		}
+	case []interface{}:
+		for _, child := range t {
+			if found := findKey(child, key); found != nil {
+				return found
+			}
+		}
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("oembed returned status %d for video %s", resp.StatusCode, videoID)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // audit #30: cap upstream body at 10 MiB
-	if err != nil {
-		return "", fmt.Errorf("read oembed response: %w", err)
-	}
-
-	var oembed struct {
-		AuthorURL string `json:"author_url"`
-	}
-	if err := json.Unmarshal(body, &oembed); err != nil {
-		return "", fmt.Errorf("parse oembed response: %w", err)
-	}
-
-	// author_url is like https://www.youtube.com/channel/UC... or https://www.youtube.com/@handle
-	if matches := channelURLPattern.FindStringSubmatch(oembed.AuthorURL); len(matches) > 1 {
-		return matches[1], nil
-	}
-	if matches := handlePattern.FindStringSubmatch(oembed.AuthorURL); len(matches) > 1 {
-		return r.resolveHandleToChannelID(ctx, matches[1])
-	}
-
-	return "", fmt.Errorf("could not extract channel ID from oembed author_url: %s", oembed.AuthorURL)
+	return nil
 }
 
 // GetChannelInfo returns display info for a channel ID via the InnerTube Browse API.
 func (r *Resolver) GetChannelInfo(ctx context.Context, channelID string) (*ChannelInfo, error) {
-	data, err := r.innertubeBrowse(ctx, channelID)
+	data, err := r.innertubePost(ctx, "browse", map[string]interface{}{"browseId": channelID})
 	if err != nil {
 		return nil, fmt.Errorf("innertube browse for channel %s: %w", channelID, err)
 	}
@@ -290,10 +251,9 @@ func (r *Resolver) GetChannelInfo(ctx context.Context, channelID string) (*Chann
 	return info, nil
 }
 
-// innertubeBrowse calls the InnerTube Browse API for the given browseId.
-func (r *Resolver) innertubeBrowse(ctx context.Context, browseID string) (map[string]interface{}, error) {
-	url := fmt.Sprintf("https://www.youtube.com/youtubei/v1/browse?key=%s", innertubeAPIKey)
-
+// innertubePost calls an InnerTube endpoint (browse, next, navigation/resolve_url) as the
+// WEB client with fields added to the request body, and returns the decoded response.
+func (r *Resolver) innertubePost(ctx context.Context, endpoint string, fields map[string]interface{}) (map[string]interface{}, error) {
 	payload := map[string]interface{}{
 		"context": map[string]interface{}{
 			"client": map[string]interface{}{
@@ -301,60 +261,43 @@ func (r *Resolver) innertubeBrowse(ctx context.Context, browseID string) (map[st
 				"clientVersion": innertubeClientVersion,
 			},
 		},
-		"browseId": browseID,
 	}
-
+	for k, v := range fields {
+		payload[k] = v
+	}
 	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("marshal payload: %w", err)
+		return nil, fmt.Errorf("marshal %s payload: %w", endpoint, err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(jsonPayload))
+	endpointURL := fmt.Sprintf("https://www.youtube.com/youtubei/v1/%s?key=%s", endpoint, innertubeAPIKey)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL, bytes.NewReader(jsonPayload))
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf("create %s request: %w", endpoint, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
 
 	resp, err := r.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute request: %w", err)
+		return nil, fmt.Errorf("execute %s request: %w", endpoint, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("innertube browse returned status %d for %s", resp.StatusCode, browseID)
+		return nil, fmt.Errorf("innertube %s returned status %d", endpoint, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // audit #30: cap upstream body at 10 MiB
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, fmt.Errorf("read %s response: %w", endpoint, err)
 	}
 
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
+		return nil, fmt.Errorf("parse %s response: %w", endpoint, err)
 	}
-
-	r.logger.Debug("innertube browse response",
-		zap.String("browse_id", browseID),
-		zap.Int("body_bytes", len(body)),
-	)
-
 	return data, nil
-}
-
-// extractChannelIDFromBrowse extracts the channel ID from an InnerTube browse response.
-// The channel ID lives in header.c4TabbedHeaderRenderer.channelId.
-func extractChannelIDFromBrowse(data map[string]interface{}) string {
-	header := extractHeader(data)
-	if header == nil {
-		return ""
-	}
-	if id, ok := header["channelId"].(string); ok && id != "" {
-		return id
-	}
-	return ""
 }
 
 // extractHeader returns the c4TabbedHeaderRenderer map from a browse response.
