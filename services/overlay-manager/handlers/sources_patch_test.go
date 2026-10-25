@@ -379,9 +379,8 @@ func TestPatchYouTubePin_UnchangedPinNoLookup(t *testing.T) {
 }
 
 func TestPatchYouTubeConfig_UnverifiableLink422(t *testing.T) {
-	// oEmbed refusing the video (private, embedding disabled, outage) must not store an
-	// unchecked pin.
-	videos := &fakeYouTubeVideoChannels{err: errors.New("oembed returned status 401")}
+	// An unresolvable owner (private video, outage) must not store an unchecked pin.
+	videos := &fakeYouTubeVideoChannels{err: errors.New("innertube next returned status 500")}
 	res := patchYouTubePin(t, videos,
 		map[string]interface{}{},
 		map[string]interface{}{"stream_id": pinVideo},
