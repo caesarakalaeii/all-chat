@@ -538,8 +538,12 @@
   }
 
   /* ── User badges (subscriber/mod/bits icons) ───────────────────────── */
+  /* `inline-flex`, not `flex`: in the default header the group is a flex item,
+     where the two compute to the same box, but an inline-layout theme (Minimal)
+     runs the header inline, and a block-level `flex` there broke the line into
+     icon / badges / "username: message" on three rows in the editor preview. */
   .overlay-preview-body .flex.gap-1 {
-    display: var(--chat-show-badges, flex);
+    display: var(--chat-show-badges, inline-flex);
   }
   /* Scale badges with --chat-badge-size, but keep the header row's height tied to
      the USERNAME line so a larger badge stays vertically centred on the name
@@ -576,6 +580,17 @@
     margin-bottom: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
     );
+  }
+
+  /* ── Username header (platform badge + user badges + username) ─────────
+     The header carries the username's font size so everything sized or aligned
+     against the header's font follows the name: an inline-layout theme centres
+     the icon and badges with `vertical-align: middle`, which resolves against
+     the PARENT's x-height. Inheriting the page's 16px instead, a 26px name had
+     its icons centred on a 16px midline, hanging well below the text. No
+     fallback on purpose: an unset size leaves the inherited font untouched. */
+  .overlay-preview-body .flex.items-center.gap-2 {
+    font-size: var(--chat-username-font-size);
   }
 
   /* ── Username ──────────────────────────────────────────────────────── */
@@ -764,6 +779,11 @@
     margin-bottom: calc(
       (var(--chat-username-font-size, 0.875rem) - var(--chat-badge-size, 1rem)) / 2
     );
+  }
+
+  /* ── Username header ─ see the .overlay-preview-body block above. ───── */
+  .overlay-live-body .flex.items-center.gap-2 {
+    font-size: var(--chat-username-font-size);
   }
 
   /* ── Username ──────────────────────────────────────────────────────── */

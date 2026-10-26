@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { visualSettingsToCss } from '../../src/lib/utils/visual-settings-to-css'
 import type { VisualSettings } from '../../src/lib/types/visual-settings'
+import { wrapThemeCss } from '../../src/lib/theme-marketplace/wrap-theme-css'
 
 /**
  * A theme must be able to remove chrome the platform adds by default.
@@ -23,14 +24,24 @@ import type { VisualSettings } from '../../src/lib/types/visual-settings'
 
 const REPO = join(__dirname, '..', '..', '..')
 const EVENTS_CSS = readFileSync(join(REPO, 'frontend/src/styles/events.css'), 'utf8')
-const THEME_CSS = readFileSync(join(REPO, 'docs/overlay-themes/minimal-theme.css'), 'utf8').replace(
-  /@import[^;]+;/g,
-  ''
+// Injected the way the overlay pages do it: wrapped into its cascade layer with
+// every `!important` stripped. Unwrapped, the theme's `!important` outranks the
+// whole customizer layer and "an explicitly set control" could never win.
+const THEME_CSS = wrapThemeCss(
+  readFileSync(join(REPO, 'docs/overlay-themes/minimal-theme.css'), 'utf8').replace(
+    /@import[^;]+;/g,
+    ''
+  )
 )
 
-const TAILWIND = `
+// Tailwind's layers come first in the real app (globals.css imports tailwindcss
+// before declaring its own layers), so utilities rank below theme + customizer.
+const PREFLIGHT = `
   *, ::before, ::after { box-sizing: border-box; margin: 0; padding: 0; }
   html { line-height: 1.5; font-family: system-ui, sans-serif; }
+`
+
+const TAILWIND = `
   .p-3 { padding: 0.75rem; }
   .p-4 { padding: 1rem; }
   .mb-1 { margin-bottom: 0.25rem; }
@@ -64,8 +75,9 @@ const ROW = `
 
 function fixture(surface: string, settings: Partial<VisualSettings>): string {
   return `<!doctype html><html><head><meta charset="utf-8">
-<style>@layer base, design-system, marketplace-themes, user-overrides;</style>
-<style>${TAILWIND}</style>
+<style>@layer theme, base, components, utilities;
+@layer base, design-system, marketplace-themes, user-overrides;</style>
+<style>@layer base { ${PREFLIGHT} } @layer utilities { ${TAILWIND} }</style>
 <style>${EVENTS_CSS}</style>
 <style>${visualSettingsToCss(settings)}</style>
 <style>${THEME_CSS}</style>
