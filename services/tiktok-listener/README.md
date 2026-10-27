@@ -123,7 +123,10 @@ TIKTOK_US_RELAY_TOKEN=                # Shared secret, sent as X-Relay-Token
 # pushes) resets the timer, so a low-traffic room is not killed for silence.
 # A connection whose frames never decode (acks only) is treated as deaf and
 # reconnected. The timeout is room liveness, not socket liveness; soften it
-# for launch-day streams rather than disabling monitoring.
+# for launch-day streams rather than disabling monitoring. A room that is
+# still deaf after one reconnect is parked for 10, then 20, then 30 min
+# ("Silent failure streak - parking deaf room") so it cannot spend the pod's
+# 12/hour pure-node connect budget that every other room shares.
 TIKTOK_HEARTBEAT_INTERVAL_MS=30000     # How often to check (default)
 TIKTOK_HEARTBEAT_TIMEOUT_MS=90000      # Silence before a forced reconnect (default)
 

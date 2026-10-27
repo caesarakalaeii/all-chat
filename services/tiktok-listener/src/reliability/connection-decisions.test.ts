@@ -25,8 +25,10 @@ import {
   nextFlapRetryDelayMs,
   NoLaneCache,
   NO_LANE_CACHE_TTL_MS,
-  shouldBackOffReconnect,
+  SILENT_FAILURE_PARK_BASE_MS,
+  SILENT_FAILURE_PARK_MAX_MS,
   SILENT_FAILURE_STREAK_THRESHOLD,
+  silentFailureParkMs,
   WS_FLAP_MAX_FAST_RETRIES,
   WS_FLAP_RETRY_DELAY_MS
 } from './connection-decisions.js';
@@ -59,35 +61,46 @@ describe('connectionCeilingReached', () => {
   });
 });
 
-describe('shouldBackOffReconnect', () => {
-  // The threshold decides whether a heartbeat-forced disconnect takes growing
-  // error backoff or the fast reconnect path. Flipping the comparison to >=
-  // would put every normally-ended stream on error backoff; dropping the
-  // threshold to 0 would never damp the deaf-room reconnect churn the
-  // 2026-09-14 incident was made of.
+describe('silentFailureParkMs', () => {
+  // The park decides how often a deaf room may re-sign against the pod's
+  // 12/hour WS-connect budget. Returning 0 too late lets one deaf room spend
+  // the whole budget (prod 2026-10-27: 42 reconnects in a row, every ~2.5
+  // min, refusing every other room going live); returning a park too early
+  // puts every normally-ended stream on a 10-minute wait.
 
   it('reconnects quickly on the first silent failure (streak 1)', () => {
-    expect(shouldBackOffReconnect(1)).toBe(false);
+    expect(silentFailureParkMs(1)).toBe(0);
   });
 
   it('reconnects quickly when the stream was healthy (streak 0)', () => {
-    expect(shouldBackOffReconnect(0)).toBe(false);
+    expect(silentFailureParkMs(0)).toBe(0);
   });
 
-  it('backs off once reconnecting did not fix the silence (streak 2)', () => {
-    expect(shouldBackOffReconnect(2)).toBe(true);
+  it('parks once reconnecting did not fix the silence (streak 2)', () => {
+    expect(silentFailureParkMs(2)).toBe(SILENT_FAILURE_PARK_BASE_MS);
   });
 
-  it('backs off on long streaks', () => {
-    expect(shouldBackOffReconnect(7)).toBe(true);
+  it('doubles the park per further deaf reconnect, up to the cap', () => {
+    expect(silentFailureParkMs(3)).toBe(2 * SILENT_FAILURE_PARK_BASE_MS);
+    expect(silentFailureParkMs(4)).toBe(SILENT_FAILURE_PARK_MAX_MS);
+    expect(silentFailureParkMs(42)).toBe(SILENT_FAILURE_PARK_MAX_MS);
+    expect(silentFailureParkMs(5000)).toBe(SILENT_FAILURE_PARK_MAX_MS);
+  });
+
+  it('keeps a permanently deaf room to a small share of the 12/hour budget', () => {
+    // A deaf connection is killed ~2 min after connect, so a park of P
+    // minutes costs one sign per P+2 minutes. At the cap that must stay a
+    // small share of the per-pod budget, or two deaf rooms starve the rest.
+    const signsPerHour = 60 / (SILENT_FAILURE_PARK_MAX_MS / 60_000 + 2);
+    expect(signsPerHour).toBeLessThanOrEqual(2);
   });
 
   it('is exclusive of the threshold, so streak and threshold stay decoupled', () => {
     // If someone tunes the threshold constant, the boundary must follow it —
     // pinning a literal 1 in the comparisons above would hide a change here.
     expect(SILENT_FAILURE_STREAK_THRESHOLD).toBe(1);
-    expect(shouldBackOffReconnect(SILENT_FAILURE_STREAK_THRESHOLD)).toBe(false);
-    expect(shouldBackOffReconnect(SILENT_FAILURE_STREAK_THRESHOLD + 1)).toBe(true);
+    expect(silentFailureParkMs(SILENT_FAILURE_STREAK_THRESHOLD)).toBe(0);
+    expect(silentFailureParkMs(SILENT_FAILURE_STREAK_THRESHOLD + 1)).toBeGreaterThan(0);
   });
 });
 
