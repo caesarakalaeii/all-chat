@@ -69,7 +69,7 @@ import {
   isWsFlapError,
   nextFlapRetryDelayMs,
   NoLaneCache,
-  shouldBackOffReconnect,
+  silentFailureParkMs,
   WS_FLAP_MAX_FAST_RETRIES,
   WS_FLAP_RETRY_DELAY_MS
 } from './reliability/connection-decisions.js';
@@ -1196,11 +1196,12 @@ class TikTokListenerService {
         // Set every hold synchronously before any teardown awaits: a Pub/Sub
         // snapshot can arrive mid-teardown, and a lease released by rebalance()
         // but not yet held would be re-claimable in that window. A room parked
-        // on this pod's sign budget is held until the park ends: the teardown
-        // below drops its backoff state, and an earlier re-claim would re-dial
-        // into the same refusal. Another pod, with its own budget, may claim it.
+        // on this pod (sign budget or deaf room) is held until the park ends:
+        // the teardown below drops its backoff state, and an earlier re-claim
+        // would re-dial into the same refusal. Another pod, with its own
+        // budget, may claim it.
         for (const username of released) {
-          const holdMs = Math.max(REBALANCE_HOLD_MS, this.backoffManager.budgetParkRemainingMs(username));
+          const holdMs = Math.max(REBALANCE_HOLD_MS, this.backoffManager.parkRemainingMs(username));
           this.rebalanceHolds.set(username, Date.now() + holdMs);
         }
         for (const username of released) {
@@ -1538,17 +1539,17 @@ class TikTokListenerService {
         this.livePoller.publishStreamEnd(username);
 
         // A heartbeat-forced disconnect means the connection went silently deaf;
-        // if reconnects keep landing in the same state (streak > 1), back off
-        // progressively instead of resetting to the 60s base. The instant
-        // reconnect loop re-entered ~43 rooms every 2 minutes from one pod for
-        // days (2026-09-14 incident), burning the Euler free tier and keeping
-        // the proxy wedged. A genuinely-ended stream stays at streak 0 via
+        // if reconnects keep landing in the same state (streak > 1), park the
+        // room on a growing curve instead of resetting to the base re-check.
+        // Every reconnect is a sign against this pod's hourly connect budget:
+        // the instant loop re-entered ~43 rooms every 2 minutes (2026-09-14),
+        // and one deaf room alone starved the budget for every other room
+        // (2026-10-27). A genuinely-ended stream stays at streak 0 via
         // recordMessage having fired on its last real messages.
-        if (shouldBackOffReconnect(this.heartbeatMonitor.getSilentFailureStreak(username))) {
-          this.backoffManager.recordConnectionError(
-            username,
-            new Error(`Silent connection failure x${this.heartbeatMonitor.getSilentFailureStreak(username)}`)
-          );
+        const silentFailureStreak = this.heartbeatMonitor.getSilentFailureStreak(username);
+        const silentParkMs = silentFailureParkMs(silentFailureStreak);
+        if (silentParkMs > 0) {
+          this.backoffManager.recordSilentFailurePark(username, silentParkMs, silentFailureStreak);
         } else {
           // Stream ended - reset to quick re-check
           this.backoffManager.recordDisconnection(username);
@@ -1563,10 +1564,9 @@ class TikTokListenerService {
         }
 
         // Publish reconnecting status so overlay indicators show the retry state
-        const backoffState = this.backoffManager.getState(username);
-        const nextRetryAt = backoffState
-          ? new Date(Date.now() + backoffState.currentBackoffMs)
-          : new Date(Date.now() + TIKTOK_BASE_OFFLINE_BACKOFF_MS);
+        // From nextCheckTime, not currentBackoffMs: a park leaves the latter at
+        // the 0 the successful connect reset it to.
+        const nextRetryAt = new Date(Date.now() + this.backoffManager.getTimeUntilNextCheck(username));
         this.publishPlatformStatus(username, 'reconnecting', nextRetryAt);
 
         // Update database: stream went offline (but keep source active for other overlays)
