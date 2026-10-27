@@ -38,7 +38,7 @@ export interface BackoffState {
   nextCheckTime: number;
   currentBackoffMs: number;
   lastSeenLive?: number; // Timestamp of last successful connection
-  budgetParkedUntil?: number; // End of the latest sign-budget park; see budgetParkRemainingMs
+  parkedUntil?: number; // End of the latest park (sign budget or deaf room); see parkRemainingMs
 }
 
 /**
@@ -150,7 +150,7 @@ export class BackoffManager {
    *
    * The park rides nextCheckTime; currentBackoffMs is derived state the
    * next record* call recomputes anyway, and recoverStuckChannels
-   * (poller.ts) skips a room while budgetParkRemainingMs is positive.
+   * (poller.ts) skips a room while parkRemainingMs is positive.
    * consecutiveErrors is untouched: a budget refusal is not the room's
    * fault, and the next genuine error resumes the error curve where it
    * left off.
@@ -159,17 +159,45 @@ export class BackoffManager {
    * @param retryAfterMs ms until the window slides, from the refusal error
    */
   recordBudgetRefusal(username: string, retryAfterMs: number): void {
-    const state = this.getOrCreateState(username);
-    const parkMs = Math.max(0, retryAfterMs);
-    state.lastCheckTime = Date.now();
-    state.nextCheckTime = Date.now() + parkMs;
-    state.budgetParkedUntil = state.nextCheckTime;
+    const parkMs = this.park(username, retryAfterMs);
 
     this.logger.warn('Sign budget refused - parking until window slides', {
       username,
       next_check_in_ms: parkMs,
       next_check_in_minutes: Math.round(parkMs / 60000)
     });
+  }
+
+  /**
+   * Park a room whose reconnects keep landing deaf (heartbeat silent-failure
+   * streak; the duration comes from silentFailureParkMs). Each reconnect is a
+   * sign against the pod's hourly WS-connect budget, so a deaf room must not
+   * retry on the error curve, which every 'connected' resets. Like a budget
+   * park, consecutiveErrors is untouched and stuck recovery leaves it alone.
+   *
+   * @param username TikTok username
+   * @param parkMs ms to park, from silentFailureParkMs
+   * @param streak consecutive deaf reconnects, for the log
+   */
+  recordSilentFailurePark(username: string, parkMs: number, streak: number): void {
+    this.park(username, parkMs);
+
+    this.logger.warn('Silent failure streak - parking deaf room', {
+      username,
+      silent_failure_streak: streak,
+      next_check_in_ms: parkMs,
+      next_check_in_minutes: Math.round(parkMs / 60000)
+    });
+  }
+
+  /** Hold a room until now + parkMs (clamped to now); returns the clamped ms. */
+  private park(username: string, parkMs: number): number {
+    const state = this.getOrCreateState(username);
+    const clampedMs = Math.max(0, parkMs);
+    state.lastCheckTime = Date.now();
+    state.nextCheckTime = Date.now() + clampedMs;
+    state.parkedUntil = state.nextCheckTime;
+    return clampedMs;
   }
 
   /**
@@ -257,14 +285,14 @@ export class BackoffManager {
   }
 
   /**
-   * ms left on this room's sign-budget park, 0 when none. The budget is
-   * this pod's, so the park must outlive a rebalance release: the teardown
+   * ms left on this room's park (sign budget or deaf room), 0 when none.
+   * Both are this pod's, so the park must outlive a rebalance release: the teardown
    * drops the backoff state, and without carrying the park into the
    * re-claim hold this pod re-dials the room ~40s later and is refused
    * again (prod 2026-10-08: one room refused every ~75s for 15 minutes).
    */
-  budgetParkRemainingMs(username: string): number {
-    const until = this.backoffStates.get(username)?.budgetParkedUntil;
+  parkRemainingMs(username: string): number {
+    const until = this.backoffStates.get(username)?.parkedUntil;
     return until === undefined ? 0 : Math.max(0, until - Date.now());
   }
 
