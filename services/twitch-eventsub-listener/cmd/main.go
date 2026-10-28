@@ -206,9 +206,9 @@ func main() {
 	// isLeader tracks whether this pod currently holds EventSub leadership.
 	// Protected by mu; read by subscription callback and HTTP handlers.
 	//
-	// Defined BEFORE ll.Start because that call synchronously starts the channel manager's sync
-	// loop (and its initial sync), which refreshes chat-ownership claims. Wiring the leader gate
-	// first ensures a standby never writes claims (a nil gate would be treated as "always leader").
+	// Defined BEFORE ll.Start because that call starts the channel manager's sync loop (and its
+	// initial sync), which refreshes chat-ownership claims. Wiring the leader gate first ensures a
+	// standby never writes claims (a nil gate would be treated as "always leader").
 	var isLeaderMu sync.RWMutex
 	isLeader := false
 	isLeaderFn := func() bool {
@@ -217,11 +217,6 @@ func main() {
 		return isLeader
 	}
 	channelManager.SetLeaderFunc(isLeaderFn)
-
-	// Start LeadershipListener — runs demand subscriber; channel manager started after leadership
-	if err := ll.Start(ctx, channelManager); err != nil {
-		log.Fatal("Failed to start leadership listener", zap.Error(err))
-	}
 
 	// Create webhook handler
 	webhookHandler := webhooks.NewHandler(webhookSecret, redisClient, db, streamPublisher, listenerMetrics, statusPublisher, chatClaims, msgRegistry, log)
@@ -580,6 +575,12 @@ func main() {
 		return nil
 	})
 
+	// Start LeadershipListener (demand subscriber + channel manager). Only after the leader gate and
+	// subscription callback are wired: the initial sync runs in the background and reads both.
+	if err := ll.Start(ctx, channelManager); err != nil {
+		log.Fatal("Failed to start leadership listener", zap.Error(err))
+	}
+
 	setLeader := func(v bool) {
 		isLeaderMu.Lock()
 		isLeader = v
@@ -597,8 +598,8 @@ func main() {
 		lc := ll.LeadershipCoordinator()
 		if lc == nil {
 			log.Info("Leadership coordination disabled — acting as standalone leader")
-			channelManager.ResetTracking()
 			setLeader(true)
+			channelManager.ResetTracking()
 			channelManager.TriggerSync()
 			return
 		}
@@ -628,8 +629,11 @@ func main() {
 				log.Info("Acquired EventSub leadership")
 				// Rebuild from a clean slate: as a standby this pod may have tracked channels
 				// with a no-op callback, so clear that state before (re)creating subscriptions.
-				channelManager.ResetTracking()
+				// Leader first: a sync landing between the two steps would otherwise track
+				// channels through the no-op callback again, and the triggered sync would then
+				// skip them as already subscribed.
 				setLeader(true)
+				channelManager.ResetTracking()
 				channelManager.TriggerSync()
 
 				// Hold leadership until it is lost or the service shuts down.
