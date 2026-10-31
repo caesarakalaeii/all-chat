@@ -863,8 +863,9 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 
 	// Rollout gate (ADR-0008): the expansion platforms (owncast, goodgame, picarto,
 	// facebook, instagram) ship behind a per-platform feature_gates row seeded
-	// premium-only, so a new listener rolls out to a cohort instead of every
-	// overlay at once. Fail closed on a lookup error: "cannot verify" must never
+	// premium-only (and early access while an upstream app awaits approval), so a
+	// new listener rolls out to a cohort instead of every overlay at once. Fail
+	// closed on a lookup error: "cannot verify" must never
 	// read as "allowed".
 	if allowed, gateErr := h.platformSourceAllowed(c.Request.Context(), userID.(string), req.Platform); gateErr != nil {
 		h.logger.Warn("platform source gate check failed; refusing",
@@ -872,7 +873,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "cannot verify platform availability"})
 		return
 	} else if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": req.Platform + " sources are currently premium-only"})
+		c.JSON(http.StatusForbidden, gin.H{"error": req.Platform + " sources are not available for your account yet"})
 		return
 	}
 	// For Twitch, validate that channel_id is a valid username (lowercase alphanumeric + underscore)
@@ -1281,7 +1282,7 @@ func (h *SourcesHandler) HandleAddSourceAuto(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "cannot verify platform availability"})
 		return
 	} else if !allowed {
-		c.JSON(http.StatusForbidden, gin.H{"error": req.Platform + " sources are currently premium-only"})
+		c.JSON(http.StatusForbidden, gin.H{"error": req.Platform + " sources are not available for your account yet"})
 		return
 	}
 	// For Twitch, validate that channel_id is a valid username (lowercase alphanumeric + underscore)
