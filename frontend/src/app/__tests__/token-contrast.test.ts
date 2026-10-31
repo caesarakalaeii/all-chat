@@ -176,6 +176,7 @@ const PLATFORMS = [
   '--color-picarto',
   '--color-facebook',
   '--color-instagram',
+  '--color-altstream',
   '--color-discord',
 ] as const
 

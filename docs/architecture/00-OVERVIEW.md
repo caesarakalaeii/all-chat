@@ -245,18 +245,30 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - **Rollout**: premium-gated (`platform_picarto`, migration 093)
 - **→ Documentation**: [services/picarto-listener/README.md](../../services/picarto-listener/README.md)
 
+**Altstream Listener** (`:8101`) — ADR-0082
+- **Purpose**: Read chat from Altstream channels (keyed by lowercased username) via Altstream's official, unauthenticated developer API; read-only (messages, highlights, native delete/clear)
+- **Protocol**: Server-Sent Events, `GET https://altstream.online/api/chat/stream?channel=<user>&lastId=<id>` (`lastId` is mandatory: without it the stream only pings), plus REST for live status and channel emotes
+- **Rollout**: early access (`platform_altstream`, `early_access=TRUE`, migration 117); allch.at shows it only to early-access users
+- **→ Documentation**: [services/altstream-listener/README.md](../../services/altstream-listener/README.md)
+
 **Facebook Listener** (`:8099`) — ADR-0060
 - **Purpose**: Poll the streamer's Facebook Page live-video comments; moderation write path (delete/hide comment, ban/unban viewer) via moderation-service with the stored Page token
 - **Protocol**: Graph API HTTP polling (no public realtime comment API)
 - **Rollout**: premium-gated (`platform_facebook`, migration 094); requires the operator's Meta app to pass App Review for Advanced Access
 - **→ Documentation**: [services/facebook-listener/README.md](../../services/facebook-listener/README.md)
 
+**Instagram Listener** (`:8100`) — ADR-0062
+- **Purpose**: Poll live comments on the streamer's Instagram professional account broadcasts; read-only
+- **Protocol**: Graph API HTTP polling of `live_comments`
+- **Rollout**: premium-gated (`platform_instagram`, migration 096); same Meta App Review dependency as Facebook
+- **→ Documentation**: [services/instagram-listener/README.md](../../services/instagram-listener/README.md)
+
 ### Processing Layer
 
 **Message Processor** (`:8087`)
 - **Purpose**: Normalize, enrich, and route messages
 - **Features**:
-  - Platform-specific normalizers (Twitch, YouTube, Kick, TikTok, Discord, Owncast, GoodGame, Picarto, Facebook)
+  - Platform-specific normalizers (Twitch, YouTube, Kick, TikTok, Discord, Owncast, GoodGame, Picarto, Altstream, Facebook, Instagram)
   - Emote enrichment (7TV, BTTV, FFZ)
   - Message age filtering (60s cutoff)
   - Publish to overlay-specific Redis Pub/Sub channels

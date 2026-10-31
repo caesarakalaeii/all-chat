@@ -65,6 +65,7 @@ interface OverlaySource {
     | 'picarto'
     | 'facebook'
     | 'instagram'
+    | 'altstream'
     | 'discord'
     | 'shared_overlay'
   channel_id: string

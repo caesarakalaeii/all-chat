@@ -36,12 +36,15 @@
    Instagram #ED6FA4 (lightened from brand #E1306C — the raw brand lands at
    4.59:1 over surface-2, below AA),
    Discord #737DF6 (lightened from blurple #5865F2 — the raw brand sits at
-   4.32-4.50:1 and is used as link and chip text). */
+   4.32-4.50:1 and is used as link and chip text),
+   Altstream #F97316 (brand orange, the default theme of altstream.online's
+   own stylesheet; passes as-is). */
   --color-owncast: #9b7ff5;
   --color-goodgame: #7fa3d1;
   --color-picarto: #27b756;
   --color-facebook: #3b93f5;
   --color-instagram: #ed6fa4;
+  --color-altstream: #f97316;
   --color-discord: #737df6;
   /* Neutral scale — oklch with constant chroma ~0.007, hue 270 */
   --color-neutral-950: oklch(0.09 0.007 270); /* #020204 — bg */

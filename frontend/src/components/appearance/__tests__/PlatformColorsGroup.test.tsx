@@ -46,8 +46,9 @@ describe('PlatformColorsGroup', () => {
       hostname: 'beta.allch.at',
     })
     render(<PlatformColorsGroup visualSettings={{}} onChange={vi.fn()} />)
-    expect(document.querySelectorAll('[data-testid="color-swatch"]')).toHaveLength(10)
+    expect(document.querySelectorAll('[data-testid="color-swatch"]')).toHaveLength(11)
     expect(screen.getByLabelText(/reset instagram accent/i)).toBeDefined()
+    expect(screen.getByLabelText(/reset altstream accent/i)).toBeDefined()
   })
 
   it('renders 5 color swatches', () => {
@@ -70,6 +71,7 @@ describe('PlatformColorsGroup', () => {
     expect(screen.queryByLabelText(/reset picarto accent/i)).toBeNull()
     expect(screen.queryByLabelText(/reset facebook accent/i)).toBeNull()
     expect(screen.queryByLabelText(/reset instagram accent/i)).toBeNull()
+    expect(screen.queryByLabelText(/reset altstream accent/i)).toBeNull()
   })
 
   it('clicking Twitch reset button calls onChange with { twitchAccent: undefined }', () => {
