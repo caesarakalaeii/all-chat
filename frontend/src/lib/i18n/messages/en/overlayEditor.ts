@@ -489,10 +489,11 @@ export const overlayEditor = {
     connectKick: 'Connect Kick',
     connectTiktok: 'Connect TikTok',
     // Owncast instances serve one stream each, so the ask is the server's base
-    // URL; the other two take a channel name like TikTok's username.
+    // URL; the others take a channel name like TikTok's username.
     connectOwncast: 'Connect Owncast',
     connectGoodgame: 'Connect GoodGame',
     connectPicarto: 'Connect Picarto',
+    connectAltstream: 'Connect Altstream',
     connectFacebook: 'Connect Facebook Page',
     connectInstagram: 'Connect Instagram',
     channelTitle: 'Connect {platform}',

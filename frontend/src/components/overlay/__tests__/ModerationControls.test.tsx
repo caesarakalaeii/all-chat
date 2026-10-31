@@ -167,6 +167,22 @@ describe('ModerationControls', () => {
     expect(screen.getByLabelText('Moderate user')).toBeDisabled()
   })
 
+  it('Altstream: read-only, so controls are disabled and name the platform', () => {
+    render(
+      <ModerationControls
+        item={makeItem('altstream')}
+        capability={undefined}
+        onDelete={noop}
+        onTimeout={noop}
+        onBan={noop}
+        onUnban={noop}
+      />
+    )
+    const deleteBtn = screen.getByLabelText('Delete message')
+    expect(deleteBtn).toBeDisabled()
+    expect(deleteBtn).toHaveAttribute('title', 'Altstream has no moderation API')
+  })
+
   it('Discord: a bot with only the delete permission shows delete but no per-user menu', () => {
     const item: ViewItem = { ...makeItem('discord'), id: 'discord-snowflake-1', metadata: {} }
     const cap: SourceCapability = {

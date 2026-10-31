@@ -26,6 +26,7 @@ const BETA_ONLY_PLATFORMS: Partial<Record<string, true>> = {
   picarto: true,
   facebook: true,
   instagram: true,
+  altstream: true,
 }
 
 const BETA_ONLY_OVERLAY_KINDS: Partial<Record<OverlayType, true>> = {
