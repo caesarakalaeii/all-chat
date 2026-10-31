@@ -81,7 +81,7 @@ func TestAddSource_PlatformGateClosedRefuses(t *testing.T) {
 	h := gateTestHandler(stubPlatformGate{allowed: map[string]bool{}})
 	w := postGoodGameSource(h)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "premium-only")
+	assert.Contains(t, w.Body.String(), "not available for your account")
 }
 
 func TestAddSource_PlatformGateOpenAllows(t *testing.T) {
