@@ -96,7 +96,10 @@ const (
 	// platform_instagram. Each ships seeded is_premium=TRUE (migrations
 	// 091-094 and 096) so a new listener cannot reach every overlay at
 	// once; flip a row to is_premium=false via the feature-gate admin endpoint
-	// to graduate a platform with no redeploy. Sources created while the gate
+	// to graduate a platform with no redeploy. early_access=TRUE (ADR-0020)
+	// narrows a gate further to beta testers and ambassadors, for a platform
+	// whose upstream app is not approved yet (Facebook and Instagram before Meta
+	// App Review, when only app testers can connect). Sources created while the gate
 	// is open keep working after it closes — the gate only ever blocks new
 	// adds, mirroring how the moderation/engagement gates gate the write, not
 	// the reads.
@@ -105,6 +108,7 @@ const (
 	GatePlatformPicarto   = "platform_picarto"
 	GatePlatformFacebook  = "platform_facebook"
 	GatePlatformInstagram = "platform_instagram"
+	GatePlatformAltstream = "platform_altstream" // ADR-0082, seeded is_premium=TRUE by migration 117
 
 	// GateLocalizationContribution is the feature key for the beta-tester
 	// translation tool (ADR-0063): contributing UI-catalog translations into
@@ -177,6 +181,7 @@ var rolloutPlatformGates = map[string]string{
 	"picarto":   GatePlatformPicarto,
 	"facebook":  GatePlatformFacebook,
 	"instagram": GatePlatformInstagram,
+	"altstream": GatePlatformAltstream,
 }
 
 // RolloutPlatformGateKey returns the feature-gate key that gates adding a

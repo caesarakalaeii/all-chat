@@ -50,7 +50,7 @@ describe('LiveStreamPoller stuck recovery', () => {
     poller.recoverStuckChannels();
 
     expect(mgr.shouldCheckNow('parked')).toBe(false);
-    expect(mgr.budgetParkRemainingMs('parked')).toBe(33 * 60_000);
+    expect(mgr.parkRemainingMs('parked')).toBe(33 * 60_000);
   });
 
   it('still recovers a room stuck at max offline backoff with no park', () => {
@@ -64,5 +64,20 @@ describe('LiveStreamPoller stuck recovery', () => {
     poller.recoverStuckChannels();
 
     expect(mgr.getState('stuck')).toBeUndefined();
+  });
+
+  it('leaves a silent-failure park alone', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const mgr = new BackoffManager(noopLogger);
+    const poller = new LiveStreamPoller({} as never, mgr, noopLogger);
+
+    offlineStreak(mgr, 'deaf');
+    mgr.recordSilentFailurePark('deaf', 30 * 60_000, 4);
+    now.mockReturnValue(1_000_000 + 6 * 60_000);
+    poller.recoverStuckChannels();
+
+    expect(mgr.shouldCheckNow('deaf')).toBe(false);
+    expect(mgr.parkRemainingMs('deaf')).toBe(24 * 60_000);
   });
 });

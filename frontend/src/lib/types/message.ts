@@ -144,6 +144,7 @@ export interface ChatMessage {
     | 'picarto'
     | 'facebook'
     | 'instagram'
+    | 'altstream'
     | 'discord'
     | 'system' // Primary platform
   /**
@@ -200,7 +201,7 @@ export interface MessageInfo {
 
 export interface Emote {
   code: string
-  provider: 'twitch' | '7tv' | 'bttv' | 'ffz' | 'youtube' | 'discord' | 'tiktok'
+  provider: 'twitch' | '7tv' | 'bttv' | 'ffz' | 'youtube' | 'discord' | 'tiktok' | 'altstream'
   url: string
   positions: number[][]
 }
@@ -234,6 +235,7 @@ export interface PlatformStatus {
     | 'picarto'
     | 'facebook'
     | 'instagram'
+    | 'altstream'
     | 'discord'
   channel_id: string
   channel_name?: string

@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
   if (!post) return {}
   const { meta } = post
   return {
-    title: `${meta.title} | All-Chat`,
+    title: meta.title,
     description: meta.description,
     alternates: { canonical: `/blog/${meta.slug}` },
     authors: [{ name: meta.author }],

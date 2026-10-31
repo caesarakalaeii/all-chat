@@ -194,14 +194,14 @@ describe('BackoffManager budget-refusal parking', () => {
 
     const mgr = new BackoffManager(noopLogger);
     mgr.recordConnectionError('erroring', new Error('boom'));
-    expect(mgr.budgetParkRemainingMs('erroring')).toBe(0);
-    expect(mgr.budgetParkRemainingMs('unknown')).toBe(0);
+    expect(mgr.parkRemainingMs('erroring')).toBe(0);
+    expect(mgr.parkRemainingMs('unknown')).toBe(0);
 
     mgr.recordBudgetRefusal('parked', 600_000);
     now.mockReturnValue(1_000_000 + 200_000);
-    expect(mgr.budgetParkRemainingMs('parked')).toBe(400_000);
+    expect(mgr.parkRemainingMs('parked')).toBe(400_000);
     now.mockReturnValue(1_000_000 + 700_000);
-    expect(mgr.budgetParkRemainingMs('parked')).toBe(0);
+    expect(mgr.parkRemainingMs('parked')).toBe(0);
   });
 
   it('parks at the stated time even when it is shorter than the error curve would be', () => {
@@ -215,3 +215,27 @@ describe('BackoffManager budget-refusal parking', () => {
     expect(mgr.getState('user')!.nextCheckTime).toBe(1_000_000 + 5_000);
   });
 });
+
+describe('BackoffManager silent-failure parking', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('parks a deaf room that just reconnected, despite the connect resetting the error curve', () => {
+    // The 2026-10-27 regression: every 'connected' resets consecutiveErrors,
+    // so an error-curve backoff for a deaf room never left its first step
+    // (4s) and the room re-signed every ~2.5 min for hours.
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordSuccessfulConnection('deaf');
+    mgr.recordSilentFailurePark('deaf', 600_000, 2);
+
+    expect(mgr.shouldCheckNow('deaf')).toBe(false);
+    expect(mgr.getTimeUntilNextCheck('deaf')).toBe(600_000);
+    expect(mgr.parkRemainingMs('deaf')).toBe(600_000);
+    expect(mgr.getState('deaf')!.consecutiveErrors).toBe(0);
+  });
+});
+

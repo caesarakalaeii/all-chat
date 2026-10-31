@@ -129,8 +129,8 @@ ENVIRONMENT=development
 6. Copy Client ID and Client Secret
 
 **Kick**:
-1. Contact Kick developer support (no public developer portal yet)
-2. Request OAuth application
+1. Create an app in the Developer tab of your Kick account settings (https://kick.com/settings/developer)
+2. Enable the scopes All-Chat requests: `user:read`, `channel:read`, `chat:write`, `moderation:ban`, `moderation:chat_message:manage`. Kick returns only the scopes it grants, and the token exchange records exactly those; a token without `chat:write` leaves the monitor's Kick send pill locked however often the streamer re-consents
 3. Add redirect: `http://localhost:8080/api/v1/auth/kick/callback`
 4. Copy Client ID and Client Secret
 
@@ -197,16 +197,22 @@ GET /api/v1/auth/youtube/callback?code=...&state=...
 → Returns: { "token": "jwt-token", "user": {...} }
 ```
 
-**Kick OAuth**:
+**Kick OAuth** (OAuth 2.1 + PKCE):
 ```bash
-# 1. Initiate OAuth (redirect to Kick)
-GET /api/v1/auth/kick/authorize
-→ Redirects to: https://kick.com/oauth2/authorize?client_id=...
+# 1. Initiate OAuth
+GET /api/v1/auth/kick/login
+→ Returns: { "auth_url": "https://id.kick.com/oauth/authorize?...&code_challenge=..." }
 
 # 2. OAuth callback (Kick redirects here)
 GET /api/v1/auth/kick/callback?code=...&state=...
-→ Returns: { "token": "jwt-token", "user": {...} }
+→ Redirects to: {frontend}/auth/callback?code=<short-lived code>
+→ or, when the Kick channel is already a source on another account:
+  {frontend}/auth/callback?error=duplicate_account&existing_username=...&platform=kick
 ```
+
+Add-source and the advanced-controls re-consent (`GET /api/v1/auth/kick/moderation/:overlay_id`) resolve the streamer's channel **slug**, which is what the source and the linked credential are keyed by. The callback tries the user token first (needs `channel:read`) and falls back to an app access token (`client_credentials`) looking the channel up by broadcaster id, which needs no user scope. Kick slugs are case-insensitive, so a slug that differs only in case from an existing source or `kick_oauth_tokens` row (older rows were keyed by the display name) updates that row instead of adding a second one.
+
+For an account whose login is **not** Kick, the Kick credential lives in `kick_oauth_tokens`, never on the `users` row (which holds the login platform's token). The streamer send endpoint (`POST /api/v1/auth/chat/send`) uses that linked credential, the newest row carrying `chat:write`, and refreshes it in place when it is within 5 minutes of expiry.
 
 ### Token Management
 
@@ -377,9 +383,12 @@ sendable streamer identity are skipped, like `/internal/chat/announce`.
 
 Platform mechanics: a Twitch bot send goes through Helix `chat/messages` with our
 **app access token** (client-credentials, cached pre-expiry) and `sender_id` set to
-the bot's platform user id. Kick: All-Chat Bot posts with the streamer's own token
-and `type=bot`; a custom bot posts with the bot account's own token and
-`type=user` addressed to the streamer's Kick id. YouTube: `liveChatMessages.insert`
+the bot's platform user id. Kick: All-Chat Bot posts with the streamer's own Kick
+token and `type=bot`; a custom bot posts with the bot account's own token and
+`type=user` addressed to the streamer's Kick id. The streamer's Kick token and id
+come from the users row for a Kick-login account and from the linked
+`kick_oauth_tokens` row (with `chat:write`) for everyone else, the same resolution
+the streamer send uses; without one, Kick is skipped. YouTube: `liveChatMessages.insert`
 with the bot's own OAuth token (refreshed proactively and rotated back into the
 row); timer sends resolve the live chat id **only** from the Redis stream state
 (`youtube:stream:state:{channel}`) so an offline channel costs no quota.

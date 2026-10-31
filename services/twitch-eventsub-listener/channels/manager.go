@@ -116,7 +116,8 @@ type Manager struct {
 	// newly-connected overlay's channel is subscribed without waiting for the periodic tick.
 	syncSignal chan struct{}
 
-	stopChan     chan struct{}
+	// cancel stops the sync loop, aborting any sync in flight. Set by Start.
+	cancel       context.CancelFunc
 	wg           sync.WaitGroup
 	syncInterval time.Duration
 
@@ -139,7 +140,6 @@ func NewManager(db *pgxpool.Pool, logger *zap.Logger, resolver UserIDResolver, c
 		resolveCache: make(map[string]string),
 		resolveNeg:   make(map[string]time.Time),
 		syncSignal:   make(chan struct{}, 1),
-		stopChan:     make(chan struct{}),
 		syncInterval: syncInterval,
 
 		chatReconcileInterval: ChatSubscriptionReconcileInterval,
@@ -545,23 +545,27 @@ func (m *Manager) reconcileChatLocked(demanded map[string]listener.DemandedSourc
 	}
 }
 
-// Start begins periodic channel syncing
+// Start begins channel syncing in the background and returns immediately.
+//
+// The initial sync runs on the sync goroutine, not inline: before demand is known it resolves
+// every active login with one Helix call each, which outgrew the liveness window at a few
+// hundred channels and crashlooped the pod, because the HTTP server only starts after Start.
 func (m *Manager) Start(ctx context.Context) error {
 	m.logger.Info("Starting channel manager",
 		zap.Duration("sync_interval", m.syncInterval),
 	)
 
-	// Initial sync
-	if err := m.SyncChannels(ctx); err != nil {
-		m.logger.Error("Initial channel sync failed", zap.Error(err))
-	}
-	m.refreshClaims(ctx)
-	m.heartbeatActiveSources(ctx)
+	ctx, m.cancel = context.WithCancel(ctx)
 
-	// Periodic sync
 	m.wg.Add(1)
 	go func() {
 		defer m.wg.Done()
+
+		if err := m.SyncChannels(ctx); err != nil {
+			m.logger.Error("Initial channel sync failed", zap.Error(err))
+		}
+		m.refreshClaims(ctx)
+		m.heartbeatActiveSources(ctx)
 
 		ticker := time.NewTicker(m.syncInterval)
 		defer ticker.Stop()
@@ -575,8 +579,6 @@ func (m *Manager) Start(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				return
-			case <-m.stopChan:
 				return
 			case <-m.syncSignal:
 				if err := m.SyncChannels(ctx); err != nil {
@@ -600,7 +602,9 @@ func (m *Manager) Start(ctx context.Context) error {
 
 // Stop stops the channel manager
 func (m *Manager) Stop() {
-	close(m.stopChan)
+	if m.cancel != nil {
+		m.cancel()
+	}
 	m.wg.Wait()
 	m.logger.Info("Channel manager stopped")
 }

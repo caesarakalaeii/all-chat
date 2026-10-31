@@ -23,6 +23,23 @@ COPY services/tiktok-signer/vendor/ ./vendor/
 # Build TypeScript
 RUN npm run build
 
+# Brotli stage: bookworm's libbrotli1 (1.0.9) carries CVE-2026-111497, an
+# out-of-bounds write in the decoder, and Debian has no fixed package yet.
+# Chromium decodes untrusted brotli (Content-Encoding: br, WOFF2 fonts) with
+# the system libbrotlidec, so build upstream 1.0.10 (same ABI series) and let
+# it shadow the distro copy. Drop this stage once bookworm ships a fixed
+# libbrotli1.
+FROM debian:bookworm-slim AS brotli
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends cmake gcc libc6-dev make && \
+    rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:b517ebdb5266b963d28d6e639b973479874ec72086deb6ee4a2d639e1b13606b \
+    https://github.com/google/brotli/archive/refs/tags/v1.0.10.tar.gz /tmp/brotli.tar.gz
+RUN tar -xzf /tmp/brotli.tar.gz -C /tmp && \
+    cmake -S /tmp/brotli-1.0.10 -B /tmp/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    cmake --build /tmp/build -j"$(nproc)" && \
+    cmake --install /tmp/build
+
 # Production stage: Chromium is required for the signing session. Bookworm
 # (not alpine) because puppeteer's bundled chromium needs glibc.
 FROM node:22-bookworm-slim
@@ -64,6 +81,15 @@ RUN apt-get update && \
       libxkbcommon0 \
       libxrandr2 \
     && rm -rf /var/lib/apt/lists/*
+
+# Patched brotli (see the brotli stage). /usr/local/lib is searched before the
+# multiarch dir, so after ldconfig Chromium and every other consumer resolve
+# the fixed copy; the build fails if Chromium still links the distro one or
+# cannot resolve every symbol against the replacement.
+COPY --from=brotli /usr/local/lib/libbrotli*.so.1* /usr/local/lib/
+RUN ldconfig && \
+    ldd /usr/lib/chromium/chromium | grep -q '/usr/local/lib/libbrotlidec.so.1' && \
+    LD_BIND_NOW=1 /usr/lib/chromium/chromium --version
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \

@@ -472,6 +472,36 @@ func (r *UserRepository) StoreKickToken(ctx context.Context, userID, channelSlug
 		grantedScopes = []string{}
 	}
 
+	// Kick slugs are case-insensitive, and older rows were keyed by the account's display
+	// name ("Hedisaurus") when the slug lookup failed. Merge into such a row (keeping its
+	// channel id) rather than starting a second one for the same channel: the moderation
+	// service resolves case-insensitively with LIMIT 1, so two rows would make it pick the
+	// old or the new grant at random.
+	tag, err := r.db.Exec(ctx, `
+		UPDATE kick_oauth_tokens SET
+			kick_user_id = $3,
+			access_token = $4,
+			refresh_token = $5,
+			token_type = 'Bearer',
+			expiry = $6,
+			granted_scopes = ARRAY(SELECT DISTINCT unnest(granted_scopes || $7::text[])),
+			encryption_version = 1,
+			updated_at = NOW()
+		WHERE id = (
+			SELECT id FROM kick_oauth_tokens
+			WHERE user_id = $1 AND LOWER(channel_id) = LOWER($2)
+			ORDER BY (channel_id = $2) DESC, updated_at DESC
+			LIMIT 1
+		)`,
+		userID, channelSlug, kickUserID, accessToken, refreshToken, token.Expiry, grantedScopes,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to store linked Kick token: %w", err)
+	}
+	if tag.RowsAffected() > 0 {
+		return nil
+	}
+
 	query := `
 		INSERT INTO kick_oauth_tokens (
 			user_id, channel_id, kick_user_id, access_token, refresh_token,
@@ -495,6 +525,70 @@ func (r *UserRepository) StoreKickToken(ctx context.Context, userID, channelSlug
 		return fmt.Errorf("failed to store linked Kick token: %w", err)
 	}
 
+	return nil
+}
+
+// LinkedKickCredential is a non-Kick-login account's own Kick credential from
+// kick_oauth_tokens, decrypted. KickUserID is the numeric broadcaster id the Kick chat API
+// keys on.
+type LinkedKickCredential struct {
+	ID           int64
+	KickUserID   string
+	AccessToken  string
+	RefreshToken string
+	Expiry       time.Time
+}
+
+// GetLinkedKickSendCredential returns the user's own linked Kick credential that carries the
+// chat:write grant (stored by the advanced-controls consent, StoreKickToken), newest first.
+// Returns nil, nil when the user holds none. A Twitch- or YouTube-login streamer has a
+// different platform's token on the users row, so this row is the only Kick credential that
+// can send to their Kick chat.
+func (r *UserRepository) GetLinkedKickSendCredential(ctx context.Context, userID string) (*LinkedKickCredential, error) {
+	var (
+		cred                  LinkedKickCredential
+		encAccess, encRefresh string
+	)
+	err := r.db.QueryRow(ctx, `
+		SELECT id, kick_user_id, access_token, refresh_token, expiry
+		FROM kick_oauth_tokens
+		WHERE user_id = $1
+		  AND kick_user_id IS NOT NULL
+		  AND 'chat:write' = ANY(granted_scopes)
+		ORDER BY updated_at DESC
+		LIMIT 1`, userID).Scan(&cred.ID, &cred.KickUserID, &encAccess, &encRefresh, &cred.Expiry)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to read linked Kick credential: %w", err)
+	}
+	if cred.AccessToken, err = r.decryptToken(encAccess); err != nil {
+		return nil, fmt.Errorf("failed to decrypt linked Kick access token: %w", err)
+	}
+	if cred.RefreshToken, err = r.decryptToken(encRefresh); err != nil {
+		return nil, fmt.Errorf("failed to decrypt linked Kick refresh token: %w", err)
+	}
+	return &cred, nil
+}
+
+// UpdateLinkedKickTokens writes a refreshed token pair back to a kick_oauth_tokens row.
+// granted_scopes and kick_user_id are owned by the consent flow and left untouched.
+func (r *UserRepository) UpdateLinkedKickTokens(ctx context.Context, id int64, accessToken, refreshToken string, expiry time.Time) error {
+	encAccess, err := r.encryptToken(accessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+	encRefresh, err := r.encryptToken(refreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt refresh token: %w", err)
+	}
+	if _, err := r.db.Exec(ctx, `
+		UPDATE kick_oauth_tokens
+		SET access_token = $1, refresh_token = $2, expiry = $3, encryption_version = 1, updated_at = NOW()
+		WHERE id = $4`, encAccess, encRefresh, expiry.UTC(), id); err != nil {
+		return fmt.Errorf("failed to update linked Kick tokens: %w", err)
+	}
 	return nil
 }
 
