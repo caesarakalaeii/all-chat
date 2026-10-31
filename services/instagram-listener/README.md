@@ -106,7 +106,9 @@ v26.0 references (fetched and quoted while implementing):
 2. **Configure the backend**: set `INSTAGRAM_APP_ID` and
    `INSTAGRAM_APP_SECRET` (auth-service reads them). Dev mode works
    immediately for app admins/developers/testers who hold an Instagram
-   professional account linked to a Page they manage.
+   professional account linked to a Page they manage. Until App Review passes,
+   keep the `platform_instagram` gate on **early access** (`/admin/features`)
+   so only beta testers and ambassadors can add an Instagram source.
 3. **Streamer prerequisites**: an Instagram professional (business or
    creator) account linked to a Facebook Page. Personal IG accounts cannot be
    connected.
@@ -129,8 +131,10 @@ v26.0 references (fetched and quoted while implementing):
   readable while the broadcast runs. Check `GET /status` for the poller count
   and start a live broadcast.
 - **403 on source add**: the `platform_instagram` feature gate is closed for
-  your account (ADR-0008 rollout pattern). An admin flips it via the
-  feature-gates admin endpoint — no redeploy.
+  your account: it is premium-only (ADR-0008 rollout pattern) and, while the
+  Meta app awaits review, early access (beta testers and ambassadors only,
+  ADR-0020). An admin flips either via the feature-gates admin endpoint — no
+  redeploy.
 - **Gate closed but sources exist**: sources created while the gate was open
   keep working; the gate only blocks new adds.
 
