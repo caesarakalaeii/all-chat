@@ -236,3 +236,16 @@ func TestPubSubChannelConstant(t *testing.T) {
 func TestGateSharingConstant(t *testing.T) {
 	assert.Equal(t, "sharing", featuregates.GateSharing)
 }
+
+// Every rollout platform maps to its own platform_<slug> gate (ADR-0008), so
+// overlay-manager refuses a source add while the gate is closed. Core platforms
+// are never gated.
+func TestRolloutPlatformGateKey(t *testing.T) {
+	for _, platform := range []string{"owncast", "goodgame", "picarto", "facebook", "instagram", "altstream"} {
+		key, gated := featuregates.RolloutPlatformGateKey(platform)
+		assert.True(t, gated, platform)
+		assert.Equal(t, "platform_"+platform, key)
+	}
+	_, gated := featuregates.RolloutPlatformGateKey("twitch")
+	assert.False(t, gated)
+}

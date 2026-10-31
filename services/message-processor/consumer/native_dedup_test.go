@@ -165,6 +165,16 @@ func TestPlatformMessageID(t *testing.T) {
 			want: "yt-1",
 		},
 		{
+			name: "altstream: message_id is the native id (no listener-side registry)",
+			raw:  &models.RawChatMessage{Platform: "altstream", MessageID: "840417196", Tags: map[string]string{"message_type": "message"}},
+			want: "840417196",
+		},
+		{
+			name: "other platforms do not fall back to message_id",
+			raw:  &models.RawChatMessage{Platform: "picarto", MessageID: "p-1"},
+			want: "",
+		},
+		{
 			name: "deletions are excluded — their target lives in EventData",
 			raw: &models.RawChatMessage{
 				EventType: "message_deletion",

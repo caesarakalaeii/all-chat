@@ -1,0 +1,152 @@
+{
+ "clear": {
+  "type": "clear",
+  "id": "793486440",
+  "author": "System",
+  "text": "[CLEAR_CHAT]",
+  "sentAt": 1793455888000,
+  "channel": "achie7240",
+  "roles": {
+   "broadcaster": false,
+   "moderator": false,
+   "subscriber": false,
+   "supporter": false
+  },
+  "source": "system"
+ },
+ "message": {
+  "type": "message",
+  "id": "615594708",
+  "author": "Vildravn",
+  "text": "choo choo",
+  "sentAt": 1793455910000,
+  "channel": "achie7240",
+  "userColor": "#8b5cf6",
+  "color": "#8b5cf6",
+  "roles": {
+   "broadcaster": false,
+   "moderator": false,
+   "subscriber": false,
+   "supporter": false
+  },
+  "source": "local"
+ },
+ "system": {
+  "type": "system",
+  "id": "444347682",
+  "author": "System",
+  "text": "[STREAMER_ONLY_FOLLOW]:Vildravn",
+  "sentAt": 1793456083000,
+  "channel": "achie7240",
+  "roles": {
+   "broadcaster": false,
+   "moderator": false,
+   "subscriber": false,
+   "supporter": false
+  },
+  "source": "system"
+ },
+ "shoutout": {
+  "type": "shoutout",
+  "id": "893591828",
+  "author": "AchieGameDev",
+  "text": "[SHOUTOUT]:{\"targetUsername\":\"vildravn\",\"targetDisplayName\":\"Vildravn\",\"targetAvatar\":\"https://cdn.discordapp.com/avatars/89649767826591744/5c20128354be4be971fc0752bc06e95e.png\",\"targetBio\":null,\"gameName\":null,\"gameCover\":null,\"shoutedBy\":\"AchieGameDev\"}",
+  "sentAt": 1793460094000,
+  "channel": "achie7240",
+  "data": {
+   "targetUsername": "vildravn",
+   "targetDisplayName": "Vildravn",
+   "targetAvatar": "https://cdn.discordapp.com/avatars/89649767826591744/5c20128354be4be971fc0752bc06e95e.png",
+   "targetBio": null,
+   "gameName": null,
+   "gameCover": null,
+   "shoutedBy": "AchieGameDev"
+  },
+  "roles": {
+   "broadcaster": false,
+   "moderator": false,
+   "subscriber": false,
+   "supporter": false
+  },
+  "source": "system"
+ },
+ "redemption": {
+  "type": "redemption",
+  "id": "2024786212",
+  "author": "LEMONPOPPYSEEDGAMES",
+  "text": "[REDEMPTION]:{\"from\":\"LEMONPOPPYSEEDGAMES\",\"rewardName\":\"Posture Check\",\"cost\":2,\"pointsName\":\"Tokens\",\"userInput\":\"Hi Achie!\"}",
+  "sentAt": 1793460825000,
+  "channel": "achie7240",
+  "data": {
+   "from": "LEMONPOPPYSEEDGAMES",
+   "rewardName": "Posture Check",
+   "cost": 2,
+   "pointsName": "Tokens",
+   "userInput": "Hi Achie!"
+  },
+  "userColor": "#f59e0b",
+  "color": "#f59e0b",
+  "roles": {
+   "broadcaster": false,
+   "moderator": false,
+   "subscriber": false,
+   "supporter": false
+  },
+  "source": "redemption"
+ },
+ "raid": {
+  "type": "raid",
+  "id": "519160387",
+  "author": "fletchmakes",
+  "text": "@fletchmakes is raiding with a party of \"2\" viewers!",
+  "sentAt": 1793454672000,
+  "channel": "copygirl",
+  "roles": {
+   "broadcaster": false,
+   "moderator": false,
+   "subscriber": false,
+   "supporter": false
+  },
+  "source": "system"
+ },
+ "highlight": {
+  "type": "highlight",
+  "id": "2024786203",
+  "author": "copygirl",
+  "text": "[HIGHLIGHT]:{\"from\":\"copygirl\",\"rewardName\":\"Test Highlight\",\"cost\":1,\"pointsName\":null,\"text\":\"Hi!\"}",
+  "sentAt": 1793457661000,
+  "channel": "copygirl",
+  "data": {
+   "from": "copygirl",
+   "rewardName": "Test Highlight",
+   "cost": 1,
+   "pointsName": null,
+   "text": "Hi!"
+  },
+  "userColor": "#84cc16",
+  "color": "#84cc16",
+  "roles": {
+   "broadcaster": false,
+   "moderator": false,
+   "subscriber": false,
+   "supporter": false
+  },
+  "source": "highlight"
+ },
+ "delete": {
+  "type": "delete",
+  "id": "169457509",
+  "author": "System",
+  "text": "[DELETE]:840417196",
+  "sentAt": 1793461947000,
+  "channel": "copygirl",
+  "targetId": "840417196",
+  "roles": {
+   "broadcaster": false,
+   "moderator": false,
+   "subscriber": false,
+   "supporter": false
+  },
+  "source": "system"
+ }
+}
