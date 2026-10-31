@@ -176,7 +176,7 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 Fixes may still go to `main` through PRs.
 
-**Gap:** only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (altstream, facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in any other service has no beta environment, so a human decides how to stage it.
+**Gap:** only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in any other service has no beta environment, so a human decides how to stage it.
 
 On top of the cycle, a new user-facing feature is not "done" until all three of these release steps are covered:
 

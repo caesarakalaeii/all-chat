@@ -160,7 +160,7 @@ The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-exte
 | **Owncast** *(beta)* | Chat websocket, one connection per instance | Chat from any self-hosted Owncast instance; add the instance URL as a source |
 | **GoodGame** *(beta)* | Chat websocket | Chat from GoodGame.ru channels; add the channel key as a source |
 | **Picarto** *(beta)* | Pop-out chat websocket | Chat from Picarto channels |
-| **Altstream** *(beta)* | Official public chat stream (SSE), read-only | Chat and highlighted messages from Altstream channels, channel emotes, message deletion; add the channel by username |
+| **Altstream** *(early access)* | Official public chat stream (SSE), read-only | Chat and highlighted messages from Altstream channels, channel emotes, message deletion; add the channel by username |
 | **Facebook** *(beta)* | Graph API polling + moderation | Live-video comments from your Facebook Page; delete/hide comments and ban/unban viewers |
 | **Instagram** *(beta)* | Graph API live_comments polling | Live comments from your Instagram professional account's broadcasts |
 

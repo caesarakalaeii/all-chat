@@ -248,7 +248,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 **Altstream Listener** (`:8101`) — ADR-0082
 - **Purpose**: Read chat from Altstream channels (keyed by lowercased username) via Altstream's official, unauthenticated developer API; read-only (messages, highlights, native delete/clear)
 - **Protocol**: Server-Sent Events, `GET https://altstream.online/api/chat/stream?channel=<user>&lastId=<id>` (`lastId` is mandatory: without it the stream only pings), plus REST for live status and channel emotes
-- **Rollout**: premium-gated (`platform_altstream`, migration 117), frontend beta-only
+- **Rollout**: early access (`platform_altstream`, `early_access=TRUE`, migration 117); allch.at shows it only to early-access users
 - **→ Documentation**: [services/altstream-listener/README.md](../../services/altstream-listener/README.md)
 
 **Facebook Listener** (`:8099`) — ADR-0060

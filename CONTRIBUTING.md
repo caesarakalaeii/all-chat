@@ -215,7 +215,7 @@ Closes #123
 
 Fixes may still go to `main` through PRs.
 
-Beta coverage is incomplete. Only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (altstream, facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in one of those services has no beta environment, so a human decides how to stage it.
+Beta coverage is incomplete. Only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in one of those services has no beta environment, so a human decides how to stage it.
 
 Frontend-only gating for beta lives in `frontend/src/lib/platform-availability.ts`: platforms and overlay kinds listed there are offered only on beta.allch.at.
 

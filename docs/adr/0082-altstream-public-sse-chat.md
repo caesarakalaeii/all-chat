@@ -88,17 +88,18 @@ the events into the unified format.
   catalogs of every channel the listener currently watches. A `:name:` token
   that is not in the map stays plain text.
 
-**Rollout, mirroring Picarto:**
+**Rollout, as early access (ADR-0020):**
 
 - Migration 117 seeds the `supported_platforms` row (`requires_oauth = false`)
-  and the `platform_altstream` feature gate with `is_premium = TRUE`
-  (ADR-0008).
-- The frontend offers Altstream only on `beta.allch.at`
-  (`frontend/src/lib/platform-availability.ts`).
-- The listener image runs from `:beta`, like the other beta-platform listeners.
-- Release to production by removing Altstream from `platform-availability.ts`,
-  then flip the gate through the feature-gate admin endpoint to open it beyond
-  premium.
+  and the `platform_altstream` feature gate with `early_access = TRUE` and
+  `is_premium = FALSE` (ADR-0008), so only beta testers and ambassadors can add
+  an Altstream source.
+- The frontend offers Altstream on every host, but on allch.at only to
+  early-access users (`EARLY_ACCESS_PLATFORMS` in
+  `frontend/src/lib/platform-availability.ts`).
+- The whole feature ships on `main`, and the listener image runs from `:main`.
+- Release to everyone by removing Altstream from `EARLY_ACCESS_PLATFORMS`, then
+  turning `early_access` off on the gate in `/admin/features`.
 
 ### The `lastId` gotcha
 
@@ -137,7 +138,7 @@ catch-up events older than the connection itself.
 - **The API is new** (its first third-party wrapper calls it "brand new") and
   the documentation already lags the server (`lastId`), so it may change shape
   while it settles. The parser is defensive (unknown types dropped, not
-  fatal), and the beta-only, premium-gated rollout limits who is affected.
+  fatal), and the early-access rollout limits who is affected.
 - **One SSE connection per watched channel**, all leaving from the cluster's
   egress IP. Twelve parallel connections from one IP worked in testing; there
   is no documented limit. If the number of watched Altstream channels grows
@@ -155,7 +156,8 @@ catch-up events older than the connection itself.
 
 ## Related
 
-- ADR-0008: premium feature gates (`platform_altstream`).
+- ADR-0008: feature gates (`platform_altstream`).
+- ADR-0020: early access for beta testers and ambassadors.
 - ADR-0059: Picarto, the rollout this mirrors.
 - ADR-0061: Rumble, withdrawn; the closest technical precedent and the
   opposite values outcome.

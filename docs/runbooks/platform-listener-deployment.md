@@ -77,7 +77,7 @@ copy: `caesar-deployment/apps/workloads/all-chat/kick-listener-deployment.yaml`
 ## Section 1 — Deploy owncast, goodgame, picarto, altstream
 
 Prereq: PR (platform expansion) merged to `beta`, images
-`ghcr.io/caesarakalaeii/allchat-{owncast,goodgame,picarto,altstream}-listener:beta`
+`ghcr.io/caesarakalaeii/allchat-{owncast,goodgame,picarto}-listener:beta` (altstream-listener runs from `:main`)
 exist in ghcr (workflow `build-and-push.yml` tags `type=ref,event=branch` on
 push to `beta`).
 
