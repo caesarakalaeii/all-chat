@@ -21,16 +21,36 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
 
 import { usePlatformAvailable } from '@/lib/platform-availability'
+import { useAuthStore } from '@/lib/stores/auth-store'
+import type { User } from '@/lib/types/auth'
 
 afterEach(() => {
   vi.restoreAllMocks()
+  useAuthStore.setState({ user: null })
 })
 
+function signIn(flags: Partial<User>) {
+  useAuthStore.setState({ user: { is_beta_tester: false, is_ambassador: false, ...flags } as User })
+}
+
 describe('usePlatformAvailable', () => {
-  it('hides Altstream outside the beta host', () => {
+  it('hides Altstream outside the beta host from users without early access', () => {
+    signIn({})
     const { result } = renderHook(() => usePlatformAvailable())
     expect(result.current('altstream')).toBe(false)
     expect(result.current('twitch')).toBe(true)
+  })
+
+  it('offers Altstream to beta testers and ambassadors on any host', () => {
+    signIn({ is_beta_tester: true })
+    expect(renderHook(() => usePlatformAvailable()).result.current('altstream')).toBe(true)
+    signIn({ is_ambassador: true })
+    expect(renderHook(() => usePlatformAvailable()).result.current('altstream')).toBe(true)
+  })
+
+  it('keeps beta-only platforms off allch.at even for early-access users', () => {
+    signIn({ is_beta_tester: true })
+    expect(renderHook(() => usePlatformAvailable()).result.current('picarto')).toBe(false)
   })
 
   it('offers Altstream on beta.allch.at', () => {
