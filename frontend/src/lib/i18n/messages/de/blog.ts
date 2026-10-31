@@ -19,7 +19,7 @@
 import type { LocaleNamespace } from '../../translate'
 
 export const blog: LocaleNamespace<'blog'> = {
-  metaTitle: 'Engineering-Blog | All-Chat',
+  metaTitle: 'Engineering-Blog',
   metaDescription:
     'Was in All-Chat kaputtgegangen ist, warum und was es brauchte, um es zu fixen. Geschrieben vom Entwickler, mit Daten und Zahlen.',
   breadcrumb: 'Blog',

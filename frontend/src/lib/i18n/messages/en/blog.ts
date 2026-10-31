@@ -25,7 +25,7 @@
  */
 
 export const blog = {
-  metaTitle: 'Engineering blog | All-Chat',
+  metaTitle: 'Engineering blog',
   metaDescription:
     'What broke in All-Chat, why, and what it took to fix. Written by the developer, with the dates and numbers.',
   breadcrumb: 'Blog',
