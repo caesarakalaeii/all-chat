@@ -890,7 +890,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Status**: Accepted (2026-10-31)
 **Problem**: Streamers who multistream to Altstream (six asks on Bluesky in October 2026) want its chat in their overlay. Altstream is a small, community-funded, queer-friendly, anti-generative-AI platform whose values fit All-Chat, the opposite of the values reason that withdrew Rumble (ADR-0061).
 **Decision**: New `altstream-listener` (port 8101) reads the official, documented, unauthenticated developer API: the SSE chat stream per channel plus REST for live status and emote catalogs, never an internal endpoint. v1 is read-only: messages, highlights, and native `delete`/`clear`; other event types are dropped with a metric. The SSE `lastId` parameter is mandatory and undocumented (without it the stream only pings), so the listener always sends one. Beta-only in the frontend, `:beta` image, `platform_altstream` gate seeded premium (migration 117).
-**Impact**: No credentials or auth-service change. Risks accepted: a three-month-old, one-developer platform with frequent October outages and a brand-new API; an unknown per-IP SSE connection cap (12 parallel got 502, 4 were fine); no full gap replay after a reconnect; emotes from unwatched channels stay text; no alerts.
+**Impact**: No credentials or auth-service change. Risks accepted: a three-month-old, one-developer platform with frequent October outages and a new API whose docs already lag the server (`lastId`); one SSE connection per watched channel from the cluster's egress IP; no full gap replay after a reconnect; emotes from unwatched channels stay text; no alerts.
 **→ Read**: [0082-altstream-public-sse-chat.md](./0082-altstream-public-sse-chat.md)
 
 ---
