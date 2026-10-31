@@ -383,9 +383,12 @@ sendable streamer identity are skipped, like `/internal/chat/announce`.
 
 Platform mechanics: a Twitch bot send goes through Helix `chat/messages` with our
 **app access token** (client-credentials, cached pre-expiry) and `sender_id` set to
-the bot's platform user id. Kick: All-Chat Bot posts with the streamer's own token
-and `type=bot`; a custom bot posts with the bot account's own token and
-`type=user` addressed to the streamer's Kick id. YouTube: `liveChatMessages.insert`
+the bot's platform user id. Kick: All-Chat Bot posts with the streamer's own Kick
+token and `type=bot`; a custom bot posts with the bot account's own token and
+`type=user` addressed to the streamer's Kick id. The streamer's Kick token and id
+come from the users row for a Kick-login account and from the linked
+`kick_oauth_tokens` row (with `chat:write`) for everyone else, the same resolution
+the streamer send uses; without one, Kick is skipped. YouTube: `liveChatMessages.insert`
 with the bot's own OAuth token (refreshed proactively and rotated back into the
 row); timer sends resolve the live chat id **only** from the Redis stream state
 (`youtube:stream:state:{channel}`) so an offline channel costs no quota.
