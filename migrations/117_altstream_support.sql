@@ -7,13 +7,13 @@
 -- API (altstream.online/documentation), and the channel is the lowercased
 -- Altstream username.
 --
--- Also seeds the platform_altstream feature gate (ADR-0008 rollout cohort).
--- Seeded is_premium=TRUE: a new listener reaches a premium cohort first; flip it
--- via the feature-gate admin endpoint to open the platform with no redeploy.
+-- Also seeds the platform_altstream feature gate (ADR-0008) as early access
+-- (early_access=TRUE, is_premium=FALSE, ADR-0020): beta testers and ambassadors
+-- only, until an admin turns early_access off in /admin/features.
 --
 -- IDEMPOTENCY: every service runs the full migration set on each pod restart
 -- (the runner does not track applied migrations), so this script must be safe
--- to re-execute, hence ON CONFLICT DO NOTHING (the row's is_premium is owned
+-- to re-execute, hence ON CONFLICT DO NOTHING (the row's flags are owned
 -- by the admin toggle thereafter and must not be reset by a re-run).
 
 BEGIN;
@@ -22,9 +22,10 @@ INSERT INTO supported_platforms (platform, display_name, is_enabled, requires_oa
 VALUES ('altstream', 'Altstream', true, false, '{"api_type": "public_sse", "requires_oauth": false}')
 ON CONFLICT (platform) DO NOTHING;
 
-INSERT INTO feature_gates (feature_key, is_premium, description)
+INSERT INTO feature_gates (feature_key, is_premium, early_access, description)
 VALUES (
     'platform_altstream',
+    FALSE,
     TRUE,
     'Altstream chat sources via the public SSE chat API (ADR-0082)'
 )
