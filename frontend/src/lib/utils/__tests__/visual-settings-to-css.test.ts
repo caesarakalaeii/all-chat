@@ -86,6 +86,7 @@ describe('visualSettingsToCss', () => {
       picartoBubbleBg: '#1b3d26',
       facebookBubbleBg: '#1b2940',
       instagramBubbleBg: '#2b1220',
+      altstreamBubbleBg: '#3d2a1b',
       messageGap: '8px',
       avatarGap: '4px',
       backdropBlur: '0px',
@@ -110,6 +111,7 @@ describe('visualSettingsToCss', () => {
       picartoAccent: '#1aa455',
       facebookAccent: '#1877f2',
       instagramAccent: '#e1306c',
+      altstreamAccent: '#f97316',
       showSuperChat: 'block',
       showSubscriptions: 'block',
       showRaids: 'block',
@@ -141,6 +143,7 @@ describe('visualSettingsToCss', () => {
     expect(result).toContain('--platform-twitch-accent: #9146ff;')
     expect(result).toContain('--platform-discord-accent: #5865f2;')
     expect(result).toContain('--platform-owncast-accent: #9b7ff5;')
+    expect(result).toContain('--platform-altstream-accent: #f97316;')
     expect(result).toContain('--chat-show-super-chat: block;')
     expect(result).toContain('--chat-bits-size-modifier: 1;')
     expect(result).toContain('--chat-membership-gift-size-modifier: 1.2;')
@@ -150,9 +153,9 @@ describe('visualSettingsToCss', () => {
     // messageAnimation is applied as a .msg-anim-* class, never as a CSS property
     expect(result).not.toContain('messageAnimation')
     expect(result).not.toContain('fly-left')
-    // All 58 CSS properties present (53 + 5 platform accents; the platform
+    // All 59 CSS properties present (48 + 11 platform accents; the platform
     // bubble fills are rules-only and never counted here)
-    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(58)
+    expect((result.match(/--chat-|--platform-/g) ?? []).length).toBe(59)
     // The by-username mode emits its [data-user-bubble] rule, not variables.
     // Background mode emits only the fill half; the border half is emitted only
     // when the mode is border (see the test below).
@@ -232,6 +235,13 @@ describe('visualSettingsToCss forced overrides', () => {
     expect(result).not.toContain("data-platform='youtube'")
   })
 
+  it('recolours the Altstream badge like every other platform', () => {
+    const result = visualSettingsToCss({ altstreamAccent: '#f97316' })
+
+    expect(result).toContain(".overlay-live-body [data-platform='altstream'] .platform-badge svg *")
+    expect(result).toContain('fill: #f97316;')
+  })
+
   it('emits no forced rule for an unset setting, leaving the theme alone', () => {
     const result = visualSettingsToCss({ fontFamily: 'Inter' })
 
@@ -306,6 +316,15 @@ describe('visualSettingsToCss bubble fills', () => {
     )
     expect(result).toContain('background-color: #2a1b3d;')
     expect(result).not.toContain("data-platform='youtube'")
+  })
+
+  it('fills an Altstream bubble', () => {
+    const result = visualSettingsToCss({ altstreamBubbleBg: '#3d2a1b' })
+
+    expect(result).toContain(
+      ".overlay-live-body > div[data-platform='altstream']:not(.event-message)"
+    )
+    expect(result).toContain('background-color: #3d2a1b;')
   })
 
   /**

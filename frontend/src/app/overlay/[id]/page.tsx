@@ -41,6 +41,7 @@
 import Image from 'next/image'
 import { use, useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import clsx from 'clsx'
+import { AltstreamIcon } from '@/components/icons/AltstreamIcon'
 import { toastManager } from '@/lib/toast'
 import type { ChatMessage, DeletionMetadata } from '@/lib/types/message'
 import { renderMessageContent } from '@/lib/renderMessage'
@@ -229,6 +230,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
       'picarto',
       'facebook',
       'instagram',
+      'altstream',
       'discord',
     ],
   })
@@ -610,6 +612,7 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             'picarto',
             'facebook',
             'instagram',
+            'altstream',
             'discord',
           ],
       skip_links: display.tts_skip_links !== false,
@@ -732,6 +735,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         return 'text-facebook'
       case 'instagram':
         return 'text-instagram'
+      case 'altstream':
+        return 'text-altstream'
       default:
         return 'text-slate-400'
     }
@@ -848,6 +853,8 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
             <circle cx="17.2" cy="6.8" r="1.2" fill="#ED6FA4" />
           </svg>
         )
+      case 'altstream':
+        return <AltstreamIcon className={clsx(iconClass, 'text-altstream')} />
       default:
         return null
     }

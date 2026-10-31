@@ -59,6 +59,7 @@ describe('PLATFORM_COLORS', () => {
   it('all keys are exactly the eleven platforms plus system', () => {
     const keys = Object.keys(PLATFORM_COLORS).sort()
     expect(keys).toEqual([
+      'altstream',
       'discord',
       'facebook',
       'goodgame',
@@ -79,6 +80,14 @@ describe('PLATFORM_COLORS', () => {
 
   it('instagram bg class is bg-instagram', () => {
     expect(PLATFORM_COLORS.instagram.bg).toBe('bg-instagram')
+  })
+
+  it('altstream text class is text-altstream', () => {
+    expect(PLATFORM_COLORS.altstream.text).toBe('text-altstream')
+  })
+
+  it('altstream bg class is bg-altstream', () => {
+    expect(PLATFORM_COLORS.altstream.bg).toBe('bg-altstream')
   })
 
   it('discord text class is text-discord', () => {

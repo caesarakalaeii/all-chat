@@ -221,6 +221,7 @@ describe('visual customizer property coverage', () => {
       'picartoBubbleBg',
       'facebookBubbleBg',
       'instagramBubbleBg',
+      'altstreamBubbleBg',
       'discordBubbleBg',
       'bubbleColorFromUser',
       'bubbleUserColorOpacity',
@@ -255,6 +256,7 @@ describe('visual customizer property coverage', () => {
       'picartoAccent',
       'facebookAccent',
       'instagramAccent',
+      'altstreamAccent',
       'discordAccent',
     ] as const) {
       expect(OVERRIDDEN_FIELDS.has(field), `${field} must stay forced`).toBe(true)

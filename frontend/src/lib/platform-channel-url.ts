@@ -27,6 +27,7 @@
  *   - owncast: `channelId` is the instance base URL -> that URL as given
  *   - goodgame: `channelId` is the numeric stream id -> goodgame.ru/{id}
  *   - picarto: `channelId` is the channel name      -> picarto.tv/{name}
+ *   - altstream: `channelId` is the username        -> altstream.online/{name}
  *   - facebook: the source is the connected Page; no public chat URL -> null
  *   - instagram: the source is the connected account; no public chat URL -> null
  *
@@ -66,6 +67,10 @@ export function channelUrl(
     case 'picarto': {
       const name = id || handle
       return name ? `https://picarto.tv/${encodeURIComponent(name)}` : null
+    }
+    case 'altstream': {
+      const name = id || handle
+      return name ? `https://altstream.online/${encodeURIComponent(name)}` : null
     }
     case 'youtube': {
       if (handle) {
