@@ -32,6 +32,7 @@ const EXPECTED_NAMESPACES = [
   'admin',
   'auth',
   'blog',
+  'commands',
   'common',
   'dashboard',
   'docs',

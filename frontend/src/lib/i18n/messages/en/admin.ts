@@ -44,6 +44,8 @@ export const admin = {
     maintenanceDescription: 'Maintenance mode and ops',
     localizationLabel: 'Localization',
     localizationDescription: 'Review community translations',
+    chatBotsLabel: 'Chat bots',
+    chatBotsDescription: 'Connect the All-Chat Bot to Twitch and YouTube',
   },
   sidebar: {
     brandSuffix: 'Admin',
@@ -135,6 +137,30 @@ export const admin = {
     makeEarlyAccessConfirm: 'Make Early Access',
     dialogCancel: 'No, keep as-is',
     updateFailed: 'Failed to update {flag}. Please try again.',
+  },
+
+  // All-Chat Bot management (/admin/chat-bots, ADR-0081): admin connects the
+  // shared bot account on Twitch and YouTube; the Kick bot ships on the Kick app.
+  chatBots: {
+    heading: 'Chat bots',
+    intro:
+      'The All-Chat Bot answers chat commands for any streamer who has not connected their own. Connect it on Twitch and YouTube here; on Kick the bot already ships with the Kick app.',
+    loadError: 'Failed to load the chat bot state. Refresh the page to try again.',
+    allchatHeading: 'All-Chat Bot accounts',
+    kickNote: 'Kick uses the bot configured on the Kick app; there is nothing to connect here.',
+    notConnected: 'Not connected',
+    connected: 'Connected as {name}',
+    connect: 'Connect on {platform}',
+    connecting: 'Opening {platform}',
+    connectFailed: 'Could not start the {platform} connection.',
+    disconnect: 'Disconnect',
+    disconnecting: 'Disconnecting',
+    disconnectFailed: 'Disconnecting on {platform} failed.',
+    disconnected: 'Bot disconnected.',
+    removeTitle: 'Disconnect the All-Chat Bot on {platform}?',
+    removeBody: 'Replies fall back to the streamer’s own account until it is reconnected.',
+    removeCancel: 'Keep it',
+    removeConfirm: 'Disconnect',
   },
   search: {
     heading: 'Search',

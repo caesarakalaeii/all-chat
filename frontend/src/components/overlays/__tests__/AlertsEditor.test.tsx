@@ -315,6 +315,22 @@ describe('AlertsEditor', () => {
     expect(screen.queryByRole('option', { name: /All events/ })).not.toBeInTheDocument()
   })
 
+  it('offers the chat command alert only where chat commands are available', async () => {
+    render(<AlertsEditor overlayId="ov1" isPremium />)
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Event type' }))
+    expect(await screen.findByRole('option', { name: /^Bits/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^Chat command/ })).not.toBeInTheDocument()
+    cleanup()
+
+    const host = vi
+      .spyOn(window, 'location', 'get')
+      .mockReturnValue({ ...window.location, hostname: 'beta.allch.at' })
+    render(<AlertsEditor overlayId="ov1" isPremium />)
+    fireEvent.click(await screen.findByRole('combobox', { name: 'Event type' }))
+    expect(await screen.findByRole('option', { name: /^Chat command/ })).toBeInTheDocument()
+    host.mockRestore()
+  })
+
   it('offers exactly the event types shared/alerts knows', () => {
     // The server owns the list (shared/alerts eventDefs) and 400s an unknown
     // type; this keeps the picker from drifting out of sync with it.

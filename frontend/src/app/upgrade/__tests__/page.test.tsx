@@ -33,8 +33,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-// The rows for the beta-only overlay kinds, and for alerts, released to every host (lib/platform-availability.ts).
-const betaOnlyStems = ['goalOverlay', 'listOverlay'] as const
+// The rows for the beta-only overlay kinds and features, and for alerts, released to every host (lib/platform-availability.ts).
+const betaOnlyStems = ['goalOverlay', 'listOverlay', 'chatCommands'] as const
 const alertsStems = ['alertsOverlay', 'alertsEditor'] as const
 
 describe('UpgradePage premium feature list', () => {
@@ -57,7 +57,7 @@ describe('UpgradePage premium feature list', () => {
     }
   })
 
-  it('omits the goal and list overlays outside the beta host', () => {
+  it('omits the goal and list overlays and chat commands outside the beta host', () => {
     render(<UpgradePage />)
 
     for (const stem of betaOnlyStems) {
@@ -67,7 +67,7 @@ describe('UpgradePage premium feature list', () => {
     }
   })
 
-  it('lists the goal and list overlays on beta.allch.at', () => {
+  it('lists the goal and list overlays and chat commands on beta.allch.at', () => {
     vi.spyOn(window, 'location', 'get').mockReturnValue({
       ...window.location,
       hostname: 'beta.allch.at',

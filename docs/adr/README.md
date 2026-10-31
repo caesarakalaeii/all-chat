@@ -855,6 +855,35 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0079: Streamer chat commands in engagement-service, with a sandboxed JS template engine
+
+**Status**: Accepted (2026-10-21)
+**Problem**: Streamers want Nightbot-style commands, keyword triggers (clip on "clip that") and templated replies with JavaScript across every merged chat, replying from their own account, without taxing the message-processor hot path or letting streamer-written code take down a shared service.
+**Decision**: Extend ADR-0028: message-processor forwards every message of a channel in the `chatcmd:channels` SET (kept by engagement-service) to `chatcmd:jobs` with the chatter's roles; engagement-service matches, checks `min_role`, cooldown, per-message dedup and a reply-echo guard in Redis, then clips via a new auth-service `/internal/twitch/clip` (`clips:edit`, new `clip` re-consent action) and replies via `/internal/chat/announce` to the origin channel when it is the streamer's own. Templates use `{user}`-style tokens plus `{js …}` run in QuickJS (`modernc.org/quickjs`) with no host functions, 100 ms, 16 MB. YouTube replies need premium (quota); the `chat_commands` gate is seeded open.
+**Impact**: New stream, SET, `chat_commands` table (migration 113) and editor at `/commands` (beta-only). Twitch replies and clips need a Twitch login; roles exist only on Twitch, Kick and YouTube. Works on beta once the backend services reach main.
+**→ Read**: [0079-streamer-chat-commands-in-engagement-service.md](./0079-streamer-chat-commands-in-engagement-service.md)
+
+---
+
+### ADR-0080: Chat command urlfetch and images, with a guarded outbound HTTP client
+
+**Status**: Accepted (2026-10-22)
+**Problem**: Streamers want Nightbot's `$(urlfetch)` and commands that put an image on stream, but a server-side fetch of a user-chosen URL is SSRF in a cluster whose egress is open, and Twitch/Kick/YouTube chats only take text.
+**Decision**: Fetch on the server through new `shared/safehttp` (dial-time refusal of every non-public IP, no proxy, ≤3 redirects); `{urlfetch}` is https on port 443 only, ≤3 per reply, 3 s, 32 KB, with variables query-escaped and bodies inserted into `{js}` as string literals. Running JS/urlfetch in the overlay was rejected: overlay sockets are anonymous (anyone with the URL could post as the streamer) and streamer JS on allch.at is stored XSS. A command's `image_url` (migration 114, rendered without chatter input) fires a `chat_command` alert on the owner's alerts overlays. The Owncast listener now dials through safehttp too.
+**Impact**: Images need an alerts overlay (premium-gated today). Any new user-URL dial must use `shared/safehttp`. Works on beta once engagement-service, overlay-manager and api-gateway reach main; the Owncast fix ships with beta.
+**→ Read**: [0080-chat-command-urlfetch-and-images.md](./0080-chat-command-urlfetch-and-images.md)
+
+---
+
+### ADR-0081: Chat command replies from an All-Chat Bot, premium custom bots, and timers
+
+**Status**: Accepted (2026-10-23)
+**Problem**: Streamers want command replies from a branded bot instead of their own account, a custom bot name as a premium option (like Wizebot), and timers that post every X minutes, every X messages, or both.
+**Decision**: New auth-service `/internal/chat/bot-send` resolves the sender per platform: the streamer's choice of `self`, else a premium custom bot, else the All-Chat Bot, falling back to the streamer when a grant or bot row is missing. Twitch bots post via Helix with an app access token (`user:bot` from the bot, `channel:bot` from the broadcaster through a new `bot` re-consent action); Kick uses `type: "bot"` with the streamer's token; YouTube posts with the bot's Google token. Bot accounts live in `chat_bot_accounts` (migration 115), connected through a consent flow that reuses each platform's callback. Timers (`chat_timers`, migration 116) count lines per owner in Redis and fire from a 15 s tick on every replica, claimed by a conditional `UPDATE` so exactly one replica posts. Timer YouTube sends read the live chat id only from Redis.
+**Impact**: Operator connects the All-Chat Bot on `/admin/chat-bots` and configures the Kick app bot; streamers grant `channel:bot` once. New gate `custom_chat_bot` (premium, early access). Time-only timers can post into offline Twitch/Kick chats. Works on beta once auth-service and engagement-service reach main.
+**→ Read**: [0081-chat-command-bot-sender-custom-bots-and-timers.md](./0081-chat-command-bot-sender-custom-bots-and-timers.md)
+
+---
 
 ## How to Create a New ADR
 
@@ -986,8 +1015,8 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Last Updated**: 2026-10-17
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories)
+**Last Updated**: 2026-10-21
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories, streamer chat commands, guarded outbound fetches for user URLs)
 
 **Most Referenced**:
 
@@ -995,4 +1024,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-10-17
+**Last Updated**: 2026-10-21

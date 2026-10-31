@@ -14,18 +14,25 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-// Package announcer posts an opt-in "round started" message to the streamer's chat
-// when a poll/prediction opens (issue #523, H4-2). engagement-service has no chat-send
-// capability of its own, so it resolves the overlay owner + its sendable source
-// platforms and calls auth-service's internal announce endpoint (which reuses the
-// tested per-platform streamer-send path) with a short-lived service JWT. Everything
-// here is best-effort: a failed or disabled announce never blocks or fails the round.
+// Package announcer is engagement-service's client for auth-service's internal chat
+// routes, called with a short-lived service JWT. engagement-service has no platform
+// credentials of its own, so every message it posts to chat and every clip it makes
+// goes through here:
+//   - an opt-in "round started" message when a poll/prediction opens (issue #523,
+//     H4-2), posted as the streamer to her sendable source platforms
+//     (/internal/chat/announce). Best-effort: a failed or disabled announce never
+//     blocks or fails the round.
+//   - chat command replies and chat timer posts (BotSend), ADR-0079/0081: auth-service
+//     resolves the sender the streamer chose (All-Chat Bot by default, else their
+//     own account) and posts with it.
+//   - Twitch clips (Clip).
 package announcer
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,15 +47,19 @@ import (
 	"go.uber.org/zap"
 )
 
-// sendablePlatforms are the platforms auth-service can post a streamer message to.
+// SendablePlatforms are the platforms auth-service can post a streamer message to.
 // Discord/TikTok have no streamer-send path, so a round on a Discord/TikTok-only
-// overlay simply isn't announced (viewers there still see the overlay + participate page).
-var sendablePlatforms = map[string]bool{"twitch": true, "youtube": true, "kick": true}
+// overlay simply isn't announced (viewers there still see the overlay + participate
+// page), and a chat command fired there cannot reply.
+var SendablePlatforms = map[string]bool{"twitch": true, "youtube": true, "kick": true}
 
 const (
 	maxAnnounceLen  = 500 // matches auth-service maxMessageLength
 	announceTimeout = 8 * time.Second
 )
+
+// ErrDisabled is returned by Send and Clip when the auth-service wiring is not configured.
+var ErrDisabled = errors.New("auth-service chat routes not configured")
 
 // store is the slice of the repository the announcer needs.
 type store interface {
@@ -182,25 +193,115 @@ func (a *Announcer) buildMessage(icon, title string, options []string, cta strin
 	return msg
 }
 
-func (a *Announcer) postAnnounce(ctx context.Context, userID, message string, platforms []string) error {
-	body, err := json.Marshal(announceRequest{UserID: userID, Message: message, Platforms: platforms})
-	if err != nil {
-		return fmt.Errorf("marshal announce: %w", err)
+// SendPurpose distinguishes what a BotSend carries; anything not the timer purpose
+// defaults to the command one.
+type SendPurpose string
+
+const (
+	PurposeCommand SendPurpose = "command"
+	PurposeTimer   SendPurpose = "timer"
+)
+
+// BotSend posts a chat command reply or a timer message on one platform (ADR-0079,
+// ADR-0081). auth-service resolves the sender the streamer chose — the All-Chat Bot
+// by default, else their own account — and falls back per platform on its own, so
+// engagement-service only names the target user and platform. The response shape is
+// announce's, so the outcome handling is the same code.
+func (a *Announcer) BotSend(ctx context.Context, userID, message, platform string, purpose SendPurpose) error {
+	if a == nil || !a.enabled {
+		return ErrDisabled
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.authBaseURL+"/internal/chat/announce", bytes.NewReader(body))
+	if purpose != PurposeTimer {
+		purpose = PurposeCommand
+	}
+	resp, err := a.callAuth(ctx, "/internal/chat/bot-send", botSendRequest{
+		UserID: userID, Message: message, Platforms: []string{platform}, Purpose: string(purpose),
+	})
 	if err != nil {
-		return fmt.Errorf("build announce request: %w", err)
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		snippet, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("bot-send endpoint returned %d: %s", resp.StatusCode, strings.TrimSpace(string(snippet)))
+	}
+	// 200 with success=false means nothing was posted; the real outcome is per
+	// platform in the body. Replies and timers are best-effort, so a failure here is
+	// exactly as loud as a failed announce.
+	var out announceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return fmt.Errorf("decode bot-send response: %w", err)
+	}
+	if !out.Success {
+		detail := failedResults(out.Results)
+		if detail == "" {
+			detail = "no sendable platform connected"
+		}
+		return fmt.Errorf("bot-send not delivered (%s)", detail)
+	}
+	if partial := failedResults(out.Results); partial != "" {
+		a.log.Warn("engagement bot-send partially delivered",
+			zap.String("user", userID), zap.String("failed", partial))
+	}
+	return nil
+}
+
+// botSendRequest is the body of POST /internal/chat/bot-send on auth-service.
+type botSendRequest struct {
+	UserID    string   `json:"user_id"`
+	Message   string   `json:"message"`
+	Platforms []string `json:"platforms"`
+	Purpose   string   `json:"purpose"`
+}
+
+// Clip clips the streamer's live Twitch stream and returns the clip URL (ADR-0079).
+func (a *Announcer) Clip(ctx context.Context, userID string) (string, error) {
+	if a == nil || !a.enabled {
+		return "", ErrDisabled
+	}
+	resp, err := a.callAuth(ctx, "/internal/twitch/clip", map[string]string{"user_id": userID})
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var out struct {
+		URL       string `json:"url"`
+		ErrorKind string `json:"error_kind"`
+	}
+	_ = json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&out)
+	if resp.StatusCode != http.StatusOK || out.URL == "" {
+		return "", fmt.Errorf("clip endpoint returned %d (%s)", resp.StatusCode, out.ErrorKind)
+	}
+	return out.URL, nil
+}
+
+// callAuth POSTs body as JSON to an auth-service internal route with a service JWT.
+func (a *Announcer) callAuth(ctx context.Context, path string, body any) (*http.Response, error) {
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal %s: %w", path, err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.authBaseURL+path, bytes.NewReader(buf))
+	if err != nil {
+		return nil, fmt.Errorf("build %s request: %w", path, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	tok, err := sharedAuth.GenerateServiceJWTWithKid(a.svcKeys.LatestKid(), "engagement-service", string(a.svcKeys.LatestSecret()), 30*time.Second)
 	if err != nil {
-		return fmt.Errorf("mint service jwt: %w", err)
+		return nil, fmt.Errorf("mint service jwt: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+tok)
-
 	resp, err := a.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("post announce: %w", err)
+		return nil, fmt.Errorf("post %s: %w", path, err)
+	}
+	return resp, nil
+}
+
+func (a *Announcer) postAnnounce(ctx context.Context, userID, message string, platforms []string) error {
+	resp, err := a.callAuth(ctx, "/internal/chat/announce", announceRequest{UserID: userID, Message: message, Platforms: platforms})
+	if err != nil {
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
@@ -239,7 +340,7 @@ func sendableFrom(channels []repository.ChannelRef) []string {
 	var out []string
 	for _, c := range channels {
 		p := strings.ToLower(c.Platform)
-		if sendablePlatforms[p] && !seen[p] {
+		if SendablePlatforms[p] && !seen[p] {
 			seen[p] = true
 			out = append(out, p)
 		}

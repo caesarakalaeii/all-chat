@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
@@ -100,6 +101,9 @@ type StreamConsumer struct {
 	consumerName   string
 	engagementCh   chan *models.RawChatMessage // buffered hand-off to the engagement forwarder (issue #523)
 	concurrency    int                         // max messages processed in parallel per batch (ADR-0033)
+
+	// chatCmdChannels is the hot path's copy of chatcmd:channels (ADR-0079).
+	chatCmdChannels atomic.Pointer[map[string]struct{}]
 }
 
 // engagementForwardBufferSize bounds the hot-path→forwarder hand-off. Command-shaped
@@ -163,6 +167,7 @@ func (c *StreamConsumer) Start(ctx context.Context) error {
 
 	// Engagement (issue #523): drain forwarded vote/wager candidates off the hot path.
 	go c.runEngagementForwarder(ctx)
+	go c.runChatCommandChannelsRefresher(ctx)
 
 	// Start consuming
 	go c.consumeLoop(ctx)

@@ -26,12 +26,39 @@
 
 import { apiClient } from './client'
 import type {
+  ChatCommand,
+  ChatCommandInput,
+  ChatCommandList,
+  ChatCommandPreview,
   CreatePollRequest,
   CreatePredictionRequest,
   EarnConfig,
   Poll,
   Prediction,
 } from '@/lib/types/engagement'
+import type {
+  ChatBotPlatform,
+  ChatBotSender,
+  ChatCommandSenderSettings,
+  ChatTimer,
+  ChatTimerInput,
+  ChatTimerList,
+} from '@/lib/types/engagement'
+
+import { authApi } from './auth'
+import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
+
+/**
+ * Connect a bot account by navigating the browser: fetch the auth check URL and,
+ * on success, redirect through the allowlist helper the moderation link uses.
+ */
+export async function startChatBotConnect(
+  platform: ChatBotPlatform,
+  scope: 'custom' | 'allchat'
+): Promise<void> {
+  const authUrl = await authApi.getChatBotConnectUrl(platform, scope)
+  safeExternalRedirect(authUrl)
+}
 
 /** A fresh idempotency header for one mutating request. */
 function idempotencyHeader(): Record<string, string> {
@@ -127,5 +154,78 @@ export const engagementApi = {
       `/api/v1/auth/twitch/moderation/${overlayId}?actions=engagement`
     )
     return res.auth_url
+  },
+
+  // --- Chat commands (ADR-0079): account-level, no overlay in the path ---
+
+  listChatCommands(): Promise<ChatCommandList> {
+    return apiClient.get<ChatCommandList>('/api/v1/engagement/chat-commands')
+  },
+
+  createChatCommand(body: ChatCommandInput): Promise<ChatCommand> {
+    return apiClient.post<ChatCommand>(
+      '/api/v1/engagement/chat-commands',
+      body,
+      idempotencyHeader()
+    )
+  },
+
+  updateChatCommand(id: string, body: ChatCommandInput): Promise<ChatCommand> {
+    return apiClient.put<ChatCommand>(`/api/v1/engagement/chat-commands/${id}`, body)
+  },
+
+  deleteChatCommand(id: string): Promise<void> {
+    return apiClient.delete(`/api/v1/engagement/chat-commands/${id}`)
+  },
+
+  /** Renders a response and image template against sample input, without posting anything. */
+  previewChatCommand(body: {
+    response: string
+    image: string
+    input: string
+    min_role: string
+    create_clip: boolean
+  }): Promise<ChatCommandPreview> {
+    return apiClient.post<ChatCommandPreview>('/api/v1/engagement/chat-commands/preview', body)
+  },
+
+  /**
+   * The Twitch grant for chat commands: clips:edit, with the chat-send scope the
+   * advanced-controls consent always folds in. Twitch sends the user back to /commands.
+   */
+  async getChatCommandsConsentUrl(overlayId: string): Promise<string> {
+    const res = await apiClient.get<ConsentUrlResponse>(
+      `/api/v1/auth/twitch/moderation/${overlayId}?actions=clip&return=commands`
+    )
+    return res.auth_url
+  },
+
+  // --- Chat command sender and timers (ADR-0081) ---
+
+  getChatBotSettings(): Promise<ChatCommandSenderSettings> {
+    return apiClient.get<ChatCommandSenderSettings>('/api/v1/engagement/chat-commands/settings')
+  },
+
+  updateChatBotSettings(body: { sender: ChatBotSender }): Promise<ChatCommandSenderSettings> {
+    return apiClient.put<ChatCommandSenderSettings>(
+      '/api/v1/engagement/chat-commands/settings',
+      body
+    )
+  },
+
+  getChatTimers(): Promise<ChatTimerList> {
+    return apiClient.get<ChatTimerList>('/api/v1/engagement/chat-timers')
+  },
+
+  createChatTimer(body: ChatTimerInput): Promise<ChatTimer> {
+    return apiClient.post<ChatTimer>('/api/v1/engagement/chat-timers', body, idempotencyHeader())
+  },
+
+  updateChatTimer(id: string, body: ChatTimerInput): Promise<ChatTimer> {
+    return apiClient.put<ChatTimer>(`/api/v1/engagement/chat-timers/${id}`, body)
+  },
+
+  deleteChatTimer(id: string): Promise<void> {
+    return apiClient.delete(`/api/v1/engagement/chat-timers/${id}`)
   },
 }

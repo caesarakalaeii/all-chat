@@ -311,9 +311,11 @@ func main() {
 	viewerIdentityRepo := repository.NewViewerIdentityRepository(db, viewerPremiumRecomputer)
 
 	// Create handlers
-	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics)
-	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, kickOAuth, userRepo, redisClient, userKeyChain, jwtExpiryHours, log).WithMetrics(businessMetrics)
+	platformAuthHandlerV2 := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, overlayManagerURL, log).WithMetrics(businessMetrics).WithChatBotStore(repository.NewChatBotAccountStore(db, tokenCipher))
 	viewerAuthHandler := handlers.NewViewerAuthHandler(viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, viewerRepo, viewerIdentityRepo, userRepo, redisClient, userKeyChain, jwtExpiryHours, frontendURL, tokenCipher, log).WithMetrics(businessMetrics)
+	legacyAuthHandler := handlers.NewAuthHandler(twitchOAuth, youtubeOAuth, kickOAuth, userRepo, redisClient, userKeyChain, jwtExpiryHours, log).WithMetrics(businessMetrics)
+
+	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 
 	// Seed the persistent total-users gauge from the database so Grafana retains
 	// an accurate baseline even after pod restarts (Prometheus counters are ephemeral).
@@ -359,8 +361,7 @@ func main() {
 	impersonationExpiry := time.Duration(getEnvAsIntOrDefault("IMPERSONATION_EXPIRY_HOURS", 2)) * time.Hour
 	adminHandler := handlers.NewAdminHandler(userRepo, db, log, userKeyChain, redisClient, time.Duration(jwtExpiryHours)*time.Hour, impersonationExpiry)
 	viewerCosmeticsHandler := handlers.NewViewerCosmeticsHandler(viewerIdentityRepo, redisClient, log)
-	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient, getEnvAsIntOrDefault("QUOTA_LIMIT_DAILY", 1009000)).WithYouTubeTokenSource(youtubetoken.NewYouTubeSource(db, tokenCipher, youtubeClientID, youtubeClientSecret)).WithKickTokenSource(userRepo)
-	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
+	chatSendHandler := handlers.NewChatSendHandler(log, viewerRepo, userRepo, db, twitchClientID, viewerTwitchOAuth, viewerYouTubeOAuth, viewerKickOAuth, tokenCipher, youtubeAPIKey, redisClient, getEnvAsIntOrDefault("QUOTA_LIMIT_DAILY", 1009000)).WithYouTubeTokenSource(youtubetoken.NewYouTubeSource(db, tokenCipher, youtubeClientID, youtubeClientSecret)).WithKickTokenSource(userRepo).WithChatBotStore(repository.NewChatBotAccountStore(db, tokenCipher), twitchClientSecret)
 	adminViewerHandler := handlers.NewAdminViewerHandler(log, viewerRepo)
 	adminCosmeticsHandler := handlers.NewAdminCosmeticsHandler(log, db)
 	riscHandler := handlers.NewRISCHandler(log, db)
@@ -573,6 +574,36 @@ func main() {
 		protected.GET("/kick/mod-consent", platformAuthHandlerV2.HandleModConsent(oauth.PlatformKick))
 		protected.GET("/youtube/mod-consent", platformAuthHandlerV2.HandleModConsent(oauth.PlatformYouTube))
 
+		// Chat-bot connect (ADR-0081). The flavor is chosen by ?scope=custom|allchat
+		// and gated PER FLAVOR before the handler runs, because the two skip
+		// different gates: custom needs EarlyAccess + Premium(custom_chat_bot) like
+		// chat-command writes; allchat (the global All-Chat Bot) is product, not
+		// upsell, and requires the admin role instead. The Kick leg is refused by
+		// the handler — the Kick bot lives on our Kick app and needs no credential.
+		requireCustomBotEarlyAccess := middleware.RequireEarlyAccess(db, gateCache, featuregates.GateCustomChatBot, log)
+		requireCustomBotPremium := middleware.RequirePremium(db, gateCache, featuregates.GateCustomChatBot, log)
+		gateBotConnect := func(c *gin.Context) {
+			if c.Query("scope") == oauth.PurposeBotConnectAllChat {
+				if !middleware.IsAdminSession(c) {
+					c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "admin only"})
+				}
+				return
+			}
+			requireCustomBotEarlyAccess(c)
+			if c.IsAborted() {
+				return
+			}
+			requireCustomBotPremium(c)
+		}
+		protected.GET("/chat-bots", platformAuthHandlerV2.HandleGetChatBots)
+		protected.GET("/twitch/bot-connect", gateBotConnect, platformAuthHandlerV2.HandleBotConnect(oauth.PlatformTwitch))
+		protected.GET("/kick/bot-connect", gateBotConnect, platformAuthHandlerV2.HandleBotConnect(oauth.PlatformKick))
+		protected.GET("/youtube/bot-connect", gateBotConnect, platformAuthHandlerV2.HandleBotConnect(oauth.PlatformYouTube))
+		protected.DELETE("/chat-bots/custom/:platform", platformAuthHandlerV2.HandleDeleteCustomChatBot)
+		protected.DELETE("/chat-bots/allchat/:platform",
+			middleware.AdminOnly(),
+			platformAuthHandlerV2.HandleDeleteAllChatBot)
+
 		// Discord guild management routes (require JWT)
 		if discordHandler != nil {
 			protected.GET("/discord/connect", discordHandler.HandleConnect)
@@ -590,13 +621,17 @@ func main() {
 
 	// Internal service-to-service routes (require a service JWT, validated against the
 	// service key chain). engagement-service calls /internal/chat/announce to post an
-	// opt-in round-start message to chat as the overlay owner (ADR-0028, H4-2). Not
-	// proxied by the gateway (it only forwards explicit /auth/... routes), so this is
-	// reachable only pod-to-pod within the cluster.
+	// opt-in round-start message or a chat command reply to chat as the streamer
+	// (ADR-0028, ADR-0079), and /internal/twitch/clip when a chat command clips; it
+	// calls /internal/chat/bot-send for command replies from the resolved bot sender
+	// (ADR-0081). Not proxied by the gateway (it only forwards explicit /auth/...
+	// routes), so these are reachable only pod-to-pod within the cluster.
 	if serviceKeyChain != nil {
 		internal := router.Group("/internal")
 		internal.Use(middleware.ServiceJWTAuth(serviceKeyChain, "engagement-service"))
 		internal.POST("/chat/announce", chatSendHandler.HandleInternalAnnounce)
+		internal.POST("/twitch/clip", chatSendHandler.HandleInternalClip)
+		internal.POST("/chat/bot-send", chatSendHandler.HandleInternalBotSend)
 	}
 
 	// Public viewer catalog routes (no JWT required — cosmetic catalogs are not sensitive)
