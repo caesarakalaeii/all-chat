@@ -70,7 +70,7 @@ type MessageHandler func(ctx context.Context, msg *models.RawChatMessage) error
 // Deletions are excluded: they carry no Tags, and their target id lives in
 // EventData["target_msg_id"]. Twitch (IRC and EventSub) sets Tags["id"]; YouTube's InnerTube path
 // sets Tags["youtube_message_id"] instead, and without that fallback buffered deletions for YouTube
-// messages never drain (#284).
+// messages never drain (#284). For selfRegisteredPlatforms the message_id is the native id.
 func platformMessageID(raw *models.RawChatMessage) string {
 	if raw.EventType == "message_deletion" {
 		return ""
@@ -78,7 +78,42 @@ func platformMessageID(raw *models.RawChatMessage) string {
 	if id := raw.Tags["id"]; id != "" {
 		return id
 	}
-	return raw.Tags["youtube_message_id"]
+	if id := raw.Tags["youtube_message_id"]; id != "" {
+		return id
+	}
+	if selfRegisteredPlatforms[raw.Platform] {
+		return raw.MessageID
+	}
+	return ""
+}
+
+// selfRegisteredPlatforms publish the platform's own message id as message_id, which is therefore
+// also the id the overlay renders and deletes by, and their listeners write no msgid registry entry
+// (only the Twitch and YouTube listeners do). The consumer registers these ids itself after the
+// message is published, so a native single deletion, which names only the platform id, resolves
+// instead of sitting in the deletion buffer until it expires (ADR-0082).
+var selfRegisteredPlatforms = map[string]bool{
+	"altstream": true,
+}
+
+// promoteTagDeletion turns a deletion published with its fields in Tags and no event_type (the
+// Kick and GoodGame listeners' shape) into an EventType/EventData deletion. Without it the consumer
+// handles that shape as an empty chat message. The id it gets keeps two deletions in the same second
+// from collapsing into one in the per-overlay dedup.
+func promoteTagDeletion(raw *models.RawChatMessage) {
+	if raw.EventType != "" || raw.Tags["event_type"] != "message_deletion" {
+		return
+	}
+	raw.EventType = "message_deletion"
+	raw.EventData = make(map[string]interface{}, len(raw.Tags))
+	for k, v := range raw.Tags {
+		if k != "event_type" {
+			raw.EventData[k] = v
+		}
+	}
+	if raw.MessageID == "" {
+		raw.MessageID = raw.Tags["target_msg_id"] + ":del"
+	}
 }
 
 // NativeDeduplicator drops messages whose platform-native id has already been processed. Both the
@@ -335,6 +370,7 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 		c.metrics.RecordStreamError("message-processor", "parse_error")
 		return fmt.Errorf("failed to parse raw message: %w", err)
 	}
+	promoteTagDeletion(rawMsg)
 
 	// Record message consumed
 	c.metrics.RecordMessageConsumed("message-processor", rawMsg.Platform, ConsumerGroup)
@@ -352,47 +388,12 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 		return c.processDeletionEvent(ctx, rawMsg)
 	}
 
-	// For any message a moderator could later remove, check whether its deletion already arrived
-	// and was buffered. Uses the SAME predicate as the native-id dedup below — see
-	// platformMessageID, which exists so these two cannot drift apart again (ADR-0046).
-	{
-		platformMsgID := platformMessageID(rawMsg)
-		if platformMsgID != "" {
-			// NOTE: registry.Add() happens in twitch-listener per user decision (CONTEXT.md)
-			// We only CHECK the buffer here for pending deletions
-
-			// Check if deletion was buffered for this message
-			deletion, err := c.deletionBuffer.Get(ctx, rawMsg.Platform, rawMsg.ChannelID, platformMsgID)
-			if err != nil {
-				c.logger.Error("Failed to check deletion buffer", zap.Error(err))
-			} else if deletion != nil {
-				// Apply buffered deletion
-				c.logger.Info("Applying buffered deletion",
-					zap.String("platform_msg_id", platformMsgID),
-					zap.String("deletion_type", deletion.EventData["deletion_type"].(string)),
-				)
-
-				// Process deletion event immediately
-				if err := c.processDeletionEvent(ctx, deletion); err != nil {
-					c.logger.Error("Failed to process buffered deletion", zap.Error(err))
-				}
-
-				// Remove from buffer
-				if err := c.deletionBuffer.Remove(ctx, rawMsg.Platform, rawMsg.ChannelID, platformMsgID); err != nil {
-					c.logger.Error("Failed to remove from buffer", zap.Error(err))
-				}
-
-				c.metrics.BufferedDeletionsApplied.Inc()
-			}
-		}
-	}
-
 	// Native-id dedup (ADR-0015): the IRC and EventSub Twitch paths both stamp the identical
 	// native Twitch message id into Tags["id"], so a channel handed off between them (or a Twitch
 	// webhook retry) can present the same message twice. Drop the second copy before enrichment so
 	// viewers never see doubled chat.
 	//
-	// Scoped via the SAME platformMessageID predicate as the buffered-deletion drain above, so the
+	// Scoped via the SAME platformMessageID predicate as the buffered-deletion drain below, so the
 	// two can never disagree about which messages carry a native id (ADR-0046). That deliberately
 	// includes chat notices (watch streaks, announcements), which arrive on
 	// channel.chat.notification stamped with the same native id the corresponding
@@ -424,6 +425,41 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 	// Record successful processing and duration
 	c.metrics.RecordMessageProcessed("message-processor", rawMsg.Platform, "handler", "success")
 	c.metrics.ProcessingDuration.WithLabelValues("message-processor", rawMsg.Platform).Observe(time.Since(start).Seconds())
+
+	// For any message a moderator could later remove, apply a deletion that overtook it and was
+	// buffered. Uses the SAME predicate as the native-id dedup above — see platformMessageID, which
+	// exists so these two cannot drift apart again (ADR-0046). This runs after the handler published
+	// the message: a deletion that reaches the overlay before its message removes nothing.
+	if platformMsgID := platformMessageID(rawMsg); platformMsgID != "" {
+		// Twitch and YouTube listeners register native id → internal id before publishing; for
+		// selfRegisteredPlatforms the consumer does it here, after the message is out, so a
+		// deletion resolving against it can never reach the overlay first.
+		if selfRegisteredPlatforms[rawMsg.Platform] {
+			if err := c.msgIDRegistry.Add(ctx, rawMsg.Platform, rawMsg.ChannelID, platformMsgID, rawMsg.MessageID); err != nil {
+				c.logger.Warn("Failed to register message id", zap.String("platform", rawMsg.Platform), zap.Error(err))
+			}
+		}
+
+		deletion, err := c.deletionBuffer.Get(ctx, rawMsg.Platform, rawMsg.ChannelID, platformMsgID)
+		if err != nil {
+			c.logger.Error("Failed to check deletion buffer", zap.Error(err))
+		} else if deletion != nil {
+			c.logger.Info("Applying buffered deletion",
+				zap.String("platform_msg_id", platformMsgID),
+				zap.String("deletion_type", deletion.EventData["deletion_type"].(string)),
+			)
+
+			if err := c.processDeletionEvent(ctx, deletion); err != nil {
+				c.logger.Error("Failed to process buffered deletion", zap.Error(err))
+			}
+
+			if err := c.deletionBuffer.Remove(ctx, rawMsg.Platform, rawMsg.ChannelID, platformMsgID); err != nil {
+				c.logger.Error("Failed to remove from buffer", zap.Error(err))
+			}
+
+			c.metrics.BufferedDeletionsApplied.Inc()
+		}
+	}
 
 	// Engagement (issue #523): forward candidate vote/wager chat commands to the
 	// engagement service. Best-effort and gated on a cheap text pre-check + a Redis
@@ -480,8 +516,9 @@ func (c *StreamConsumer) processDeletionEvent(ctx context.Context, raw *models.R
 		// A moderation-originated deletion already carries the internal UUID (the
 		// dashboard knows the id of the rendered message it moderated), so trust it and
 		// skip the registry lookup. This is the only resolution path for platforms whose
-		// listener does not populate the msgid registry — only twitch-listener does — so
-		// it is what makes moderation reflect-back work for Discord/Kick/YouTube.
+		// ids nothing registers (only the Twitch and YouTube listeners, and this consumer
+		// for selfRegisteredPlatforms, do), so it is what makes moderation reflect-back
+		// work for Discord/Kick.
 		if internalUUID, ok := raw.EventData["target_uuid"].(string); ok && internalUUID != "" {
 			break
 		}

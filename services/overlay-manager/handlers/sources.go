@@ -895,7 +895,9 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 
 	// TikTok handles are lowercase, and TikTok's lookups are case-sensitive: "MrBeast"
 	// returns user_not_found where "mrbeast" resolves, so a mixed-case handle is never live.
-	if req.Platform == "tiktok" {
+	// Altstream usernames are case-insensitive and keyed lowercased (ADR-0082); the
+	// username charset is checked by source.Validate below.
+	if req.Platform == "tiktok" || req.Platform == "altstream" {
 		channelID = strings.ToLower(strings.TrimSpace(channelID))
 	}
 

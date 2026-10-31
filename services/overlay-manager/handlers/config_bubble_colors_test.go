@@ -199,5 +199,6 @@ func TestBubbleColorSettingsCoversEveryGatedField(t *testing.T) {
 		"facebookBubbleBg",
 		"discordBubbleBg",
 		"instagramBubbleBg",
+		"altstreamBubbleBg",
 	}, bubbleColorSettings)
 }

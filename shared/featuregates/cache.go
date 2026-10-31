@@ -105,6 +105,7 @@ const (
 	GatePlatformPicarto   = "platform_picarto"
 	GatePlatformFacebook  = "platform_facebook"
 	GatePlatformInstagram = "platform_instagram"
+	GatePlatformAltstream = "platform_altstream" // ADR-0082, seeded is_premium=TRUE by migration 117
 
 	// GateLocalizationContribution is the feature key for the beta-tester
 	// translation tool (ADR-0063): contributing UI-catalog translations into
@@ -177,6 +178,7 @@ var rolloutPlatformGates = map[string]string{
 	"picarto":   GatePlatformPicarto,
 	"facebook":  GatePlatformFacebook,
 	"instagram": GatePlatformInstagram,
+	"altstream": GatePlatformAltstream,
 }
 
 // RolloutPlatformGateKey returns the feature-gate key that gates adding a
