@@ -341,7 +341,7 @@ export function CommandEditor({
             <output
               htmlFor={`${ids}-response ${ids}-sample`}
               aria-live="polite"
-              className="block min-h-6 font-mono text-sm break-words text-text"
+              className="block min-h-6 font-mono text-sm wrap-break-word text-text"
             >
               {previewFailed
                 ? t('commands.editor.previewFailed')
