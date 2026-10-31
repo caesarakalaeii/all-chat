@@ -1,8 +1,8 @@
-# New-Listener Deployment Runbook (Owncast, GoodGame, Picarto, Facebook, Instagram)
+# New-Listener Deployment Runbook (Owncast, GoodGame, Picarto, Altstream, Facebook, Instagram)
 
 **Owner:** Platform / SRE
-**Last reviewed:** 2026-09-12
-**Applies to:** the platform-expansion listeners (PR to `beta`, ADR-0058–0062)
+**Last reviewed:** 2026-10-31
+**Applies to:** the platform-expansion listeners (PR to `beta`, ADR-0058–0062, ADR-0082)
 **Related:** `docs/runbooks/secret-rotation.md` (hazard notes on `allchat-secrets`
 SOPS-vs-live drift apply here unchanged — `kubectl patch` only, never
 `sops set`/`sops edit` on the encrypted file)
@@ -13,7 +13,7 @@ SOPS-vs-live drift apply here unchanged — `kubectl patch` only, never
 
 | Trigger | Action |
 |---------|--------|
-| Deploy the three secretless listeners (owncast, goodgame, picarto) | Section 1 — no new secrets needed, manifests need key-name fixes first |
+| Deploy the secretless listeners (owncast, goodgame, picarto, altstream) | Section 1 — no new secrets needed, manifests need key-name fixes first |
 | Deploy the facebook listener | Section 2 — requires a Meta app and two new secret keys first |
 | Deploy the instagram listener | Section 2a — same Meta app as facebook plus the Instagram product; separate `instagram-app-id`/`instagram-app-secret` keys |
 | A listener CrashLoops after deploy | Section 3 — the two known failure modes are both key-name drift |
@@ -33,6 +33,7 @@ Third-party credentials needed *at the pod*:
 | owncast-listener | none — connects to the streamer's own Owncast instance URL, no API key | deploy as-is |
 | goodgame-listener | none — anonymous chat WebSocket | deploy as-is |
 | picarto-listener | none — unofficial pop-out chat WebSocket | deploy as-is |
+| altstream-listener | none — Altstream's official, unauthenticated public API (SSE chat plus REST) | deploy as-is |
 | facebook-listener | none *in the pod*, but the platform is dead end-to-end without Meta credentials in auth-service + moderation-service | **do not deploy yet** |
 | instagram-listener | none *in the pod*, but the platform is inert without Meta credentials in auth-service (same Meta app as facebook, plus the Instagram product) | **do not deploy yet** |
 
@@ -56,7 +57,7 @@ cluster runs Redis **without AUTH** — no listener sets `REDIS_PASSWORD` today.
 
 ## Hazard: the repo base manifests will not apply as-is
 
-The five new listener manifests in `deployments/k8s/base/<platform>-listener/`
+The new listener manifests in `deployments/k8s/base/<platform>-listener/`
 were written for the local docker/kustomize setup and reference secret keys
 that **do not match live `allchat-secrets`**:
 
@@ -73,10 +74,10 @@ copy: `caesar-deployment/apps/workloads/all-chat/kick-listener-deployment.yaml`
 
 ---
 
-## Section 1 — Deploy owncast, goodgame, picarto
+## Section 1 — Deploy owncast, goodgame, picarto, altstream
 
 Prereq: PR (platform expansion) merged to `beta`, images
-`ghcr.io/caesarakalaeii/allchat-{owncast,goodgame,picarto}-listener:beta`
+`ghcr.io/caesarakalaeii/allchat-{owncast,goodgame,picarto}-listener:beta` (altstream-listener runs from `:main`)
 exist in ghcr (workflow `build-and-push.yml` tags `type=ref,event=branch` on
 push to `beta`).
 
@@ -87,17 +88,18 @@ push to `beta`).
    - `owncast-listener-deployment.yaml` — port 8095
    - `goodgame-listener-deployment.yaml` — port 8096
    - `picarto-listener-deployment.yaml` — port 8097
+   - `altstream-listener-deployment.yaml` — port 8101
    - HPA files optional (repo base ships `minReplicas: 1, maxReplicas: 5` on
      CPU; leadership coordination makes extra replicas safe — every listener
      calls `NewLeadershipListenerFromEnv`, and with `SOURCE_MANAGER_SECRET`
      set only the leader ingests)
 
-2. **Env block per listener** (identical for all three):
+2. **Env block per listener** (identical for all of them):
 
    ```yaml
    env:
      - name: PORT
-       value: "<8095-8097>"
+       value: "<8095-8097 or 8101>"
      - name: LOG_LEVEL
        valueFrom:
          configMapKeyRef:
@@ -150,10 +152,20 @@ push to `beta`).
            key: service-jwt-secret      # lowercase — matches live
    ```
 
+   Altstream only, additionally (optional; the listener defaults to it):
+
+   ```yaml
+     - name: ALTSTREAM_BASE_URL
+       value: "https://altstream.online"
+   ```
+
    Skip `REDIS_PASSWORD` entirely (no AUTH in prod, no `redis-auth` Secret).
    Skip `SERVICE_JWT_SECRET`/`_V1` — listeners use `SOURCE_MANAGER_SECRET`.
 
-3. **Add to `kustomization.yaml`** resources list.
+3. **Add to `kustomization.yaml`** resources list, and add the listener to the
+   `listeners` NetworkPolicy in `network-policies.yaml` (its `app` label in the
+   pod selector, its port in the monitoring ingress rule). Egress is open in the
+   `allchat` namespace, so no egress rule is needed for the platform's host.
 
 4. **Commit to caesar-deployment `main`**, push, let ArgoCD sync the `all-chat`
    app. Watch rollout:
@@ -162,6 +174,7 @@ push to `beta`).
    kubectl --context default rollout status deployment/owncast-listener -n allchat --timeout=5m
    kubectl --context default rollout status deployment/goodgame-listener -n allchat --timeout=5m
    kubectl --context default rollout status deployment/picarto-listener -n allchat --timeout=5m
+   kubectl --context default rollout status deployment/altstream-listener -n allchat --timeout=5m
    ```
 
 5. **Verify ingest path** (gate still closed for non-premium users — expected
@@ -333,3 +346,5 @@ Instagram. No rotation procedure needed.
 | auth-service logs "Facebook OAuth will not be available" | `FACEBOOK_APP_ID`/`FACEBOOK_APP_SECRET` unset | Section 2 step 2-3 |
 | Graph 401 on a Page poll | Streamer's Page token invalidated | Streamer reconnects from dashboard; no operator action |
 | No messages despite source added | `platform_*` feature gate closed (ADR-0008) — overlay-manager 403s the source add, or the add succeeded but the listener's leader hasn't synced yet (30s sync cadence) | Flip the gate for premium users or per-gate via the feature-gate admin endpoint; then wait one sync interval |
+| altstream-listener connected but no messages, only `: ping` frames | The SSE request has no `lastId` (or an empty one): Altstream then sends pings forever (ADR-0082) | Listener bug; the stream URL must always carry a non-empty `lastId` |
+| altstream-listener SSE connects fail with `502 Bad Gateway` | Altstream is restarting or rolling out (seen during their deploys) | Transient: the listener backs off and reconnects. If it persists, check https://bsky.app/profile/altstream.online for an outage notice |

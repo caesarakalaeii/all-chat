@@ -242,5 +242,6 @@ const NAMEABLE_PLATFORMS = [
   'tiktok',
   'facebook',
   'instagram',
+  'altstream',
   'discord',
 ] as const

@@ -33,6 +33,13 @@ describe('channelUrl', () => {
     expect(channelUrl('tiktok', '@someone')).toBe('https://www.tiktok.com/@someone')
   })
 
+  it('builds an Altstream URL from the username', () => {
+    expect(channelUrl('altstream', 'kanaruhoshino16')).toBe(
+      'https://altstream.online/kanaruhoshino16'
+    )
+    expect(channelUrl('altstream', '')).toBeNull()
+  })
+
   it('prefers a YouTube @handle when present', () => {
     expect(channelUrl('youtube', 'UCsomethingignored0000000', '@MrBeast')).toBe(
       'https://www.youtube.com/@MrBeast'

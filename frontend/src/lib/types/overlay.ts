@@ -253,6 +253,7 @@ export interface ChatSource {
     | 'picarto'
     | 'facebook'
     | 'instagram'
+    | 'altstream'
     | 'shared_overlay'
     | 'discord'
   channel_id: string
@@ -324,6 +325,7 @@ export interface AddSourceRequest {
     | 'picarto'
     | 'facebook'
     | 'instagram'
+    | 'altstream'
     | 'shared_overlay'
     | 'discord'
   channel_id: string

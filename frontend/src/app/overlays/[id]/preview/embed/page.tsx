@@ -34,6 +34,7 @@
 import Image from 'next/image'
 import { use, useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import clsx from 'clsx'
+import { AltstreamIcon } from '@/components/icons/AltstreamIcon'
 import { toastManager } from '@/lib/toast'
 import { WebSocketClient } from '@/lib/api/websocket'
 import { overlaysApi } from '@/lib/api/overlays'
@@ -115,6 +116,8 @@ const getPlatformColor = (platform: string): string => {
       return 'text-facebook'
     case 'instagram':
       return 'text-instagram'
+    case 'altstream':
+      return 'text-altstream'
     default:
       return 'text-slate-400'
   }
@@ -230,6 +233,8 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
           <circle cx="17.2" cy="6.8" r="1.2" fill="#ED6FA4" />
         </svg>
       )
+    case 'altstream':
+      return <AltstreamIcon className={clsx(iconClass, 'text-altstream')} />
     default:
       return null
   }
@@ -356,6 +361,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       'goodgame',
       'picarto',
       'facebook',
+      'instagram',
+      'altstream',
       'discord',
     ],
   })
@@ -730,6 +737,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
                 'goodgame',
                 'picarto',
                 'facebook',
+                'instagram',
+                'altstream',
                 'discord',
               ],
         }

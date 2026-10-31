@@ -106,6 +106,7 @@ import { YouTubeStreamLinkField } from '@/components/overlay/YouTubeStreamLinkFi
 import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge'
 import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal'
 import { cn } from '@/lib/utils'
+import { AltstreamIcon } from '@/components/icons/AltstreamIcon'
 import { TypographyGroup } from '@/components/appearance/TypographyGroup'
 import { BubbleColorsGroup } from '@/components/appearance/BubbleColorsGroup'
 import { ColorsGroup } from '@/components/appearance/ColorsGroup'
@@ -1226,12 +1227,12 @@ function AddSourceForm({
 
   // Discord dialog state
   // A channel-name or instance-URL dialog for the no-OAuth platforms:
-  // GoodGame/Picarto key a channel; Owncast's "channel" is the base URL
-  // of the instance (one stream per server). One dialog serves all three; the
+  // GoodGame/Picarto/Altstream key a channel; Owncast's "channel" is the base
+  // URL of the instance (one stream per server). One dialog serves them all; the
   // label and placeholder come from the catalog per platform.
-  const [channelDialog, setChannelDialogOpen] = useState<'owncast' | 'goodgame' | 'picarto' | null>(
-    null
-  )
+  const [channelDialog, setChannelDialogOpen] = useState<
+    'owncast' | 'goodgame' | 'picarto' | 'altstream' | null
+  >(null)
   const [channelValue, setChannelValue] = useState('')
   // Discord dialog state
   const [guilds, setGuilds] = useState<DiscordGuild[]>([])
@@ -1500,7 +1501,7 @@ function AddSourceForm({
           </Button>
         )}
 
-        {/* GoodGame / Picarto — channel-name dialogs, same shape as TikTok. */}
+        {/* GoodGame / Picarto / Altstream — channel-name dialogs, same shape as TikTok. */}
         {isPlatformAvailable('goodgame') && (
           <Button
             onClick={() => setChannelDialogOpen('goodgame')}
@@ -1540,6 +1541,18 @@ function AddSourceForm({
               <circle cx="14.5" cy="15" r="1.4" fill="#FFFFFF" />
             </svg>
             {t('overlayEditor.addSource.connectPicarto')}
+          </Button>
+        )}
+
+        {isPlatformAvailable('altstream') && (
+          <Button
+            onClick={() => setChannelDialogOpen('altstream')}
+            size="lg"
+            className="gap-2.5 text-bg"
+            style={{ backgroundColor: 'var(--color-altstream)' }}
+          >
+            <AltstreamIcon className="h-4 w-4 shrink-0" />
+            {t('overlayEditor.addSource.connectAltstream')}
           </Button>
         )}
 
@@ -1750,7 +1763,7 @@ function AddSourceForm({
       </Dialog.Root>
 
       {/* No-OAuth platform input dialog — Owncast asks for the instance's base
-          URL, GoodGame/Picarto for a channel name. Kept beside the
+          URL, GoodGame/Picarto/Altstream for a channel name. Kept beside the
           TikTok dialog rather than merged into it so TikTok's copy stays its
           own (the body copy differs by more than the platform name). */}
       <Dialog.Root
@@ -1879,6 +1892,9 @@ function AddSourceForm({
                 )}
                 {isPlatformAvailable('facebook') && (
                   <option value="facebook">{t('common.platforms.facebook')}</option>
+                )}
+                {isPlatformAvailable('altstream') && (
+                  <option value="altstream">{t('common.platforms.altstream')}</option>
                 )}
               </select>
               <Input
@@ -4368,6 +4384,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           <option value="picarto">{t('common.platforms.picarto')}</option>
                           <option value="facebook">{t('common.platforms.facebook')}</option>
                           <option value="instagram">{t('common.platforms.instagram')}</option>
+                          <option value="altstream">{t('common.platforms.altstream')}</option>
                           <option value="twitch">{t('common.platforms.twitch')}</option>
                           <option value="youtube">{t('common.platforms.youtube')}</option>
                           <option value="kick">{t('common.platforms.kick')}</option>

@@ -70,6 +70,7 @@ export const common = {
     picarto: 'Picarto',
     facebook: 'Facebook',
     instagram: 'Instagram',
+    altstream: 'Altstream',
     discord: 'Discord',
   },
   // Overlay kinds (ADR-0068), keyed by the overlay_type wire value. Read by
