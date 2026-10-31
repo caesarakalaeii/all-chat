@@ -171,6 +171,7 @@ func main() {
 	goodgameNormalizer := normalizer.NewGoodGameNormalizer()
 	picartoNormalizer := normalizer.NewPicartoNormalizer()
 	instagramNormalizer := normalizer.NewInstagramNormalizer()
+	altstreamNormalizer := normalizer.NewAltstreamNormalizer()
 
 	// Map of platform-specific normalizers
 	normalizers := map[string]normalizer.Normalizer{
@@ -184,6 +185,7 @@ func main() {
 		"goodgame":  goodgameNormalizer,
 		"picarto":   picartoNormalizer,
 		"instagram": instagramNormalizer,
+		"altstream": altstreamNormalizer,
 	}
 
 	emoteServiceURL := getEnvOrDefault("EMOTE_SERVICE_URL", "http://localhost:8083")

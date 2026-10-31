@@ -37,6 +37,7 @@ export type ModerationPlatform =
   | 'picarto'
   | 'facebook'
   | 'instagram'
+  | 'altstream'
   | 'discord'
   | 'system'
 

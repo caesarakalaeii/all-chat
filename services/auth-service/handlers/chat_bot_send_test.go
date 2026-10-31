@@ -306,12 +306,31 @@ func TestSendBotTwitchMessage_BodyAndHeaders(t *testing.T) {
 		"the send goes to Helix chat/messages: %s", sendCall.url)
 }
 
+// kickLoginStreamerFixture is a streamer who signed in with Kick, so the users
+// row itself carries their Kick token and id.
+func kickLoginStreamerFixture(userID string) *models.User {
+	user := streamerFixture(userID)
+	user.AuthProvider = "kick"
+	user.TwitchID = nil
+	return user
+}
+
+// linkedKickSource is a Kick credential linked to a Twitch-login account
+// (kick_oauth_tokens, #1111): users.kick_id is empty and users.access_token is
+// a Twitch token.
+func linkedKickSource() *fakeKickTokenSource {
+	return &fakeKickTokenSource{cred: &repository.LinkedKickCredential{
+		ID: 7, KickUserID: "130554250", AccessToken: "kick-linked-token", RefreshToken: "r",
+		Expiry: time.Now().Add(time.Hour),
+	}}
+}
+
 func TestSendAllChatBotKickMessage_TypeBotWithStreamerToken(t *testing.T) {
 	// Kick's All-Chat Bot: no DB row, type=bot, and the token that presents is
 	// the STREAMER's (the bot identity comes from the Kick app the streamer's
 	// token belongs to).
 	transport := &recordingTransport{prefixes: []string{"https://api.kick.com/"}}
-	user := streamerFixture("u1")
+	user := kickLoginStreamerFixture("u1")
 	h := &ChatSendHandler{log: zap.NewNop(), httpClient: &http.Client{Transport: transport}}
 
 	require.NoError(t, h.sendAllChatBotKickMessage(context.Background(), user, "hello"))
@@ -322,11 +341,27 @@ func TestSendAllChatBotKickMessage_TypeBotWithStreamerToken(t *testing.T) {
 	assert.Equal(t, "Bearer streamer-token", calls[0].authorization, "the All-Chat Kick bot travels under the streamer's own user token")
 }
 
+func TestSendAllChatBotKickMessage_LinkedKickUsesLinkedCredential(t *testing.T) {
+	// A Twitch-login streamer's users row holds a Twitch token, which Kick
+	// rejects; the streamer's Kick token is the linked credential.
+	transport := &recordingTransport{prefixes: []string{"https://api.kick.com/"}}
+	user := streamerFixture("u1")
+	user.KickID = nil
+	h := &ChatSendHandler{log: zap.NewNop(), httpClient: &http.Client{Transport: transport}, kickTokenSource: linkedKickSource()}
+
+	require.NoError(t, h.sendAllChatBotKickMessage(context.Background(), user, "hello"))
+
+	calls := transport.chatCalls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, `{"content":"hello","type":"bot"}`, calls[0].body)
+	assert.Equal(t, "Bearer kick-linked-token", calls[0].authorization, "must never send the users-row (Twitch) token to Kick")
+}
+
 func TestSendCustomBotKickMessage_TypeUserWithBotToken(t *testing.T) {
 	// A custom Kick bot speaks with its OWN user token (type=user), addressing
 	// the streamer's numeric Kick id — the inverse of the All-Chat flavour above.
 	transport := &recordingTransport{prefixes: []string{"https://api.kick.com/"}}
-	user := streamerFixture("u1")
+	user := kickLoginStreamerFixture("u1")
 	h := &ChatSendHandler{log: zap.NewNop(), httpClient: &http.Client{Transport: transport}}
 	acct := &repository.ChatBotAccount{Platform: "kick", PlatformUserID: "654321", AccessToken: "bot-token"}
 
@@ -336,6 +371,65 @@ func TestSendCustomBotKickMessage_TypeUserWithBotToken(t *testing.T) {
 	require.Len(t, calls, 1)
 	assert.Equal(t, `{"broadcaster_user_id":"123456","content":"hello","type":"user"}`, calls[0].body)
 	assert.Equal(t, "Bearer bot-token", calls[0].authorization, "a custom Kick bot speaks with its OWN user token")
+}
+
+func TestSendCustomBotKickMessage_LinkedKickAddressesLinkedChannel(t *testing.T) {
+	transport := &recordingTransport{prefixes: []string{"https://api.kick.com/"}}
+	user := streamerFixture("u1")
+	user.KickID = nil
+	h := &ChatSendHandler{log: zap.NewNop(), httpClient: &http.Client{Transport: transport}, kickTokenSource: linkedKickSource()}
+	acct := &repository.ChatBotAccount{Platform: "kick", PlatformUserID: "654321", AccessToken: "bot-token"}
+
+	require.NoError(t, h.sendCustomBotKickMessage(context.Background(), acct, user, "hello"))
+
+	calls := transport.chatCalls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, `{"broadcaster_user_id":"130554250","content":"hello","type":"user"}`, calls[0].body)
+	assert.Equal(t, "Bearer bot-token", calls[0].authorization)
+}
+
+// botSendResults posts a bot-send for platforms and returns the per-platform
+// results plus the Kick calls that went out.
+func botSendResults(t *testing.T, streamer *models.User, kickSource KickTokenSource, platforms string) ([]BotSendResult, []chatCall) {
+	t.Helper()
+	_, h := newBotTestHandler(t, &stubBotStore{settings: "bot"}, streamer)
+	h.kickTokenSource = kickSource
+	transport := h.httpClient.Transport.(*recordingTransport)
+	transport.prefixes = []string{"https://api.kick.com/"}
+
+	w := botSendRequest(t, h, streamer, `{"user_id":"`+streamer.ID+`","message":"hello","platforms":`+platforms+`}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp struct {
+		Results []BotSendResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	return resp.Results, transport.chatCalls()
+}
+
+func TestHandleInternalBotSend_LinkedKickStreamerGetsKickReply(t *testing.T) {
+	// A command typed in Kick chat by a Twitch-login streamer's viewer must be
+	// answered there: their Kick identity is the linked credential, not users.kick_id.
+	streamer := streamerFixture("u1")
+	streamer.KickID = nil
+
+	results, calls := botSendResults(t, streamer, linkedKickSource(), `["kick"]`)
+
+	require.Len(t, results, 1)
+	assert.Equal(t, BotSendResult{Platform: "kick", Success: true, Sender: botSenderAllChatBot}, results[0])
+	require.Len(t, calls, 1)
+	assert.Equal(t, "Bearer kick-linked-token", calls[0].authorization)
+}
+
+func TestHandleInternalBotSend_NoKickIdentitySkipsKick(t *testing.T) {
+	// A timer asks for twitch and kick; a streamer without Kick sending enabled
+	// must not get a failed Kick result every tick.
+	streamer := streamerFixture("u1")
+	streamer.KickID = nil
+
+	results, calls := botSendResults(t, streamer, &fakeKickTokenSource{}, `["kick"]`)
+
+	assert.Empty(t, results)
+	assert.Empty(t, calls)
 }
 
 func TestSendBotYouTubeMessage_TimerUsesOnlyRedisStreamState(t *testing.T) {

@@ -17,8 +17,7 @@
  */
 
 import Link from 'next/link'
-import type { ReactNode } from 'react'
-import { Code, Pre } from '@/components/docs/prose'
+import { Code, External, Pre } from '@/components/docs/prose'
 import type { BlogPostMeta } from './types'
 
 export const meta: BlogPostMeta = {
@@ -32,14 +31,6 @@ export const meta: BlogPostMeta = {
 
 const ADR_0052_URL =
   'https://github.com/caesarakalaeii/all-chat/blob/main/docs/adr/0052-retiring-euler-stream-for-tiktok-signing.md'
-
-function External({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  )
-}
 
 export default function Body() {
   return (

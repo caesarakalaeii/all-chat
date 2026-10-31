@@ -278,6 +278,7 @@ normalizers := map[string]normalizer.Normalizer{
     "picarto":  picartoNormalizer,
     "facebook": facebookNormalizer,
     "instagram": instagramNormalizer,
+    "altstream": altstreamNormalizer,
 }
 ```
 
@@ -294,6 +295,9 @@ normalizers := map[string]normalizer.Normalizer{
 - `normalizer/picarto_normalizer.go` - Parse the Picarto pop-out chat batch (ADR-0059)
 - `normalizer/facebook_normalizer.go` - Parse Graph API live-video comments (ADR-0060)
 - `normalizer/instagram_normalizer.go` - Parse Graph API live_comments payloads (ADR-0062)
+- `normalizer/altstream_normalizer.go` - Parse the Altstream SSE chat event: display name, pronouns, roles and badges, highlight reward, `:name:` emotes the listener resolved (ADR-0082)
+
+**Native deletions**: a single deletion names the platform message id; the consumer resolves it to the rendered message id through the msgid registry, buffering it (60s) when the message has not been seen yet and applying it right after the message is published. The Twitch and YouTube listeners write the registry; for platforms whose `message_id` is the native id and whose listener writes nothing (`selfRegisteredPlatforms` in `consumer/stream_consumer.go`: Altstream) the consumer registers it after publishing. A deletion published with its fields in `tags` (Kick, GoodGame) is promoted to `event_type`/`event_data` before processing.
 
 **Output**: `models.UnifiedMessage` (common schema across all platforms)
 

@@ -140,14 +140,22 @@ func (h *ChatSendHandler) HandleInternalBotSend(c *gin.Context) {
 	useStreamerSender := senderSetting == "self"
 
 	// Intersect requested platforms with where the streamer actually has an identity
-	// (the fallback target and the Kick bot-send carrier both need one).
+	// (the fallback target and the Kick bot-send carrier both need one). Kick uses
+	// the send-to-all test, resolveKickSender, since a linked Kick is not on the users row.
 	requested := map[string]bool{}
 	for _, p := range req.Platforms {
 		requested[strings.ToLower(p)] = true
 	}
 	targets := make([]string, 0, 3)
 	for _, p := range []string{"twitch", "youtube", "kick"} {
-		if !requested[p] || !h.streamerHasPlatformCtx(ctx, user, p) {
+		if !requested[p] {
+			continue
+		}
+		if p == "kick" {
+			if _, _, err := h.resolveKickSender(ctx, user); err != nil {
+				continue
+			}
+		} else if !h.streamerHasPlatformCtx(ctx, user, p) {
 			continue
 		}
 		targets = append(targets, p)
@@ -434,8 +442,9 @@ func (h *ChatSendHandler) sendBotTwitchMessage(ctx context.Context, acct *reposi
 // attributes it to the bot built into our Kick app rather than to the streamer.
 // No chat_bot_accounts row is consulted — there is none by design.
 func (h *ChatSendHandler) sendAllChatBotKickMessage(ctx context.Context, user *models.User, message string) error {
-	if user.KickID == nil || *user.KickID == "" {
-		return fmt.Errorf("streamer has no Kick account linked")
+	accessToken, _, err := h.resolveKickSender(ctx, user)
+	if err != nil {
+		return err
 	}
 
 	reqBody := map[string]interface{}{
@@ -446,23 +455,24 @@ func (h *ChatSendHandler) sendAllChatBotKickMessage(ctx context.Context, user *m
 	if err != nil {
 		return fmt.Errorf("failed to marshal request body: %w", err)
 	}
-	return h.postKickChat(ctx, user.AccessToken, bodyBytes)
+	return h.postKickChat(ctx, accessToken, bodyBytes)
 }
 
 // sendCustomBotKickMessage sends to Kick chat as the streamer's CUSTOM bot: the
 // bot account's own user token (type=user) speaks into the streamer's channel.
 func (h *ChatSendHandler) sendCustomBotKickMessage(ctx context.Context, acct *repository.ChatBotAccount, user *models.User, message string) error {
-	if user.KickID == nil || *user.KickID == "" {
-		return fmt.Errorf("streamer has no Kick account linked")
-	}
 	if acct == nil || acct.AccessToken == "" {
 		return fmt.Errorf("no Kick bot token available")
+	}
+	_, broadcasterID, err := h.resolveKickSender(ctx, user)
+	if err != nil {
+		return err
 	}
 
 	reqBody := map[string]interface{}{
 		"type":                "user",
 		"content":             message,
-		"broadcaster_user_id": *user.KickID,
+		"broadcaster_user_id": broadcasterID,
 	}
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {

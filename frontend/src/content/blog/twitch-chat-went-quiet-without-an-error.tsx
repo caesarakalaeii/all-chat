@@ -17,8 +17,7 @@
  */
 
 import Link from 'next/link'
-import type { ReactNode } from 'react'
-import { Code, Pre } from '@/components/docs/prose'
+import { Code, External, Pre } from '@/components/docs/prose'
 import type { BlogPostMeta } from './types'
 
 export const meta: BlogPostMeta = {
@@ -37,14 +36,6 @@ const ADR_0046_URL = `${ADR_BASE}/0046-twitch-chat-notices-via-chat-notification
 const SCOPE_ERROR_COMMENT = `// A scope error is non-fatal: return nil so the manager marks chat active and
 // doesn't retry-spam; that channel just won't get EventSub chat (it stays on IRC
 // unless/until the owner grants the missing scope).`
-
-function External({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  )
-}
 
 export default function Body() {
   return (

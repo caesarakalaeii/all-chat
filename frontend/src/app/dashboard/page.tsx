@@ -68,6 +68,7 @@ const PLATFORM_HEX: Record<string, string> = {
   picarto: '#27B756',
   facebook: '#3B93F5',
   instagram: '#ED6FA4',
+  altstream: '#F97316',
 }
 
 function getTopBorderStyle(sources: Array<{ platform: string }>): React.CSSProperties {
@@ -139,6 +140,7 @@ function DashboardEmptyState({ onCreateClick }: { onCreateClick: () => void }) {
             'picarto',
             'facebook',
             'instagram',
+            'altstream',
           ] as const
         )
           .filter(isPlatformAvailable)

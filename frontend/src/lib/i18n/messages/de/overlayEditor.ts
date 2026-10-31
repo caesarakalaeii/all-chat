@@ -431,6 +431,7 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     connectOwncast: 'Owncast verbinden',
     connectGoodgame: 'GoodGame verbinden',
     connectPicarto: 'Picarto verbinden',
+    connectAltstream: 'Altstream verbinden',
     connectFacebook: 'Facebook-Seite verbinden',
     connectInstagram: 'Instagram verbinden',
     channelTitle: '{platform} verbinden',

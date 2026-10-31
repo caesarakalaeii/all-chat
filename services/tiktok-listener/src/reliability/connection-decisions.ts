@@ -38,20 +38,30 @@ export function connectionCeilingReached(liveConnectionCount: number, ceiling: n
 }
 
 /**
- * Whether a heartbeat-forced disconnect should take growing error backoff
- * instead of the fast reconnect path.
+ * How long to park a room after a heartbeat-forced disconnect; 0 means the
+ * fast reconnect path.
  *
  * A silent-failure streak above SILENT_FAILURE_STREAK_THRESHOLD means
- * reconnecting did not fix the silence, so the reconnect loop must back off
- * instead of hammering Euler every ~2 minutes per channel (the churn that kept
- * the 2026-09-14 incident wedged for a day). A streak of 1 — the first forced
- * disconnect, possibly a one-off — still reconnects quickly; a genuinely-ended
- * stream never grows a streak because delivering messages heals it.
+ * reconnecting did not fix the silence. Every reconnect is a WS-connect sign
+ * against the pod's 12/hour pure-node budget, so the room is parked on a
+ * doubling curve (10, 20, then 30 min) instead of retried. The error backoff
+ * cannot do this: every 'connected' resets consecutiveErrors, so a deaf
+ * room's curve never left its 4s first step (prod 2026-10-27: one deaf room
+ * reconnected 42 times in a row every ~2.5 min, spent most of its pod's
+ * budget, and every other room going live was refused, firing
+ * TikTokPureNodeConnectBudgetExhausted). At the cap a permanently deaf room
+ * costs ~2 signs/hour. A streak of 1 — the first forced disconnect, possibly
+ * a one-off — still reconnects quickly; a genuinely-ended stream never grows
+ * a streak because delivering messages heals it.
  */
 export const SILENT_FAILURE_STREAK_THRESHOLD = 1;
+export const SILENT_FAILURE_PARK_BASE_MS = 10 * 60_000;
+export const SILENT_FAILURE_PARK_MAX_MS = 30 * 60_000;
 
-export function shouldBackOffReconnect(silentFailureStreak: number): boolean {
-  return silentFailureStreak > SILENT_FAILURE_STREAK_THRESHOLD;
+export function silentFailureParkMs(silentFailureStreak: number): number {
+  if (silentFailureStreak <= SILENT_FAILURE_STREAK_THRESHOLD) return 0;
+  const doublings = silentFailureStreak - SILENT_FAILURE_STREAK_THRESHOLD - 1;
+  return Math.min(SILENT_FAILURE_PARK_BASE_MS * 2 ** doublings, SILENT_FAILURE_PARK_MAX_MS);
 }
 
 /**

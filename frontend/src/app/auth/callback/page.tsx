@@ -57,6 +57,11 @@ import { archivoBlack, spaceMono } from '@/lib/fonts'
 // words directly beneath it.
 const WARNING_GLYPH = '⚠️'
 
+// Sign-in platforms the duplicate-account refusal can name; anything else is shown verbatim.
+// Matched with find() rather than an object lookup, as in chat/auth-error, so a query value
+// like "toString" cannot resolve to a prototype member.
+const SIGN_IN_PLATFORMS = ['twitch', 'youtube', 'kick'] as const
+
 function AuthCallbackContent() {
   const t = useTranslations()
   const router = useRouter()
@@ -71,6 +76,30 @@ function AuthCallbackContent() {
       // Get short-lived auth code from query param (audit M1 — replaces URL
       // fragment token exposure with code+POST exchange).
       const code = searchParams.get('code')
+
+      // auth-service redirects here with ?error= and no code when it refuses the
+      // sign-in. Read it before the missing-code check, or every refusal reads as
+      // "No authentication code received".
+      const authError = searchParams.get('error')
+      if (authError) {
+        trackEvent('signin_failed', {
+          reason: authError === 'duplicate_account' ? 'duplicate_account' : 'backend_error',
+        })
+        const platform = searchParams.get('platform') ?? ''
+        const known = SIGN_IN_PLATFORMS.find((p) => p === platform)
+        const username = searchParams.get('existing_username')
+        setError(
+          authError === 'duplicate_account' && username
+            ? t('auth.callback.duplicateAccount', {
+                platform: known ? t(`common.platforms.${known}`) : platform,
+                username,
+              })
+            : t('auth.callback.failed')
+        )
+        setLoading(false)
+        return
+      }
+
       if (!code) {
         trackEvent('signin_failed', { reason: 'no_code' })
         setError(t('auth.callback.noCode'))

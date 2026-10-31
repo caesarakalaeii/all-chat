@@ -38,6 +38,15 @@ hljs.registerLanguage('css', css)
 
 export type CodeLang = 'javascript' | 'python' | 'json' | 'css'
 
+/** A link that leaves the site, opened in a new tab. */
+export function External({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  )
+}
+
 export function Code({ children }: { children: ReactNode }) {
   return (
     <code className="border-2 border-white bg-black px-1.5 py-0.5 text-[0.85em]">{children}</code>

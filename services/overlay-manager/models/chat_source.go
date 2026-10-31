@@ -18,6 +18,7 @@ package models
 
 import (
 	"errors"
+	"regexp"
 	"time"
 )
 
@@ -69,7 +70,12 @@ var validPlatforms = map[string]bool{
 	"owncast":        true, // ADR-0058: Owncast instance URL as the channel
 	"goodgame":       true, // GoodGame.ru chat websocket; channel key resolves to a numeric chat id
 	"picarto":        true, // ADR-0059: unofficial Picarto pop-out chat websocket
+	"altstream":      true, // ADR-0082: Altstream public SSE chat API; channel is the lowercased username
 }
+
+// altstreamUsername is a stored Altstream channel: the username, lowercased by
+// the add-source handler (Altstream treats usernames case-insensitively).
+var altstreamUsername = regexp.MustCompile(`^[a-z0-9_-]{1,64}$`)
 
 // Validate validates the chat source fields
 func (c *ChatSource) Validate() error {
@@ -91,6 +97,10 @@ func (c *ChatSource) Validate() error {
 
 	if c.ChannelName == "" {
 		return errors.New("channel_name is required")
+	}
+
+	if c.Platform == "altstream" && !altstreamUsername.MatchString(c.ChannelID) {
+		return errors.New("invalid Altstream username: use the name from the channel URL, altstream.online/<username>")
 	}
 
 	return nil

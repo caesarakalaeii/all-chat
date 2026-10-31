@@ -396,6 +396,35 @@ services:
       - allchat
     restart: unless-stopped
 
+  # Altstream Listener (official public SSE chat API, ADR-0082)
+  altstream-listener:
+    build:
+      context: ../
+      dockerfile: services/altstream-listener/Dockerfile
+    container_name: allchat-altstream-listener
+    environment:
+      PORT: "8101"
+      LOG_LEVEL: "info"
+      ALTSTREAM_BASE_URL: ${ALTSTREAM_BASE_URL:-https://altstream.online}
+      DATABASE_HOST: postgres
+      DATABASE_PORT: "5432"
+      DATABASE_NAME: allchat
+      DATABASE_USER: allchat
+      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "127.0.0.1:8101:8101"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - allchat
+    restart: unless-stopped
+
   # YouTube Listener (Phase 4)
   youtube-listener:
     build:

@@ -68,7 +68,9 @@ type addSourceStub struct {
 
 	// Behavior knobs, set per scenario.
 	validateHandler func(callerToken string) (int, string)
-	kickChannels    func() (int, string)
+	// kickChannels sees the request so a scenario can answer the user-token lookup
+	// (no query) differently from the app-token lookup (?broadcaster_user_id=).
+	kickChannels func(r *http.Request) (int, string)
 }
 
 func newAddSourceStub(t *testing.T) *addSourceStub {
@@ -92,7 +94,7 @@ func newAddSourceStub(t *testing.T) *addSourceStub {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"data":[{"user_id":130554250,"name":"Scuffed_Onigiri","profile_picture":"p"}],"message":"OK"}`))
 		case r.URL.Path == "/public/v1/channels":
-			status, body := s.kickChannels()
+			status, body := s.kickChannels(r)
 			w.WriteHeader(status)
 			_, _ = w.Write([]byte(body))
 		case strings.HasPrefix(r.URL.Path, "/internal/overlays/"):
@@ -468,7 +470,31 @@ func TestHandleCallback_KickAddSource_StoresChannelSlug(t *testing.T) {
 	overlayID := "36847b00-5329-44f2-9008-81daa1a34991"
 
 	stub := newAddSourceStub(t)
-	stub.kickChannels = func() (int, string) {
+	stub.kickChannels = func(_ *http.Request) (int, string) {
+		return http.StatusOK, `{"data":[{"broadcaster_user_id":130554250,"slug":"scuffed-onigiri"}],"message":"OK"}`
+	}
+
+	kickCallbackScenario(t, pool, repo, stub, userID, overlayID, "scuffed-onigiri")
+}
+
+// Production shape (2026-10-24): Kick returned a token carrying only user:read although the
+// consent asked for channel:read, so the user-token channel lookup 401'd and the display name
+// was stored as the channel id. The callback must fall back to the broadcaster-id lookup with
+// an app access token, which needs no user scope, and still store the real slug.
+func TestHandleCallback_KickAddSource_FallsBackToAppTokenLookupWhenUserTokenLacksChannelRead(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration")
+	}
+	pool := setupAddSourceDB(t)
+	repo := repository.NewUserRepository(pool, nil)
+	userID := seedUser(t, pool, "twitch-login-token", time.Now().Add(time.Hour), []string{"user:read:chat"})
+	overlayID := "36847b00-5329-44f2-9008-81daa1a34991"
+
+	stub := newAddSourceStub(t)
+	stub.kickChannels = func(r *http.Request) (int, string) {
+		if r.URL.Query().Get("broadcaster_user_id") != "130554250" {
+			return http.StatusUnauthorized, `{"data":{},"message":"Unauthorized"}`
+		}
 		return http.StatusOK, `{"data":[{"broadcaster_user_id":130554250,"slug":"scuffed-onigiri"}],"message":"OK"}`
 	}
 
@@ -488,7 +514,7 @@ func TestHandleCallback_KickAddSource_FallsBackToDisplayNameWhenChannelLookupFai
 	overlayID := "36847b00-5329-44f2-9008-81daa1a34991"
 
 	stub := newAddSourceStub(t)
-	stub.kickChannels = func() (int, string) {
+	stub.kickChannels = func(_ *http.Request) (int, string) {
 		return http.StatusInternalServerError, `{"message":"boom"}`
 	}
 
@@ -497,8 +523,9 @@ func TestHandleCallback_KickAddSource_FallsBackToDisplayNameWhenChannelLookupFai
 
 // kickCallbackScenario drives the full OAuth callback for a Kick add-source
 // with a verified shared oauth state, then asserts which channel_id the
-// overlay-manager stub received.
-func kickCallbackScenario(t *testing.T, _ *pgxpool.Pool, repo *repository.UserRepository, stub *addSourceStub, userID, overlayID, wantChannelID string) {
+// overlay-manager stub received and which channel the linked credential is
+// stored under.
+func kickCallbackScenario(t *testing.T, pool *pgxpool.Pool, repo *repository.UserRepository, stub *addSourceStub, userID, overlayID, wantChannelID string) {
 	t.Helper()
 
 	csrf := "csrf-test-123"
@@ -541,4 +568,61 @@ func kickCallbackScenario(t *testing.T, _ *pgxpool.Pool, repo *repository.UserRe
 	added := stub.lastOverlayCall()
 	assert.Equal(t, wantChannelID, added["channel_id"],
 		"overlay-manager must receive the identifier kick-listener can resolve (the slug), not the display name")
+
+	// The linked credential must be keyed by the same channel id as the source: the
+	// moderation service resolves it by the overlay source's channel_id, so a credential
+	// stored under the display name never matches a slug source and the monitor's Kick
+	// send/moderation controls stay locked after a successful consent.
+	var credChannel string
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT channel_id FROM kick_oauth_tokens WHERE user_id = $1`, userID).Scan(&credChannel))
+	assert.Equal(t, wantChannelID, credChannel,
+		"the linked Kick credential must be stored under the source's channel id")
+}
+
+// Unit-level (no DB): the Kick channel resolution the callback uses. The user-token lookup
+// 401s when Kick withheld channel:read (the production shape), so the resolver must fall
+// back to the app-token lookup by broadcaster id and still return the slug.
+func TestResolveKickSourceDetails_FallsBackToAppTokenLookup(t *testing.T) {
+	stub := newAddSourceStub(t)
+	stub.kickChannels = func(r *http.Request) (int, string) {
+		if r.URL.Query().Get("broadcaster_user_id") != "130554250" {
+			return http.StatusUnauthorized, `{"data":{},"message":"Unauthorized"}`
+		}
+		return http.StatusOK, `{"data":[{"broadcaster_user_id":130554250,"slug":"scuffed-onigiri"}],"message":"OK"}`
+	}
+	provider := oauth.NewKickOAuth("cid", "secret", "http://localhost/cb").
+		WithHTTPClient(&http.Client{Transport: stub.transport()})
+	h := &PlatformAuthHandlerV2{logger: zaptest.NewLogger(t)}
+
+	details := h.resolveKickSourceDetails(context.Background(), provider, "user-tok", "130554250")
+	require.NotNil(t, details)
+	assert.Equal(t, "scuffed-onigiri", details.ChannelID)
+}
+
+// Both lookups failing keeps the legacy behaviour: no details, so the caller stores the
+// users-endpoint name (correct for everyone whose display name is their slug).
+func TestResolveKickSourceDetails_NilWhenBothLookupsFail(t *testing.T) {
+	stub := newAddSourceStub(t)
+	stub.kickChannels = func(_ *http.Request) (int, string) {
+		return http.StatusInternalServerError, `{"message":"boom"}`
+	}
+	provider := oauth.NewKickOAuth("cid", "secret", "http://localhost/cb").
+		WithHTTPClient(&http.Client{Transport: stub.transport()})
+	h := &PlatformAuthHandlerV2{logger: zaptest.NewLogger(t)}
+
+	assert.Nil(t, h.resolveKickSourceDetails(context.Background(), provider, "user-tok", "130554250"))
+}
+
+// The linked Kick credential is keyed by the channel the source was added under, so the
+// moderation service (which resolves by the overlay source's channel_id) finds it. Keying it
+// by the users-endpoint display name left Kick send/moderation locked after a successful
+// consent whenever the display name differs from the slug (e.g. Scuffed_Onigiri vs
+// scuffed-onigiri).
+func TestKickCredentialChannel(t *testing.T) {
+	user := &oauth.KickUserInfoWrapper{ID: "130554250", Username: "Scuffed_Onigiri"}
+	assert.Equal(t, "scuffed-onigiri",
+		kickCredentialChannel(&OverlaySourceDetails{ChannelID: "scuffed-onigiri"}, user))
+	assert.Equal(t, "Scuffed_Onigiri", kickCredentialChannel(nil, user),
+		"without a resolved slug, fall back to the same name the source was added under")
 }

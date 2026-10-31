@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { useAuthStore } from '@/lib/stores/auth-store'
 import type { OverlayType } from '@/lib/types/overlay'
 
 /**
@@ -26,6 +27,17 @@ const BETA_ONLY_PLATFORMS: Partial<Record<string, true>> = {
   picarto: true,
   facebook: true,
   instagram: true,
+}
+
+/**
+ * Platforms offered on every host, but outside beta.allch.at only to
+ * early-access users (beta testers and ambassadors, ADR-0020). The
+ * `platform_*` gate's early_access flag enforces the same server-side.
+ * Release by removing the platform here, then turning early_access off on its
+ * gate in /admin/features.
+ */
+const EARLY_ACCESS_PLATFORMS: Partial<Record<string, true>> = {
+  altstream: true,
 }
 
 const BETA_ONLY_OVERLAY_KINDS: Partial<Record<OverlayType, true>> = {
@@ -61,7 +73,12 @@ function useOnBetaHost(): boolean {
 /** Returns a predicate telling whether a platform may be offered on this host. */
 export function usePlatformAvailable(): (platform: string) => boolean {
   const onBeta = useOnBetaHost()
-  return (platform) => onBeta || BETA_ONLY_PLATFORMS[platform] !== true
+  const user = useAuthStore((s) => s.user)
+  const earlyAccess = !!(user?.is_beta_tester || user?.is_ambassador)
+  return (platform) =>
+    onBeta ||
+    (BETA_ONLY_PLATFORMS[platform] !== true &&
+      (earlyAccess || EARLY_ACCESS_PLATFORMS[platform] !== true))
 }
 
 /** Returns a predicate telling whether an overlay kind may be offered on this host. */

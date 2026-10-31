@@ -101,6 +101,7 @@ const ALL_PLATFORMS = [
   'picarto',
   'facebook',
   'instagram',
+  'altstream',
   'discord',
 ] as const
 
