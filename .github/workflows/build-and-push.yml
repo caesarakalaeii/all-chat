@@ -56,6 +56,7 @@ jobs:
       owncast-listener: ${{ steps.changes.outputs.owncast-listener }}
       goodgame-listener: ${{ steps.changes.outputs.goodgame-listener }}
       picarto-listener: ${{ steps.changes.outputs.picarto-listener }}
+      altstream-listener: ${{ steps.changes.outputs.altstream-listener }}
       instagram-listener: ${{ steps.changes.outputs.instagram-listener }}
       media-service: ${{ steps.changes.outputs.media-service }}
       alert-processor: ${{ steps.changes.outputs.alert-processor }}
@@ -144,6 +145,9 @@ jobs:
               - 'shared/**'
             picarto-listener:
               - 'services/picarto-listener/**'
+              - 'shared/**'
+            altstream-listener:
+              - 'services/altstream-listener/**'
               - 'shared/**'
             facebook-listener:
               - 'services/facebook-listener/**'
@@ -264,6 +268,9 @@ jobs:
           - name: picarto-listener
             changed: ${{ needs.detect-changes.outputs.picarto-listener }}
             path: services/picarto-listener
+          - name: altstream-listener
+            changed: ${{ needs.detect-changes.outputs.altstream-listener }}
+            path: services/altstream-listener
           - name: facebook-listener
             changed: ${{ needs.detect-changes.outputs.facebook-listener }}
             path: services/facebook-listener
@@ -374,6 +381,7 @@ jobs:
           - goodgame-listener
           - instagram-listener
           - picarto-listener
+          - altstream-listener
           - facebook-listener
           - media-service
           - alert-processor
