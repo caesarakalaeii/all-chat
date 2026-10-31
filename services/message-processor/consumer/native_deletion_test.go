@@ -108,27 +108,25 @@ func TestAltstreamNativeDeletion_EndToEnd(t *testing.T) {
 	c, published := pipelineConsumer(t)
 	ctx := context.Background()
 
-	// 1. The message renders under its Altstream id.
 	require.NoError(t, c.processMessage(ctx, entry(t, altstreamChat("840417196"))))
 	require.Len(t, *published, 1)
 	rendered := (*published)[0]
 	require.Nil(t, rendered.Event)
 	assert.Equal(t, "840417196", rendered.ID)
 
-	// 2. Altstream's own delete event names only the platform id (targetId).
+	// Altstream's own delete event names only the platform id (targetId).
 	require.NoError(t, c.processMessage(ctx, entry(t, altstreamDeletion("169457509",
 		map[string]interface{}{"deletion_type": "single", "target_msg_id": "840417196"}))))
 	require.Len(t, *published, 2, "a native deletion of a known message must be published, not buffered")
 	assert.Equal(t, rendered.ID, deletionMeta(t, (*published)[1])["target_uuid"],
 		"the overlay removes by target_uuid, which must be the rendered message's id")
 
-	// 3. A deletion that already carries the internal id is trusted as is.
+	// A deletion that already carries the internal id is trusted as is.
 	require.NoError(t, c.processMessage(ctx, entry(t, altstreamDeletion("mod-1",
 		map[string]interface{}{"deletion_type": "single", "target_msg_id": "840417196", "target_uuid": rendered.ID}))))
 	require.Len(t, *published, 3)
 	assert.Equal(t, rendered.ID, deletionMeta(t, (*published)[2])["target_uuid"])
 
-	// 4. A clear wipes the channel.
 	require.NoError(t, c.processMessage(ctx, entry(t, altstreamDeletion("793486440",
 		map[string]interface{}{"deletion_type": "clear"}))))
 	require.Len(t, *published, 4)
