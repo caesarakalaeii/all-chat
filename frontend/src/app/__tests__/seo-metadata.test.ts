@@ -81,6 +81,21 @@ describe('homepage metadata', () => {
   })
 })
 
+describe('blog metadata', () => {
+  // The layout's titleTemplate appends '| All-Chat'; a blog title that adds it
+  // itself renders as '... | All-Chat | All-Chat'.
+  it('leaves the brand suffix to the layout template', () => {
+    expect(read('blog/[slug]/page.tsx')).not.toMatch(/\| All-Chat/)
+    for (const locale of ['en', 'de']) {
+      const catalog = readFileSync(
+        join(__dirname, '..', '..', 'lib', 'i18n', 'messages', locale, 'blog.ts'),
+        'utf-8'
+      )
+      expect(catalog).not.toMatch(/metaTitle:.*\| All-Chat/)
+    }
+  })
+})
+
 describe('site description', () => {
   const src = metadataCatalog()
 
