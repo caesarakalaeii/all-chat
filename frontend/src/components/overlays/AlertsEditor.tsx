@@ -71,6 +71,7 @@ import {
 import { overlaysApi } from '@/lib/api/overlays'
 import { useTranslations, type TFunction } from '@/lib/i18n'
 import { searchKlipyGifs, type KlipyGif } from '@/lib/klipy'
+import { useFeatureAvailable } from '@/lib/platform-availability'
 import { toastManager } from '@/lib/toast'
 import { ALERT_ALL_EVENTS, ALERT_EVENT_TYPES, type EditableAlertProfile } from '@/lib/types/alert'
 
@@ -119,6 +120,7 @@ export function validateAlertProfile(p: EditableAlertProfile): ProfileErrors {
 
 export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPremium: boolean }) {
   const t = useTranslations()
+  const featureAvailable = useFeatureAvailable()
   const ids = useId()
   const [profiles, setProfiles] = useState<EditableAlertProfile[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -242,7 +244,9 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
     ...(base
       ? [{ value: ALERT_ALL_EVENTS, label: t('overlayEditor.alertsEditor.allEvents') }]
       : []),
-    ...ALERT_EVENT_TYPES.map((value) => ({
+    ...ALERT_EVENT_TYPES.filter(
+      (value) => value !== 'chat_command' || featureAvailable('chatCommands')
+    ).map((value) => ({
       value,
       label: t(`overlayEditor.alertEventTypes.${value}`),
     })),

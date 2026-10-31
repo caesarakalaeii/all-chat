@@ -28,10 +28,13 @@ import {
   Bell,
   Code,
   Target,
+  Terminal,
+  Bot,
   Trophy,
 } from 'lucide-react'
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
+import { FeatureOffered } from '@/components/FeatureOffered'
 import { OverlayKindOffered } from '@/components/overlays/OverlayKindOffered'
 import { cn } from '@/lib/utils'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
@@ -39,6 +42,7 @@ import { PATREON_JOIN_URL } from '@/lib/constants'
 import { getTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import type { OverlayType } from '@/lib/types/overlay'
+import type { BetaFeature } from '@/lib/platform-availability'
 
 const t = getTranslations()
 
@@ -54,6 +58,8 @@ interface PremiumFeature {
   messageStem: string
   /** Set on a row that advertises an overlay kind; hidden where that kind is beta-only. */
   overlayKind?: OverlayType
+  /** Set on a row that advertises an app feature; hidden where that feature is beta-only. */
+  feature?: BetaFeature
 }
 
 // Keep in sync with the onboarding extras tour in
@@ -75,6 +81,8 @@ const features = [
   { icon: Code, messageStem: 'alertsEditor', overlayKind: 'alerts' },
   { icon: Target, messageStem: 'goalOverlay', overlayKind: 'goal' },
   { icon: Trophy, messageStem: 'listOverlay', overlayKind: 'list' },
+  { icon: Terminal, messageStem: 'chatCommands', feature: 'chatCommands' },
+  { icon: Bot, messageStem: 'customChatBot', feature: 'customChatBot' },
 ] as const satisfies ReadonlyArray<PremiumFeature>
 
 export default function UpgradePage() {
@@ -120,13 +128,21 @@ export default function UpgradePage() {
                 </div>
               </div>
             )
-            return 'overlayKind' in feature ? (
-              <OverlayKindOffered key={messageStem} kind={feature.overlayKind}>
-                {row}
-              </OverlayKindOffered>
-            ) : (
-              row
-            )
+            if ('overlayKind' in feature) {
+              return (
+                <OverlayKindOffered key={messageStem} kind={feature.overlayKind}>
+                  {row}
+                </OverlayKindOffered>
+              )
+            }
+            if ('feature' in feature) {
+              return (
+                <FeatureOffered key={messageStem} feature={feature.feature}>
+                  {row}
+                </FeatureOffered>
+              )
+            }
+            return row
           })}
         </div>
 

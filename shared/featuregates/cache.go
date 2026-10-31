@@ -149,6 +149,24 @@ const (
 	// Seeded is_premium=TRUE (migrations 110 and 111).
 	GateGoalOverlay = "goal_overlay"
 	GateListOverlay = "list_overlay"
+
+	// GateChatCommands gates creating and editing chat commands and keyword triggers
+	// (ADR-0079), mounted by engagement-service on POST/PUT /chat-commands through both
+	// RequireEarlyAccess and RequirePremium. Seeded early_access=TRUE, is_premium=FALSE
+	// (migration 113): beta testers and ambassadors first, free; flip early_access off
+	// to open it to everyone. The one paid part, replying in YouTube chat (it spends
+	// Data API quota), is checked per send on the owner's premium status, independent
+	// of this gate. Deleting is never gated.
+	GateChatCommands = "chat_commands"
+
+	// GateCustomChatBot is the feature key for connecting a streamer's OWN bot
+	// account as a chat-command/timer sender (ADR-0081), mounted by auth-service on
+	// the bot-connect endpoint through both RequireEarlyAccess and RequirePremium.
+	// Seeded is_premium=TRUE, early_access=TRUE (migration 115): a second
+	// rate-limit identity per platform burns the same shared send budget, and the
+	// feature ships to beta testers first. The All-Chat Bot itself (the default
+	// sender) is admin-managed and NOT gated by this — it is product, not upsell.
+	GateCustomChatBot = "custom_chat_bot"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate

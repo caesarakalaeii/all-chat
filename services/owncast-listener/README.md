@@ -47,6 +47,8 @@ One WebSocket connection **per instance URL** (not one connection with many subs
 1. Manager syncs active `overlay_chat_sources` rows for `platform='owncast'` every 30s (demand-filtered like other listeners).
 2. For each instance URL: `POST <url>/api/chat/register` (unauthenticated, anonymous chat registration) → `{id, accessToken, displayName}`.
 3. Dial `<ws|wss>://<host>/ws?accessToken=<token>` — the token is passed as a query parameter and re-registered on every reconnect (token lifetime is tied to the instance's session, so an instance restart invalidates it).
+
+The instance URL is user input and the cluster leaves egress open, so both the register call and the socket dial go through `shared/safehttp` (ADR-0080): a host that resolves to a private, loopback, link-local or otherwise non-public address is refused at dial time. A local Owncast on a private address therefore cannot be used in development.
 4. Read events. A single frame may carry **multiple newline-separated JSON events** (the server coalesces queued events); each line is decoded independently.
 5. Only `type: "CHAT"` messages are forwarded to `chat:raw`; joins, parts, name changes, system messages and actions are logged-and-dropped (chat is read-only anyway).
 

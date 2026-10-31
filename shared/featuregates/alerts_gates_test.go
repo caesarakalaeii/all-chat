@@ -34,11 +34,13 @@ func TestAlertsGateSeeds(t *testing.T) {
 		"110_goal_configs.sql":        GateGoalOverlay,
 		"111_list_configs.sql":        GateListOverlay,
 	} {
-		t.Run(key, func(t *testing.T) { assertPremiumSeed(t, file, key) })
+		t.Run(key, func(t *testing.T) { assertSeed(t, file, key, true, false) })
 	}
 }
 
-func assertPremiumSeed(t *testing.T, file, key string) {
+// assertSeed checks that file seeds exactly one feature_gates row for key with the
+// given is_premium and early_access, idempotently.
+func assertSeed(t *testing.T, file, key string, wantPremium, wantEarlyAccess bool) {
 	raw, err := os.ReadFile("../../migrations/" + file)
 	if err != nil {
 		t.Fatalf("read migration: %v", err)
@@ -52,11 +54,11 @@ func assertPremiumSeed(t *testing.T, file, key string) {
 	if got := rows[0][1]; got != key {
 		t.Fatalf("seeded key = %q, want %q", got, key)
 	}
-	if got := rows[0][2]; !strings.EqualFold(got, "TRUE") {
-		t.Fatalf("seeded is_premium = %s, want TRUE", got)
+	if got := strings.EqualFold(rows[0][2], "TRUE"); got != wantPremium {
+		t.Fatalf("seeded is_premium = %s, want %v", rows[0][2], wantPremium)
 	}
-	if got := rows[0][3]; !strings.EqualFold(got, "FALSE") {
-		t.Fatalf("seeded early_access = %s, want FALSE", got)
+	if got := strings.EqualFold(rows[0][3], "TRUE"); got != wantEarlyAccess {
+		t.Fatalf("seeded early_access = %s, want %v", rows[0][3], wantEarlyAccess)
 	}
 	if !regexp.MustCompile(`(?i)ON\s+CONFLICT\s*\(\s*feature_key\s*\)\s*DO\s+NOTHING`).MatchString(sql) {
 		t.Fatal("seed must be idempotent: the runner re-applies every migration on pod start")

@@ -49,7 +49,7 @@ func TestEventTypesMatchTheNamesThePipelineEmits(t *testing.T) {
 		"subscription", "resubscription", "gift_subscription", "mystery_gift", "bits", "raid",
 		"follow", "channel_points", "charity_donation", "super_chat", "super_sticker",
 		"new_sponsor", "member_milestone", "membership_gift", "subscriber", "gift", "share",
-		"tiktok_subscription", "power_up", "gift_received",
+		"tiktok_subscription", "power_up", "gift_received", ChatCommandEvent,
 	} {
 		assert.True(t, IsKnownEventType(et), et)
 	}
@@ -123,6 +123,23 @@ func TestResolveAttachesTheRenderedText(t *testing.T) {
 	for _, k := range []string{"event_type", "text", "text_template", "sound_url", "image_url", "duration_ms", "volume", "enabled", "sort_after"} {
 		assert.Contains(t, keys, k)
 	}
+}
+
+// A chat command alert (ADR-0080) shows the command's own image over whatever the
+// overlay's profile for the event type has; without one the profile's stays.
+func TestResolveUsesTheChatCommandImage(t *testing.T) {
+	p, ok := DefaultProfile(ChatCommandEvent)
+	require.True(t, ok)
+	p.ImageURL = "https://cdn.example.com/profile.gif"
+	a := Alert{EventType: ChatCommandEvent, User: User{Name: "Viewer"}, Message: "hype!",
+		EventData: &EventData{Value: &Value{Amount: 3, DisplayText: "!hype"}},
+		ImageURL:  "https://cdn.example.com/hype.gif"}
+	r := Resolve(p, a)
+	assert.Equal(t, "https://cdn.example.com/hype.gif", r.ImageURL)
+	assert.Equal(t, "Viewer used !hype", r.Text)
+
+	a.ImageURL = ""
+	assert.Equal(t, "https://cdn.example.com/profile.gif", Resolve(p, a).ImageURL)
 }
 
 func TestTestAlertMatchesThePipelineEnvelope(t *testing.T) {

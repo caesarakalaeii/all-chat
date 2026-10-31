@@ -61,6 +61,9 @@ type PlatformAuthHandlerV2 struct {
 	frontendURL       string
 	overlayManagerURL string
 	metrics           *metrics.BusinessMetrics
+	// botRepo persists chat-bot OAuth rows for the bot-connect flow (ADR-0081);
+	// nil ⇒ bot-connect endpoints answer with a plain error.
+	botRepo *repository.ChatBotAccountStore
 }
 
 // NewPlatformAuthHandlerV2 creates a new platform auth handler v2
@@ -440,7 +443,7 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 			return
 		}
 		if len(modScopes) == 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban,engagement,modlog"})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no valid moderation actions; expected ?actions=delete,timeout,ban,unban,engagement,modlog,clip,bot"})
 			return
 		}
 		// This opt-in is the unified "advanced controls" consent: a single re-consent
@@ -474,6 +477,11 @@ func (h *PlatformAuthHandlerV2) HandleEnableModeration(platform oauth.Platform) 
 		provider = providerForOrigin(provider, platform, origin)
 		oauthState := oauth.NewModerationState(csrfToken, overlayID, userIDStr)
 		oauthState.Origin = origin
+		// The chat commands editor asks for clips:edit here and wants the user back on it,
+		// not on the overlay monitor (ADR-0079). Validate keeps this to one known path.
+		if c.Query("return") == "commands" {
+			oauthState.ReturnPath = oauth.ChatCommandsReturnPath
+		}
 		if err := oauthState.Validate(); err != nil {
 			h.logger.Error("Invalid OAuth state", zap.Error(err))
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
@@ -907,6 +915,16 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			return
 		}
 
+		// Chat-bot consent (ADR-0081) is handled here and returns, BEFORE any of the
+		// login / account-link / add-source machinery below, for the same reasons
+		// mod-consent is: the consenting account is a bot, not a session — no
+		// account may be created or linked, the consenter's login grant is never
+		// touched, and the row lands in chat_bot_accounts.
+		if oauthState.IsBotConnect() {
+			h.completeBotConnect(c, platform, oauthState, provider, platformUser, token)
+			return
+		}
+
 		// Get or create user based on platform and context
 		var user *models.User
 		var jwtToken string
@@ -987,6 +1005,9 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				errRedirect := fmt.Sprintf("%s/overlays/%s?error=failed_to_add_source", origin, oauthState.OverlayID)
 				if oauthState.IsModeration() {
 					errRedirect = fmt.Sprintf("%s/overlay/%s/view?error=moderation_setup_failed", origin, oauthState.OverlayID)
+					if oauthState.ReturnPath != "" {
+						errRedirect = origin + oauthState.ReturnPath + "?error=moderation_setup_failed"
+					}
 				}
 				h.redirectWithTombstone(c, platform, oauthState.CSRFToken, errRedirect)
 				return
@@ -999,6 +1020,9 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 			redirectTo := fmt.Sprintf("/overlays/%s", oauthState.OverlayID)
 			if oauthState.IsModeration() {
 				redirectTo = fmt.Sprintf("/overlay/%s/view", oauthState.OverlayID)
+				if oauthState.ReturnPath != "" {
+					redirectTo = oauthState.ReturnPath
+				}
 			}
 			// Store tokens via short-lived auth code (audit M1 — no token in URL fragment).
 			payload := StreamerAuthPayload{
@@ -1462,6 +1486,7 @@ var preservableScopes = []string{
 	"moderator:read:moderators",                         // Twitch moderation-log grant
 	"moderator:read:vips",                               // Twitch moderation-log grant
 	"moderator:manage:automod",                          // Twitch moderation-log grant — required by automod.message.hold
+	"clips:edit",                                        // Twitch clip grant (chat commands, ADR-0079)
 }
 
 // wouldDowngradeScopes reports whether replacing existing with incoming would drop any

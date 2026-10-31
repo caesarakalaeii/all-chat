@@ -44,6 +44,7 @@ export const common = {
     // is_ambassador users, hence "beta" rather than a second word for
     // "translate".
     translate: 'Translate',
+    commands: 'Commands',
     logOut: 'Log out',
     signIn: 'Sign in',
   },

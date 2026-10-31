@@ -38,6 +38,22 @@ const (
 	// redirected to an error. It also must not touch the moderator's login credential or
 	// granted_scopes: the credential lands in its own table, keyed on the moderator.
 	ActionModConsent OAuthAction = "mod_consent"
+	// ActionBotConnect is a streamer or admin granting All-Chat the scopes of a BOT
+	// chat account (ADR-0081): the All-Chat Bot (admin) or the streamer's custom bot
+	// (premium). Like mod-consent it must never touch login machinery — the bot row
+	// lands in chat_bot_accounts and the callback redirects straight back. The
+	// Purpose field carries the scope flavor: "custom" (owner's own bot) or
+	// "allchat" (the global bot, admin only).
+	ActionBotConnect OAuthAction = "bot_connect"
+)
+
+// PurposeBotConnectCustom / PurposeBotConnectAllChat mark which flavor of bot
+// consent a bot-connect state carries: the streamer's custom bot (premium gate,
+// returns to /commands) or the global All-Chat Bot (admin only, returns to
+// /admin/chat-bots).
+const (
+	PurposeBotConnectCustom  = "custom"
+	PurposeBotConnectAllChat = "allchat"
 )
 
 // PurposeModeration marks an add-source flow that is really an opt-in moderation
@@ -46,6 +62,14 @@ const (
 // the overlay monitor (/overlay/{id}/view) instead of the overlay settings page.
 const PurposeModeration = "moderation"
 
+// ChatCommandsReturnPath is the frontend page the chat commands editor's clip-permission
+// re-consent returns to (ADR-0079). The other ReturnPath an OAuthState may carry.
+const ChatCommandsReturnPath = "/commands"
+
+// ChatBotsAdminReturnPath is the frontend page the All-Chat Bot consent returns to
+// (ADR-0081). The bot-connect callback appends ?bot=connected|error.
+const ChatBotsAdminReturnPath = "/admin/chat-bots"
+
 // OAuthState represents the state parameter for OAuth flow
 type OAuthState struct {
 	CSRFToken string      `json:"csrf_token"`           // Random string for CSRF protection
@@ -53,6 +77,9 @@ type OAuthState struct {
 	UserID    string      `json:"user_id,omitempty"`    // Current user ID for account linking
 	Action    OAuthAction `json:"action"`               // Action to take after callback
 	Purpose   string      `json:"purpose,omitempty"`    // Sub-flow marker (e.g. moderation re-consent)
+	// ReturnPath, when set, is where a moderation re-consent returns instead of the
+	// overlay monitor. Validate accepts only the two known frontend paths.
+	ReturnPath string `json:"return_path,omitempty"`
 	// Origin is the allowlisted frontend origin (e.g. https://beta.allch.at) the
 	// flow was started from. It selects the provider redirect_uri at authorize
 	// and exchange time and the frontend the callback redirects back to. Set
@@ -114,6 +141,26 @@ func (s *OAuthState) IsModConsent() bool {
 	return s.Action == ActionModConsent
 }
 
+// NewBotConnectState creates a state for granting all-chat the scopes of a BOT chat
+// account (ADR-0081). purpose is PurposeBotConnectCustom (the streamer's own bot,
+// gated premium) or PurposeBotConnectAllChat (the global All-Chat Bot, admin only).
+// No overlay id for the same reason as mod-consent: the grant sits on the bot
+// account, not on any overlay, and the callback must never reach addSourceToOverlay.
+func NewBotConnectState(csrfToken, userID, purpose, returnPath string) *OAuthState {
+	return &OAuthState{
+		CSRFToken:  csrfToken,
+		UserID:     userID,
+		Action:     ActionBotConnect,
+		Purpose:    purpose,
+		ReturnPath: returnPath,
+	}
+}
+
+// IsBotConnect reports whether this state is a bot-account consent flow (ADR-0081).
+func (s *OAuthState) IsBotConnect() bool {
+	return s.Action == ActionBotConnect
+}
+
 // Encode serializes the state to JSON string
 func (s *OAuthState) Encode() (string, error) {
 	data, err := json.Marshal(s)
@@ -147,16 +194,28 @@ func (s *OAuthState) Validate() error {
 	if s.CSRFToken == "" {
 		return fmt.Errorf("csrf_token is required")
 	}
-	if s.Action != ActionLogin && s.Action != ActionAddSource && s.Action != ActionModConsent {
+	if s.Action != ActionLogin && s.Action != ActionAddSource && s.Action != ActionModConsent && s.Action != ActionBotConnect {
 		return fmt.Errorf("invalid action: %s", s.Action)
 	}
 	if s.Action == ActionAddSource && s.OverlayID == "" {
 		return fmt.Errorf("overlay_id is required for add_source action")
 	}
+	if s.ReturnPath != "" && s.ReturnPath != ChatCommandsReturnPath && s.ReturnPath != ChatBotsAdminReturnPath {
+		return fmt.Errorf("invalid return_path: %s", s.ReturnPath)
+	}
 	// A moderator's credential is keyed on them, so without a user id there is nobody to
 	// attribute it to — and the callback must never fall back to creating an account here.
 	if s.Action == ActionModConsent && s.UserID == "" {
 		return fmt.Errorf("user_id is required for mod_consent action")
+	}
+	// Same for a bot consent: the row it lands in is attributed to this user (NULL owner
+	// for the All-Chat Bot is derived by the callback from the purpose; a client can
+	// never hand the state a user id it should not own).
+	if s.Action == ActionBotConnect && s.UserID == "" {
+		return fmt.Errorf("user_id is required for bot_connect action")
+	}
+	if s.Action == ActionBotConnect && s.Purpose != PurposeBotConnectCustom && s.Purpose != PurposeBotConnectAllChat {
+		return fmt.Errorf("invalid purpose %q for bot_connect action", s.Purpose)
 	}
 	return nil
 }
