@@ -32,6 +32,7 @@
 
 import { useEffect, useState } from 'react'
 import clsx from 'clsx'
+import { AltstreamIcon as AltstreamMark } from '@/components/icons/AltstreamIcon'
 import { DiscordIcon as DiscordMark } from '@/components/icons/DiscordIcon'
 import type { PlatformStatus } from '@/lib/types/message'
 import { useTranslations, type MessageKey, type TFunction } from '@/lib/i18n'
@@ -106,6 +107,8 @@ const TikTokIcon = () => (
 )
 
 const DiscordIcon = () => <DiscordMark className="h-5 w-5 text-discord" />
+
+const AltstreamIcon = () => <AltstreamMark className="h-5 w-5 text-altstream" />
 
 const OwncastIcon = () => (
   <svg viewBox="0 0 24 24" className="h-5 w-5">
@@ -188,6 +191,7 @@ const platformIcons = {
   picarto: { icon: PicartoIcon, nameKey: 'common.platforms.picarto' },
   facebook: { icon: FacebookIcon, nameKey: 'common.platforms.facebook' },
   instagram: { icon: InstagramIcon, nameKey: 'common.platforms.instagram' },
+  altstream: { icon: AltstreamIcon, nameKey: 'common.platforms.altstream' },
   discord: { icon: DiscordIcon, nameKey: 'common.platforms.discord' },
 } as const satisfies Record<string, { icon: React.FC; nameKey: MessageKey }>
 

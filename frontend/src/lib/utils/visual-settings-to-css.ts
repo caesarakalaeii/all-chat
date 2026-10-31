@@ -80,6 +80,7 @@ export const PROPERTY_MAP: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['picartoAccent', '--platform-picarto-accent'],
   ['facebookAccent', '--platform-facebook-accent'],
   ['instagramAccent', '--platform-instagram-accent'],
+  ['altstreamAccent', '--platform-altstream-accent'],
   // Event visibility
   ['showSuperChat', '--chat-show-super-chat'],
   ['showSubscriptions', '--chat-show-subscriptions'],
@@ -152,6 +153,7 @@ const ACCENT_PLATFORMS: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['picartoAccent', 'picarto'],
   ['facebookAccent', 'facebook'],
   ['instagramAccent', 'instagram'],
+  ['altstreamAccent', 'altstream'],
   ['discordAccent', 'discord'],
 ]
 
@@ -241,6 +243,7 @@ const BUBBLE_TINT_PLATFORMS: ReadonlyArray<[keyof VisualSettings, string]> = [
   ['picartoBubbleBg', 'picarto'],
   ['facebookBubbleBg', 'facebook'],
   ['instagramBubbleBg', 'instagram'],
+  ['altstreamBubbleBg', 'altstream'],
   ['discordBubbleBg', 'discord'],
 ]
 

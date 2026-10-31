@@ -69,6 +69,7 @@ const PLATFORMS: ReadonlyArray<{
     | 'picarto'
     | 'facebook'
     | 'instagram'
+    | 'altstream'
     | 'discord'
   sample: string
 }> = [
@@ -81,6 +82,7 @@ const PLATFORMS: ReadonlyArray<{
   { field: 'picartoBubbleBg', platform: 'picarto', sample: '#1b3d26' },
   { field: 'facebookBubbleBg', platform: 'facebook', sample: '#1b2940' },
   { field: 'instagramBubbleBg', platform: 'instagram', sample: '#2b1220' },
+  { field: 'altstreamBubbleBg', platform: 'altstream', sample: '#3d2a1b' },
   { field: 'discordBubbleBg', platform: 'discord', sample: '#22253d' },
 ]
 

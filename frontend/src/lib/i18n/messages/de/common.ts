@@ -48,6 +48,7 @@ export const common: LocaleNamespace<'common'> = {
     picarto: 'Picarto',
     facebook: 'Facebook',
     instagram: 'Instagram',
+    altstream: 'Altstream',
     discord: 'Discord',
   },
   overlayKinds: {

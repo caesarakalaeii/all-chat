@@ -221,7 +221,7 @@ func main() {
 	seventvResolver := clients.NewSevenTVResolver(log)
 	configHandler := handlers.NewConfigHandler(configRepo, overlayRepo, sourceRepo, seventvResolver, bubbleColorsGate{gates: gateCache, db: dbPool})
 	sourcesHandler := handlers.NewSourcesHandler(sourceRepo, overlayRepo, dbPool, log, redisClient, bm, tokenCipher)
-	sourcesHandler.SetPlatformGate(platformSourceGate{gates: gateCache, db: dbPool})
+	sourcesHandler.SetPlatformGate(platformSourceGate{gates: gateCache, entitlements: userEntitlements(dbPool)})
 	sourcesHandler.SetStreamSelectionGate(premiumKeyGate{gates: gateCache, db: dbPool, key: featuregates.GateStreamSelection})
 
 	// Discord source guard (ADR-0048): a Discord source is acted on by the SHARED bot, so
@@ -465,23 +465,42 @@ func (g bubbleColorsGate) BubbleColorsEnabled(ctx context.Context, userID string
 }
 
 // platformSourceGate combines the feature-gate cache (ADR-0008) with the
-// users.is_premium lookup to decide whether a user may add a source on a
+// caller's entitlements to decide whether a user may add a source on a
 // rollout platform. Keyed on the caller, the overlay owner by construction of
-// the sources routes. A closed gate (is_premium=TRUE) requires a premium user;
-// once flipped to free the check short-circuits without touching the database.
+// the sources routes. is_premium=TRUE requires a premium user; early_access=TRUE
+// (ADR-0020) requires a beta tester or ambassador, for a platform whose upstream
+// app is not approved yet so only app testers can connect it. Once both are off
+// the check short-circuits without touching the database.
 type platformSourceGate struct {
-	gates *featuregates.FeatureGateCache
-	db    *pgxpool.Pool
+	gates        middleware.GateChecker
+	entitlements func(ctx context.Context, userID string) (premium, earlyAccess bool, err error)
 }
 
 func (g platformSourceGate) PlatformSourceAllowed(ctx context.Context, userID, platform string) (bool, error) {
 	key, gated := featuregates.RolloutPlatformGateKey(platform)
-	if !gated || g.gates == nil || !g.gates.IsPremium(key) {
+	if !gated || g.gates == nil {
 		return true, nil
 	}
-	var isPremium bool
-	err := g.db.QueryRow(ctx, "SELECT is_premium FROM users WHERE id = $1", userID).Scan(&isPremium)
-	return isPremium, err
+	needPremium, needEarlyAccess := g.gates.IsPremium(key), g.gates.IsEarlyAccess(key)
+	if !needPremium && !needEarlyAccess {
+		return true, nil
+	}
+	premium, earlyAccess, err := g.entitlements(ctx, userID)
+	if err != nil {
+		return false, err
+	}
+	return (premium || !needPremium) && (earlyAccess || !needEarlyAccess), nil
+}
+
+// userEntitlements reads is_premium and early-access eligibility (is_beta_tester OR
+// is_ambassador, ADR-0041) in one row read.
+func userEntitlements(db *pgxpool.Pool) func(context.Context, string) (bool, bool, error) {
+	return func(ctx context.Context, userID string) (premium, earlyAccess bool, err error) {
+		err = db.QueryRow(ctx,
+			"SELECT is_premium, (is_beta_tester OR is_ambassador) FROM users WHERE id = $1", userID).
+			Scan(&premium, &earlyAccess)
+		return premium, earlyAccess, err
+	}
 }
 
 // premiumKeyGate is the plain ADR-0008 decision for one gate key: open while the key is

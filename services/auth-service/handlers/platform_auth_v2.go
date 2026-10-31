@@ -899,21 +899,7 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "Kick provider misconfigured"})
 				return
 			}
-			channelInfo, channelErr := kickProvider.GetChannelInfo(c.Request.Context(), token.AccessToken)
-			if channelErr != nil {
-				// Fall back to the legacy behaviour (display name as channel id): it is
-				// correct for every user whose display name IS their slug, and failing the
-				// whole add over a channel-resolution hiccup would block those users.
-				h.logger.Warn("Failed to resolve Kick channel slug; storing the users-endpoint name as channel id",
-					zap.String("platform", string(platform)),
-					zap.String("platform_user_id", platformUser.GetID()),
-					zap.Error(channelErr))
-			} else {
-				sourceDetails = &OverlaySourceDetails{
-					ChannelID:   channelInfo.Slug,
-					ChannelName: channelInfo.Slug,
-				}
-			}
+			sourceDetails = h.resolveKickSourceDetails(c.Request.Context(), kickProvider, token.AccessToken, platformUser.GetID())
 		}
 
 		// Delegated-moderator consent (ADR-0048) is handled here and returns, BEFORE any of
@@ -1158,17 +1144,18 @@ func (h *PlatformAuthHandlerV2) HandleCallback(platform oauth.Platform) gin.Hand
 		// (platformUser.GetID()) the Kick moderation API keys on, keyed by the slug.
 		if shouldStoreLinkedKickCredentials(user.AuthProvider, platform, oauthState.IsAddSource()) {
 			scopes := oauth.ExtractGrantedScopes(token)
+			kickChannel := kickCredentialChannel(sourceDetails, platformUser)
 			if err := h.userRepo.StoreKickToken(c.Request.Context(),
-				user.ID, platformUser.GetUsername(), platformUser.GetID(), token, scopes); err != nil {
+				user.ID, kickChannel, platformUser.GetID(), token, scopes); err != nil {
 				h.logger.Warn("Failed to store linked Kick credentials",
 					zap.String("user_id", user.ID),
-					zap.String("kick_slug", platformUser.GetUsername()),
+					zap.String("kick_slug", kickChannel),
 					zap.Error(err),
 				)
 			} else {
 				h.logger.Info("Stored linked Kick credentials",
 					zap.String("user_id", user.ID),
-					zap.String("kick_slug", platformUser.GetUsername()),
+					zap.String("kick_slug", kickChannel),
 					zap.Strings("scopes", scopes),
 				)
 			}
@@ -1535,6 +1522,41 @@ func shouldStoreLinkedTwitchCredentials(authProvider string, platform oauth.Plat
 // the same rotating Kick refresh token.
 func shouldStoreLinkedKickCredentials(authProvider string, platform oauth.Platform, isAddSource bool) bool {
 	return platform == oauth.PlatformKick && isAddSource && authProvider != "kick"
+}
+
+// resolveKickSourceDetails resolves the streamer's Kick channel slug for add-source and the
+// advanced-controls re-consent. It tries the user's token first (needs channel:read), then
+// an app-token lookup by broadcaster id (needs no user scope): Kick hands back only the
+// scopes it agrees to, and in production a consent that asked for channel:read came back
+// with user:read alone. Returns nil when both fail; the caller then falls back to the
+// users-endpoint name, which is correct for every user whose display name IS their slug,
+// because failing the whole add over a channel-resolution hiccup would block those users.
+func (h *PlatformAuthHandlerV2) resolveKickSourceDetails(ctx context.Context, kick *oauth.KickOAuth, userAccessToken, broadcasterID string) *OverlaySourceDetails {
+	info, err := kick.GetChannelInfo(ctx, userAccessToken)
+	if err != nil {
+		var appErr error
+		info, appErr = kick.GetChannelInfoByBroadcasterID(ctx, broadcasterID)
+		if appErr != nil {
+			h.logger.Warn("Failed to resolve Kick channel slug; storing the users-endpoint name as channel id",
+				zap.String("platform_user_id", broadcasterID),
+				zap.NamedError("user_token_error", err),
+				zap.NamedError("app_token_error", appErr))
+			return nil
+		}
+	}
+	return &OverlaySourceDetails{ChannelID: info.Slug, ChannelName: info.Slug}
+}
+
+// kickCredentialChannel is the channel id a linked Kick credential is stored under. It must
+// match the channel id the source was added under: the moderation service resolves the
+// credential by the overlay source's channel_id, so keying it by the users-endpoint display
+// name while the source holds the slug left Kick send and moderation locked after a
+// successful consent.
+func kickCredentialChannel(sourceDetails *OverlaySourceDetails, platformUser oauth.PlatformUserInfo) string {
+	if sourceDetails != nil && sourceDetails.ChannelID != "" {
+		return sourceDetails.ChannelID
+	}
+	return platformUser.GetUsername()
 }
 
 // linkPlatformToUser links a new platform to an existing user account

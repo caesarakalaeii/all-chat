@@ -17,7 +17,9 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -27,6 +29,7 @@ import (
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -81,7 +84,7 @@ func TestAddSource_PlatformGateClosedRefuses(t *testing.T) {
 	h := gateTestHandler(stubPlatformGate{allowed: map[string]bool{}})
 	w := postGoodGameSource(h)
 	assert.Equal(t, http.StatusForbidden, w.Code)
-	assert.Contains(t, w.Body.String(), "premium-only")
+	assert.Contains(t, w.Body.String(), "not available for your account")
 }
 
 func TestAddSource_PlatformGateOpenAllows(t *testing.T) {
@@ -112,4 +115,55 @@ func TestAddSource_NilGateReadsAsOpen(t *testing.T) {
 	}
 	w := postGoodGameSource(h)
 	assert.Equal(t, http.StatusCreated, w.Code)
+}
+
+// Altstream (ADR-0082) rides the same rollout gate. Its channel is the
+// Altstream username, which Altstream treats case-insensitively, so the source
+// stores it trimmed and lowercased; anything outside [A-Za-z0-9_-]{1,64} is
+// refused before it reaches the listener's URLs.
+func postAltstreamSource(t *testing.T, gate PlatformSourceGate, channelID string) (*httptest.ResponseRecorder, *models.ChatSource) {
+	t.Helper()
+	var created *models.ChatSource
+	h := gateTestHandler(gate)
+	h.sourceRepo = &mockSourceRepository{
+		createFunc: func(_ context.Context, s *models.ChatSource) error { created = s; return nil },
+	}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/overlays/:id/sources", func(c *gin.Context) {
+		c.Set("user_id", "user-1")
+		h.HandleAddSource(c)
+	})
+	body, err := json.Marshal(map[string]string{"platform": "altstream", "channel_id": channelID})
+	require.NoError(t, err)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/overlays/ov-1/sources", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	return w, created
+}
+
+func TestAddSource_Altstream(t *testing.T) {
+	open := stubPlatformGate{allowed: map[string]bool{"altstream": true}}
+
+	w, created := postAltstreamSource(t, stubPlatformGate{allowed: map[string]bool{}}, "copygirl")
+	assert.Equal(t, http.StatusForbidden, w.Code, "platform_altstream closed for the caller")
+	assert.Nil(t, created)
+
+	w, created = postAltstreamSource(t, open, " Utsuho____Reiuji ")
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	require.NotNil(t, created)
+	assert.Equal(t, "altstream", created.Platform)
+	assert.Equal(t, "utsuho____reiuji", created.ChannelID)
+	assert.False(t, created.AuthRequired, "Altstream's chat API needs no OAuth")
+
+	for _, ok := range []string{"kanaruhoshino16", "a", "copy-girl", strings.Repeat("a", 64)} {
+		w, _ = postAltstreamSource(t, open, ok)
+		assert.Equal(t, http.StatusCreated, w.Code, "%q must be accepted", ok)
+	}
+	for _, bad := range []string{"copy girl", "copygirl/../api", "copygirl?x=1", "kanä", "@copygirl", strings.Repeat("a", 65)} {
+		w, created = postAltstreamSource(t, open, bad)
+		assert.Equal(t, http.StatusBadRequest, w.Code, "%q must be refused", bad)
+		assert.Nil(t, created, "%q must not be stored", bad)
+	}
 }

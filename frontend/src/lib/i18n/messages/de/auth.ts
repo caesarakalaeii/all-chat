@@ -83,6 +83,8 @@ export const auth: LocaleNamespace<'auth'> = {
     exchangeFailed:
       'Authentifizierung fehlgeschlagen. Der Code ist möglicherweise abgelaufen — bitte versuche es erneut.',
     failed: 'Authentifizierung fehlgeschlagen. Bitte versuche es erneut.',
+    duplicateAccount:
+      'Dein {platform}-Kanal ist bereits mit dem All-Chat-Konto „{username}“ verbunden. Melde dich stattdessen mit diesem Konto an. Ein separater {platform}-Login ist nicht nötig.',
     returnHome: 'Zur Startseite',
   },
   viewerSuccess: {

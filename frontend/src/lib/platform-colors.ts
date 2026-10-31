@@ -32,6 +32,7 @@ export const PLATFORM_COLORS = {
   picarto: { text: 'text-picarto', bg: 'bg-picarto' },
   facebook: { text: 'text-facebook', bg: 'bg-facebook' },
   instagram: { text: 'text-instagram', bg: 'bg-instagram' },
+  altstream: { text: 'text-altstream', bg: 'bg-altstream' },
   discord: { text: 'text-discord', bg: 'bg-discord' },
   system: { text: 'text-text-sub', bg: 'bg-surface' },
 } as const

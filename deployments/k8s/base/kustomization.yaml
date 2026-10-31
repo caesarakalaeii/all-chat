@@ -54,6 +54,9 @@ resources:
   # Picarto Listener (unofficial pop-out WebSocket, ADR-0059)
   - picarto-listener/deployment.yaml
   - picarto-listener/hpa.yaml
+  # Altstream Listener (official public SSE chat API, ADR-0082)
+  - altstream-listener/deployment.yaml
+  - altstream-listener/hpa.yaml
   # Owncast Listener (ADR-0058, self-hosted instances, URL-as-channel)
   - owncast-listener/deployment.yaml
   - owncast-listener/hpa.yaml
@@ -114,6 +117,9 @@ images:
     newTag: main
   - name: allchat-picarto-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-picarto-listener
+    newTag: main
+  - name: allchat-altstream-listener:latest
+    newName: ghcr.io/caesarakalaeii/allchat-altstream-listener
     newTag: main
   - name: allchat-owncast-listener:latest
     newName: ghcr.io/caesarakalaeii/allchat-owncast-listener

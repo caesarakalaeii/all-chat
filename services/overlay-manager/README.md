@@ -209,7 +209,8 @@ Body: { "config": { ... } }
 #                  premium status cannot be read.
 #   stream_id    — pinned stream for unlisted streams: a watch, youtu.be or /live/ link or an
 #                  11-character id, stored as the id. "" removes it. 400 if unparsable, 422 if
-#                  oEmbed attributes the video to another channel or cannot verify it. Free.
+#                  the watch page (InnerTube /next) names another owner channel or none, as
+#                  for a private video. Scheduled streams can be pinned before they go live. Free.
 #   official_api — true hands the channel to youtube-listener (premium gate
 #                  youtube_official_api): 403 when not premium, 409 when the caller has no
 #                  YouTube connection for the channel. Turning it off is never checked.

@@ -29,6 +29,9 @@
  */
 
 import { formatDateTime } from '@/lib/i18n'
+import DeafTiktokRoomSlowTwitchRestart, {
+  meta as deafTiktokRoomSlowTwitchRestartMeta,
+} from './one-deaf-tiktok-room-and-a-slow-twitch-restart'
 import TiktokSignServer, {
   meta as tiktokSignServerMeta,
 } from './tiktok-live-chat-without-a-sign-server'
@@ -39,6 +42,7 @@ import type { BlogPost } from './types'
 
 /** Newest first. */
 export const POSTS: readonly BlogPost[] = [
+  { meta: deafTiktokRoomSlowTwitchRestartMeta, Body: DeafTiktokRoomSlowTwitchRestart },
   { meta: twitchChatWentQuietMeta, Body: TwitchChatWentQuiet },
   { meta: tiktokSignServerMeta, Body: TiktokSignServer },
 ]

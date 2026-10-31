@@ -86,7 +86,11 @@ comment polling.
    OAuth redirect URI.
 2. **Configure the backend**: set `FACEBOOK_APP_ID` and `FACEBOOK_APP_SECRET`
    (auth-service reads them). Dev mode works immediately against Pages owned
-   by the app's admins/developers/testers.
+   by the app's admins/developers/testers. Until App Review passes, keep the
+   `platform_facebook` gate on **early access** (`/admin/features`) so only beta
+   testers and ambassadors, the people you can add as app testers, can add a
+   Facebook source; everyone else gets a 403 instead of a consent screen Meta
+   refuses.
 3. **Business verification — start early.** Advanced Access on
    `pages_read_engagement` and `pages_manage_engagement` requires a verified
    business, and verification + review commonly takes ~20 days. Begin before

@@ -40,13 +40,15 @@ Options:
 1. IRC (Internet Relay Chat)
 2. WebSocket (real-time connection)
 3. HTTP Polling (REST API)
-4. Other/Unknown
+4. Server-Sent Events (SSE stream)
+5. Other/Unknown
 ```
 
 Based on answer, select template:
 - **IRC** → Use twitch-listener as template
 - **WebSocket** → Use kick-listener as template
 - **HTTP Polling** → Use youtube-listener as template
+- **SSE** → Use altstream-listener as template (no OAuth, channel-name keyed, ADR-0082)
 - **Unknown** → Provide decision tree to help user determine
 
 ---
@@ -63,6 +65,7 @@ Based on API type:
 - **IRC**: Read `services/twitch-listener/` (irc/, channels/, publisher/)
 - **WebSocket**: Read `services/kick-listener/` (websocket/, channels/, publisher/)
 - **HTTP**: Read `services/youtube-listener/` (youtube/, streams/, channels/)
+- **SSE**: Read `services/altstream-listener/`
 
 ---
 
