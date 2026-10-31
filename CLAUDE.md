@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok, Discord; Owncast, GoodGame, Picarto, Facebook and Instagram in beta) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
+All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from **multiple live streaming platforms** (Twitch, YouTube, Kick, TikTok, Discord; Owncast, GoodGame, Picarto, Altstream, Facebook and Instagram in beta) on streaming overlays with support for 7TV, BTTV, and FFZ emotes.
 
 **Core Concept**: Users can create multiple overlays, each configured with one or more chat sources. An overlay can combine messages from every supported platform simultaneously, providing full flexibility for streamers who multistream.
 
@@ -14,7 +14,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 
 **Platform Status**:
 - ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Centrifugo or Pusher, whichever Kick picks; ADR-0077) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
-- 🚧 Beta only: Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Instagram (ADR-0062, Graph API live_comments polling, read-only). The listeners are deployed and the backend is shared, but the frontend offers these platforms only on `beta.allch.at` (`frontend/src/lib/platform-availability.ts`); allch.at hides them. Adding a source is still limited by the ADR-0008 `platform_*` gate (seeded `is_premium=TRUE`, migrations 091-094 and 096; beta testers are granted premium). Release to production by removing the platform from `platform-availability.ts`, then flip its gate via the feature-gate admin endpoint to open it beyond premium.
+- 🚧 Beta only: Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Altstream (ADR-0082, official public SSE chat API, read-only) | Facebook (ADR-0060, Graph API polling + moderation write path) | Instagram (ADR-0062, Graph API live_comments polling, read-only). The listeners are deployed and the backend is shared, but the frontend offers these platforms only on `beta.allch.at` (`frontend/src/lib/platform-availability.ts`); allch.at hides them. Adding a source is still limited by the ADR-0008 `platform_*` gate (seeded `is_premium=TRUE`, migrations 091-094, 096 and 117; beta testers are granted premium). Release to production by removing the platform from `platform-availability.ts`, then flip its gate via the feature-gate admin endpoint to open it beyond premium.
 - ✅ Alerts overlays (ADR-0070, ADR-0075) are offered on every host; creating one is limited by the `alerts_overlay` premium gate.
 - 🚧 Beta only (feature): the chat commands editor `/commands` (ADR-0079). `BETA_ONLY_FEATURES` in `platform-availability.ts` hides its nav link, onboarding extras entry and `/upgrade` row outside `beta.allch.at`; the page itself works on any host, and the alerts editor offers the `chat_command` event type (command images, ADR-0080) only where the feature is. Its backend (message-processor, engagement-service, auth-service, overlay-manager, and the api-gateway for images) runs from `:main`. Release by removing `chatCommands` from `BETA_ONLY_FEATURES`.
 - 🚧 Beta only (overlay kinds): Goal and List overlays (ADR-0072). The same `platform-availability.ts` list hides them outside `beta.allch.at`: the create-overlay kind picker, the onboarding "Optional: go further" entries and the `/upgrade` rows. Existing overlays of these kinds still render in OBS (`/overlay/[id]`) and open in the editor on any host, and creating one is still limited by the `goal_overlay` / `list_overlay` premium gates. Release to production by removing the kind from `BETA_ONLY_OVERLAY_KINDS` in `platform-availability.ts`.
@@ -118,6 +118,7 @@ Each service has a detailed README:
 - [owncast-listener](./services/owncast-listener/README.md) - Self-hosted Owncast instances; one websocket per instance URL (ADR-0058)
 - [goodgame-listener](./services/goodgame-listener/README.md) - GoodGame.ru chat websocket; resolves channel key to numeric chat id
 - [picarto-listener](./services/picarto-listener/README.md) - Picarto pop-out chat websocket, defensively parsed (ADR-0059)
+- [altstream-listener](./services/altstream-listener/README.md) - Altstream chat via the official public SSE chat API, read-only; the `lastId` parameter is mandatory (ADR-0082)
 - [facebook-listener](./services/facebook-listener/README.md) - Facebook Live comments via Graph API polling + moderation (ADR-0060)
 - [instagram-listener](./services/instagram-listener/README.md) - Instagram Live comments via Graph API `live_comments` polling, read-only (ADR-0062)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
@@ -174,7 +175,7 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 Fixes may still go to `main` through PRs.
 
-**Gap:** only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in any other service has no beta environment, so a human decides how to stage it.
+**Gap:** only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (altstream, facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in any other service has no beta environment, so a human decides how to stage it.
 
 On top of the cycle, a new user-facing feature is not "done" until all three of these release steps are covered:
 
@@ -227,7 +228,7 @@ services/<service-name>/
 ## Message Flow Architecture
 
 ```
-Listeners (Twitch/YouTube/Kick/TikTok/Discord/Owncast/GoodGame/Picarto/Facebook/Instagram)
+Listeners (Twitch/YouTube/Kick/TikTok/Discord/Owncast/GoodGame/Picarto/Altstream/Facebook/Instagram)
   ↓ publish raw messages
 Redis Streams (chat:raw)
   ↓ consume via XREADGROUP (group: message-processors)

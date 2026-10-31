@@ -885,6 +885,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0082: Altstream chat via the official public SSE chat API
+
+**Status**: Accepted (2026-10-31)
+**Problem**: Streamers who multistream to Altstream (six asks on Bluesky in October 2026) want its chat in their overlay. Altstream is a small, community-funded, queer-friendly, anti-generative-AI platform whose values fit All-Chat, the opposite of the values reason that withdrew Rumble (ADR-0061).
+**Decision**: New `altstream-listener` (port 8101) reads the official, documented, unauthenticated developer API: the SSE chat stream per channel plus REST for live status and emote catalogs, never an internal endpoint. v1 is read-only: messages, highlights, and native `delete`/`clear`; other event types are dropped with a metric. The SSE `lastId` parameter is mandatory and undocumented (without it the stream only pings), so the listener always sends one. Beta-only in the frontend, `:beta` image, `platform_altstream` gate seeded premium (migration 117).
+**Impact**: No credentials or auth-service change. Risks accepted: a three-month-old, one-developer platform with frequent October outages and a brand-new API; an unknown per-IP SSE connection cap (12 parallel got 502, 4 were fine); no full gap replay after a reconnect; emotes from unwatched channels stay text; no alerts.
+**→ Read**: [0082-altstream-public-sse-chat.md](./0082-altstream-public-sse-chat.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -1015,8 +1025,8 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Last Updated**: 2026-10-21
-**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories, streamer chat commands, guarded outbound fetches for user URLs)
+**Last Updated**: 2026-10-31
+**Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories, streamer chat commands, guarded outbound fetches for user URLs, platform listeners on official public APIs)
 
 **Most Referenced**:
 
@@ -1024,4 +1034,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-10-21
+**Last Updated**: 2026-10-31
