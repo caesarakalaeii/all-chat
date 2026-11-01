@@ -22,10 +22,10 @@ FROM alpine:3.24
 # ca-certificates for HTTPS (GitHub, Grafana, the local LLM if TLS).
 RUN apk --no-cache add ca-certificates
 
-# kubectl for the read-only cluster tool: latest patch of the cluster's minor (1.33).
+# kubectl for the read-only cluster tool: latest patch of the cluster's minor (1.36).
 # kubectl must stay within one minor of the server, so bump this with k3s.
 # busybox wget (built into alpine) downloads it; no curl dependency needed.
-RUN wget -O /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.33.13/bin/linux/amd64/kubectl" && \
+RUN wget -O /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.36.6/bin/linux/amd64/kubectl" && \
     chmod 0755 /usr/local/bin/kubectl
 
 # Create non-root user
