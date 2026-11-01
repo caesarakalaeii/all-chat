@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26.10-alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/youtube-quota-monitor ./cmd
 
 # Runtime stage
-FROM alpine:3.23
+FROM alpine:3.24
 
 # ca-certificates for HTTPS; tzdata because the monitor resolves America/Los_Angeles
 # (YouTube quota resets at midnight Pacific).

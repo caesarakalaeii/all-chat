@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26.10-alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 
 WORKDIR /app
 
@@ -17,14 +17,15 @@ RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/support-bot ./cmd
 
 # Runtime stage
-FROM alpine:3.23
+FROM alpine:3.24
 
 # ca-certificates for HTTPS (GitHub, Grafana, the local LLM if TLS).
 RUN apk --no-cache add ca-certificates
 
-# kubectl for the read-only cluster tool (match cluster server version v1.33.5).
+# kubectl for the read-only cluster tool: latest patch of the cluster's minor (1.33).
+# kubectl must stay within one minor of the server, so bump this with k3s.
 # busybox wget (built into alpine) downloads it; no curl dependency needed.
-RUN wget -O /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.33.5/bin/linux/amd64/kubectl" && \
+RUN wget -O /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.33.13/bin/linux/amd64/kubectl" && \
     chmod 0755 /usr/local/bin/kubectl
 
 # Create non-root user
