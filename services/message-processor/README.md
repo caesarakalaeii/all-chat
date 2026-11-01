@@ -182,6 +182,11 @@ without any real streaming platform. It only ever targets the fixed test overlay
 (`TEST_STREAM_OVERLAY_ID`, seeded by migration `058`). Disable with
 `TEST_STREAM_ENABLED=false`.
 
+The public status page depends on it: status.allch.at's end-to-end chat
+delivery row (caesar-deployment `apps/workloads/status`, ADR-0085) opens a
+passive socket on this overlay and starts a 5 s run every minute. Disabling the
+generator or changing the overlay id turns that row red.
+
 **Just connect — no trigger needed.** A `DemandWatcher` reuses the api-gateway
 connection-presence signal (`overlay:connected:{id}` / the `overlay:connections`
 channel — the same demand signal the youtube-listener uses). The moment a client
