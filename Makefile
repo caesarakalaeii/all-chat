@@ -197,8 +197,8 @@ docker-build:
 minio-setup:
 	@if ! command -v mc >/dev/null 2>&1; then \
 		echo "mc (MinIO client) not found. Install it, then re-run:"; \
-		echo "  curl -sSL -o /usr/local/bin/mc https://github.com/minio/mc/releases/download/RELEASE.2025-08-13T08-35-41Z/mc.linux-amd64.RELEASE.2025-08-13T08-35-41Z && chmod +x /usr/local/bin/mc"; \
-		echo "  (or pick the latest release for your platform: https://github.com/minio/mc/releases)"; \
+		echo "  curl -sSL https://github.com/pgsty/mc/releases/download/RELEASE.2026-10-26T00-00-00Z/mcli_20261026000000.0.0_linux_amd64.tar.gz | tar -xzO mcli > /usr/local/bin/mc && chmod +x /usr/local/bin/mc"; \
+		echo "  (pgsty/mc is the maintained fork of the archived minio/mc; other platforms: https://github.com/pgsty/mc/releases)"; \
 		exit 1; \
 	fi
 	@user=$${MINIO_ROOT_USER:-$$(grep -hs '^MINIO_ROOT_USER=' deployments/.env 2>/dev/null | head -n1 | cut -d= -f2-)}; \
