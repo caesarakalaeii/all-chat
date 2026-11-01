@@ -1087,10 +1087,7 @@ class TikTokListenerService {
       if (this.leadershipCoordinator) {
         await this.leadershipCoordinator.release(username);
       }
-      this.livePoller.removeTarget(username);
-      if (this.activeStreams.has(username)) {
-        await this.disconnectFromStream(username);
-      }
+      await this.disconnectFromStream(username);
       // Drop any silent-failure streak: a stale streak from a since-removed
       // overlay would give a re-added channel error backoff after one future
       // heartbeat timeout.
