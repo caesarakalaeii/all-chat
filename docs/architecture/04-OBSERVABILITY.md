@@ -33,7 +33,7 @@ All-Chat implements comprehensive observability across three pillars:
 |------|--------|--------|
 | **Mean Time to Detect (MTTD)** | < 2 minutes | ✅ Alerts deployed |
 | **Mean Time to Resolve (MTTR)** | < 15 minutes | ✅ Runbooks available |
-| **Service Availability** | 99.9% (3 nines) | ✅ Measuring |
+| **Service Availability** | 99.9% (3 nines) | ✅ Measured on [status.allch.at](https://status.allch.at) since 2026-11-01 (ADR-0085) |
 | **Metric Collection** | 100% of services | ✅ Complete |
 | **Log Aggregation** | 100% of services | ✅ Structured logging |
 
@@ -658,12 +658,25 @@ WriteTimeout    = 3 seconds
 
 ### Service Level Indicators (SLIs)
 
-| SLI | Measurement | Target |
-|-----|-------------|--------|
-| **Availability** | `up{service=~".*-listener|processor|gateway"} == 1` | 99.9% |
-| **Latency (P95)** | `histogram_quantile(0.95, processor_message_duration_seconds)` | <500ms |
-| **Error Rate** | `rate(listener_errors_total[5m]) / rate(listener_messages_received_total[5m])` | <1% |
-| **Message Delivery** | `rate(gateway_messages_sent_total[5m]) / rate(listener_messages_received_total[5m])` | >99% |
+Availability is measured by the public status page at
+[status.allch.at](https://status.allch.at): Gatus in the `status` namespace,
+configured in caesar-deployment `apps/workloads/status/config.yaml` (ADR-0085,
+which lives in caesar-deployment). Each row is checked every minute (sign-in
+every two), and uptime is the share of passing checks over 1h/24h/7d/30d.
+Nothing is excluded by hand, maintenance included.
+
+| SLI | How it is measured | Source |
+|-----|--------------------|--------|
+| **Website / sign-in** | `GET https://allch.at/` returns 200; `/api/v1/auth/{twitch,youtube,kick}/login` returns the provider's authorize URL | Public request through Cloudflare + Envoy |
+| **Overlay connection** | `wss://allch.at/ws/overlay/<test-stream overlay>?passive=true` returns the `connected` frame | Public request |
+| **End-to-end chat delivery** | `status-prober` starts a 5 s test-stream run and must receive a `chat_message` frame within 15 s | Pushed to Gatus; 3 min without a push counts as down |
+| **Chat processing** | `max(processor_stream_lag_seconds{stream="chat:raw"}) < 60` and a ready message-processor | Prometheus |
+| **Platform ingestion** | Listener has a ready replica and none of the platform's critical outage alerts is firing (`ALERTS`) | Prometheus + alert rules (ADR-0022) |
+
+Not measured: requests that never reach the cluster are only seen by the
+public checks, and while the cluster itself is down the status page is down
+with it, so that time is not recorded. Silence on a low-traffic platform (Kick,
+Discord, the beta platforms) is never treated as an outage.
 
 ### Service Level Objectives (SLOs)
 
