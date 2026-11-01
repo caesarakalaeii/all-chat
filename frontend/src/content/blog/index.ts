@@ -29,6 +29,7 @@
  */
 
 import { formatDateTime } from '@/lib/i18n'
+import CveStorm, { meta as cveStormMeta } from './becoming-ready-for-the-cve-storm'
 import DeafTiktokRoomSlowTwitchRestart, {
   meta as deafTiktokRoomSlowTwitchRestartMeta,
 } from './one-deaf-tiktok-room-and-a-slow-twitch-restart'
@@ -42,6 +43,7 @@ import type { BlogPost } from './types'
 
 /** Newest first. */
 export const POSTS: readonly BlogPost[] = [
+  { meta: cveStormMeta, Body: CveStorm },
   { meta: deafTiktokRoomSlowTwitchRestartMeta, Body: DeafTiktokRoomSlowTwitchRestart },
   { meta: twitchChatWentQuietMeta, Body: TwitchChatWentQuiet },
   { meta: tiktokSignServerMeta, Body: TiktokSignServer },
