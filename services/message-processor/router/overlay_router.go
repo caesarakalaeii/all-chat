@@ -18,9 +18,11 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -124,21 +126,48 @@ func (r *Repository) FindTwitchChannelForOverlay(ctx context.Context, overlayID 
 	return channelName, nil
 }
 
-// FindSevenTVEmoteSetIDForOverlay returns the explicit per-overlay 7TV emote-set
-// override, or the empty string if none is set.
-func (r *Repository) FindSevenTVEmoteSetIDForOverlay(ctx context.Context, overlayID string) (string, error) {
-	query := `
-		SELECT COALESCE(seventv_emote_set_id, '')
+// OverlayConfig is the per-overlay config the chat path reads once per message and overlay.
+type OverlayConfig struct {
+	// SevenTVEmoteSetID is the explicit 7TV emote-set override, empty when none is set.
+	SevenTVEmoteSetID string
+	// ShowPronouns is the overlay's pronoun display toggle; the pronoun lookup runs only
+	// when it is on.
+	ShowPronouns bool
+}
+
+const findOverlayConfigSQL = `
+		SELECT COALESCE(seventv_emote_set_id, ''),
+		       display_settings -> 'show_pronouns',
+		       visual_settings -> 'showPronouns'
 		FROM overlay_configs
 		WHERE overlay_id = $1
 	`
 
-	var setID string
-	err := r.db.QueryRow(ctx, query, overlayID).Scan(&setID)
-	if err != nil {
-		return "", nil
+// FindOverlayConfig returns the overlay's chat-path config. An overlay without a config
+// row gets the defaults the overlay page uses: no 7TV override, pronouns on.
+func (r *Repository) FindOverlayConfig(ctx context.Context, overlayID string) (OverlayConfig, error) {
+	var cfg OverlayConfig
+	var displayShowPronouns, visualShowPronouns []byte
+	err := r.db.QueryRow(ctx, findOverlayConfigSQL, overlayID).Scan(&cfg.SevenTVEmoteSetID, &displayShowPronouns, &visualShowPronouns)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return OverlayConfig{ShowPronouns: true}, nil
 	}
-	return setID, nil
+	if err != nil {
+		return OverlayConfig{}, fmt.Errorf("failed to query overlay config: %w", err)
+	}
+	cfg.ShowPronouns = showPronouns(displayShowPronouns, visualShowPronouns)
+	return cfg, nil
+}
+
+// showPronouns resolves the pronoun toggle from its two raw JSON values (nil = key absent)
+// exactly as the OBS overlay page does (frontend/src/app/overlay/[id]/page.tsx): a
+// visual_settings.showPronouns value wins and is on unless it is "none"; otherwise a
+// boolean display_settings.show_pronouns; otherwise on (the default for new overlays).
+func showPronouns(displayShowPronouns, visualShowPronouns []byte) bool {
+	if visualShowPronouns != nil {
+		return string(visualShowPronouns) != `"none"`
+	}
+	return string(displayShowPronouns) != "false"
 }
 
 // Router routes messages to the appropriate overlays
@@ -161,10 +190,9 @@ func (r *Router) TwitchChannelForOverlay(ctx context.Context, overlayID string) 
 	return r.repo.FindTwitchChannelForOverlay(ctx, overlayID)
 }
 
-// SevenTVEmoteSetIDForOverlay returns the per-overlay 7TV emote-set override,
-// or empty if the user hasn't configured one.
-func (r *Router) SevenTVEmoteSetIDForOverlay(ctx context.Context, overlayID string) (string, error) {
-	return r.repo.FindSevenTVEmoteSetIDForOverlay(ctx, overlayID)
+// OverlayConfig returns the overlay's 7TV emote-set override and pronoun toggle.
+func (r *Router) OverlayConfig(ctx context.Context, overlayID string) (OverlayConfig, error) {
+	return r.repo.FindOverlayConfig(ctx, overlayID)
 }
 
 // Route finds all overlays that should receive this message
