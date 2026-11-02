@@ -21,6 +21,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/google/uuid"
@@ -291,32 +292,55 @@ type OverlayWithSourceCount struct {
 	OwnerDisplayName string
 }
 
-// GetAllOverlaysWithSourceCount returns every overlay together with its source
-// count in a single aggregated query. This replaces an N+1 that ran one
-// ListByOverlayID per overlay just to count rows.
-func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) ([]*OverlayWithSourceCount, error) {
+// likeContains turns s into an ILIKE pattern that matches it as a literal
+// substring ("" stays "", meaning no search): usernames are full of
+// underscores, which LIKE would otherwise read as a single-character wildcard.
+func likeContains(s string) string {
+	if s == "" {
+		return ""
+	}
+	return "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s) + "%"
+}
+
+// OverlayListFilter narrows the admin overlay listing. Query is a
+// case-insensitive literal substring match on the overlay's name and id and its
+// owner's id and username; IDs, when non-nil, restricts it to those overlays
+// (the connected-only view and deep links).
+type OverlayListFilter struct {
+	Query string
+	IDs   []string
+}
+
+// ListOverlaysWithSourceCount returns one page of overlays matching filter,
+// newest first, each with its source count, plus the total number of matches.
+func (r *OverlayRepository) ListOverlaysWithSourceCount(ctx context.Context, filter OverlayListFilter, limit, offset int) ([]*OverlayWithSourceCount, int, error) {
+	// ids compare as text so a malformed id matches nothing instead of failing
+	// the uuid cast; id breaks created_at ties so pages neither repeat nor skip.
 	query := `
-		SELECT o.id, o.user_id, o.name, o.overlay_type, o.created_at, o.updated_at, COUNT(s.id) AS sources_count,
-		       u.username, u.display_name
+		SELECT o.id, o.user_id, o.name, o.overlay_type, o.created_at, o.updated_at,
+		       (SELECT COUNT(*) FROM overlay_chat_sources s WHERE s.overlay_id = o.id) AS sources_count,
+		       u.username, u.display_name, COUNT(*) OVER () AS total
 		FROM overlays o
-		LEFT JOIN overlay_chat_sources s ON s.overlay_id = o.id
 		LEFT JOIN users u ON u.id = o.user_id
-		GROUP BY o.id, u.id, u.username, u.display_name
-		ORDER BY o.created_at DESC
+		WHERE ($1 = '' OR o.name ILIKE $1 OR o.id::text ILIKE $1 OR o.user_id::text ILIKE $1 OR u.username ILIKE $1)
+		  AND ($2::text[] IS NULL OR o.id::text = ANY($2))
+		ORDER BY o.created_at DESC, o.id
+		LIMIT $3 OFFSET $4
 	`
 
-	rows, err := r.pool.Query(ctx, query)
+	rows, err := r.pool.Query(ctx, query, likeContains(filter.Query), filter.IDs, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query overlays: %w", err)
+		return nil, 0, fmt.Errorf("failed to query overlays: %w", err)
 	}
 	defer rows.Close()
 
-	var overlays []*OverlayWithSourceCount
+	overlays := []*OverlayWithSourceCount{}
+	total := 0
 	for rows.Next() {
 		var o OverlayWithSourceCount
 		var username, displayName sql.NullString
-		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.OverlayType, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount, &username, &displayName); err != nil {
-			return nil, fmt.Errorf("failed to scan overlay: %w", err)
+		if err := rows.Scan(&o.ID, &o.UserID, &o.Name, &o.OverlayType, &o.CreatedAt, &o.UpdatedAt, &o.SourcesCount, &username, &displayName, &total); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan overlay: %w", err)
 		}
 		o.OwnerUsername = username.String
 		o.OwnerDisplayName = displayName.String
@@ -324,10 +348,10 @@ func (r *OverlayRepository) GetAllOverlaysWithSourceCount(ctx context.Context) (
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating overlays: %w", err)
+		return nil, 0, fmt.Errorf("error iterating overlays: %w", err)
 	}
 
-	return overlays, nil
+	return overlays, total, nil
 }
 
 // ListByUserIDWithSourceCount returns a single user's overlays with their source

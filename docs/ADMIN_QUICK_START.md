@@ -70,9 +70,9 @@ You should now see:
 
 ### Sources (`/admin/sources`)
 - Platform statistics dashboard
-- Comprehensive table of all sources
+- Table of all sources, 50 at a time; scrolling loads more
 - Filtering by:
-  - Search (channel name or ID)
+  - Search (channel name, ID or handle, overlay name, owner)
   - Platform (Twitch, YouTube, Kick, TikTok)
   - Status (Active/Inactive)
 - Links to parent overlays
@@ -133,10 +133,10 @@ All admin endpoints require:
 - JWT token must have "admin" role
 
 **Available endpoints**:
-- `GET /api/v1/admin/users` - List all users
+- `GET /api/v1/admin/users` - List users, paged (`limit`/`offset`), searchable (`q`), filterable by tab (`filter`)
 - `GET /api/v1/admin/users/:id` - Get specific user
-- `GET /api/v1/admin/overlays` - List all overlays
-- `GET /api/v1/admin/sources` - List all sources
+- `GET /api/v1/admin/overlays` - List overlays, paged and searchable
+- `GET /api/v1/admin/sources` - List sources, paged and searchable, filterable by `platform`/`status`/`user`
 
 ## Next Steps
 

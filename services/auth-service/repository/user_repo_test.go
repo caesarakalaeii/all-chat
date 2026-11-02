@@ -18,6 +18,8 @@ package repository
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -135,7 +137,7 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);
 
-		-- Minimal overlays/overlay_chat_sources tables so GetAllUsers can compute
+		-- Minimal overlays/overlay_chat_sources tables so ListUsers can compute
 		-- the per-user overlay/source counts that back the admin "never set up an
 		-- overlay" filter.
 		CREATE TABLE IF NOT EXISTS overlays (
@@ -301,16 +303,16 @@ func TestUserRepository_NullProfileImageURL(t *testing.T) {
 		t.Fatalf("Failed to insert user with NULL profile_image_url: %v", err)
 	}
 
-	t.Run("GetAllUsers tolerates NULL profile_image_url", func(t *testing.T) {
-		users, err := repo.GetAllUsers(ctx)
+	t.Run("ListUsers tolerates NULL profile_image_url", func(t *testing.T) {
+		users, err := repo.ListUsers(ctx, UserListFilter{}, 100, 0)
 		if err != nil {
-			t.Fatalf("GetAllUsers() error = %v, want nil", err)
+			t.Fatalf("ListUsers() error = %v, want nil", err)
 		}
 		if len(users) != 1 {
-			t.Fatalf("GetAllUsers() returned %d users, want 1", len(users))
+			t.Fatalf("ListUsers() returned %d users, want 1", len(users))
 		}
 		if users[0].ProfileImageURL != "" {
-			t.Errorf("GetAllUsers() ProfileImageURL = %q, want empty string", users[0].ProfileImageURL)
+			t.Errorf("ListUsers() ProfileImageURL = %q, want empty string", users[0].ProfileImageURL)
 		}
 	})
 
@@ -325,12 +327,12 @@ func TestUserRepository_NullProfileImageURL(t *testing.T) {
 	})
 }
 
-// TestUserRepository_GetAllUsers_UndecryptableToken verifies that the admin
+// TestUserRepository_ListUsers_UndecryptableToken verifies that the admin
 // user listing does not fail when an account has a corrupt or legacy-plaintext
-// access/refresh token that cannot be decrypted. GetAllUsers is a metadata-only
+// access/refresh token that cannot be decrypted. ListUsers is a metadata-only
 // listing and must not depend on token decryption. Regression test for the
 // admin "failed to load users" HTTP 500 ("illegal base64 data" decrypt error).
-func TestUserRepository_GetAllUsers_UndecryptableToken(t *testing.T) {
+func TestUserRepository_ListUsers_UndecryptableToken(t *testing.T) {
 	pool, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -347,23 +349,23 @@ func TestUserRepository_GetAllUsers_UndecryptableToken(t *testing.T) {
 		t.Fatalf("Failed to insert user with corrupt token: %v", err)
 	}
 
-	users, err := repo.GetAllUsers(ctx)
+	users, err := repo.ListUsers(ctx, UserListFilter{}, 100, 0)
 	if err != nil {
-		t.Fatalf("GetAllUsers() error = %v, want nil", err)
+		t.Fatalf("ListUsers() error = %v, want nil", err)
 	}
 	if len(users) != 1 {
-		t.Fatalf("GetAllUsers() returned %d users, want 1", len(users))
+		t.Fatalf("ListUsers() returned %d users, want 1", len(users))
 	}
 	if users[0].Username != "legacytoken" {
-		t.Errorf("GetAllUsers() Username = %q, want %q", users[0].Username, "legacytoken")
+		t.Errorf("ListUsers() Username = %q, want %q", users[0].Username, "legacytoken")
 	}
 }
 
-// TestUserRepository_GetAllUsers_OverlaySetupCounts verifies that GetAllUsers
+// TestUserRepository_ListUsers_OverlaySetupCounts verifies that ListUsers
 // reports per-user overlay and source counts. These back the admin "never set
 // up an overlay" filter, whose criterion is sources_count == 0 (covering both
 // users with no overlays and users with overlays but no configured sources).
-func TestUserRepository_GetAllUsers_OverlaySetupCounts(t *testing.T) {
+func TestUserRepository_ListUsers_OverlaySetupCounts(t *testing.T) {
 	pool, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -401,9 +403,9 @@ func TestUserRepository_GetAllUsers_OverlaySetupCounts(t *testing.T) {
 		t.Fatalf("Failed to insert sources: %v", err)
 	}
 
-	users, err := repo.GetAllUsers(ctx)
+	users, err := repo.ListUsers(ctx, UserListFilter{}, 100, 0)
 	if err != nil {
-		t.Fatalf("GetAllUsers() error = %v, want nil", err)
+		t.Fatalf("ListUsers() error = %v, want nil", err)
 	}
 
 	byName := make(map[string]*models.User, len(users))
@@ -424,7 +426,7 @@ func TestUserRepository_GetAllUsers_OverlaySetupCounts(t *testing.T) {
 	for _, tc := range cases {
 		u, ok := byName[tc.username]
 		if !ok {
-			t.Fatalf("GetAllUsers() missing user %q", tc.username)
+			t.Fatalf("ListUsers() missing user %q", tc.username)
 		}
 		if u.OverlaysCount != tc.wantOverlaysCount {
 			t.Errorf("%s: OverlaysCount = %d, want %d", tc.username, u.OverlaysCount, tc.wantOverlaysCount)
@@ -436,6 +438,128 @@ func TestUserRepository_GetAllUsers_OverlaySetupCounts(t *testing.T) {
 			t.Errorf("%s: unconfigured = %v, want %v", tc.username, got, tc.wantUnconfigured)
 		}
 	}
+}
+
+// TestUserRepository_ListUsers_FilterSearchAndPaging covers the server-side
+// listing the paginated admin Users page relies on: status filters (including
+// a ban that only exists as a banned platform id), the free-text search,
+// stable newest-first pages, and per-tab counts that follow the search.
+func TestUserRepository_ListUsers_FilterSearchAndPaging(t *testing.T) {
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := newTestUserRepository(t, pool)
+	ctx := context.Background()
+
+	base := time.Now().Add(-time.Hour)
+	insertUser := func(twitchID, username string, minute int) string {
+		var id string
+		err := pool.QueryRow(ctx, `
+			INSERT INTO users (twitch_id, auth_provider, username, display_name, access_token, refresh_token, token_expires_at, created_at)
+			VALUES ($1, 'twitch', $2, $2, '', '', $3, $4)
+			RETURNING id
+		`, twitchID, username, time.Now().Add(24*time.Hour), base.Add(time.Duration(minute)*time.Minute)).Scan(&id)
+		if err != nil {
+			t.Fatalf("Failed to insert user %s: %v", username, err)
+		}
+		return id
+	}
+
+	insertUser("700001", "alice", 1)
+	insertUser("700002", "bob_premium", 2)
+	insertUser("700003", "carol_beta", 3)
+	insertUser("700004", "dave_banned", 4)
+	insertUser("700005", "erin_platform_banned", 5)
+	configuredID := insertUser("700006", "frank_configured", 6)
+
+	if _, err := pool.Exec(ctx, `
+		UPDATE users SET is_premium = TRUE WHERE username IN ('bob_premium', 'carol_beta');
+		UPDATE users SET is_beta_tester = TRUE WHERE username = 'carol_beta';
+		UPDATE users SET is_banned = TRUE WHERE username = 'dave_banned';
+	`); err != nil {
+		t.Fatalf("Failed to set user flags: %v", err)
+	}
+	// erin is banned only through her Twitch id, the way a platform ban lands.
+	if _, err := pool.Exec(ctx, `INSERT INTO banned_platform_ids (platform, platform_id, reason) VALUES ('twitch', '700005', 'spam')`); err != nil {
+		t.Fatalf("Failed to insert platform ban: %v", err)
+	}
+	var overlayID string
+	if err := pool.QueryRow(ctx, `INSERT INTO overlays (user_id, name) VALUES ($1, 'o') RETURNING id`, configuredID).Scan(&overlayID); err != nil {
+		t.Fatalf("Failed to insert overlay: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO overlay_chat_sources (overlay_id, platform) VALUES ($1, 'twitch')`, overlayID); err != nil {
+		t.Fatalf("Failed to insert source: %v", err)
+	}
+
+	names := func(users []*models.User) []string {
+		out := make([]string, len(users))
+		for i, u := range users {
+			out[i] = u.Username
+		}
+		return out
+	}
+	list := func(filter UserListFilter, limit, offset int) []string {
+		t.Helper()
+		users, err := repo.ListUsers(ctx, filter, limit, offset)
+		if err != nil {
+			t.Fatalf("ListUsers(%+v, %d, %d) error = %v", filter, limit, offset, err)
+		}
+		return names(users)
+	}
+
+	cases := []struct {
+		name   string
+		filter UserListFilter
+		want   []string
+	}{
+		{"banned includes platform-id bans", UserListFilter{Status: "banned"}, []string{"erin_platform_banned", "dave_banned"}},
+		{"active excludes both bans", UserListFilter{Status: "active"}, []string{"frank_configured", "carol_beta", "bob_premium", "alice"}},
+		{"premium", UserListFilter{Status: "premium"}, []string{"carol_beta", "bob_premium"}},
+		{"beta", UserListFilter{Status: "beta"}, []string{"carol_beta"}},
+		{"unconfigured", UserListFilter{Status: "unconfigured"}, []string{"erin_platform_banned", "dave_banned", "carol_beta", "bob_premium", "alice"}},
+		{"search is case-insensitive", UserListFilter{Query: "BOB"}, []string{"bob_premium"}},
+		{"search matches platform ids", UserListFilter{Query: "700004"}, []string{"dave_banned"}},
+		{"search matches the user id", UserListFilter{Query: configuredID}, []string{"frank_configured"}},
+		{"search and status combine", UserListFilter{Query: "_b", Status: "premium"}, []string{"carol_beta"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := list(tc.filter, 100, 0); !slices.Equal(got, tc.want) {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	t.Run("pages are newest first and do not overlap", func(t *testing.T) {
+		first := list(UserListFilter{}, 4, 0)
+		second := list(UserListFilter{}, 4, 4)
+		want := []string{"frank_configured", "erin_platform_banned", "dave_banned", "carol_beta", "bob_premium", "alice"}
+		if got := append(first, second...); !slices.Equal(got, want) {
+			t.Errorf("pages = %v + %v, want %v", first, second, want)
+		}
+	})
+
+	t.Run("counts follow the search, not the status tab", func(t *testing.T) {
+		counts, err := repo.CountUsers(ctx, "")
+		if err != nil {
+			t.Fatalf("CountUsers() error = %v", err)
+		}
+		want := map[string]int{"all": 6, "active": 4, "banned": 2, "premium": 2, "beta": 1, "unconfigured": 5}
+		if !maps.Equal(counts, want) {
+			t.Errorf("CountUsers(\"\") = %v, want %v", counts, want)
+		}
+
+		counts, err = repo.CountUsers(ctx, "_b")
+		if err != nil {
+			t.Fatalf("CountUsers(_b) error = %v", err)
+		}
+		// "_b" is a literal underscore, not a LIKE wildcard: it must match
+		// carol_beta, dave_banned and erin_platform_banned, but not bob_premium.
+		want = map[string]int{"all": 3, "active": 1, "banned": 2, "premium": 1, "beta": 1, "unconfigured": 3}
+		if !maps.Equal(counts, want) {
+			t.Errorf("CountUsers(\"_b\") = %v, want %v", counts, want)
+		}
+	})
 }
 
 func TestUserRepository_GetByID(t *testing.T) {

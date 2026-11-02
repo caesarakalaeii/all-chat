@@ -127,3 +127,23 @@ describe('docs structured data (JSON-LD)', () => {
     expect(src).toContain("'BreadcrumbList'")
   })
 })
+
+describe('login-gated pages', () => {
+  // Google only honours a noindex it may crawl. Blocking these in robots.txt
+  // instead got /dashboard "indexed, though blocked by robots.txt".
+  const gated = ['dashboard', 'settings', 'admin', 'overlays', 'translate', 'moderate', 'link']
+  const robots = read('robots.ts')
+
+  it.each(gated)('/%s sends noindex from its layout', (segment) => {
+    expect(read(`${segment}/layout.tsx`)).toMatch(/robots:\s*\{\s*index:\s*false/)
+  })
+
+  it.each(gated)('/%s is not disallowed in robots.txt', (segment) => {
+    expect(robots).not.toMatch(new RegExp(`'/${segment}'`))
+  })
+
+  it('does not let the /overlay/ rule swallow /overlays by prefix', () => {
+    expect(robots).toContain("'/overlay/'")
+    expect(robots).not.toContain("'/overlay',")
+  })
+})
