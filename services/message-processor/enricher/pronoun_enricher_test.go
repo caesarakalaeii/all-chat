@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -115,11 +116,53 @@ func TestPronounEnricher_TwitchMessage_HehimPronouns(t *testing.T) {
 	e := newTestPronounEnricher(t, mr, srv.URL)
 
 	msg := makeTwitchMsg("pajlada")
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if msg.User.Pronouns != "he/him" {
 		t.Errorf("expected pronouns %q, got %q", "he/him", msg.User.Pronouns)
+	}
+}
+
+// The lookup sends the chatter's Twitch login to a third party, so it runs only while
+// preparing a message for an overlay that displays pronouns. For an overlay with the
+// toggle off there must be no outbound request at all, for Twitch chatters and for
+// non-Twitch chatters with a linked Twitch account alike.
+func TestPronounEnricher_LooksUpOnlyForOverlaysShowingPronouns(t *testing.T) {
+	var lookups atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		lookups.Add(1)
+		w.Write([]byte(`{"channel_id":"11148817","channel_login":"pajlada","pronoun_id":"hehim","alt_pronoun_id":null}`))
+	}))
+	defer srv.Close()
+	mr := miniredis.RunT(t)
+	e := newTestPronounEnricher(t, mr, srv.URL)
+	ctx := context.Background()
+
+	for _, msg := range []*models.UnifiedChatMessage{makeTwitchMsg("pajlada"), makeKickMsg("kick-987", "pajlada")} {
+		if err := e.Enrich(ctx, msg, false); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if msg.User.Pronouns != "" {
+			t.Errorf("%s: expected no pronouns for an overlay with pronouns off, got %q", msg.Platform, msg.User.Pronouns)
+		}
+	}
+	if n := lookups.Load(); n != 0 {
+		t.Fatalf("expected no request to the pronouns API for an overlay with pronouns off, got %d", n)
+	}
+	if mr.Exists(PronounCacheKeyPrefix + "pajlada") {
+		t.Error("expected nothing cached for a lookup that never ran")
+	}
+
+	msg := makeTwitchMsg("pajlada")
+	if err := e.Enrich(ctx, msg, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.User.Pronouns != "he/him" {
+		t.Errorf("expected pronouns %q for an overlay with pronouns on, got %q", "he/him", msg.User.Pronouns)
+	}
+	if n := lookups.Load(); n != 1 {
+		t.Errorf("expected exactly 1 request for an overlay with pronouns on, got %d", n)
 	}
 }
 
@@ -130,7 +173,7 @@ func TestPronounEnricher_NonTwitch_WithTwitchUsername(t *testing.T) {
 	e := newTestPronounEnricher(t, mr, srv.URL)
 
 	msg := makeKickMsg("kick-987", "pajlada")
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if msg.User.Pronouns != "he/him" {
@@ -145,7 +188,7 @@ func TestPronounEnricher_NonTwitch_NoTwitchUsername_Skips(t *testing.T) {
 	e := newTestPronounEnricher(t, mr, srv.URL)
 
 	msg := makeKickMsg("kick-111", "") // no linked Twitch account
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if msg.User.Pronouns != "" {
@@ -160,7 +203,7 @@ func TestPronounEnricher_404_CachesEmptySentinel(t *testing.T) {
 	e := newTestPronounEnricher(t, mr, srv.URL)
 
 	msg := makeTwitchMsg("unknown")
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if msg.User.Pronouns != "" {
@@ -184,7 +227,7 @@ func TestPronounEnricher_NetworkError_SilentSkip(t *testing.T) {
 	e := newTestPronounEnricher(t, mr, "http://127.0.0.1:1") // nothing listening
 
 	msg := makeTwitchMsg("pajlada")
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("expected nil error on network failure (D-05 silent skip), got: %v", err)
 	}
 	if msg.User.Pronouns != "" {
@@ -204,7 +247,7 @@ func TestPronounEnricher_CacheHit_ReturnsCachedPronoun(t *testing.T) {
 	mr.SetTTL(cacheKey, 24*time.Hour)
 
 	msg := makeTwitchMsg("pajlada")
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should get "she/her" from cache, not "he/him" from API
@@ -225,7 +268,7 @@ func TestPronounEnricher_CacheHit_EmptySentinel_NoPronouns(t *testing.T) {
 	mr.SetTTL(cacheKey, 24*time.Hour)
 
 	msg := makeTwitchMsg("pajlada")
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if msg.User.Pronouns != "" {
@@ -240,7 +283,7 @@ func TestPronounEnricher_AltPronounID_SheTheyProduces(t *testing.T) {
 	e := newTestPronounEnricher(t, mr, srv.URL)
 
 	msg := makeTwitchMsg("shetheyperson")
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if msg.User.Pronouns != "she/they" {
@@ -255,7 +298,7 @@ func TestPronounEnricher_SingularPronoun_Any(t *testing.T) {
 	e := newTestPronounEnricher(t, mr, srv.URL)
 
 	msg := makeTwitchMsg("anyperson")
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if msg.User.Pronouns != "any" {
@@ -271,7 +314,7 @@ func TestPronounEnricher_CacheTTL(t *testing.T) {
 	e := newTestPronounEnricher(t, mr, srv.URL)
 
 	msg := makeTwitchMsg("pajlada")
-	if err := e.Enrich(context.Background(), msg); err != nil {
+	if err := e.Enrich(context.Background(), msg, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

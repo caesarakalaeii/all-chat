@@ -211,7 +211,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ### ADR-0010: Pronoun Enricher via Alejo API
 
-**Status**: Accepted
+**Status**: Accepted (amended 2026-11-02: the user lookup runs only for overlays whose pronoun display is on)
 **Date**: 2026-04-04
 **Problem**: Pronoun display for chat users requires an external API dependency on api.pronouns.alejo.io — the only publicly available opt-in pronoun data source for Twitch users
 **Decision**: Integrate Alejo API as a new enricher in the message-processor pipeline with 24h Redis cache and silent-fail on API errors; cross-platform lookup via linked Twitch accounts resolved in ViewerBadgeEnricher query
