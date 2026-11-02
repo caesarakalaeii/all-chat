@@ -240,6 +240,7 @@ export default function PrivacyPolicyPage() {
             <li>{t('legal.privacy.patreonTokens')}</li>
             <li>{t('legal.privacy.patreonMembership')}</li>
           </ul>
+          <p>{t('legal.privacy.patreonUnlinked')}</p>
           <p className={noteClasses}>
             {interpolateElements(t('legal.privacy.patreonNoPaymentData'), { not: notElement })}
           </p>

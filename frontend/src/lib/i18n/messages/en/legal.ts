@@ -217,7 +217,7 @@ export const legal = {
       'If you are an ambassador and opt in to the public showcase: your username, display name, profile image, platform and tagline, shown publicly on allch.at',
     // 2.4
     viewerAccountBody:
-      'Viewers can sign in with Twitch, YouTube or Kick through the browser extension, the participation page or the viewer settings. We store the platform user ID, username, display name, avatar and encrypted tokens (Twitch: no extra permissions; YouTube: read-only access and basic profile; Kick: basic profile), and the name color, avatar frame, flair and viewer premium status you have.',
+      'Viewers can sign in with Twitch, YouTube or Kick through the browser extension, the participation page or the viewer settings. We store the platform user ID, username, display name, avatar and encrypted tokens (Twitch: no extra permissions; YouTube: read-only access and basic profile; Kick: basic profile), and the name color, avatar frame, flair and viewer premium status you have. Unlinking a platform deletes its tokens and revokes them at the platform.',
     viewerIdentityBody:
       'If you choose to link several platform accounts (e.g.\u00A0Twitch + YouTube), we create a unified viewer profile that associates your platform identities. This is {emphasis}.',
     viewerIdentityEmphasis: 'opt-in only and requires your explicit action',
@@ -243,9 +243,11 @@ export const legal = {
     patreonUserId: 'Your Patreon user ID',
     patreonTokens: 'Encrypted OAuth access and refresh tokens for the Patreon API',
     patreonMembership:
-      'Your membership state for our campaign (status, tier, pledge amount, last and next charge date)',
+      'Your membership state for our campaign (status, tier, pledge amount and next charge date)',
+    patreonUnlinked:
+      "If you support us on Patreon without connecting All-Chat, Patreon's notifications still reach us; we then store only your Patreon user ID and membership state, so the membership can be matched once you connect.",
     patreonNoPaymentData:
-      'We do {not} receive or store your payment details; payments are processed entirely by Patreon. Patreon also sends us your email address and full name when you connect and with membership updates; we do not store them. Patreon notifies us via webhooks when your membership changes, and a periodic reconciliation keeps the state current. Disconnecting Patreon in the Settings page deletes the stored tokens and revokes subscription-derived premium.',
+      "We do {not} receive or store your payment details; payments are processed entirely by Patreon. Patreon's membership notifications also contain your email address, name and other profile details; we discard them without storing them. Patreon notifies us via webhooks when your membership changes, and a periodic reconciliation keeps the state current. Disconnecting Patreon in the Settings page deletes the stored tokens and revokes subscription-derived premium.",
     notEmphasis: 'not',
     // 2.8
     supportEmailBody:
@@ -303,7 +305,7 @@ export const legal = {
     platformApisEmotes:
       '7TV, BetterTTV and FrankerFaceZ for emote sets (only channel IDs are sent)',
     platformApisPronouns:
-      'The alejo.io pronoun service: we send the Twitch username of chatters to show their pronouns, and cache the answer for 24 hours',
+      'The alejo.io pronoun service: for overlays with pronoun display turned on (the default; you can switch it off per overlay), we send the Twitch username of each chatter, or the Twitch account a viewer linked, to look up their pronouns, and cache the answer for 24 hours',
     platformApisScopes:
       "Every integration remains subject to the platform's own policies and the scopes you approve.",
     // 5.2
@@ -378,9 +380,10 @@ export const legal = {
     retentionMedia: '{label} deleted with the item they belong to or with your account',
     retentionMediaLabel: 'Uploaded media:',
     retentionTokens:
-      '{label} deleted when you disconnect a platform or delete your account; credentials that can no longer be used are deleted 7 days after they expire',
+      '{label} deleted when you disconnect the platform in the Settings or delete your account; the platform you sign in with stays connected until you delete your account',
     retentionTokensLabel: 'OAuth tokens:',
-    retentionSentMessages: '{label} automatically deleted after 1 hour',
+    retentionSentMessages:
+      '{label} automatically deleted after one hour (checked every 15 minutes)',
     retentionSentMessagesLabel: 'Chat messages sent through All-Chat:',
     retentionDisplayedMessages:
       '{label} not stored in our database; up to 5 minutes in the replay buffer, up to 7 days if processing failed',
@@ -457,14 +460,14 @@ export const legal = {
     // Section 13, one paragraph per platform. What All-Chat does NOT access
     // is the load-bearing half of each of these.
     twitchNote:
-      'Through EventSub we receive chat, channel events (follows, subscriptions, bits, raids, channel point redemptions) and, if you enable them, polls, predictions and moderation events. Optional permissions you grant let All-Chat send chat messages, moderate, create clips and post as a bot. We do not access payment data or channel analytics.',
+      'Through EventSub we receive chat, channel events (follows, subscriptions, bits, raids, channel point redemptions) and, if you enable them, polls, predictions and moderation events. Optional permissions you grant let All-Chat send chat messages, moderate, create clips and post as a bot. We do not access payment data or channel analytics. Disconnecting Twitch in the Settings deletes your stored tokens and revokes them at Twitch.',
     youtubeNote:
-      "We read live chat through YouTube's public live chat endpoints or, in the premium official-API mode, the YouTube live chat API. With your permission we read your most recent subscribers for alerts and your subscriber count for goals, and optional permissions let All-Chat send messages and moderate. We do not access video content or channel analytics. API usage is subject to YouTube's quota limits. You can revoke access via {googleSettings} or the All-Chat Settings page. Disconnecting deletes your stored OAuth tokens.",
+      "We read live chat through YouTube's public live chat endpoints or, in the premium official-API mode, the YouTube live chat API. With your permission we read your most recent subscribers for alerts and your subscriber count for goals, and optional permissions let All-Chat send messages and moderate. We do not access video content or channel analytics. API usage is subject to YouTube's quota limits. You can revoke access via {googleSettings}, or disconnect YouTube in the All-Chat Settings, which deletes your stored OAuth tokens and revokes them at Google.",
     googleSettingsLinkText: 'Google security settings',
     tiktokNote:
       'TikTok offers no official chat API, so you only enter your TikTok handle and no TikTok login is involved. We read the public LIVE chat and events (gifts, likes, follows, shares) without accessing your videos, followers or other content. Remove the source to stop.',
     kickNote:
-      "We use Kick's OAuth for sign-in and sources and connect to Kick's realtime service to receive chat. Optional permissions let All-Chat send messages and moderate. We do not access channel analytics or payment data.",
+      "We use Kick's OAuth for sign-in and sources and connect to Kick's realtime service to receive chat. Optional permissions let All-Chat send messages and moderate. We do not access channel analytics or payment data. Disconnecting Kick in the Settings deletes your stored tokens and revokes them at Kick.",
     discordNote:
       'When you add the All-Chat bot to a server, we store the server ID and name and read messages, including content and attachments, in the channels you configure. Chat from your other platforms can be relayed into a Discord channel through a webhook. We do not read direct messages or channels you did not configure.',
     owncastNote:
@@ -472,7 +475,7 @@ export const legal = {
     publicChatNote:
       'We read public chat anonymously using the channel name you enter. No login with these platforms is involved, and we never post or moderate there.',
     metaNote:
-      'You connect a Facebook Page or an Instagram professional account through Meta. We poll live video comments and, on Facebook, can delete comments and block users on your instruction; Instagram is read-only. Both stay inactive until Meta has approved All-Chat in its app review.',
+      'You connect a Facebook Page or an Instagram professional account through Meta. We poll live video comments and, on Facebook, can delete comments and block users on your instruction; Instagram is read-only. Both stay inactive until Meta has approved All-Chat in its app review. Disconnecting deletes the stored tokens and the Facebook or Instagram sources; to revoke the grant at Meta itself, remove All-Chat from the apps connected to your Facebook account.',
     contactEmailRow: 'Email: {email}',
     contactHostedNote:
       'This contact is for users of the official hosted service at {host}. Self-hosted installations should contact their own administrator.',
