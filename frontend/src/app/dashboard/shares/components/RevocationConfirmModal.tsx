@@ -55,7 +55,7 @@ export function RevocationConfirmModal({
   }
   return (
     <AlertDialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <AlertDialog.Content className="lanes-app rounded-none border-white bg-black">
+      <AlertDialog.Content className="lanes-app rounded-none border-lanes-fg-strong bg-lanes-panel">
         <AlertDialog.Title className="mb-4 text-xl">
           {t('dashboard.shares.revokeTitle', { partner: partnerName })}
         </AlertDialog.Title>

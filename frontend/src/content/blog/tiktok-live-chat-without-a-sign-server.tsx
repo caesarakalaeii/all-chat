@@ -81,7 +81,7 @@ export default function Body() {
           smaller. The library keeps its network routes in a registry it explicitly invites you to
           swap out:
         </p>
-        <blockquote className="border-l-2 border-white/40 pl-4 italic">
+        <blockquote className="border-l-2 border-lanes-fg-strong/40 pl-4 italic">
           <p>
             Global route registry. Call sites should read handlers from here rather than importing
             the route functions directly, so downstream consumers can swap implementations.

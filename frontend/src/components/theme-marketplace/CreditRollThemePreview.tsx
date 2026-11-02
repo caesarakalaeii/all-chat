@@ -120,7 +120,7 @@ export default function CreditRollThemePreview({
   }, [css, scopeId])
 
   return (
-    <div id={scopeId} className="relative h-full w-full overflow-hidden">
+    <div id={scopeId} className="theme-dark relative h-full w-full overflow-hidden">
       {/* Inject scoped theme CSS */}
       <style dangerouslySetInnerHTML={{ __html: scopedCss }} />
 

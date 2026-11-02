@@ -380,7 +380,7 @@ function ApiKeyInput({
             </Button>
           </div>
           {error && (
-            <p role="alert" className="mt-1 text-xs font-medium text-red-400">
+            <p role="alert" className="mt-1 text-xs font-medium text-destructive">
               {error}
             </p>
           )}

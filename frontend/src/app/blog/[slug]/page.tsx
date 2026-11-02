@@ -97,7 +97,7 @@ export default async function BlogPostPage({ params }: PostPageProps) {
         </div>
       </article>
 
-      <nav className="mt-12 border-t border-white/20 pt-6">
+      <nav className="mt-12 border-t border-lanes-fg-strong/20 pt-6">
         <Link href="/blog" className="text-sm underline underline-offset-2">
           {t('blog.backToIndex')}
         </Link>

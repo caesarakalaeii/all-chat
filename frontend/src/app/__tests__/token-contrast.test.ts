@@ -93,32 +93,35 @@ function contrast(a: LinearRGB, b: LinearRGB): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-/**
- * Resolves `--color-*` tokens from the @theme block. Handles the forms the
- * token system actually uses: hex, absolute oklch(L C H), and var() aliases.
- * Alpha/relative forms (border, badge-bg, nav-bg) are intentionally skipped:
- * they are decorative-by-design and meaningless without a composite backdrop.
- */
-function parseThemeTokens(css: string): Map<string, LinearRGB> {
-  const themeStart = css.indexOf('@theme {')
-  if (themeStart === -1) throw new Error('globals.css: @theme block not found')
+/** The declaration block that follows `marker` (e.g. `@theme {`) in the CSS. */
+function blockAfter(css: string, marker: string): string {
+  const start = css.indexOf(marker)
+  if (start === -1) throw new Error(`globals.css: ${marker} block not found`)
   let depth = 0
-  let end = themeStart
-  for (let i = css.indexOf('{', themeStart); i < css.length; i++) {
+  for (let i = css.indexOf('{', start); i < css.length; i++) {
     if (css[i] === '{') depth++
     if (css[i] === '}') depth--
-    if (depth === 0) {
-      end = i
-      break
-    }
+    if (depth === 0) return css.slice(start, i)
   }
-  const block = css.slice(themeStart, end)
+  throw new Error(`globals.css: ${marker} block is not closed`)
+}
 
+/** Every custom property declared in a block, name -> raw value. */
+function declarations(block: string): Map<string, string> {
   const raw = new Map<string, string>()
-  for (const m of block.matchAll(/(--color-[\w-]+)\s*:\s*([^;]+);/g)) {
+  for (const m of block.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
     raw.set(m[1], m[2].trim())
   }
+  return raw
+}
 
+/**
+ * Resolves `--color-*` tokens. Handles the forms the token system actually
+ * uses: hex, absolute oklch(L C H), and var() aliases. Alpha/relative forms
+ * (border, badge-bg, nav-bg) are intentionally skipped: they are
+ * decorative-by-design and meaningless without a composite backdrop.
+ */
+function resolveTokens(raw: Map<string, string>): Map<string, LinearRGB> {
   const resolved = new Map<string, LinearRGB>()
   const resolve = (name: string, seen: Set<string> = new Set()): LinearRGB | null => {
     if (resolved.has(name)) return resolved.get(name) ?? null
@@ -148,15 +151,25 @@ function parseThemeTokens(css: string): Map<string, LinearRGB> {
     // Alpha/relative/color-mix forms: skipped by design (see docblock).
     return null
   }
-  for (const name of raw.keys()) resolve(name)
+  for (const name of raw.keys()) if (name.startsWith('--color-')) resolve(name)
   return resolved
 }
 
 const css = readFileSync(join(__dirname, '..', 'globals.css'), 'utf-8')
-const tokens = parseThemeTokens(css)
 
-function token(name: string): LinearRGB {
-  const rgb = tokens.get(name)
+// Dark is the @theme block itself. Light (ADR-0087) is the same tokens with
+// the :root[data-theme='light'] overrides on top, and must keep every promise
+// dark keeps.
+const darkRaw = declarations(blockAfter(css, '@theme {'))
+const lightOverrides = declarations(blockAfter(css, ":root[data-theme='light'] {"))
+const THEMES = {
+  dark: resolveTokens(darkRaw),
+  light: resolveTokens(new Map([...darkRaw, ...lightOverrides])),
+}
+type ThemeName = keyof typeof THEMES
+
+function tokenIn(theme: ThemeName, name: string): LinearRGB {
+  const rgb = THEMES[theme].get(name)
   if (!rgb) throw new Error(`token ${name} missing or unresolvable — did the @theme block change?`)
   return rgb
 }
@@ -180,138 +193,176 @@ const PLATFORMS = [
   '--color-discord',
 ] as const
 
-describe('design token contrast (WCAG 2.2 AA)', () => {
-  it('oklch conversion matches the rendered bg the design system documents', () => {
-    // The platform-color comment claims AA "on dark backgrounds (#020204)" —
-    // the browser-rendered value of --color-bg. If this fails, the conversion
-    // math drifted and every other assertion here is meaningless.
-    expect(toHex(token('--color-bg'))).toBe('#020204')
-  })
+for (const theme of Object.keys(THEMES) as ThemeName[]) {
+  const token = (name: string) => tokenIn(theme, name)
 
-  for (const text of TEXT_TOKENS) {
-    for (const backdrop of BACKDROPS) {
-      it(`${text} on ${backdrop} ≥ ${AA_TEXT}:1`, () => {
-        expect(contrast(token(text), token(backdrop))).toBeGreaterThanOrEqual(AA_TEXT)
+  describe(`${theme}: design token contrast (WCAG 2.2 AA)`, () => {
+    it.runIf(theme === 'dark')(
+      'oklch conversion matches the rendered bg the design system documents',
+      () => {
+        // The platform-color comment claims AA "on dark backgrounds (#020204)" —
+        // the browser-rendered value of --color-bg. If this fails, the conversion
+        // math drifted and every other assertion here is meaningless.
+        expect(toHex(token('--color-bg'))).toBe('#020204')
+      }
+    )
+
+    for (const text of TEXT_TOKENS) {
+      for (const backdrop of BACKDROPS) {
+        it(`${text} on ${backdrop} ≥ ${AA_TEXT}:1`, () => {
+          expect(contrast(token(text), token(backdrop))).toBeGreaterThanOrEqual(AA_TEXT)
+        })
+      }
+    }
+
+    it('--color-text-dim stays a tier below --color-text-sub', () => {
+      // Visual hierarchy contract from the token comments: dim < sub < text.
+      const bg = token('--color-bg')
+      expect(contrast(token('--color-text-dim'), bg)).toBeLessThan(
+        contrast(token('--color-text-sub'), bg)
+      )
+    })
+
+    for (const platform of PLATFORMS) {
+      it(`${platform} as UI component color on --color-bg ≥ ${AA_UI}:1`, () => {
+        expect(contrast(token(platform), token('--color-bg'))).toBeGreaterThanOrEqual(AA_UI)
       })
     }
-  }
 
-  it('--color-text-dim stays a tier below --color-text-sub', () => {
-    // Visual hierarchy contract from the token comments: dim < sub < text.
-    const bg = token('--color-bg')
-    expect(contrast(token('--color-text-dim'), bg)).toBeLessThan(
-      contrast(token('--color-text-sub'), bg)
-    )
+    // The token block claims text-level AA for every platform color: the raw
+    // brands that miss it (Twitch, Facebook, Instagram, Discord) are lightened.
+    for (const platform of PLATFORMS) {
+      it(`${platform} as text on --color-bg ≥ ${AA_TEXT}:1`, () => {
+        expect(contrast(token(platform), token('--color-bg'))).toBeGreaterThanOrEqual(AA_TEXT)
+      })
+    }
   })
 
-  for (const platform of PLATFORMS) {
-    it(`${platform} as UI component color on --color-bg ≥ ${AA_UI}:1`, () => {
-      expect(contrast(token(platform), token('--color-bg'))).toBeGreaterThanOrEqual(AA_UI)
-    })
-  }
+  /**
+   * Status colors and the shadcn compatibility layer (ADR-0056).
+   *
+   * `--color-destructive` and friends are the tokens that replace the 300-odd
+   * raw palette classes (`text-red-400`, `text-amber-300`, …) the codebase grew
+   * while no status token existed. They are used as *text* on all three
+   * backdrops, so they carry the same AA floor as the text tokens above.
+   *
+   * The alias block below is what makes an unmodified shadcn registry component
+   * render correctly here: the registry ships `bg-primary` / `text-muted-
+   * foreground` / `border-input`, this maps those names onto the tokens the
+   * design system actually defines. Every alias is asserted, so an alias that
+   * points at a missing or renamed token fails here rather than compiling to an
+   * empty rule — the exact failure mode ADR-0056 was written to end.
+   */
+  describe(`${theme}: status token contrast (WCAG 2.2 AA)`, () => {
+    const STATUS_TOKENS = [
+      '--color-destructive',
+      '--color-success',
+      '--color-warning',
+      '--color-info',
+      '--color-premium',
+    ] as const
 
-  // The token block claims text-level AA for every platform color: the raw
-  // brands that miss it (Twitch, Facebook, Instagram, Discord) are lightened.
-  for (const platform of PLATFORMS) {
-    it(`${platform} as text on --color-bg ≥ ${AA_TEXT}:1`, () => {
-      expect(contrast(token(platform), token('--color-bg'))).toBeGreaterThanOrEqual(AA_TEXT)
+    for (const status of STATUS_TOKENS) {
+      for (const backdrop of BACKDROPS) {
+        it(`${status} as text on ${backdrop} ≥ ${AA_TEXT}:1`, () => {
+          expect(contrast(token(status), token(backdrop))).toBeGreaterThanOrEqual(AA_TEXT)
+        })
+      }
+    }
+
+    it('--color-premium is visually distinct from --color-warning', () => {
+      // Both are golds, and before the token existed "premium" was written as
+      // amber-400 — which is very nearly the warning colour. Two tokens carrying
+      // different meanings must not resolve to the same paint, or a "paid
+      // feature" marker and a "something may go wrong" marker become
+      // indistinguishable wherever they sit near each other.
+      expect(token('--color-premium')).not.toEqual(token('--color-warning'))
     })
-  }
-})
+  })
+
+  describe(`${theme}: shadcn compatibility layer`, () => {
+    // name -> the token it must alias. Keep in sync with the alias block in
+    // globals.css; a rename on either side fails the resolution assertion.
+    const ALIASES: Record<string, string> = {
+      '--color-background': '--color-bg',
+      '--color-foreground': '--color-text',
+      '--color-card': '--color-surface',
+      '--color-card-foreground': '--color-text',
+      '--color-popover': '--color-surface',
+      '--color-popover-foreground': '--color-text',
+      '--color-primary': '--color-twitch',
+      '--color-primary-foreground': '--color-bg',
+      '--color-secondary': '--color-surface-2',
+      '--color-secondary-foreground': '--color-text',
+      '--color-muted': '--color-surface-2',
+      '--color-muted-foreground': '--color-text-sub',
+      '--color-accent': '--color-surface-2',
+      '--color-accent-foreground': '--color-text',
+      '--color-destructive-foreground': '--color-bg',
+      '--color-ring': '--color-twitch',
+    }
+
+    for (const [alias, target] of Object.entries(ALIASES)) {
+      it(`${alias} resolves to ${target}`, () => {
+        expect(token(alias)).toEqual(token(target))
+      })
+    }
+
+    // Foreground/background pairs a shadcn component puts together by default.
+    // These are filled surfaces, so the text on them needs the full text floor.
+    const PAIRS: [string, string][] = [
+      ['--color-foreground', '--color-background'],
+      ['--color-card-foreground', '--color-card'],
+      ['--color-popover-foreground', '--color-popover'],
+      ['--color-primary-foreground', '--color-primary'],
+      ['--color-secondary-foreground', '--color-secondary'],
+      ['--color-muted-foreground', '--color-muted'],
+      ['--color-accent-foreground', '--color-accent'],
+      ['--color-destructive-foreground', '--color-destructive'],
+    ]
+
+    for (const [fg, bg] of PAIRS) {
+      it(`${fg} on ${bg} ≥ ${AA_TEXT}:1`, () => {
+        expect(contrast(token(fg), token(bg))).toBeGreaterThanOrEqual(AA_TEXT)
+      })
+    }
+
+    it('--color-ring is discernible as a focus indicator on every backdrop', () => {
+      // WCAG 2.2 SC 1.4.11 — the focus ring is a non-text UI component.
+      for (const backdrop of BACKDROPS) {
+        expect(contrast(token('--color-ring'), token(backdrop))).toBeGreaterThanOrEqual(AA_UI)
+      }
+    })
+  })
+}
 
 /**
- * Status colors and the shadcn compatibility layer (ADR-0056).
- *
- * `--color-destructive` and friends are the tokens that replace the 300-odd
- * raw palette classes (`text-red-400`, `text-amber-300`, …) the codebase grew
- * while no status token existed. They are used as *text* on all three
- * backdrops, so they carry the same AA floor as the text tokens above.
- *
- * The alias block below is what makes an unmodified shadcn registry component
- * render correctly here: the registry ships `bg-primary` / `text-muted-
- * foreground` / `border-input`, this maps those names onto the tokens the
- * design system actually defines. Every alias is asserted, so an alias that
- * points at a missing or renamed token fails here rather than compiling to an
- * empty rule — the exact failure mode ADR-0056 was written to end.
+ * The .theme-dark scope (ADR-0087) keeps chat-theme previews and the homepage
+ * stream mockups dark on a light page. Custom properties inherit as computed
+ * values, so it cannot point back at the root's dark tokens: it restates
+ * them. This keeps the restatement exact and complete — every value the light
+ * theme changes, and every alias computed from one, must be restated with its
+ * dark value, or that part of a "dark" preview silently turns light.
  */
-describe('status token contrast (WCAG 2.2 AA)', () => {
-  const STATUS_TOKENS = [
-    '--color-destructive',
-    '--color-success',
-    '--color-warning',
-    '--color-info',
-    '--color-premium',
-  ] as const
+describe('.theme-dark restates the dark theme', () => {
+  const island = declarations(blockAfter(css, '.theme-dark {'))
+  const lanesDark = declarations(blockAfter(css, ':root {'))
+  const darkValue = (name: string) => darkRaw.get(name) ?? lanesDark.get(name)
 
-  for (const status of STATUS_TOKENS) {
-    for (const backdrop of BACKDROPS) {
-      it(`${status} as text on ${backdrop} ≥ ${AA_TEXT}:1`, () => {
-        expect(contrast(token(status), token(backdrop))).toBeGreaterThanOrEqual(AA_TEXT)
-      })
-    }
+  const dependsOnOverride = (name: string, seen = new Set<string>()): boolean => {
+    if (lightOverrides.has(name)) return true
+    if (seen.has(name)) return false
+    seen.add(name)
+    const value = darkValue(name) ?? ''
+    return [...value.matchAll(/var\((--[\w-]+)\)/g)].some((m) => dependsOnOverride(m[1], seen))
   }
+  const needed = [
+    ...new Set([...darkRaw.keys(), ...lanesDark.keys(), ...lightOverrides.keys()]),
+  ].filter((name) => dependsOnOverride(name))
 
-  it('--color-premium is visually distinct from --color-warning', () => {
-    // Both are golds, and before the token existed "premium" was written as
-    // amber-400 — which is very nearly the warning colour. Two tokens carrying
-    // different meanings must not resolve to the same paint, or a "paid
-    // feature" marker and a "something may go wrong" marker become
-    // indistinguishable wherever they sit near each other.
-    expect(token('--color-premium')).not.toEqual(token('--color-warning'))
-  })
-})
-
-describe('shadcn compatibility layer', () => {
-  // name -> the token it must alias. Keep in sync with the alias block in
-  // globals.css; a rename on either side fails the resolution assertion.
-  const ALIASES: Record<string, string> = {
-    '--color-background': '--color-bg',
-    '--color-foreground': '--color-text',
-    '--color-card': '--color-surface',
-    '--color-card-foreground': '--color-text',
-    '--color-popover': '--color-surface',
-    '--color-popover-foreground': '--color-text',
-    '--color-primary': '--color-twitch',
-    '--color-primary-foreground': '--color-bg',
-    '--color-secondary': '--color-surface-2',
-    '--color-secondary-foreground': '--color-text',
-    '--color-muted': '--color-surface-2',
-    '--color-muted-foreground': '--color-text-sub',
-    '--color-accent': '--color-surface-2',
-    '--color-accent-foreground': '--color-text',
-    '--color-destructive-foreground': '--color-bg',
-    '--color-ring': '--color-twitch',
-  }
-
-  for (const [alias, target] of Object.entries(ALIASES)) {
-    it(`${alias} resolves to ${target}`, () => {
-      expect(token(alias)).toEqual(token(target))
+  for (const name of needed) {
+    it(`${name} is restated with its dark value`, () => {
+      expect(island.get(name)).toBe(darkValue(name))
     })
   }
-
-  // Foreground/background pairs a shadcn component puts together by default.
-  // These are filled surfaces, so the text on them needs the full text floor.
-  const PAIRS: [string, string][] = [
-    ['--color-foreground', '--color-background'],
-    ['--color-card-foreground', '--color-card'],
-    ['--color-popover-foreground', '--color-popover'],
-    ['--color-primary-foreground', '--color-primary'],
-    ['--color-secondary-foreground', '--color-secondary'],
-    ['--color-muted-foreground', '--color-muted'],
-    ['--color-accent-foreground', '--color-accent'],
-    ['--color-destructive-foreground', '--color-destructive'],
-  ]
-
-  for (const [fg, bg] of PAIRS) {
-    it(`${fg} on ${bg} ≥ ${AA_TEXT}:1`, () => {
-      expect(contrast(token(fg), token(bg))).toBeGreaterThanOrEqual(AA_TEXT)
-    })
-  }
-
-  it('--color-ring is discernible as a focus indicator on every backdrop', () => {
-    // WCAG 2.2 SC 1.4.11 — the focus ring is a non-text UI component.
-    for (const backdrop of BACKDROPS) {
-      expect(contrast(token('--color-ring'), token(backdrop))).toBeGreaterThanOrEqual(AA_UI)
-    }
-  })
 })

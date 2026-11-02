@@ -40,7 +40,7 @@ export default function GuidesIndexPage() {
 
       <ul className="space-y-8">
         {GUIDES.map((guide) => (
-          <li key={guide.path} className="space-y-2 border-t border-white/20 pt-6">
+          <li key={guide.path} className="space-y-2 border-t border-lanes-fg-strong/20 pt-6">
             <h2 className="text-xl">
               <Link href={guide.path} className="underline underline-offset-4">
                 {t(guide.labelKey)}
