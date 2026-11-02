@@ -75,7 +75,9 @@ Redis Streams (chat:raw)
 
 ## Features
 
-- **OAuth 2.0**: Per-user OAuth tokens stored in PostgreSQL
+- **OAuth 2.0**: Per-user OAuth tokens stored in PostgreSQL. auth-service creates the rows on
+  consent and deletes them when the streamer disconnects YouTube (ADR-0088); this service only
+  writes a refreshed token back to an existing row and never recreates a deleted one
 - **Live Stream Detection**: Automatically detects when channels go live
 - **Adaptive Polling**: Uses API-recommended polling intervals (typically 2-5 seconds)
 - **Quota Management**: Tracks daily YouTube API quota (default 1,009,000 units/day)
