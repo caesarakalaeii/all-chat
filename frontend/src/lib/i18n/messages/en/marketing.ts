@@ -320,8 +320,9 @@ export const marketing = {
     kicker: 'FOR VIEWERS · BROWSER EXTENSION',
     titleTop: 'JUST WATCHING?',
     titleBottom: 'SEE EVERY CHAT.',
-    titleCategory:
-      'Free browser extension for Chrome and Firefox: the streamer’s Twitch, YouTube, Kick, TikTok and Discord chat in one panel on twitch.tv, youtube.com and kick.com',
+    // Same length budget as lanes.titleCategory: two or three lines under the
+    // display type. The platform and site lists live in demoBody.
+    titleCategory: 'Free multistream chat extension for viewers on Twitch, YouTube and Kick',
     manifestoLine1: 'MULTICHAT TOOLS ARE BUILT FOR STREAMERS.',
     manifestoLine2: 'THIS ONE IS BUILT FOR YOU.',
     ctaChrome: 'ADD TO CHROME — FREE →',
