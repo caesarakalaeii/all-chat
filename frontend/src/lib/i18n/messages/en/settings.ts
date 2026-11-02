@@ -166,6 +166,19 @@ export const settings = {
     disconnecting: 'Disconnecting…',
     loadLinkedFailed: 'Could not load linked platforms',
     disconnectFailed: 'Failed to disconnect platform',
+    // Erasing the viewer's own data (ADR-0088).
+    deleteHeading: 'Delete viewer data',
+    deleteBody:
+      'Permanently erase your viewer identity: linked platforms, name color and avatar cosmetics, points, poll votes and predictions in every channel, the messages you sent through All-Chat, and your viewer Patreon connection. Votes and points you collected by chat command without signing in are included. A streamer account you have is not affected.',
+    deleteButton: 'Delete my viewer data',
+    deleteConfirmTitle: 'Delete your viewer data?',
+    deleteConfirmBody:
+      'Everything listed is erased right away and you are signed out. This cannot be undone. A Patreon membership is not cancelled by this; cancel it on Patreon. If you keep chatting in channels that run All-Chat polls or points, new data is collected from then on.',
+    deleteCancel: 'Cancel',
+    deleteConfirm: 'Yes, delete my viewer data',
+    deleting: 'Deleting…',
+    deleteFailed: 'Could not delete your viewer data. Please try again.',
+    deletedToast: 'Your viewer data was deleted',
   },
   // Settings → API tokens: minting, listing and revoking the personal access
   // tokens the Stream Deck and StreamController plugins authenticate with.

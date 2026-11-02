@@ -133,6 +133,14 @@ export const viewerApi = {
   },
 
   /**
+   * Permanently erase the signed-in viewer's own data (ADR-0088). The server revokes
+   * the token; the caller clears it locally with viewerLogout().
+   */
+  async deleteViewerData(): Promise<void> {
+    await viewerApiClient.delete('/api/v1/auth/viewer/me')
+  },
+
+  /**
    * Viewer premium (ADR-0019): the viewer-scoped Patreon connection, authenticated
    * with the viewer JWT. Mirrors the streamer payment API but grants the cheaper
    * viewer cosmetic product.
