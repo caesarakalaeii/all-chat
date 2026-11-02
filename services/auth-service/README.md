@@ -96,6 +96,10 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 # allchat_active_users{window=...} are re-sampled from the database
 USAGE_SAMPLE_INTERVAL_SECONDS=120
 
+# Public base of uploaded media, used for the file URLs in the data export.
+# Same value as media-service's; defaults to production's.
+MEDIA_PUBLIC_URL=https://media.allch.at/allchat-media
+
 # Application
 APP_VERSION=dev
 ENVIRONMENT=development
@@ -247,6 +251,64 @@ Authorization: Bearer <jwt-token>
 Body: { "completed": true }
 → Returns: { "onboarding_completed_at": "2026-07-17T12:00:00Z" }
 ```
+
+### Data export (DSGVO Art. 15/20)
+
+```bash
+# Everything stored about the streamer account, as one JSON file.
+GET /api/v1/auth/me/data-export
+Authorization: Bearer <jwt-token>          # session only — a PAT is refused (403)
+
+# Everything stored about the viewer identity in a viewer token.
+GET /api/v1/auth/viewer/data-export
+Authorization: Bearer <viewer-jwt>
+→ 200, Content-Disposition: attachment; filename=allchat-data-export.json
+```
+
+The frontend's "Download my data" buttons call these: `/settings` (Data & Privacy
+card) and `/settings/viewer` ("Your data" card). Sections are defined in
+`handlers/data_export.go`; each is one query whose rows become a JSON list.
+
+Streamer export (`format_version: 2`):
+
+| Key | Contents |
+| --- | --- |
+| `user` | Profile, platform ids, roles (premium, admin override, beta tester, ambassador, admin), ban status and reason, onboarding date |
+| `linked_accounts` | Sign-in grant and every connected platform account (Twitch, YouTube, Kick, TikTok, Facebook, Instagram, Patreon, moderation credentials): account id/name, scopes, expiry |
+| `overlays` | Each overlay with its chat sources and settings: config, event settings, alert profiles, goal, list, credit roll, points config, TTS voice |
+| `alert_events`, `stream_sessions`, `polls`, `predictions` | Activity on the user's overlays |
+| `chat_commands`, `chat_timers`, `chat_bot_settings`, `chat_bot_accounts` | Chat commands and bots (bot login and display name only) |
+| `media` | Uploaded files: name, type, size, object key, public URL |
+| `api_tokens`, `devices` | Token and paired-device names, scopes, created/last used/expiry/revoked |
+| `translations`, `requested_locales` | Strings submitted and languages requested in `/translate` |
+| `premium_subscriptions` | Provider, status, tier, amount, period end |
+| `ambassador_showcase` | Tagline and homepage consent |
+| `moderation_actions` | Actions the user took, and every action on the user's overlays |
+| `moderation_delegations` | Moderator grants given and received, including revoked ones |
+| `share_requests` | Overlay shares sent and received |
+| `impersonations` | When an admin signed in as the user, and which admin |
+| `discord_accounts`, `discord_guilds` | Linked Discord identity and connected servers |
+| `viewer_sessions`, `messages` | Viewer sessions linked to the account; messages sent through All-Chat (kept 1 h) |
+| `viewer_accounts` | The viewer export below, for each viewer identity the user signed in with |
+
+Viewer export: `profile`, `platform_identities`, `sessions`, `cosmetics`, `points`,
+`points_transactions`, `poll_votes`, `prediction_entries`, `messages`,
+`premium_subscriptions`, `linked_patreon_accounts`.
+
+Deliberate rules:
+
+- **No credentials, ever.** Tokens, token hashes, API keys and signing secrets are
+  never selected; tables that hold one are listed column by column. Settings tables
+  without one are exported whole-row so new settings appear automatically;
+  `TestWholeRowExportTablesHoldNoCredentials` fails if one of them gains a
+  credential column. `premium_subscriptions.raw` (the provider's webhook payload,
+  which also describes the campaign) is left out.
+- **All or nothing.** The export is read in one read-only snapshot with timestamps in
+  UTC. A failing section fails the request (500) rather than returning a file that
+  silently omits it.
+- **Event logs are capped** at their 10,000 most recent rows each (alert events,
+  moderation actions, point transactions, votes, prediction entries, messages).
+- Bump `exportFormatVersion` when a section is added, removed or reshaped.
 
 ### Personal Access Tokens (ADR-0051)
 
@@ -525,6 +587,14 @@ go test ./... -cover
 go test ./oauth -v
 go test ./handlers -v
 go test ./repository -v
+```
+
+The data-export tests apply the full migration set to a fresh database on a
+testcontainer, or, without Docker, on any Postgres you point them at (they create
+and drop their own database there):
+
+```bash
+TEST_DATABASE_URL=postgres://user@localhost:5432/postgres go test ./handlers -run 'DataExport|Delegations|WholeRow'
 ```
 
 ---

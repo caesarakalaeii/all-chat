@@ -79,6 +79,14 @@ export const authApi = {
   },
 
   /**
+   * Everything stored about the signed-in streamer, as the JSON export the
+   * privacy policy promises (DSGVO Art. 15/20).
+   */
+  async exportData(): Promise<unknown> {
+    return apiClient.get<unknown>('/api/v1/auth/me/data-export')
+  },
+
+  /**
    * Set (true = finished/dismissed) or clear (false = restart from Settings)
    * the first-run setup guide state. Rejected with 403 while impersonating.
    */

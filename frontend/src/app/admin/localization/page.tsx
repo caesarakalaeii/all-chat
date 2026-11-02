@@ -40,6 +40,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { DialogRoot, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
+import { downloadJson } from '@/lib/utils/download'
 import { useTranslations } from '@/lib/i18n'
 import { enMessages } from '@/lib/i18n/messages/en'
 import {
@@ -157,15 +158,7 @@ export default function AdminLocalizationPage() {
     setExporting(code)
     localizationAdminApi
       .exportLocale(code)
-      .then((data) => {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `localization-export-${code}.json`
-        a.click()
-        URL.revokeObjectURL(url)
-      })
+      .then((data) => downloadJson(`localization-export-${code}.json`, data))
       .catch(() =>
         toastManager.add({ title: t('admin.localization.exportFailedToast'), type: 'error' })
       )
