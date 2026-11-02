@@ -37,6 +37,34 @@ export const settings: LocaleNamespace<'settings'> = {
     checkFailed:
       'Konnte nicht prüfen, welche Sprachen du verwenden kannst. Englisch ist immer verfügbar.',
   },
+  connections: {
+    heading: 'Verbundene Plattformen',
+    body: 'All-Chat speichert für jede verbundene Plattform ein OAuth-Token. Wenn du eine Plattform trennst, werden ihre Tokens gelöscht.',
+    loading: 'Verbundene Plattformen werden geladen',
+    loadFailed: 'Deine verbundenen Plattformen konnten nicht geladen werden.',
+    empty: 'Keine Plattformen verbunden.',
+    signInBadge: 'Anmeldung',
+    signInNote:
+      'Du meldest dich mit {platform} an, deshalb kann es hier nicht getrennt werden. Die Tokens werden gelöscht, wenn du dein Konto löschst.',
+    disconnect: 'Trennen',
+    disconnectLabel: '{platform} trennen',
+    disconnecting: 'Wird getrennt…',
+    disconnectTitle: '{platform} trennen?',
+    effectTwitch:
+      'Deine Twitch-Tokens werden gelöscht und Twitch wird gebeten, sie zu widerrufen. Deine Twitch-Quellen bleiben in deinen Overlays, empfangen aber keinen Chat mehr, und Senden und Moderation auf Twitch funktionieren nicht mehr, bis du Twitch wieder verbindest.',
+    effectYoutube:
+      'Deine YouTube-Tokens werden gelöscht und Google wird gebeten, sie zu widerrufen. Deine YouTube-Quellen lesen weiterhin öffentliche Streams, dafür ist kein Token nötig. Nicht gelistete Streams und Streams nur für Mitglieder, Abo-Alerts, Senden und Moderation auf YouTube funktionieren nicht mehr, bis du YouTube wieder verbindest.',
+    effectKick:
+      'Deine Kick-Tokens werden gelöscht und Kick wird gebeten, sie zu widerrufen. Deine Kick-Quellen empfangen weiterhin Chat. Senden und Moderation auf Kick funktionieren nicht mehr, bis du Kick wieder verbindest.',
+    effectFacebook:
+      'Deine Tokens für Facebook-Seiten werden gelöscht und deine Facebook-Quellen werden aus deinen Overlays entfernt. Meta bietet uns keinen Weg, das Token zu widerrufen. Entferne All-Chat deshalb auch aus den Apps, die mit deinem Facebook-Konto verbunden sind.',
+    effectInstagram:
+      'Deine Instagram-Tokens werden gelöscht und deine Instagram-Quellen werden aus deinen Overlays entfernt. Meta bietet uns keinen Weg, das Token zu widerrufen. Entferne All-Chat deshalb auch aus den Apps, die mit deinem Facebook-Konto verbunden sind.',
+    disconnectCancel: 'Abbrechen',
+    disconnectConfirm: 'Ja, trennen',
+    disconnectedToast: '{platform} getrennt',
+    disconnectFailedToast: '{platform} konnte nicht getrennt werden',
+  },
   index: {
     heading: 'Einstellungen',
     profileHeading: 'Profil',

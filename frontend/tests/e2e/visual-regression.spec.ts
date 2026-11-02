@@ -260,7 +260,16 @@ test.describe('visual baselines (chrome)', () => {
 
   test('settings', async ({ page }) => {
     // The language card probes its gate; the open state is the steady one to baseline.
-    await mockAuthedApi(page, { '**/api/v1/ui-languages': { enabled: true } })
+    // The connected platforms card is baselined with a sign-in and a linked platform.
+    await mockAuthedApi(page, {
+      '**/api/v1/ui-languages': { enabled: true },
+      '**/api/v1/auth/me/connections': {
+        connections: [
+          { platform: 'twitch', accounts: ['smoke_channel'], is_login: true },
+          { platform: 'youtube', accounts: ['UCsmokeChannel'], is_login: false },
+        ],
+      },
+    })
     await page.goto('/settings')
     await expectBaseline(
       page,

@@ -32,6 +32,7 @@ import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { toastManager } from '@/lib/toast'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AmbassadorSettingsCard } from '@/components/settings/AmbassadorSettingsCard'
+import { ConnectedPlatformsCard } from '@/components/settings/ConnectedPlatformsCard'
 import { LanguageSettingsCard } from '@/components/settings/LanguageSettingsCard'
 import {
   getGuilds,
@@ -238,6 +239,8 @@ function SettingsContent() {
             </div>
           </div>
         </div>
+
+        <ConnectedPlatformsCard />
 
         <LanguageSettingsCard />
 
