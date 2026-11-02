@@ -1498,7 +1498,9 @@ span.font-semibold.text-sm.username-gradient {
   .ctabar {
     grid-template-columns: 1fr;
     padding: 12px 16px;
-    height: auto;
+    /* The bar stacks into three rows here; the desktop flex-basis of 52px
+     * would clip them below the stage, so size it by its content. */
+    flex-basis: auto;
     min-height: 52px;
   }
   .ctabar .cta-go {
