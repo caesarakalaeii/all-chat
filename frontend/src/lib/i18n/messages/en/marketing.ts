@@ -17,8 +17,8 @@
  */
 
 /**
- * The public homepage ("lanes" design), the upgrade page and the device-link
- * flow.
+ * The public homepage ("lanes" design), the upgrade page, the device-link
+ * flow and the viewer-facing /browser-extension page.
  *
  * The homepage is marketing art direction (mockup G): manifesto voice,
  * lowercase mono chrome, five platform lanes. Its copy lives under
@@ -63,6 +63,8 @@ export const marketing = {
     howItWorks: 'how it works ↓',
     backToDashboard: 'BACK TO YOUR DASHBOARD →',
     welcomeNote: 'welcome back, {name} — {count} overlays are live, yours is one click away',
+    // Hero hint for viewers, linking /browser-extension. The arrow rides inside the key.
+    viewerChip: 'VIEWER? SEE EVERY CHAT →',
     // Doubles as each sign-in button's aria-label, so one key keeps the
     // accessible name and the visible label from ever drifting apart.
     signInWith: 'Sign in with {platform}',
@@ -305,6 +307,106 @@ export const marketing = {
     api: 'Developer API',
     docsAndFaq: 'Docs & FAQ',
   },
+  // /browser-extension, the viewer-facing page for the browser extension, in
+  // the homepage's voice. Claim only what the extension does today: it takes
+  // over chat only on channels whose streamer has set up All-Chat, and says so.
+  // The compare rows state only what each tool's own pages say (checked
+  // 2026-11-02; sources in BrowserExtensionClient's COMPARE_ROWS).
+  extensionPage: {
+    metaTitle: 'Browser Extension: See Every Chat on Twitch, YouTube and Kick',
+    metaDescription:
+      'Just watching? The free All-Chat extension for Chrome and Firefox replaces Twitch, YouTube and Kick chat with one feed of every platform the streamer broadcasts to.',
+    navStreamers: 'for streamers',
+    kicker: 'FOR VIEWERS · BROWSER EXTENSION',
+    titleTop: 'JUST WATCHING?',
+    titleBottom: 'SEE EVERY CHAT.',
+    // Same length budget as lanes.titleCategory: two or three lines under the
+    // display type. The platform and site lists live in demoBody.
+    titleCategory: 'Free multistream chat extension for viewers on Twitch, YouTube and Kick',
+    manifestoLine1: 'MULTICHAT TOOLS ARE BUILT FOR STREAMERS.',
+    manifestoLine2: 'THIS ONE IS BUILT FOR YOU.',
+    ctaChrome: 'ADD TO CHROME — FREE →',
+    ctaFirefox: 'ADD TO FIREFOX — FREE →',
+    altChrome: 'chrome · edge · brave →',
+    altFirefox: 'firefox →',
+    ctaNote: 'free · open source · agpl-3.0',
+    demoLabel: 'WHAT YOU SEE',
+    demoHeadingTop: 'SAME STREAM.',
+    demoHeadingAccent: 'EVERY CHAT.',
+    demoBody:
+      'The extension swaps the chat panel on twitch.tv, youtube.com and kick.com for the streamer’s All-Chat feed: Twitch, YouTube, Kick, TikTok and Discord messages in one live list.',
+    demoAlt:
+      'Illustration: a Twitch stream page whose chat panel shows messages from Twitch, YouTube, Kick, TikTok and Discord in one list.',
+    demoUrl: 'twitch.tv/yourstreamer',
+    demoLive: 'LIVE',
+    demoStreamTitle: 'yourstreamer is live on Twitch, YouTube, Kick, TikTok and Discord',
+    demoTabAllChat: '∞ AllChat',
+    demoTabNative: 'Twitch Chat',
+    demoInput: 'Send a message',
+    wedgeLabel: 'WHY THIS ONE',
+    wedgeHeadingTop: 'OTHER TOOLS MERGE CHAT',
+    wedgeHeadingMiddle: 'FOR THE STREAMER.',
+    wedgeHeadingAccent: 'OURS DOES IT FOR YOU.',
+    themTitle: 'EVERYTHING ELSE',
+    them1: 'multichat dashboards run on the streamer’s screen, not yours',
+    them2: 'on twitch.tv you still only see Twitch chat',
+    them3: 'Twitch Shared Chat joins Twitch channels, nothing else',
+    them4: 'emote extensions add emotes, not other platforms',
+    usTitle: 'ALL·CHAT EXTENSION',
+    us1: 'every platform the streamer is live on, in your chat panel',
+    us2: 'works on twitch.tv, youtube.com and kick.com',
+    us3: 'chat back with your own Twitch, YouTube or Kick account',
+    us4: '7TV, BTTV and FFZ emotes on every message',
+    compareLabel: 'CHECKED 2 NOVEMBER 2026',
+    compareHeadingTop: 'WE LOOKED.',
+    compareHeadingAccent: 'NOTHING ELSE DOES THIS FOR VIEWERS.',
+    compareToolHeader: 'Tool',
+    compareViewerHeader: 'What a viewer on twitch.tv gets',
+    compareSourceHeader: 'Source',
+    rowSsnTool: 'Social Stream Ninja',
+    rowSsnViewer:
+      'Nothing in the chat panel. It merges 100+ platforms into a dashboard and OBS overlay that the streamer runs.',
+    rowRestreamTool: 'Restream Chat, SleepyChat',
+    rowRestreamViewer:
+      'Nothing in the chat panel. Both are dashboards and OBS overlays for the streamer. Restream’s relay bot can repost messages into each platform’s chat, as bot messages.',
+    rowSharedTool: 'Twitch Shared Chat',
+    rowSharedViewer: 'Chat from other Twitch channels streaming together. Twitch only.',
+    rowEmotesTool: '7TV, BetterTTV, FrankerFaceZ',
+    rowEmotesViewer:
+      'More emotes and chat tools for the platform you are on. No messages from other platforms.',
+    rowChatterinoTool: 'Chatterino',
+    rowChatterinoViewer: 'A separate desktop chat app for Twitch.',
+    rowUsTool: 'All-Chat extension',
+    rowUsViewer:
+      'Every platform the streamer is live on, in the chat panel you already watch. Chat back with your own account.',
+    compareFootnote:
+      'Checked against each tool’s own pages. Found one we missed? Tell us on {discord}. Comparing tools for streamers instead? See the {compare}.',
+    compareLinkText: 'comparison page',
+    featuresLabel: 'WHAT CHANGES IN CHAT',
+    featureMergedTitle: 'Every platform',
+    featureMergedBody:
+      'Messages from every platform the streamer broadcasts to, live in one list, in the chat panel you already watch.',
+    featureSendTitle: 'Chat back',
+    featureSendBody:
+      'Sign in with Twitch, YouTube or Kick and send from the panel. No extra account to create.',
+    featureEmotesTitle: 'Your emotes',
+    featureEmotesBody:
+      '7TV, BTTV and FFZ emotes, badges and name colors on every message. Type : for emote suggestions.',
+    featureEngageTitle: 'Polls and predictions',
+    featureEngageBody:
+      'All-Chat polls and predictions appear above chat. Sign in to vote or wager points with one click.',
+    featureNativeTitle: 'Native chat stays',
+    featureNativeBody:
+      'Switch it off per site from the popup. On Twitch a tab flips back to Twitch chat, and channel points, predictions and hype trains keep working.',
+    featureOpenTitle: 'Free and open source',
+    featureOpenBody: 'AGPL-3.0, code on GitHub. Runs in Chrome, Edge, Brave and Firefox.',
+    finalMicro: 'free · open source · chrome, edge, brave, firefox',
+    finalWhere:
+      'Works on streams that use All-Chat. Everywhere else your chat stays exactly as it is.',
+    streamerBody:
+      'Streaming yourself? In the {dashboard}, click Set as Extension Overlay on the overlay your viewers should see.',
+    streamerLinkText: 'dashboard',
+  },
   ambassadors: {
     eyebrow: 'Ambassadors',
     title: 'Streamers who run on All-Chat',
@@ -358,7 +460,7 @@ export const marketing = {
       'No. Usage analytics are cookieless and self-hosted, and chat messages are automatically deleted after about an hour.',
     extensionQuestion: 'Is there a browser extension?',
     extensionAnswer:
-      'Yes. The All-Chat browser extension replaces native Twitch, YouTube, and Kick chat so your viewers can follow along across platforms.',
+      'Yes, for your viewers. On streams that use All-Chat, the extension for Chrome and Firefox replaces native Twitch, YouTube, and Kick chat with your merged feed, so viewers can read and chat across platforms. Install links are at allch.at/browser-extension.',
   },
   upgrade: {
     badge: 'All-Chat Premium',
