@@ -151,6 +151,8 @@ scratch? See the **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** or t
 - Full emote autocomplete (7TV, BTTV, FFZ) with `:` prefix
 - Auto-reconnects if your connection drops — never miss a message
 
+**Leaving?** Sign in on [allch.at/settings/viewer](https://allch.at/settings/viewer) and use **Delete my viewer data**: it erases your viewer identity, linked platforms, cosmetics, points, votes and predictions, including the ones you collected by chat command without signing in.
+
 ---
 
 ## Platform Support
@@ -236,6 +238,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Centrifugo/Pusher, TikTok WS, 
 | `discord-listener` | Discord channel chat relay |
 | `message-processor` | Message normalization, emote enrichment, overlay routing |
 | `alert-processor` | Event alerts: a second `chat:raw` consumer that routes events to alerts/goal/list overlays, scores leaderboards, and keeps goal counts (event counters + follower/subscriber polls while connected) (ADR-0068, ADR-0072) |
+| `media-service` | Alert-media uploads: presigned uploads straight to MinIO, the `media_objects` registry, and a sweep that removes files whose registry row is gone, e.g. with a deleted account (ADR-0068, ADR-0088) |
 | `overlay-manager` | Overlay CRUD, source configuration, settings |
 | `source-manager` | Leader election, active source tracking, demand coordination |
 | `share-service` | Shareable overlay link generation; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041) |
@@ -310,6 +313,7 @@ Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README
 - **ADR-0026**: Two-phase deprecation of the Twitch IRC listener — `warn` nudges connected sources to re-add their Twitch source (in-overlay notice), `enforce` stops joining channels
 - **ADR-0046**: Twitch chat notices via `channel.chat.notification` — watch streaks and announcements carry the chatter's own message on no other subscription, so they were silently dropped; notices are routed by type, skipping the five a dedicated subscription already delivers
 - **ADR-0048**: Delegated overlay moderators — a moderator acts with their OWN platform credential (never the streamer's, no fallback), so the platform re-checks their role per call; Discord is the exception (the shared bot always acts, so All-Chat verifies guild permissions live) and premium is keyed on the overlay owner
+- **ADR-0088**: Account and viewer data erasure — account deletion succeeds for everyone and also erases the user's own viewer identity, viewers can delete their own data (including votes and points collected by chat command without signing in), and uploaded files leave the public bucket within one sweep interval
 - **ADR-0027**: Time-limited admin premium grants — an optional expiry on the admin override (streamer + viewer) that reverts on its own; recompute ignores an expired override, and a single-replica payment-service sweep clears lapsed grants
 
 ### Documentation

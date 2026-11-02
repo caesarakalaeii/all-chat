@@ -407,9 +407,11 @@ jobs:
           go mod download
           go test -v -short ./...
 
-  # engagement-service authz/durability regression tests (idor_test, round5_test,
-  # native_mirror_test) are `//go:build integration` and need a real Postgres with the
-  # migrations applied, so they run in a dedicated job (they would t.Skipf without a DB).
+  # `//go:build integration` tests that need a real Postgres with the migrations applied
+  # (they would t.Skipf without a DB): engagement-service authz/durability regressions
+  # (idor_test, round5_test, native_mirror_test), and the account/viewer erasure and
+  # orphaned-media sweep tests of auth-service and media-service (ADR-0088). The job
+  # keeps its original name so the existing status check stays the same.
   test-engagement-integration:
     runs-on: ubuntu-latest
     needs: detect-changes
@@ -449,3 +451,14 @@ jobs:
           cd services/engagement-service
           go mod download
           go test -tags=integration -v ./repository/...
+
+      - name: Run account erasure integration tests (ADR-0088)
+        # -run scopes to the erasure tests: the package's testcontainers tests are not
+        # part of this job.
+        run: |
+          cd services/auth-service
+          go mod download
+          go test -tags=integration -v -run 'TestErase' ./repository/
+          cd ../media-service
+          go mod download
+          go test -tags=integration -v ./orphans/
