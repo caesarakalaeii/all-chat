@@ -16,17 +16,33 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import type { Metadata } from 'next'
 import { BrowserExtensionClient } from './BrowserExtensionClient'
 import { getTranslations } from '@/lib/i18n'
 
 // getTranslations, not useTranslations: this is a Server Component.
 const t = getTranslations()
 
+// openGraph and twitter replace the layout's objects wholesale, so the
+// site-level fields are repeated; the card comes from ./opengraph-image.
 export const metadata = {
   title: t('marketing.extensionPage.metaTitle'),
   description: t('marketing.extensionPage.metaDescription'),
   alternates: { canonical: '/browser-extension' },
-}
+  openGraph: {
+    type: 'website',
+    locale: 'en_US',
+    url: '/browser-extension',
+    siteName: 'All-Chat',
+    title: t('marketing.extensionPage.socialTitle'),
+    description: t('marketing.extensionPage.metaDescription'),
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: t('marketing.extensionPage.socialTitle'),
+    description: t('marketing.extensionPage.metaDescription'),
+  },
+} satisfies Metadata
 
 export default function BrowserExtensionPage() {
   return <BrowserExtensionClient />

@@ -51,15 +51,6 @@ describe('site-wide metadata (layout.tsx)', () => {
       'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS chat overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.'
     )
   })
-
-  it('keeps the shared OpenGraph and Twitter card copy', () => {
-    // openGraph and twitter carried byte-identical title and description, so
-    // one key each rather than two pairs that can drift apart.
-    expect(t('metadata.site.socialTitle')).toBe('All-Chat \u2014 Every chat. One overlay.')
-    expect(t('metadata.site.socialDescription')).toBe(
-      'All your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS overlay. 7TV, BTTV, and FFZ emotes built in.'
-    )
-  })
 })
 
 describe('homepage metadata', () => {

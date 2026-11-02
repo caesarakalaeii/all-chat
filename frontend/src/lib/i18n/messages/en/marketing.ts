@@ -316,6 +316,10 @@ export const marketing = {
     metaTitle: 'Browser Extension: See Every Chat on Twitch, YouTube and Kick',
     metaDescription:
       'Just watching? The free All-Chat extension for Chrome and Firefox replaces Twitch, YouTube and Kick chat with one feed of every platform the streamer broadcasts to.',
+    // Link embeds (openGraph, twitter) and the route's generated card.
+    socialTitle: 'Just watching? See every chat. | All-Chat browser extension',
+    socialCardAlt: 'All-Chat browser extension — Just watching? See every chat.',
+    socialCardChip: 'FREE FOR CHROME + FIREFOX',
     navStreamers: 'for streamers',
     kicker: 'FOR VIEWERS · BROWSER EXTENSION',
     titleTop: 'JUST WATCHING?',
