@@ -90,6 +90,24 @@ Patreon signs webhooks with **HMAC-MD5 of the raw body**, hex-encoded, in the
 EventSub. The raw body must be read before any JSON decode. See
 `patreon/webhook.go` (`VerifyWebhookSignature`).
 
+## Patron data we keep
+
+The OAuth consent asks for the `identity` scope only, and the identity call asks for
+no user attributes, so Patreon returns the patron's id and their membership to our
+campaign, nothing personal. A `members:*` webhook body is different: it carries the
+patron's email, full name, creator note and profile, and can include their address.
+The body is parsed in memory and dropped. Only these values reach Postgres:
+
+- `patreon_oauth_tokens`: Patreon user id, encrypted access and refresh tokens,
+  expiry, granted scopes.
+- `premium_subscriptions`: Patreon user id, status, tier id, entitled cents, next
+  charge date. A webhook for a patron who never connected through all-chat still
+  creates this row (unlinked); it is linked when they connect.
+
+Migration 120 dropped `premium_subscriptions.raw`, which used to hold every webhook
+body in full. `MembershipSnapshot` has no personal fields, so the parser has nowhere
+to put them.
+
 ## Subscription status
 
 `patreon.SubscriptionStatusFor` maps Patreon's `patron_status` +

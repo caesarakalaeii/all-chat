@@ -65,6 +65,14 @@ export const settings: LocaleNamespace<'settings'> = {
     disconnectedToast: '{platform} getrennt',
     disconnectFailedToast: '{platform} konnte nicht getrennt werden',
   },
+  dataExport: {
+    download: 'Meine Daten herunterladen',
+    downloading: 'Datei wird vorbereitet…',
+    failedToast: 'Deine Daten konnten nicht heruntergeladen werden',
+    viewerHeading: 'Deine Daten',
+    viewerBody:
+      'Lade eine JSON-Datei mit allem herunter, was All-Chat über dein Zuschauerkonto speichert: verknüpfte Plattformen, Sitzungen, Kosmetik, Punkte, Abstimmungen, Vorhersagen und aktuelle Nachrichten.',
+  },
   index: {
     heading: 'Einstellungen',
     profileHeading: 'Profil',

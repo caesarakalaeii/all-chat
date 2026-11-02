@@ -74,6 +74,15 @@ export const settings = {
     disconnectedToast: '{platform} disconnected',
     disconnectFailedToast: 'Could not disconnect {platform}',
   },
+  // "Download my data" (DSGVO Art. 15/20), on /settings and /settings/viewer.
+  dataExport: {
+    download: 'Download my data',
+    downloading: 'Preparing your file…',
+    failedToast: 'Could not download your data',
+    viewerHeading: 'Your data',
+    viewerBody:
+      'Download a JSON file with everything All-Chat stores about your viewer account: linked platforms, sessions, cosmetics, points, votes, predictions and recent messages.',
+  },
   // The /settings landing page: profile, the cards linking to each sub-page, the
   // Discord server and account links, and account deletion.
   index: {

@@ -811,6 +811,7 @@ func main() {
 		protectedAPI.PATCH("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/auth/viewer/linked-platforms", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/viewer/linked-platforms/:platform", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/auth/viewer/data-export", proxyHandler.ForwardRequest) // DSGVO Art. 15/20 for viewers
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)

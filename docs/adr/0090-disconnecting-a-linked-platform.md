@@ -58,8 +58,8 @@ api-gateway, session-only, refused while impersonating) and
    transaction and sets `access_token = ''`, `refresh_token = NULL` and an expired
    `token_expires_at` on the unlinked sessions, then the handler revokes the old
    tokens with the viewer OAuth client. The row stays: its ban flags and message
-   history are not the viewer's to erase, and `cleanup_expired_oauth_tokens()`
-   (migration 047) deletes it a week later.
+   history are not the viewer's to erase; it goes when the viewer deletes their
+   viewer data (`DELETE /api/v1/auth/viewer/me`, ADR-0088).
 5. **Refresh write-backs never insert.** youtube-listener's token store used an
    UPSERT to save a refreshed token, so a refresh in flight during a disconnect
    could recreate the deleted row. It now updates only; a missing row is an error.

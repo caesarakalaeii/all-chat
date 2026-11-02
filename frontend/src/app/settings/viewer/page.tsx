@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils'
 import { safeExternalRedirect } from '@/lib/auth/redirect-allowlist'
 import type { NameGradient } from '@/lib/types/message'
 import { UserAvatar } from '@/components/UserAvatar'
+import { ViewerDataExportCard } from '@/components/settings/ViewerDataExportCard'
 import { useTranslations } from '@/lib/i18n'
 
 // JWT claims from viewer token
@@ -900,6 +901,8 @@ function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
 
         {/* Linked Platforms section */}
         <LinkedPlatformsCard claims={claims} />
+
+        <ViewerDataExportCard />
       </main>
     </div>
   )

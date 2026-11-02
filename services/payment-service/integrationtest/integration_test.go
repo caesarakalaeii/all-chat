@@ -73,7 +73,7 @@ func TestEntitlementApplyGrantsAndRevokes(t *testing.T) {
 	// Active patron at threshold -> premium granted.
 	_, isPrem, err := svc.Apply(ctx, &patreon.MembershipSnapshot{
 		PatreonUserID: "pu-apply", PatronStatus: "active_patron", EntitledCents: 500,
-	}, &userID, nil, nil)
+	}, &userID, nil)
 	require.NoError(t, err)
 	assert.True(t, isPrem)
 	assert.True(t, dbPremium(t, pool, userID), "users.is_premium should be true after active membership")
@@ -81,7 +81,7 @@ func TestEntitlementApplyGrantsAndRevokes(t *testing.T) {
 	// Former patron -> premium revoked.
 	_, isPrem, err = svc.Apply(ctx, &patreon.MembershipSnapshot{
 		PatreonUserID: "pu-apply", PatronStatus: "former_patron",
-	}, &userID, nil, nil)
+	}, &userID, nil)
 	require.NoError(t, err)
 	assert.False(t, isPrem)
 	assert.False(t, dbPremium(t, pool, userID), "users.is_premium should be false after lapse")
@@ -234,7 +234,7 @@ func TestViewerEntitlementApplyGrantsAndRevokes(t *testing.T) {
 	// Active patron at the viewer threshold -> viewer premium granted.
 	_, isPrem, err := svc.Apply(ctx, &patreon.MembershipSnapshot{
 		PatreonUserID: "pv-apply", PatronStatus: "active_patron", EntitledCents: viewerMinCents,
-	}, nil, &viewerID, nil)
+	}, nil, &viewerID)
 	require.NoError(t, err)
 	assert.True(t, isPrem)
 	assert.True(t, dbViewerPremium(t, pool, viewerID), "viewers.is_premium should be true after active viewer membership")
@@ -242,7 +242,7 @@ func TestViewerEntitlementApplyGrantsAndRevokes(t *testing.T) {
 	// Below the viewer threshold -> not premium.
 	_, isPrem, err = svc.Apply(ctx, &patreon.MembershipSnapshot{
 		PatreonUserID: "pv-apply", PatronStatus: "active_patron", EntitledCents: viewerMinCents - 1,
-	}, nil, &viewerID, nil)
+	}, nil, &viewerID)
 	require.NoError(t, err)
 	assert.False(t, isPrem)
 	assert.False(t, dbViewerPremium(t, pool, viewerID), "below-threshold pledge should not grant viewer premium")
@@ -250,7 +250,7 @@ func TestViewerEntitlementApplyGrantsAndRevokes(t *testing.T) {
 	// Former patron -> premium revoked.
 	_, isPrem, err = svc.Apply(ctx, &patreon.MembershipSnapshot{
 		PatreonUserID: "pv-apply", PatronStatus: "former_patron",
-	}, nil, &viewerID, nil)
+	}, nil, &viewerID)
 	require.NoError(t, err)
 	assert.False(t, isPrem)
 	assert.False(t, dbViewerPremium(t, pool, viewerID), "viewers.is_premium should be false after lapse")
