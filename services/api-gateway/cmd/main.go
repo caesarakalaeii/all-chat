@@ -737,6 +737,10 @@ func main() {
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest)  // DSGVO Art. 20 data portability
 		protectedAPI.PATCH("/auth/me/onboarding", proxyHandler.ForwardRequest) // first-run setup guide state
+		// Connected platforms (Settings): list, and disconnect a linked platform, which
+		// deletes its OAuth tokens and revokes them at the provider. Session-only in auth-service.
+		protectedAPI.GET("/auth/me/connections", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/me/connections/:platform", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/stop-impersonation", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)

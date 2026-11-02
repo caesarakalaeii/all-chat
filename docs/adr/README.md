@@ -905,6 +905,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0088: Disconnecting a linked platform deletes its tokens
+
+**Status**: Accepted (2026-11-02)
+**Problem**: The privacy policy promised that OAuth tokens are deleted on disconnect, but Twitch, YouTube, Kick, Facebook and Instagram links (and delegated-moderator credentials) had no disconnect, and viewer unlink kept the session's tokens.
+**Decision**: `GET`/`DELETE /api/v1/auth/me/connections[/:platform]` (session-only) behind a Settings card. A disconnect deletes the platform's token rows and moderator credential in one transaction, then revokes them at Twitch, Google or Kick best effort (Meta has no revoke). Facebook and Instagram sources are removed with their token; Twitch, YouTube and Kick sources stay and fall back (Twitch stops, YouTube reads via InnerTube, Kick subscribes without auth). The sign-in platform is refused and goes only with the account. Viewer unlink wipes and revokes the unlinked session's tokens. youtube-listener's refresh write-back no longer UPSERTs.
+**Impact**: The policy is true for every linked platform. Platform user id columns stay; reconnecting stores new tokens.
+**→ Read**: [0088-disconnecting-a-linked-platform.md](./0088-disconnecting-a-linked-platform.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
@@ -1035,7 +1045,7 @@ Create a new ADR if:
 ## Summary
 
 **Total ADRs**: see `docs/adr/` (ADR numbers are shared with caesar-deployment). The count was hardcoded here and drifted by twelve before anyone noticed; do not re-add a number.
-**Last Updated**: 2026-10-31
+**Last Updated**: 2026-11-02
 **Coverage**: Core architecture decisions (Go layout, message flow, databases, frontend, quota tracking, feature gates, resilience patterns, pronoun enrichment, zombie detection, OAuth scope minimisation, overlay observability view, demand linger, EventSub chat-ownership partition, linked Twitch credentials, chat moderation write-path, premium entitlements via Patreon, streamer/viewer premium split, engagement economy, source-liveness heartbeat, admin URL-addressable views + viewer identity model + global search, YouTube pinned stream links + premium official-API claim, client-side UI locale selection, desktop plugins in their own repositories, streamer chat commands, guarded outbound fetches for user URLs, platform listeners on official public APIs)
 
 **Most Referenced**:
@@ -1044,4 +1054,4 @@ Create a new ADR if:
 2. ADR-0001 (Go layout) - Referenced by all services
 3. ADR-0006 (Quota tracking) - Referenced by YouTube listener, overlay manager
 
-**Last Updated**: 2026-10-31
+**Last Updated**: 2026-11-02

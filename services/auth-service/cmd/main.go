@@ -317,6 +317,18 @@ func main() {
 
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 
+	// Connected platforms (Settings): list and disconnect. A disconnect revokes the
+	// deleted tokens at the provider where one has a revoke endpoint; Facebook and
+	// Instagram have none for the stored Page token, so they are deleted locally only.
+	connectionRevokers := map[string]handlers.TokenRevoker{"twitch": twitchOAuth}
+	if youtubeOAuth != nil {
+		connectionRevokers["youtube"] = youtubeOAuth
+	}
+	if kickOAuth != nil {
+		connectionRevokers["kick"] = kickOAuth
+	}
+	platformConnectionsHandler := handlers.NewPlatformConnectionsHandler(userRepo, connectionRevokers, log)
+
 	// Seed the persistent total-users gauge from the database so Grafana retains
 	// an accurate baseline even after pod restarts (Prometheus counters are ephemeral).
 	if counts, err := userRepo.CountByAuthProvider(ctx); err != nil {
@@ -512,6 +524,11 @@ func main() {
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
 		protected.PATCH("/me/onboarding", legacyAuthHandler.HandleUpdateOnboarding)
+
+		// Connected platforms. Session-only (the handler refuses a PAT); disconnecting is
+		// also refused while impersonating.
+		protected.GET("/me/connections", platformConnectionsHandler.HandleListConnections)
+		protected.DELETE("/me/connections/:platform", platformConnectionsHandler.HandleDisconnect)
 
 		// Personal access tokens for non-browser clients. Session-only by design (the
 		// handler refuses a PAT-authenticated request): a leaked token must not be able

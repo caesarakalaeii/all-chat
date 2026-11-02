@@ -248,6 +248,36 @@ Body: { "completed": true }
 → Returns: { "onboarding_completed_at": "2026-07-17T12:00:00Z" }
 ```
 
+### Connected platforms (ADR-0088)
+
+Backs the "Connected platforms" card on `/settings`. Both routes are session-only
+(a personal access token gets 403); disconnecting is also refused while impersonating.
+
+```bash
+# Every platform whose OAuth tokens the account holds: the sign-in platform (users row)
+# and each linked one (its token table or mod_oauth_credentials).
+GET /api/v1/auth/me/connections
+→ Returns: { "connections": [ { "platform": "youtube", "accounts": ["UC…"], "is_login": false } ] }
+
+# Disconnect a linked platform: twitch | youtube | kick | facebook | instagram.
+# 409 { "error": "login_platform" } for the platform the account signs in with.
+DELETE /api/v1/auth/me/connections/:platform
+```
+
+A disconnect deletes, in one transaction, every row the user holds in that platform's
+token table and (Twitch, YouTube, Kick) their delegated-moderator credential, then
+revokes the deleted tokens at Twitch, Google or Kick (`oauth/revoke.go`). Revocation is
+best effort and never fails the request; Meta has no revoke for the stored Page token.
+Facebook and Instagram sources are removed from the user's overlays in the same
+transaction, because they cannot run without the token. Twitch, YouTube and Kick
+sources stay: Twitch stops receiving chat on the EventSub listener's next sync,
+YouTube falls back to InnerTube, Kick subscribes without auth. The sign-in platform's
+tokens are deleted only with the account (`DELETE /me`).
+
+Viewer unlink (`DELETE /viewer/linked-platforms/:platform`) also wipes the unlinked
+platform's `viewer_sessions` tokens (row kept, marked expired for the 047 cleanup) and
+revokes them with the viewer OAuth client.
+
 ### Personal Access Tokens (ADR-0051)
 
 Long-lived bearer credentials for clients that are not a browser — the Stream Deck /
