@@ -172,8 +172,8 @@ Returns aggregated health status of all backend services.
 | GET | `/api/v1/auth/twitch/callback` | No | Twitch OAuth callback |
 | POST | `/api/v1/auth/refresh` | No | Refresh token |
 | GET | `/api/v1/auth/me` | Yes | Get current user |
-| GET | `/api/v1/auth/me/connections` | Yes | Platforms whose OAuth tokens the account holds (ADR-0088) |
-| DELETE | `/api/v1/auth/me/connections/:platform` | Yes | Disconnect a linked platform: delete and revoke its tokens (ADR-0088) |
+| GET | `/api/v1/auth/me/connections` | Yes | Platforms whose OAuth tokens the account holds (ADR-0090) |
+| DELETE | `/api/v1/auth/me/connections/:platform` | Yes | Disconnect a linked platform: delete and revoke its tokens (ADR-0090) |
 | POST | `/api/v1/auth/logout` | Yes | Logout |
 
 ### Overlay Manager Routes

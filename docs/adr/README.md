@@ -905,13 +905,13 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
-### ADR-0088: Disconnecting a linked platform deletes its tokens
+### ADR-0090: Disconnecting a linked platform deletes its tokens
 
 **Status**: Accepted (2026-11-02)
 **Problem**: The privacy policy promised that OAuth tokens are deleted on disconnect, but Twitch, YouTube, Kick, Facebook and Instagram links (and delegated-moderator credentials) had no disconnect, and viewer unlink kept the session's tokens.
 **Decision**: `GET`/`DELETE /api/v1/auth/me/connections[/:platform]` (session-only) behind a Settings card. A disconnect deletes the platform's token rows and moderator credential in one transaction, then revokes them at Twitch, Google or Kick best effort (Meta has no revoke). Facebook and Instagram sources are removed with their token; Twitch, YouTube and Kick sources stay and fall back (Twitch stops, YouTube reads via InnerTube, Kick subscribes without auth). The sign-in platform is refused and goes only with the account. Viewer unlink wipes and revokes the unlinked session's tokens. youtube-listener's refresh write-back no longer UPSERTs.
 **Impact**: The policy is true for every linked platform. Platform user id columns stay; reconnecting stores new tokens.
-**→ Read**: [0088-disconnecting-a-linked-platform.md](./0088-disconnecting-a-linked-platform.md)
+**→ Read**: [0090-disconnecting-a-linked-platform.md](./0090-disconnecting-a-linked-platform.md)
 
 ---
 

@@ -1,4 +1,4 @@
-# ADR-0088: Disconnecting a linked platform deletes its tokens
+# ADR-0090: Disconnecting a linked platform deletes its tokens
 
 **Date**: 2026-11-02
 **Status**: Accepted

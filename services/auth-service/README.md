@@ -248,7 +248,7 @@ Body: { "completed": true }
 → Returns: { "onboarding_completed_at": "2026-07-17T12:00:00Z" }
 ```
 
-### Connected platforms (ADR-0088)
+### Connected platforms (ADR-0090)
 
 Backs the "Connected platforms" card on `/settings`. Both routes are session-only
 (a personal access token gets 403); disconnecting is also refused while impersonating.
