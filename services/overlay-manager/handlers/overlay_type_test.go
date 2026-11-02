@@ -304,8 +304,8 @@ type stubAdminOverlayStore struct {
 	overlays []*repository.OverlayWithSourceCount
 }
 
-func (s *stubAdminOverlayStore) GetAllOverlaysWithSourceCount(context.Context) ([]*repository.OverlayWithSourceCount, error) {
-	return s.overlays, nil
+func (s *stubAdminOverlayStore) ListOverlaysWithSourceCount(context.Context, repository.OverlayListFilter, int, int) ([]*repository.OverlayWithSourceCount, int, error) {
+	return s.overlays, len(s.overlays), nil
 }
 
 func (s *stubAdminOverlayStore) ListByUserIDWithSourceCount(_ context.Context, _ string) ([]*repository.OverlayWithSourceCount, error) {
@@ -345,10 +345,12 @@ func TestHandleAdminListOverlays_OverlayType(t *testing.T) {
 			router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/admin/overlays", nil))
 
 			require.Equal(t, http.StatusOK, w.Code)
-			var body []map[string]any
+			var body struct {
+				Overlays []map[string]any `json:"overlays"`
+			}
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body), "body: %s", w.Body.String())
-			require.Len(t, body, 1)
-			assert.Equal(t, tt.wantType, body[0]["overlay_type"])
+			require.Len(t, body.Overlays, 1)
+			assert.Equal(t, tt.wantType, body.Overlays[0]["overlay_type"])
 		})
 	}
 }

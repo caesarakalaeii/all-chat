@@ -95,10 +95,12 @@ export const metadata: Metadata = {
     'live streaming',
     'multi-platform chat',
   ],
+  // No `url` here: every route that does not override openGraph inherits this
+  // object, and a fixed https://allch.at told crawlers each guide was the
+  // homepage. Without it, embeds use the URL that was shared.
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://allch.at',
     siteName: 'All-Chat',
     title: t('metadata.site.socialTitle'),
     description: t('metadata.site.socialDescription'),

@@ -1,7 +1,7 @@
 # ADR-0035: Admin Global Entity Search
 
 **Date**: 2026-07-17
-**Status**: Accepted
+**Status**: Accepted; client-side federation superseded by [ADR-0086](./0086-admin-list-server-side-pagination.md)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement

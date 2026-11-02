@@ -492,11 +492,11 @@ func TestListByOverlayIDForUser_IsOwnChannel(t *testing.T) {
 		"linked twitch_oauth_tokens owner must own the channel even with an expired token (re-consent is the point)")
 }
 
-// TestGetAllSourcesWithOverlay_Owner verifies that the admin source listing surfaces the
+// TestListSourcesWithOverlay_Owner verifies that the admin source listing surfaces the
 // owning overlay's owner (username/display_name, LEFT-joined from users) and the source's
 // channel_handle. An orphaned owner (overlay.user_id with no users row) must yield empty
 // owner fields rather than dropping the source.
-func TestGetAllSourcesWithOverlay_Owner(t *testing.T) {
+func TestListSourcesWithOverlay_Owner(t *testing.T) {
 	repo, cleanup := setupSourceTestDatabase(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -534,7 +534,7 @@ func TestGetAllSourcesWithOverlay_Owner(t *testing.T) {
 		IsActive:    true,
 	}))
 
-	sources, err := repo.GetAllSourcesWithOverlay(ctx)
+	sources, _, err := repo.ListSourcesWithOverlay(ctx, SourceListFilter{}, 100, 0)
 	require.NoError(t, err)
 
 	byOverlay := map[string]*SourceWithOverlay{}
@@ -552,6 +552,77 @@ func TestGetAllSourcesWithOverlay_Owner(t *testing.T) {
 	require.Contains(t, byOverlay, orphanOverlay, "orphaned source must still appear")
 	assert.Equal(t, "", byOverlay[orphanOverlay].OwnerUsername, "missing owner => empty username")
 	assert.Equal(t, "", byOverlay[orphanOverlay].OwnerDisplayName, "missing owner => empty display name")
+}
+
+// TestListSourcesWithOverlay_FilterAndPaging covers the server-side search,
+// platform/status/owner filters and newest-first paging behind the paginated
+// admin Sources page.
+func TestListSourcesWithOverlay_FilterAndPaging(t *testing.T) {
+	repo, cleanup := setupSourceTestDatabase(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ownerID := uuid.New().String()
+	_, err := repo.pool.Exec(ctx,
+		`INSERT INTO users (id, username, display_name, auth_provider) VALUES ($1, 'cae_sar', 'Caesar', 'twitch')`,
+		ownerID)
+	require.NoError(t, err)
+	ownedOverlay := uuid.New().String()
+	_, err = repo.pool.Exec(ctx, `INSERT INTO overlays (id, user_id, name) VALUES ($1, $2, 'Stream Overlay')`, ownedOverlay, ownerID)
+	require.NoError(t, err)
+	otherOverlay := createTestOverlay(t, repo)
+
+	handle := "@handle_yt"
+	for i, s := range []models.ChatSource{
+		{OverlayID: ownedOverlay, Platform: "twitch", ChannelID: "111", ChannelName: "TwitchChan", IsActive: true},
+		{OverlayID: ownedOverlay, Platform: "youtube", ChannelID: "UC1", ChannelName: "YtChan", ChannelHandle: &handle, IsActive: false},
+		{OverlayID: otherOverlay, Platform: "twitch", ChannelID: "222", ChannelName: "caexsarfan", IsActive: true},
+	} {
+		require.NoError(t, repo.Create(ctx, &s))
+		_, err := repo.pool.Exec(ctx, `UPDATE overlay_chat_sources SET created_at = NOW() + make_interval(mins => $2) WHERE id = $1`, s.ID, i)
+		require.NoError(t, err)
+	}
+
+	active, inactive := true, false
+	cases := []struct {
+		name   string
+		filter SourceListFilter
+		want   []string
+	}{
+		{"no filter is newest first", SourceListFilter{}, []string{"caexsarfan", "YtChan", "TwitchChan"}},
+		{"platform", SourceListFilter{Platform: "twitch"}, []string{"caexsarfan", "TwitchChan"}},
+		{"active", SourceListFilter{Active: &active}, []string{"caexsarfan", "TwitchChan"}},
+		{"inactive", SourceListFilter{Active: &inactive}, []string{"YtChan"}},
+		{"owner", SourceListFilter{UserID: ownerID}, []string{"YtChan", "TwitchChan"}},
+		{"owner username, literal underscore", SourceListFilter{Query: "CAE_SAR"}, []string{"YtChan", "TwitchChan"}},
+		{"channel handle", SourceListFilter{Query: "handle_yt"}, []string{"YtChan"}},
+		{"channel id", SourceListFilter{Query: "222"}, []string{"caexsarfan"}},
+		{"overlay name", SourceListFilter{Query: "stream overlay"}, []string{"YtChan", "TwitchChan"}},
+		{"filters combine", SourceListFilter{Platform: "twitch", UserID: ownerID, Active: &active}, []string{"TwitchChan"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sources, total, err := repo.ListSourcesWithOverlay(ctx, tc.filter, 100, 0)
+			require.NoError(t, err)
+			got := make([]string, len(sources))
+			for i, s := range sources {
+				got[i] = s.ChannelName
+			}
+			assert.Equal(t, tc.want, got)
+			assert.Equal(t, len(tc.want), total)
+		})
+	}
+
+	t.Run("pages do not overlap and report the full total", func(t *testing.T) {
+		first, total, err := repo.ListSourcesWithOverlay(ctx, SourceListFilter{}, 2, 0)
+		require.NoError(t, err)
+		second, _, err := repo.ListSourcesWithOverlay(ctx, SourceListFilter{}, 2, 2)
+		require.NoError(t, err)
+		require.Len(t, first, 2)
+		require.Len(t, second, 1)
+		assert.Equal(t, "TwitchChan", second[0].ChannelName)
+		assert.Equal(t, 3, total)
+	})
 }
 
 // TestListByOverlayID_DefaultsIsOwnChannelFalse ensures the back-compat method that omits a

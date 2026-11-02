@@ -1,5 +1,3 @@
-'use client'
-
 /**
  * This file is part of All-Chat.
  * Copyright (C) 2026 caesarakalaeii
@@ -18,8 +16,13 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import type { Metadata } from 'next'
 import { ReactNode } from 'react'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
+
+// Login-gated: no public content to index. robots.txt leaves this crawlable on
+// purpose, so Googlebot can read the noindex and drop the URL from the index.
+export const metadata: Metadata = { robots: { index: false, follow: false } }
 
 export default function OverlaysLayout({ children }: { children: ReactNode }) {
   return <ProtectedRoute>{children}</ProtectedRoute>

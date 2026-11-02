@@ -71,3 +71,13 @@ export function formatConnectedFor(
   if (Number.isNaN(started)) return null
   return formatCompactDuration(t, now - started)
 }
+
+/**
+ * A query parameter of the current page, or '' on the server. For seeding
+ * state from a deep link in a lazy useState initializer, which avoids a
+ * synchronous setState in an effect.
+ */
+export function readQueryParam(name: string): string {
+  if (typeof window === 'undefined') return ''
+  return new URLSearchParams(window.location.search).get(name) ?? ''
+}

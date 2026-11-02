@@ -355,34 +355,52 @@ type SourceWithOverlay struct {
 	OwnerDisplayName string
 }
 
-// GetAllSourcesWithOverlay returns every source joined with its overlay's name and
-// owner in a single query. Sources whose overlay has been deleted are excluded
-// (INNER JOIN), matching the previous per-source "skip if overlay not found" behavior.
-// This replaces an N+1 lookup that fetched each source's overlay individually.
-func (r *SourceRepository) GetAllSourcesWithOverlay(ctx context.Context) ([]*SourceWithOverlay, error) {
+// SourceListFilter narrows the admin source listing. Query is a
+// case-insensitive literal substring match on the channel name, id and handle,
+// the overlay name and the owner's username; Platform, Active and UserID (the
+// overlay owner) are equality filters applied only when set.
+type SourceListFilter struct {
+	Query    string
+	Platform string
+	Active   *bool
+	UserID   string
+}
+
+// ListSourcesWithOverlay returns one page of sources matching filter, newest
+// first, each joined with its overlay's name and owner, plus the total number
+// of matches. Sources whose overlay has been deleted are excluded (INNER JOIN).
+func (r *SourceRepository) ListSourcesWithOverlay(ctx context.Context, filter SourceListFilter, limit, offset int) ([]*SourceWithOverlay, int, error) {
+	// id breaks created_at ties so consecutive pages neither repeat nor skip rows.
 	query := `
 		SELECT s.id, s.overlay_id, s.platform, s.channel_id, s.channel_name, s.channel_handle,
 		       s.is_active, s.created_at, s.updated_at,
 		       o.name, o.user_id,
-		       u.username, u.display_name
+		       u.username, u.display_name, COUNT(*) OVER () AS total
 		FROM overlay_chat_sources s
 		JOIN overlays o ON o.id = s.overlay_id
 		LEFT JOIN users u ON u.id = o.user_id
-		ORDER BY s.created_at DESC
+		WHERE ($1 = '' OR s.channel_name ILIKE $1 OR s.channel_id ILIKE $1 OR s.channel_handle ILIKE $1
+		       OR o.name ILIKE $1 OR u.username ILIKE $1)
+		  AND ($2 = '' OR s.platform = $2)
+		  AND ($3::boolean IS NULL OR s.is_active = $3)
+		  AND ($4 = '' OR o.user_id::text = $4)
+		ORDER BY s.created_at DESC, s.id
+		LIMIT $5 OFFSET $6
 	`
 
-	rows, err := r.pool.Query(ctx, query)
+	rows, err := r.pool.Query(ctx, query, likeContains(filter.Query), filter.Platform, filter.Active, filter.UserID, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query sources: %w", err)
+		return nil, 0, fmt.Errorf("failed to query sources: %w", err)
 	}
 	defer rows.Close()
 
-	var sources []*SourceWithOverlay
+	sources := []*SourceWithOverlay{}
+	total := 0
 	for rows.Next() {
 		var sw SourceWithOverlay
 		var username, displayName sql.NullString
-		if err := rows.Scan(&sw.ID, &sw.OverlayID, &sw.Platform, &sw.ChannelID, &sw.ChannelName, &sw.ChannelHandle, &sw.IsActive, &sw.CreatedAt, &sw.UpdatedAt, &sw.OverlayName, &sw.UserID, &username, &displayName); err != nil {
-			return nil, fmt.Errorf("failed to scan source: %w", err)
+		if err := rows.Scan(&sw.ID, &sw.OverlayID, &sw.Platform, &sw.ChannelID, &sw.ChannelName, &sw.ChannelHandle, &sw.IsActive, &sw.CreatedAt, &sw.UpdatedAt, &sw.OverlayName, &sw.UserID, &username, &displayName, &total); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan source: %w", err)
 		}
 		sw.OwnerUsername = username.String
 		sw.OwnerDisplayName = displayName.String
@@ -390,8 +408,8 @@ func (r *SourceRepository) GetAllSourcesWithOverlay(ctx context.Context) ([]*Sou
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating sources: %w", err)
+		return nil, 0, fmt.Errorf("error iterating sources: %w", err)
 	}
 
-	return sources, nil
+	return sources, total, nil
 }
