@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/caesar/all-chat/shared/premium"
@@ -327,53 +328,73 @@ func (r *ViewerIdentityRepository) GetLinkedPlatforms(ctx context.Context, viewe
 	return platforms, nil
 }
 
-// UnlinkPlatform removes a platform identity from a viewer.
+// UnlinkPlatform removes a platform identity from a viewer and wipes the OAuth
+// tokens of that platform's sessions, in one transaction. The session rows stay
+// (their ban flags and message history are not the viewer's to erase) but are
+// detached from the viewer and marked expired, so cleanup_expired_oauth_tokens()
+// removes them a week later. It returns the wiped tokens AS STORED (encrypted), so
+// the caller can decrypt and revoke them at the provider.
 // Returns ErrLastPlatform if the viewer only has one platform linked (must retain at least one).
 // Returns ErrNotFound if the platform is not linked to this viewer.
-func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error {
+func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) ([]RemovedToken, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin unlink: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	// Count how many platforms the viewer currently has.
 	var count int
-	err := r.db.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`SELECT COUNT(*) FROM viewer_platform_identities WHERE viewer_id = $1`,
 		viewerID,
 	).Scan(&count)
 	if err != nil {
-		return fmt.Errorf("failed to count linked platforms: %w", err)
+		return nil, fmt.Errorf("failed to count linked platforms: %w", err)
 	}
 	if count <= 1 {
-		return ErrLastPlatform
+		return nil, ErrLastPlatform
 	}
 
-	// Look up the platform_user_id before deleting so we can clear viewer_sessions.
 	var platformUserID string
-	err = r.db.QueryRow(ctx,
-		`SELECT platform_user_id FROM viewer_platform_identities WHERE viewer_id = $1 AND platform = $2`,
+	err = tx.QueryRow(ctx,
+		`DELETE FROM viewer_platform_identities WHERE viewer_id = $1 AND platform = $2 RETURNING platform_user_id`,
 		viewerID, platform,
 	).Scan(&platformUserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
 	if err != nil {
-		return ErrNotFound
+		return nil, fmt.Errorf("failed to delete platform identity: %w", err)
 	}
 
-	// Delete the platform identity row.
-	tag, err := r.db.Exec(ctx,
-		`DELETE FROM viewer_platform_identities WHERE viewer_id = $1 AND platform = $2`,
-		viewerID, platform,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to delete platform identity: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-
-	// Clear viewer_id on sessions that belonged to the unlinked platform identity
-	// so they are no longer associated with the viewer.
-	_, _ = r.db.Exec(ctx,
-		`UPDATE viewer_sessions SET viewer_id = NULL WHERE platform = $1 AND platform_user_id = $2 AND viewer_id = $3`,
+	// access_token is NOT NULL, so it is wiped to ''. The FROM self-join returns the
+	// tokens as they were before the wipe.
+	rows, err := tx.Query(ctx, `
+		UPDATE viewer_sessions vs
+		SET viewer_id = NULL, access_token = '', refresh_token = NULL,
+		    token_expires_at = NOW(), updated_at = NOW()
+		FROM viewer_sessions old
+		WHERE old.id = vs.id
+		  AND vs.platform = $1 AND vs.platform_user_id = $2 AND vs.viewer_id = $3
+		RETURNING old.access_token, COALESCE(old.refresh_token, '')`,
 		platform, platformUserID, viewerID,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wipe unlinked session tokens: %w", err)
+	}
+	removed, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (RemovedToken, error) {
+		var t RemovedToken
+		return t, row.Scan(&t.AccessToken, &t.RefreshToken)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to wipe unlinked session tokens: %w", err)
+	}
 
-	return nil
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit unlink: %w", err)
+	}
+	return removed, nil
 }
 
 // MigratePlatformUserID updates the platform_user_id in viewer_platform_identities for a viewer

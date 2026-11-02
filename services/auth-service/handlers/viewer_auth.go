@@ -51,7 +51,7 @@ type ViewerIdentityRepo interface {
 	LinkViewerToUser(ctx context.Context, platform, platformUserID, userID string) error
 	GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error)
 	GetLinkedPlatforms(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
-	UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error
+	UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) ([]repository.RemovedToken, error)
 	MigratePlatformUserID(ctx context.Context, platform, oldPlatformUserID, newPlatformUserID string) error
 }
 
@@ -1268,7 +1268,8 @@ func (h *ViewerAuthHandler) HandleUnlinkPlatform(c *gin.Context) {
 		return
 	}
 
-	if err := h.identityRepo.UnlinkPlatform(c.Request.Context(), viewerID, targetPlatform); err != nil {
+	stored, err := h.identityRepo.UnlinkPlatform(c.Request.Context(), viewerID, targetPlatform)
+	if err != nil {
 		switch err {
 		case repository.ErrLastPlatform:
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -1281,7 +1282,48 @@ func (h *ViewerAuthHandler) HandleUnlinkPlatform(c *gin.Context) {
 		return
 	}
 
+	// The unlinked session's tokens are already wiped; revoke them at the provider too.
+	revokeAtProvider(c.Request.Context(), h.revokerFor(targetPlatform), h.decryptStored(stored),
+		h.logger.With(zap.String("platform", targetPlatform)))
+
 	c.JSON(http.StatusOK, gin.H{"message": "Platform unlinked successfully"})
+}
+
+// revokerFor returns the viewer OAuth client that can revoke a token of platform,
+// or nil when that provider is not configured.
+func (h *ViewerAuthHandler) revokerFor(platform string) TokenRevoker {
+	switch {
+	case platform == "twitch" && h.twitchProvider != nil:
+		return h.twitchProvider
+	case platform == "youtube" && h.youtubeProvider != nil:
+		return h.youtubeProvider
+	case platform == "kick" && h.kickProvider != nil:
+		return h.kickProvider
+	}
+	return nil
+}
+
+// decryptStored decrypts viewer-session tokens as stored. A token that does not
+// decrypt is dropped: it is already wiped and cannot be revoked anyway.
+func (h *ViewerAuthHandler) decryptStored(stored []repository.RemovedToken) []repository.RemovedToken {
+	if h.cipher == nil {
+		return stored
+	}
+	decrypt := func(s string) string {
+		if s == "" {
+			return ""
+		}
+		plain, err := h.cipher.Decrypt(s)
+		if err != nil {
+			return ""
+		}
+		return plain
+	}
+	out := make([]repository.RemovedToken, 0, len(stored))
+	for _, t := range stored {
+		out = append(out, repository.RemovedToken{AccessToken: decrypt(t.AccessToken), RefreshToken: decrypt(t.RefreshToken)})
+	}
+	return out
 }
 
 // sanitizeRedirectPath ensures redirect_to is a safe relative path (starts with /,
