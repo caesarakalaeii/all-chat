@@ -104,7 +104,7 @@ cd frontend && npm run dev  # Start frontend
 
 Each service has a detailed README:
 - [api-gateway](./services/api-gateway/README.md) - WebSocket server, HTTP routing
-- [auth-service](./services/auth-service/README.md) - OAuth flows, JWT tokens
+- [auth-service](./services/auth-service/README.md) - OAuth flows, JWT tokens; also ships `retention-sweeper`, the 15-minute CronJob that enforces the privacy-policy retention periods (ADR-0087)
 - [emote-service](./services/emote-service/README.md) - 7TV, BTTV, FFZ emote APIs
 - [twitch-listener](./services/twitch-listener/README.md) - IRC client, channel management
 - [twitch-eventsub-listener](./services/twitch-eventsub-listener/README.md) - EventSub webhooks (channel points, moderation)

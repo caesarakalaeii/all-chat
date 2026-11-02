@@ -223,7 +223,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Centrifugo/Pusher, TikTok WS, 
 | Service | Role |
 |---------|------|
 | `api-gateway` | WebSocket server for overlays, HTTP routing, OAuth callbacks |
-| `auth-service` | Authentication, sessions, OAuth flows (Twitch, YouTube, Kick, Discord) |
+| `auth-service` | Authentication, sessions, OAuth flows (Twitch, YouTube, Kick, Discord); its image also ships the `retention-sweeper` CronJob that deletes data past the privacy-policy retention periods (ADR-0087) |
 | `emote-service` | 7TV, BTTV, FFZ, and native emote resolution |
 | `twitch-listener` | Twitch IRC chat ingestion (⚠️ deprecated, ADR-0026 — migrating to `twitch-eventsub-listener`) |
 | `twitch-eventsub-listener` | Twitch EventSub webhooks (channel points, moderation, raids) |
