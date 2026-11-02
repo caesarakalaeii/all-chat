@@ -396,7 +396,7 @@ export const marketing = {
       'No. Usage analytics are cookieless and self-hosted, and chat messages are automatically deleted after about an hour.',
     extensionQuestion: 'Is there a browser extension?',
     extensionAnswer:
-      'Yes. The All-Chat browser extension replaces native Twitch, YouTube, and Kick chat so your viewers can follow along across platforms.',
+      'Yes, for your viewers. On streams that use All-Chat, the extension for Chrome and Firefox replaces native Twitch, YouTube, and Kick chat with your merged feed, so viewers can read and chat across platforms. Install links are at allch.at/browser-extension.',
   },
   upgrade: {
     badge: 'All-Chat Premium',

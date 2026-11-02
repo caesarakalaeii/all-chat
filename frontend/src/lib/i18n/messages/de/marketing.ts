@@ -357,7 +357,7 @@ export const marketing: LocaleNamespace<'marketing'> = {
       'Nein. Die Nutzungsanalyse läuft cookiefrei und selbst gehostet, und Chatnachrichten werden nach etwa einer Stunde automatisch gelöscht.',
     extensionQuestion: 'Gibt es eine Browser-Erweiterung?',
     extensionAnswer:
-      'Ja. Die All-Chat-Browser-Erweiterung ersetzt den nativen Twitch-, YouTube- und Kick-Chat, damit deine Zuschauer plattformübergreifend mitlesen.',
+      'Ja, für deine Zuschauer. Bei Streams, die All-Chat nutzen, ersetzt die Erweiterung für Chrome und Firefox den nativen Twitch-, YouTube- und Kick-Chat durch deinen zusammengeführten Feed, damit Zuschauer plattformübergreifend mitlesen und mitschreiben. Die Installationslinks stehen auf allch.at/browser-extension.',
   },
   upgrade: {
     badge: 'All-Chat Premium',
