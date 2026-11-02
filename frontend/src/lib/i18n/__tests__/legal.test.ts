@@ -234,7 +234,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.metaSubheading')).toBe('Facebook & Instagram (beta)')
     expect(t('legal.privacy.tldr')).toBe(
-      '{label} All-Chat only collects what we need to sign you in, connect your streaming platforms and run your overlays, alerts and chat tools. Tokens are encrypted, chat messages are not stored in our database, and we never sell your data. Section\u00A06 lists how long we keep each kind of data. We use cookieless, self-hosted analytics (no tracking cookies; see Section\u00A05.8).'
+      '{label} All-Chat only collects what we need to sign you in, connect your streaming platforms and run your overlays, alerts and chat tools. Tokens are encrypted, the chat shown in your overlays is not stored in our database, and we never sell your data. Section\u00A06 lists how long we keep each kind of data. We use cookieless, self-hosted analytics (no tracking cookies; see Section\u00A05.8).'
     )
     expect(t('legal.privacy.tldrLabel')).toBe('TL;DR:')
     expect(t('legal.privacy.openSourceCallout')).toBe(
@@ -588,7 +588,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.retentionAccountLabel')).toBe('Account, overlay and feature settings:')
     expect(t('legal.privacy.retentionMedia')).toBe(
-      '{label} deleted with the item they belong to or with your account'
+      '{label} deleted with the item they belong to or with your account; the files stop being served within 15 minutes'
     )
     expect(t('legal.privacy.retentionMediaLabel')).toBe('Uploaded media:')
     expect(t('legal.privacy.retentionTokens')).toBe(
@@ -617,7 +617,9 @@ describe('privacy policy copy', () => {
       '{label} kept until the streamer deletes the overlay or you delete your viewer data'
     )
     expect(t('legal.privacy.retentionEngagementLabel')).toBe('Votes, predictions and points:')
-    expect(t('legal.privacy.retentionModeration')).toBe('{label} deleted after 90 days')
+    expect(t('legal.privacy.retentionModeration')).toBe(
+      '{label} deleted after 90 days, also when the account involved is deleted earlier, so abuse can still be investigated'
+    )
     expect(t('legal.privacy.retentionModerationLabel')).toBe('Moderation action log:')
     expect(t('legal.privacy.retentionLogs')).toBe(
       '{label} logs and traces for 7 days, metrics for 15 days'

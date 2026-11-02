@@ -133,7 +133,7 @@ export const legal = {
     // The two callout boxes at the top. Each opens with a bolded label that
     // begins the sentence, so the label is a {label} param rather than a
     // separate fragment.
-    tldr: '{label} All-Chat only collects what we need to sign you in, connect your streaming platforms and run your overlays, alerts and chat tools. Tokens are encrypted, chat messages are not stored in our database, and we never sell your data. Section\u00A06 lists how long we keep each kind of data. We use cookieless, self-hosted analytics (no tracking cookies; see Section\u00A05.8).',
+    tldr: '{label} All-Chat only collects what we need to sign you in, connect your streaming platforms and run your overlays, alerts and chat tools. Tokens are encrypted, the chat shown in your overlays is not stored in our database, and we never sell your data. Section\u00A06 lists how long we keep each kind of data. We use cookieless, self-hosted analytics (no tracking cookies; see Section\u00A05.8).',
     tldrLabel: 'TL;DR:',
     openSourceCallout:
       '{label} All-Chat is licensed under AGPL-3.0. Review the entire codebase—including how we store and process your data—on {github}.',
@@ -377,7 +377,8 @@ export const legal = {
     // the sentence it starts, per the legal.cookieBanner convention.
     retentionAccount: '{label} kept until you delete them or your account',
     retentionAccountLabel: 'Account, overlay and feature settings:',
-    retentionMedia: '{label} deleted with the item they belong to or with your account',
+    retentionMedia:
+      '{label} deleted with the item they belong to or with your account; the files stop being served within 15 minutes',
     retentionMediaLabel: 'Uploaded media:',
     retentionTokens:
       '{label} deleted when you disconnect the platform in the Settings or delete your account; the platform you sign in with stays connected until you delete your account',
@@ -395,7 +396,8 @@ export const legal = {
     retentionEngagement:
       '{label} kept until the streamer deletes the overlay or you delete your viewer data',
     retentionEngagementLabel: 'Votes, predictions and points:',
-    retentionModeration: '{label} deleted after 90 days',
+    retentionModeration:
+      '{label} deleted after 90 days, also when the account involved is deleted earlier, so abuse can still be investigated',
     retentionModerationLabel: 'Moderation action log:',
     retentionLogs: '{label} logs and traces for 7 days, metrics for 15 days',
     retentionLogsLabel: 'Usage logs:',
