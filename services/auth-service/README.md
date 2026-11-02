@@ -301,8 +301,7 @@ Deliberate rules:
   never selected; tables that hold one are listed column by column. Settings tables
   without one are exported whole-row so new settings appear automatically;
   `TestWholeRowExportTablesHoldNoCredentials` fails if one of them gains a
-  credential column. `premium_subscriptions.raw` (the provider's webhook payload,
-  which also describes the campaign) is left out.
+  credential column.
 - **All or nothing.** The export is read in one read-only snapshot with timestamps in
   UTC. A failing section fails the request (500) rather than returning a file that
   silently omits it.

@@ -104,8 +104,8 @@ INSERT INTO device_tokens (user_id, overlay_id, name, token_hash, scopes)
 VALUES (:me, :mine, 'StreamController', 'SECRET-device-hash'::bytea, '{chat:write}');
 INSERT INTO localization_locales (code, english_name, native_name, requested_by) VALUES ('tlh', 'Klingon', 'tlhIngan Hol', :me);
 INSERT INTO localization_translations (locale, key, value, submitted_by) VALUES ('tlh', 'nav.home', 'juH', :me);
-INSERT INTO premium_subscriptions (user_id, provider, provider_user_id, status, tier_id, cents, raw, product)
-VALUES (:me, 'patreon', 'p-1', 'active', 't-1', 500, '{"email": "SECRET-raw-email@example.com"}', 'streamer');
+INSERT INTO premium_subscriptions (user_id, provider, provider_user_id, status, tier_id, cents, product)
+VALUES (:me, 'patreon', 'p-1', 'active', 't-1', 500, 'streamer');
 INSERT INTO ambassador_showcase (user_id, tagline, featured_consent) VALUES (:me, 'Multistreams to 3 platforms', TRUE);
 INSERT INTO moderation_actions (overlay_id, actor_user_id, platform, channel_id, action, outcome, reason)
 VALUES (:mine, :mod, 'twitch', '1001', 'timeout', 'success', 'on my overlay'),

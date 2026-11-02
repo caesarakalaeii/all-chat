@@ -75,8 +75,6 @@ type exportSection struct {
 	one bool
 }
 
-// premiumSubscriptionColumns leaves out raw, the provider's webhook payload: it describes the
-// campaign and its creator as well as the member, and its member-relevant facts are the columns.
 const premiumSubscriptionColumns = `provider, provider_user_id, product, status, tier_id, cents,
 	current_period_end, created_at, updated_at`
 
