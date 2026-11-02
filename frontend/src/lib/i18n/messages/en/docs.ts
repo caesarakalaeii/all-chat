@@ -271,7 +271,7 @@ export const docs = {
     monitorDockIntro:
       'The monitor also works as an OBS Custom Browser Dock, so chat sits beside your mixer instead of in a second window. In the overlay editor, click {copyDock}. It copies the monitor link with dock mode on:',
     monitorDockSteps:
-      'In OBS, open {menu}, give the dock a name, paste the link and click Apply. The dock keeps its own browser profile, so it asks you to sign in once inside the panel. Streamlabs Desktop accepts the same link as a custom browser dock.',
+      'In OBS, open {menu}, give the dock a name, paste the link and click Apply. The dock keeps its own browser profile, so it asks you to sign in once inside the panel. Streamlabs Desktop accepts the same link as a custom browser dock. To see chat and activity at once, pick the Both tab in the dock, or add two docks, one ending in ?dock=chat and one in ?dock=activity, each showing just that panel.',
     monitorDockMenu: 'View > Docks > Custom Browser Docks',
     moderationHeading: 'Moderate your chat',
     moderationBody:

@@ -24,10 +24,11 @@ import type { DockTab } from '@/app/overlay/[id]/view/dockMode'
 import { useTranslations } from '@/lib/i18n'
 
 /**
- * Chat | Activity switcher for the monitor in dock mode.
+ * Chat | Activity | Both switcher for the monitor in dock mode.
  *
  * Replaces `ResizableSplit` at dock width, where two side-by-side columns are
- * roughly 150px each and neither is readable. Styled from the same token
+ * roughly 150px each and neither is readable; Both stacks them top/bottom
+ * instead. Styled from the same token
  * vocabulary as `LayoutPicker` (the control it stands in for) rather than the
  * shadcn `Tabs` primitive: the monitor scopes its own light mode by overriding
  * `--color-*` in `.overlay-view.light`, which the primitive's
@@ -51,6 +52,7 @@ export function DockTabPicker({
   const tabs: ReadonlyArray<{ value: DockTab; label: string }> = [
     { value: 'chat', label: t('viewerOverlay.dock.chatTab') },
     { value: 'activity', label: t('viewerOverlay.dock.activityTab') },
+    { value: 'split', label: t('viewerOverlay.dock.splitTab') },
   ]
 
   return (

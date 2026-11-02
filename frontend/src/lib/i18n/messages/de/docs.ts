@@ -244,7 +244,7 @@ export const docs: LocaleNamespace<'docs'> = {
     monitorDockIntro:
       'Der Monitor funktioniert auch als OBS-Custom-Browser-Dock, so dass der Chat neben deinem Audiopult sitzt statt in einem zweiten Fenster. Klicke im Overlay-Editor auf {copyDock}. Er kopiert den Monitor-Link im Dock-Modus:',
     monitorDockSteps:
-      'Öffne in OBS {menu}, benenne das Dock, füge den Link ein und klicke auf Anwenden. Das Dock hält sein eigenes Browser-Profil, daher wirst du einmal im Panel zur Anmeldung aufgefordert. Streamlabs Desktop akzeptiert denselben Link als Custom-Browser-Dock.',
+      'Öffne in OBS {menu}, benenne das Dock, füge den Link ein und klicke auf Anwenden. Das Dock hält sein eigenes Browser-Profil, daher wirst du einmal im Panel zur Anmeldung aufgefordert. Streamlabs Desktop akzeptiert denselben Link als Custom-Browser-Dock. Um Chat und Aktivität gleichzeitig zu sehen, wähle im Dock den Tab „Beides“ oder füge zwei Docks hinzu, eines mit ?dock=chat und eines mit ?dock=activity am Ende, die jeweils nur diesen Bereich zeigen.',
     monitorDockMenu: 'Ansicht > Docks > Benutzerdefinierte Browser-Docks',
     moderationHeading: 'Deinen Chat moderieren',
     moderationBody:

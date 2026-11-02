@@ -37,7 +37,9 @@
  * custom browser dock: a ~320-450px chromeless panel. Same data path, same
  * moderation, narrower chrome — a single non-wrapping header row with one
  * overflow menu, the notice strips collapsed into one status row, and Chat |
- * Activity as two tabs instead of a split. See ./dockMode.
+ * Activity | Both as tabs (Both stacks the two) instead of a side-by-side split.
+ * `?dock=chat` and `?dock=activity` pin one panel with no tabs, for two docks.
+ * See ./dockMode.
  */
 
 'use client'
@@ -102,7 +104,14 @@ import { useTranslations, type TFunction } from '@/lib/i18n'
 import { OFFLINE_THRESHOLD } from '@/lib/utils/connectionStatusLabel'
 import { createSoundPlayer, type SoundPlayer, type SoundSettings } from '@/lib/utils/soundPlayer'
 
-import { DEFAULT_DOCK_TAB, isDockMode, loadDockTab, saveDockTab, type DockTab } from './dockMode'
+import {
+  DEFAULT_DOCK_TAB,
+  isDockMode,
+  loadDockTab,
+  pinnedDockPanel,
+  saveDockTab,
+  type DockTab,
+} from './dockMode'
 import { shouldOfferModLogOptIn } from './modLogOptIn'
 import {
   DEFAULT_VIEW_LAYOUT,
@@ -160,7 +169,10 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   const { id } = use(params)
   // Presentation only. Every hook below runs identically in both modes; dock
   // mode changes what the return statement wraps them in.
-  const dock = isDockMode(useSearchParams())
+  const searchParams = useSearchParams()
+  const dock = isDockMode(searchParams)
+  // `dock=chat` / `dock=activity`: one panel, no tabs, so two docks can show both.
+  const pinnedPanel = pinnedDockPanel(searchParams)
 
   const [items, setItems] = useState<ViewItem[]>([])
   const [moderationLog, setModerationLog] = useState<ModEntry[]>([])
@@ -1118,6 +1130,20 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     </>
   )
 
+  const chatPanel = (
+    <ChatPanel
+      items={chat}
+      prefs={prefs}
+      capabilities={capabilitiesByChannel}
+      moderation={moderation}
+    />
+  )
+  const activityPanel = (
+    <ActivityPanel events={events} system={system} moderationLog={moderationLog} />
+  )
+  // A pinned dock URL wins over the saved tab.
+  const dockView: DockTab = pinnedPanel ?? dockTab
+
   return (
     <div
       id="overlay-view-root"
@@ -1164,26 +1190,35 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           across overlays (L-C5). */}
       {isOwner && showEngagement && <EngagementControls key={id} overlayId={id} />}
 
-      {/* Chat | Activity. Two side-by-side columns are ~150px each at dock width,
-          so the dock switches between them instead of splitting. Only the active
-          panel is mounted: its scrollback comes from `items` and is rebuilt on
-          return, and keeping the other one alive behind `hidden` would leave it
-          measuring a zero-height box. */}
+      {/* Chat | Activity | Both. Two side-by-side columns are ~150px each at dock
+          width, so the dock switches between them, or stacks them for Both. Only
+          the shown panels are mounted: scrollback comes from `items` and is
+          rebuilt on return, and keeping a panel alive behind `hidden` would leave
+          it measuring a zero-height box. */}
       {dock ? (
         <>
-          <DockTabPicker tab={dockTab} onChange={updateDockTab} />
+          {!pinnedPanel && <DockTabPicker tab={dockTab} onChange={updateDockTab} />}
           {/* Same box ResizableSplit gives each panel: both are `h-full min-h-0`
               and need a sized parent to scroll inside instead of growing. */}
-          <div id={DOCK_PANEL_ID} role="tabpanel" className="min-h-0 flex-1 overflow-hidden">
-            {dockTab === 'chat' ? (
-              <ChatPanel
-                items={chat}
-                prefs={prefs}
-                capabilities={capabilitiesByChannel}
-                moderation={moderation}
+          <div
+            id={pinnedPanel ? undefined : DOCK_PANEL_ID}
+            role={pinnedPanel ? undefined : 'tabpanel'}
+            className={clsx(
+              'min-h-0 flex-1 overflow-hidden',
+              dockView === 'split' && 'flex flex-col'
+            )}
+          >
+            {dockView === 'split' ? (
+              <ResizableSplit
+                storageKey={`overlay-view-dock-split-${id}`}
+                orientation="vertical"
+                left={chatPanel}
+                right={activityPanel}
               />
+            ) : dockView === 'chat' ? (
+              chatPanel
             ) : (
-              <ActivityPanel events={events} system={system} moderationLog={moderationLog} />
+              activityPanel
             )}
           </div>
         </>
@@ -1192,20 +1227,14 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           storageKey={`overlay-view-split-${id}`}
           orientation={LAYOUT_CONFIG[layout].orientation}
           reversed={LAYOUT_CONFIG[layout].reversed}
-          left={
-            <ChatPanel
-              items={chat}
-              prefs={prefs}
-              capabilities={capabilitiesByChannel}
-              moderation={moderation}
-            />
-          }
-          right={<ActivityPanel events={events} system={system} moderationLog={moderationLog} />}
+          left={chatPanel}
+          right={activityPanel}
         />
       )}
 
-      {/* Send bar — owner only, and only when ≥1 platform source can send. */}
-      {isOwner && hasSendableSource && capabilities && (
+      {/* Send bar — owner only, and only when ≥1 platform source can send. Not in
+          an activity-only dock: replying belongs beside the chat it answers. */}
+      {isOwner && hasSendableSource && capabilities && pinnedPanel !== 'activity' && (
         <ChatSendBar
           sources={capabilities.sources}
           onEnable={enableModeration}

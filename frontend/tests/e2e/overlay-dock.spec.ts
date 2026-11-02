@@ -12,7 +12,8 @@ import { test, expect, type Page } from '@playwright/test'
  *    sign-in affordance. In dock mode it must render a sign-in panel instead
  *    and stay on the monitor URL.
  * 2. It is narrow. Two side-by-side columns are ~150px each there, so the
- *    ResizableSplit is replaced by a Chat | Activity tab switcher.
+ *    ResizableSplit is replaced by a Chat | Activity | Both tab switcher, where
+ *    Both stacks the panels. `dock=chat` / `dock=activity` pin one panel.
  *
  * Frontend-only (API mocked, no backend), matching overlay-view.spec.ts. The
  * per-message moderation behind these panels is covered by the component tests.
@@ -101,6 +102,36 @@ test.describe('Overlay monitor in dock mode', () => {
       OVERLAY_ID
     )
     expect(stored).toBe('activity')
+  })
+
+  test('the Both tab stacks chat above activity in one dock', async ({ page }) => {
+    await page.setViewportSize(DOCK_VIEWPORT)
+    await mockApi(page, { signedIn: true })
+
+    await page.goto(DOCK_URL)
+    await expect(page.locator('#overlay-view-root')).toBeVisible({ timeout: 20_000 })
+
+    await page.getByRole('tab', { name: 'Both' }).click()
+    const panel = page.locator('#overlay-view-dock-panel')
+    const chat = panel.getByText('Chat', { exact: true })
+    const activity = panel.getByText('Activity & Events', { exact: true })
+    await expect(chat).toBeVisible()
+    await expect(activity).toBeVisible()
+    const chatTop = await chat.evaluate((el) => el.getBoundingClientRect().top)
+    const activityTop = await activity.evaluate((el) => el.getBoundingClientRect().top)
+    expect(chatTop).toBeLessThan(activityTop)
+  })
+
+  // Two docks, one per panel: each shows only its panel and no tab bar.
+  test('a pinned dock shows one panel with no tabs', async ({ page }) => {
+    await page.setViewportSize(DOCK_VIEWPORT)
+    await mockApi(page, { signedIn: true })
+
+    await page.goto(`/overlay/${OVERLAY_ID}/view?dock=activity`)
+    await expect(page.getByText('Activity & Events', { exact: true })).toBeVisible({
+      timeout: 20_000,
+    })
+    await expect(page.getByRole('tab')).toHaveCount(0)
   })
 
   test('a signed-in dock keeps its header to one row and hides the layout picker', async ({

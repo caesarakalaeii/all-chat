@@ -69,6 +69,8 @@ export const onboarding = {
     // own browser profile, so an already-signed-in browser does not count.
     step3:
       'The dock has its own sign-in \u2014 sign in once inside the panel and it stays signed in. Drag the panel where you want it; a narrow column beside Scenes and Sources works well.',
+    splitTip:
+      'Want chat and activity visible at once? Pick the Both tab in the dock. For two separate docks instead, end one link in dock=chat and the other in dock=activity instead of dock=1.',
   },
   extras: {
     heading: 'Optional: go further',

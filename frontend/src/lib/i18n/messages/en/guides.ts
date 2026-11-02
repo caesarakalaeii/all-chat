@@ -122,7 +122,7 @@ export const guides = {
       'Every All-Chat overlay comes with a chat monitor: the same messages, laid out for you to read instead of for viewers to watch. OBS can hold the monitor as a dock next to Scenes and Sources, so chat stays in the window you stream from.',
     urlHeading: 'The dock URL',
     urlBody:
-      'The dock link for an overlay is {url}: the monitor laid out for a narrow panel. In the overlay editor, click Copy dock URL to copy it. Without ?dock=1 the same address opens the full-width monitor in a browser tab.',
+      'The dock link for an overlay is {url}: the monitor laid out for a narrow panel. In the overlay editor, click Copy dock URL to copy it. Without ?dock=1 the same address opens the full-width monitor in a browser tab. To see chat and activity at once, pick the Both tab in the dock, or add two docks, one ending in ?dock=chat and one in ?dock=activity, each showing just that panel.',
     stepsHeading: 'Add the monitor as an OBS dock',
     stepMenu: 'In OBS, open {menu}.',
     stepMenuPath: 'View > Docks > Custom Browser Docks',

@@ -515,6 +515,7 @@ export const viewerOverlay: LocaleNamespace<'viewerOverlay'> = {
 
     chatTab: 'Chat',
     activityTab: 'Aktivität',
+    splitTab: 'Beides',
     menuLabel: 'Monitor-Steuerung',
     noticesLabel: 'Monitor-Hinweise',
     noticesSummary: '{count} Hinweise',
