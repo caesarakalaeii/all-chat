@@ -484,6 +484,11 @@ export const admin: LocaleNamespace<'admin'> = {
     customFieldLabel: 'Benutzerdefinierte Dauer in Tagen',
     customRange: 'Tage (1–{max})',
   },
+  list: {
+    loadMore: 'Mehr laden',
+    loadingMore: 'Wird geladen ...',
+    loadMoreError: 'Laden fehlgeschlagen. Erneut versuchen',
+  },
   localization: {
     heading: 'Lokalisierung',
     intro:

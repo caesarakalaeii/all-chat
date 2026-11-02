@@ -26,8 +26,12 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { ChannelLink } from '@/components/ChannelLink'
+import { LoadMore } from '@/components/admin/LoadMore'
+import { usePagedList } from '@/hooks/usePagedList'
+import { useDebounce } from '@/hooks/useDebounce'
 import { formatDate, useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
+import { readQueryParam } from '@/lib/utils'
 
 interface Source {
   // Stored platforms outgrow the chromatic set (discord, shared_overlay); the
@@ -59,6 +63,23 @@ interface Source {
   owner_display_name?: string
 }
 
+// Platforms a ?platform=<p> deep link may preselect (e.g. from the dashboard's
+// per-platform breakdown).
+const KNOWN_PLATFORMS = [
+  'twitch',
+  'youtube',
+  'kick',
+  'tiktok',
+  'owncast',
+  'goodgame',
+  'picarto',
+  'facebook',
+  'instagram',
+  'altstream',
+  'discord',
+  'shared_overlay',
+]
+
 // The dash shown where a source has no resolvable owner. A typographic symbol
 // standing in for absent data, not copy.
 const NO_OWNER_DASH = '\u2014'
@@ -74,112 +95,58 @@ function ownerLabel(source: Source): string {
 
 export default function SourcesPage() {
   const t = useTranslations()
-  const [sources, setSources] = useState<Source[]>([])
-  const [platformFilter, setPlatformFilter] = useState<string>('all')
+  const [platformFilter, setPlatformFilter] = useState(() => {
+    const p = readQueryParam('platform')
+    return KNOWN_PLATFORMS.includes(p) ? p : 'all'
+  })
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchTerm, setSearchTerm] = useState('')
   // Optional owner scope from ?user=<id> (set when arriving from the Users page
   // "View this user's sources" link). Narrows the list to one owner.
-  const [userFilter, setUserFilter] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [userFilter, setUserFilter] = useState<string | null>(() => readQueryParam('user') || null)
+  // Per-platform totals across every source, from the dashboard stats.
+  const [platformTotals, setPlatformTotals] = useState<Record<string, number>>({})
   const searchId = useId()
   const platformFilterId = useId()
   const statusFilterId = useId()
 
-  // Fetch all sources
+  // Sources are searched (channel, overlay, owner), filtered and paged
+  // server-side: the full list grew too large to load and render at once.
+  const search = useDebounce(searchTerm.trim(), 300)
+  const query = new URLSearchParams()
+  if (search) query.set('q', search)
+  if (platformFilter !== 'all') query.set('platform', platformFilter)
+  if (statusFilter !== 'all') query.set('status', statusFilter)
+  if (userFilter) query.set('user', userFilter)
+  const list = usePagedList<Source>(`/api/v1/admin/sources?${query}`, 'sources')
+
   useEffect(() => {
-    async function fetchSources() {
-      try {
-        // Auth is via the httpOnly session cookie (same-origin); the gateway
-        // CookieToBearer middleware copies the access cookie to Authorization
-        // before backend validation (no JS-readable token).
-        const response = await fetch('/api/v1/admin/sources', {
-          credentials: 'same-origin',
-        })
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-        }
-
-        const data = await response.json()
-        setSources(data)
-        // Scope from URL (client-only; read post-await): ?user=<id> owner scope
-        // and ?platform=<p> (e.g. from the dashboard's per-platform breakdown).
-        const params = new URLSearchParams(window.location.search)
-        setUserFilter(params.get('user'))
-        const p = params.get('platform')
-        if (
-          p &&
-          [
-            'twitch',
-            'youtube',
-            'kick',
-            'tiktok',
-            'owncast',
-            'goodgame',
-            'picarto',
-            'facebook',
-            'instagram',
-            'altstream',
-            'discord',
-            'shared_overlay',
-          ].includes(p)
-        ) {
-          setPlatformFilter(p)
-        }
-        setLoading(false)
-      } catch (err) {
-        console.error('Failed to load sources:', err)
-        setError(t('admin.sources.loadError'))
-        setLoading(false)
-      }
-    }
-
-    fetchSources()
-  }, [t])
-
-  // Derived during render (no state-in-effect): filter by owner scope, platform,
-  // status, and search (channel name/id, overlay name, owner username).
-  const searchLower = searchTerm.trim().toLowerCase()
-  const filteredSources = sources.filter((s) => {
-    if (userFilter && s.user_id !== userFilter) return false
-    if (platformFilter !== 'all' && s.platform !== platformFilter) return false
-    if (statusFilter === 'active' && !s.is_active) return false
-    if (statusFilter === 'inactive' && s.is_active) return false
-    if (searchLower) {
-      return (
-        s.channel_name.toLowerCase().includes(searchLower) ||
-        s.channel_id.toLowerCase().includes(searchLower) ||
-        (s.owner_username?.toLowerCase().includes(searchLower) ?? false)
+    fetch('/api/v1/admin/stats', { credentials: 'same-origin' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((stats: { total_sources?: Record<string, number> } | null) =>
+        setPlatformTotals(stats?.total_sources ?? {})
       )
-    }
-    return true
-  })
+      .catch((err) => console.error('Failed to load source totals:', err))
+  }, [])
 
-  // Label the active owner scope with a resolved username when we have one.
+  // While scoped to one owner every listed source is theirs, so the first row
+  // names them.
   const userFilterLabel = userFilter
-    ? (sources.find((s) => s.user_id === userFilter)?.owner_username ?? userFilter.slice(0, 8))
+    ? (list.items[0]?.owner_username ?? userFilter.slice(0, 8))
     : null
+  const filtered =
+    Boolean(search || userFilter) || platformFilter !== 'all' || statusFilter !== 'all'
+  // The current filters' first page failed: their rows are not on screen.
+  const filterFailed = list.error && !list.hasMore
+  const filteredSources = filterFailed ? [] : list.items
 
-  const platformCounts = {
-    twitch: sources.filter((s) => s.platform === 'twitch').length,
-    youtube: sources.filter((s) => s.platform === 'youtube').length,
-    kick: sources.filter((s) => s.platform === 'kick').length,
-    tiktok: sources.filter((s) => s.platform === 'tiktok').length,
-    owncast: sources.filter((s) => s.platform === 'owncast').length,
-    goodgame: sources.filter((s) => s.platform === 'goodgame').length,
-    picarto: sources.filter((s) => s.platform === 'picarto').length,
-    facebook: sources.filter((s) => s.platform === 'facebook').length,
-    instagram: sources.filter((s) => s.platform === 'instagram').length,
-    altstream: sources.filter((s) => s.platform === 'altstream').length,
-  }
-
-  if (error) {
+  // Only the very first load failing takes over the page; a later failure
+  // (new filters, a next page) leaves the filters usable.
+  if (list.error && list.response === undefined) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8">
         <Card className="border-destructive p-4">
-          <p className="text-destructive">{error}</p>
+          <p className="text-destructive">{t('admin.sources.loadError')}</p>
         </Card>
       </div>
     )
@@ -236,7 +203,7 @@ export default function SourcesPage() {
             </div>
             <div>
               <div className="text-xs text-text-sub">{t('common.platforms.twitch')}</div>
-              <div className="text-lg font-semibold text-text">{platformCounts.twitch}</div>
+              <div className="text-lg font-semibold text-text">{platformTotals.twitch ?? 0}</div>
             </div>
           </div>
         </Card>
@@ -255,7 +222,7 @@ export default function SourcesPage() {
             </div>
             <div>
               <div className="text-xs text-text-sub">{t('common.platforms.youtube')}</div>
-              <div className="text-lg font-semibold text-text">{platformCounts.youtube}</div>
+              <div className="text-lg font-semibold text-text">{platformTotals.youtube ?? 0}</div>
             </div>
           </div>
         </Card>
@@ -278,7 +245,7 @@ export default function SourcesPage() {
             </div>
             <div>
               <div className="text-xs text-text-sub">{t('common.platforms.kick')}</div>
-              <div className="text-lg font-semibold text-text">{platformCounts.kick}</div>
+              <div className="text-lg font-semibold text-text">{platformTotals.kick ?? 0}</div>
             </div>
           </div>
         </Card>
@@ -297,7 +264,7 @@ export default function SourcesPage() {
             </div>
             <div>
               <div className="text-xs text-text-sub">{t('common.platforms.tiktok')}</div>
-              <div className="text-lg font-semibold text-text">{platformCounts.tiktok}</div>
+              <div className="text-lg font-semibold text-text">{platformTotals.tiktok ?? 0}</div>
             </div>
           </div>
         </Card>
@@ -367,15 +334,19 @@ export default function SourcesPage() {
       </Card>
 
       {/* Sources Table */}
-      {loading ? (
+      {list.loading && filteredSources.length === 0 ? (
         <Card className="space-y-3 p-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-10 w-full rounded-lg" />
           ))}
         </Card>
+      ) : filterFailed ? (
+        <Card className="border-destructive p-8 text-center text-sm text-destructive">
+          {t('admin.sources.loadError')}
+        </Card>
       ) : filteredSources.length === 0 ? (
         <Card className="p-8 text-center text-sm text-text-dim">
-          {sources.length === 0 ? t('admin.sources.emptyNone') : t('admin.sources.emptyFiltered')}
+          {filtered ? t('admin.sources.emptyFiltered') : t('admin.sources.emptyNone')}
         </Card>
       ) : (
         <>
@@ -383,7 +354,7 @@ export default function SourcesPage() {
           <Card className="hidden overflow-hidden md:block">
             <div className="border-b border-border px-4 py-5">
               <h3 className="text-base font-medium text-text">
-                {t('admin.sources.listHeading', { count: filteredSources.length })}
+                {t('admin.sources.listHeading', { count: list.total })}
               </h3>
             </div>
             <div className="overflow-x-auto">
@@ -471,7 +442,7 @@ export default function SourcesPage() {
           {/* Mobile card list */}
           <div className="space-y-3 md:hidden">
             <h3 className="text-sm font-medium text-text-sub">
-              {t('admin.sources.listHeading', { count: filteredSources.length })}
+              {t('admin.sources.listHeading', { count: list.total })}
             </h3>
             {filteredSources.map((source) => (
               <Card key={source.id} className="p-4">
@@ -519,6 +490,7 @@ export default function SourcesPage() {
               </Card>
             ))}
           </div>
+          <LoadMore list={list} />
         </>
       )}
     </div>

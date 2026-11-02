@@ -153,12 +153,12 @@ Consider implementing audit logging for admin actions in production.
 ## Protected Admin Endpoints
 
 ### Auth Service
-- `GET /admin/users` - List all users
+- `GET /admin/users` - List users (paged and searchable, ADR-0086)
 - `GET /admin/users/:id` - Get specific user details
 
 ### Overlay Manager
-- `GET /admin/overlays` - List all overlays
-- `GET /admin/sources` - List all sources system-wide
+- `GET /admin/overlays` - List overlays (paged and searchable, ADR-0086)
+- `GET /admin/sources` - List sources system-wide (paged and searchable, ADR-0086)
 
 ### API Gateway (Proxies)
 - `GET /api/v1/admin/users` → auth-service
@@ -221,7 +221,7 @@ TOKEN=$(curl -X POST http://localhost:8080/api/v1/auth/login \
 
 # Access admin endpoint (should get 200)
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/admin/users
-# Response: [{"id":"...","username":"...","is_admin":true,...}]
+# Response: {"users":[{"id":"...","username":"...",...}],"total":42,"counts":{...},"limit":50,"offset":0}
 ```
 
 ## Troubleshooting

@@ -463,7 +463,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ### ADR-0035: Admin Global Entity Search
 
-**Status**: ✅ Accepted
+**Status**: ✅ Accepted; client-side federation superseded by ADR-0086
 **Date**: 2026-07-17
 **Problem**: There was no way to jump to an admin entity by name or id — an admin had to guess whether an id was a user/overlay/source/viewer and page through the right list
 **Decision**: Add a global admin search resolving a free-text query across users (username/display_name/id), overlays (name/id), sources (channel name/handle/id), and viewers (username/platform_user_id), returning typed results that deep-link into the ADR-0036 URL-addressable views; initial implementation federates over the existing admin list endpoints client-side, with a server-side `/api/v1/admin/search` endpoint noted as the future optimization
@@ -892,6 +892,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Decision**: New `altstream-listener` (port 8101) reads the official, documented, unauthenticated developer API: the SSE chat stream per channel plus REST for live status and emote catalogs, never an internal endpoint. v1 is read-only: messages, highlights, and native `delete`/`clear`; other event types are dropped with a metric. The SSE `lastId` parameter is mandatory and undocumented (without it the stream only pings), so the listener always sends one. Early access on every host: the `platform_altstream` gate is seeded `early_access=TRUE`, `is_premium=FALSE` (migration 117), and the frontend shows Altstream on allch.at only to early-access users; the listener runs from `:main`.
 **Impact**: No credentials or auth-service change. Risks accepted: a three-month-old, one-developer platform with frequent October outages and a new API whose docs already lag the server (`lastId`); one SSE connection per watched channel from the cluster's egress IP; no full gap replay after a reconnect; emotes from unwatched channels stay text; no alerts.
 **→ Read**: [0082-altstream-public-sse-chat.md](./0082-altstream-public-sse-chat.md)
+
+---
+
+### ADR-0086: Server-side pagination and search for the admin lists
+
+**Status**: Accepted (2026-11-02)
+**Problem**: The admin Users, Overlays and Sources pages fetched and rendered their whole table, and global search fetched all three full lists to show eight matches each; the Users and Sources pages became slow as the platform grew.
+**Decision**: The three list endpoints take `limit`/`offset` and answer `{ items, total }` like the Viewers endpoint, with server-side `q` (literal substring, LIKE wildcards escaped) and filters (user tabs with per-tab `counts`, source platform/status/owner, overlay `ids`). The pages scroll endlessly through `usePagedList` + `<LoadMore>`; the connected-only Overlays view loads its bounded set by `ids`; global search asks each endpoint for `q` with `limit=8`, superseding ADR-0035's client federation.
+**Impact**: Bounded page loads whatever the table size. Breaking response shape, so frontend and backend ship together (and `beta` needs `main` merged). User tab counts still aggregate over the search on each request; offset paging can skip or repeat a row during concurrent inserts.
+**→ Read**: [0086-admin-list-server-side-pagination.md](./0086-admin-list-server-side-pagination.md)
 
 ---
 

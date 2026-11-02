@@ -170,7 +170,7 @@ func (r *AmbassadorRepository) SetFeaturedConsent(ctx context.Context, userID st
 func (r *AmbassadorRepository) ListPublic(ctx context.Context) ([]PublicAmbassador, error) {
 	// Exclude banned accounts by BOTH ban paths: the account-level users.is_banned
 	// AND an active platform-ID ban (banned_platform_ids), which is the authoritative
-	// ban signal the rest of the app uses (auth-service GetAllUsers) and which does
+	// ban signal the rest of the app uses (auth-service ListUsers) and which does
 	// NOT set users.is_banned. A public marketing card must never feature either.
 	rows, err := r.db.Query(ctx, `
 		SELECT u.username, u.display_name, u.profile_image_url, u.auth_provider, sc.tagline

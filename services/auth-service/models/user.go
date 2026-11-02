@@ -34,7 +34,7 @@ type User struct {
 	IsAmbassador     bool       `json:"is_ambassador"`                // Ambassador role (ADR-0041): all premium + early-access + public homepage showcase
 	PremiumExpiresAt *time.Time `json:"premium_expires_at,omitempty"` // ADR-0027: time-limited admin premium override deadline (NULL = permanent)
 	// Ambassador showcase card metadata (ADR-0041), populated ONLY by the admin
-	// listing (GetAllUsers LEFT JOINs ambassador_showcase). omitempty keeps them off
+	// listing (ListUsers LEFT JOINs ambassador_showcase). omitempty keeps them off
 	// the /auth/me response, which does not populate them.
 	AmbassadorTagline   *string    `json:"ambassador_tagline,omitempty"`
 	AmbassadorSortOrder int        `json:"ambassador_sort_order,omitempty"`
@@ -51,7 +51,7 @@ type User struct {
 	// NULL = first-run setup guide is shown; deliberately no omitempty so the
 	// frontend receives an explicit null for users who have not onboarded.
 	OnboardingCompletedAt *time.Time `json:"onboarding_completed_at"`
-	// Overlay-setup counts, populated only by GetAllUsers to power the admin
+	// Overlay-setup counts, populated only by ListUsers to power the admin
 	// "never set up an overlay" filter. Not persisted and excluded from JSON;
 	// the admin listing handler exposes them via its own response struct.
 	OverlaysCount int `json:"-"`

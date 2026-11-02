@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
@@ -37,7 +39,8 @@ import (
 // with a fake repository — the concrete UserRepository requires a live DB
 // pool (GetUserByID panics on a nil pool) and cannot be substituted otherwise.
 type adminUserRepository interface {
-	GetAllUsers(ctx context.Context) ([]*models.User, error)
+	ListUsers(ctx context.Context, filter repository.UserListFilter, limit, offset int) ([]*models.User, error)
+	CountUsers(ctx context.Context, query string) (map[string]int, error)
 	GetUserByID(ctx context.Context, userID string) (*models.User, error)
 	BanUser(ctx context.Context, userID, adminID, reason string) error
 	BanPlatformID(ctx context.Context, platform, platformID, adminID, reason string) error
@@ -72,17 +75,46 @@ func NewAdminHandler(repo adminUserRepository, db *pgxpool.Pool, logger *zap.Log
 	}
 }
 
-// ListUsers returns all users in the system (admin only)
-// GET /api/v1/admin/users
+// pageParams reads the limit/offset pagination query parameters shared by the
+// admin list endpoints: 50 rows by default, at most 100, and junk or negative
+// values fall back to the defaults.
+func pageParams(c *gin.Context) (limit, offset int) {
+	limit = 50
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
+		limit = min(l, 100)
+	}
+	if o, err := strconv.Atoi(c.Query("offset")); err == nil && o > 0 {
+		offset = o
+	}
+	return limit, offset
+}
+
+// ListUsers returns one page of users, newest first, with the total for the
+// selected tab and the count of every tab (admin only).
+// GET /api/v1/admin/users?q=<search>&filter=<tab>&limit=&offset=
 func (h *AdminHandler) ListUsers(c *gin.Context) {
-	// Get all users from database
-	users, err := h.repo.GetAllUsers(c.Request.Context())
+	ctx := c.Request.Context()
+	limit, offset := pageParams(c)
+	filter := repository.UserListFilter{
+		Query:  strings.TrimSpace(c.Query("q")),
+		Status: c.Query("filter"),
+	}
+
+	counts, err := h.repo.CountUsers(ctx, filter.Query)
+	if err != nil {
+		h.logger.Error("Failed to count users", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		return
+	}
+	users, err := h.repo.ListUsers(ctx, filter, limit, offset)
 	if err != nil {
 		h.logger.Error("Failed to fetch users", zap.Error(err))
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to fetch users",
-		})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
 		return
+	}
+	total, ok := counts[filter.Status]
+	if !ok {
+		total = counts["all"]
 	}
 
 	// Return users without sensitive information
@@ -153,8 +185,13 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		}
 	}
 
-	h.logger.Info("Listed users", zap.Int("count", len(users)))
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, gin.H{
+		"users":  response,
+		"total":  total,
+		"counts": counts,
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
 // GetUser returns a specific user by ID (admin only)

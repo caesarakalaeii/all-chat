@@ -36,14 +36,23 @@ source breakdown, and the nav grid.
 ### Search (`/admin/search`, ADR-0035)
 
 One box that resolves a query across users, overlays, sources, and viewers and
-deep-links each hit into the addressable views. Users/overlays/sources are
-federated on the client over the admin list endpoints; viewers use the
-server-side `?q=` search.
+deep-links each hit into the addressable views. Each group asks its admin list
+endpoint for the first eight server-side `?q=` matches and shows their total
+(ADR-0086).
+
+### Paged lists (ADR-0086)
+
+Users, Overlays and Sources never load their whole table. They fetch 50 rows at
+a time from the list endpoint and load the next page as the list scrolls
+(`hooks/usePagedList.ts` + `components/admin/LoadMore.tsx`; the footer is also a
+"Load more" button for keyboard users). Search and filters are sent to the
+server, so they cover every row, not only the loaded ones.
 
 ### Users (`/admin/users`)
 
 List with avatar, platform badges, and status; search by username/display
-name/id/platform id; filter tabs (all/active/banned/premium/beta). Detail panel:
+name/id/platform id; filter tabs (all/active/banned/premium/beta/no setup) with
+server-side counts that follow the search. Detail panel:
 impersonate, grant/revoke premium (optionally time-limited, ADR-0027),
 grant/revoke beta-tester (ADR-0020), ban/unban, and the user's overlays (linked
 to the admin overlay detail, with a secondary link to the live overlay) plus a
@@ -52,7 +61,8 @@ to the admin overlay detail, with a secondary link to the live overlay) plus a
 ### Overlays (`/admin/overlays`)
 
 List with live-connection status (and a "status unavailable" notice when the
-connection endpoint can't be read). Detail panel resolves the **owner** to a
+connection endpoint can't be read). The connected-only view loads just the
+connected overlays (by `ids`) and sorts them longest-open first. Detail panel resolves the **owner** to a
 linked `@username` (not a bare UUID) and lists connected sources with channel
 links.
 
@@ -91,8 +101,9 @@ stored channel identifier into a link to the real platform page:
 
 ## Backend endpoints
 
-- overlay-manager: `GET /api/v1/admin/overlays`, `/admin/overlays/active`, `/admin/overlays/:id/sources`, `/admin/sources`, `/admin/user-overlays/:id` — overlay/source responses include `owner_username`/`owner_display_name` (joined from `users`) and `channel_handle`.
-- auth-service: `GET /api/v1/admin/users`, `/admin/viewers` (with `q`/`is_banned`/`is_premium`/`platform`/`limit`/`offset` and a `total`), `/admin/viewers/:session_id/activity`, plus ban/unban/premium/beta mutations and impersonation.
+- overlay-manager: `GET /api/v1/admin/overlays` (`q`/`ids`), `/admin/sources` (`q`/`platform`/`status`/`user`), `/admin/overlays/active`, `/admin/overlays/:id/sources`, `/admin/user-overlays/:id` — overlay/source responses include `owner_username`/`owner_display_name` (joined from `users`) and `channel_handle`.
+- auth-service: `GET /api/v1/admin/users` (`q`/`filter`, plus per-tab `counts`), `/admin/viewers` (`q`/`is_banned`/`is_premium`/`platform`), `/admin/viewers/:session_id/activity`, `/admin/stats`, plus ban/unban/premium/beta mutations and impersonation.
+- Every admin list endpoint (users, overlays, sources, viewers) pages with `limit` (default 50, at most 100) and `offset` and answers `{ <items>: [...], total, limit, offset }` (ADR-0086).
 - share-service: admin feature gates; localization review (`GET /admin/localization/locales/requests`, `/review`, `/progress`, `/export/:code`; `POST /admin/localization/locales/:code/review`, `/review/:locale/:keyHash`).
 
 ## Related ADRs

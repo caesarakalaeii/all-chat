@@ -28,20 +28,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import type { Theme } from '@/lib/theme-marketplace/types'
 import { getBundledThemes } from '@/lib/theme-marketplace/bundled-themes'
 import { getFavorites, toggleFavorite as toggleFavoriteCache } from '@/lib/theme-marketplace/cache'
-
-/**
- * Debounce hook
- */
-function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState(value)
-
-  useEffect(() => {
-    const handler = setTimeout(() => setDebouncedValue(value), delay)
-    return () => clearTimeout(handler)
-  }, [value, delay])
-
-  return debouncedValue
-}
+import { useDebounce } from './useDebounce'
 
 /**
  * Filter themes by search query and tags
