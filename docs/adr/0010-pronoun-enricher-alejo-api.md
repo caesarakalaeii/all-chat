@@ -1,7 +1,7 @@
 # ADR-0010: Pronoun Enricher via Alejo API
 
 **Date**: 2026-04-04
-**Status**: Accepted
+**Status**: Accepted (amended 2026-11-02: the user lookup runs only for overlays whose pronoun display is on; overlays with it off send nothing to the Alejo API)
 **Deciders**: Phase 9 — Add optional support for Alejo pronouns
 
 ---

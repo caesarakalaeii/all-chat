@@ -336,6 +336,7 @@ normalizers := map[string]normalizer.Normalizer{
 
 5. **Pronoun Enrichment** (`enricher/pronoun_enricher.go`):
    - Fetches pronouns from Alejo API (api.pronouns.alejo.io/v1/)
+   - **Only for overlays that display pronouns**: the lookup sends the chatter's Twitch login to a third party, so it runs only while preparing a message for an overlay whose pronoun toggle is on. For an overlay with it off nothing is looked up, sent or cached, and its messages carry no pronouns. The toggle is resolved like the OBS overlay page does it: `visual_settings.showPronouns` wins when present (on unless `"none"`), else a boolean `display_settings.show_pronouns`, else on (the default). It comes from the same `overlay_configs` read that already fetches the 7TV emote-set override (`router.OverlayConfig`), so it costs no extra query
    - Runs **after** ViewerBadgeEnricher so `TwitchUsername` is available for cross-platform lookup
    - **CHAT PATH only** — not applied to events (subscriptions, raids, etc.)
    - Cache key: `pronoun:{twitch_login}`, 24h TTL
@@ -483,6 +484,10 @@ go test ./... -cover
 go test ./normalizer -v
 go test ./enricher -v
 go test ./consumer -v
+
+# The overlay-config query against a real Postgres (skipped without the variable,
+# and in -short runs; it creates and drops its own schema). Use a disposable database.
+TEST_DATABASE_URL='postgres://user@localhost:5432/scratch?sslmode=disable' go test ./router -run TestOverlayConfigAgainstPostgres -v
 ```
 
 ---

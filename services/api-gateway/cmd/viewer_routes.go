@@ -37,4 +37,5 @@ func registerViewerRoutes(api *gin.RouterGroup, forward gin.HandlerFunc) {
 	api.PATCH("/auth/viewer/cosmetics", forward)
 	api.GET("/auth/viewer/linked-platforms", forward)
 	api.DELETE("/auth/viewer/linked-platforms/:platform", forward)
+	api.GET("/auth/viewer/data-export", forward) // DSGVO Art. 15/20 for viewers
 }

@@ -41,8 +41,10 @@ var patreonEndpoint = oauth2.Endpoint{
 }
 
 // identityScopes are the minimal scopes needed to read the logged-in user's own
-// membership to our campaign: their identity and verified email.
-var identityScopes = []string{"identity", "identity[email]"}
+// membership to our campaign. identity[email] is deliberately not requested:
+// entitlement keys on the Patreon user id, so the email would only be personal
+// data we hold for nothing.
+var identityScopes = []string{"identity"}
 
 // OAuth wraps the Patreon OAuth 2.0 flow and the identity API call.
 type OAuth struct {
@@ -104,8 +106,9 @@ func (o *OAuth) GetIdentityWithMembership(ctx context.Context, accessToken, camp
 	// parseIdentity attributes a member to us via exactly that relationship. Omitting
 	// it makes every member arrive campaign-less, which read as "not a patron".
 	q.Set("include", "memberships.currently_entitled_tiers,memberships.campaign")
+	// No fields[user]: Patreon then returns the user's id and no attributes,
+	// and the id is all we use.
 	q.Set("fields[member]", "patron_status,currently_entitled_amount_cents,last_charge_status,next_charge_date")
-	q.Set("fields[user]", "email,full_name")
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, identityURL+"?"+q.Encode(), nil)
 	if err != nil {
@@ -156,10 +159,7 @@ func parseIdentity(body []byte, campaignID string) (*MembershipSnapshot, error) 
 		return nil, fmt.Errorf("unmarshal identity: %w", err)
 	}
 
-	snap := &MembershipSnapshot{
-		PatreonUserID: doc.Data.ID,
-		Email:         doc.Data.Attributes.Email,
-	}
+	snap := &MembershipSnapshot{PatreonUserID: doc.Data.ID}
 
 	var members, campaignless []apiResource
 	for _, inc := range doc.Included {
