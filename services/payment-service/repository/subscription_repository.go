@@ -46,7 +46,6 @@ type Subscription struct {
 	TierID           string
 	Cents            int
 	CurrentPeriodEnd *time.Time
-	Raw              []byte // original payload as JSON (audit/debug); nil to leave unset
 }
 
 // SubscriptionRepository persists Patreon subscription state.
@@ -75,15 +74,10 @@ func (r *SubscriptionRepository) Upsert(ctx context.Context, s Subscription) err
 		product = ProductStreamer
 	}
 
-	var rawArg any
-	if len(s.Raw) > 0 {
-		rawArg = string(s.Raw)
-	}
-
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO premium_subscriptions
-		    (user_id, viewer_id, product, provider, provider_user_id, status, tier_id, cents, current_period_end, raw, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+		    (user_id, viewer_id, product, provider, provider_user_id, status, tier_id, cents, current_period_end, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
 		ON CONFLICT (provider, provider_user_id) DO UPDATE SET
 		    user_id            = COALESCE(EXCLUDED.user_id, premium_subscriptions.user_id),
 		    viewer_id          = COALESCE(EXCLUDED.viewer_id, premium_subscriptions.viewer_id),
@@ -92,9 +86,8 @@ func (r *SubscriptionRepository) Upsert(ctx context.Context, s Subscription) err
 		    tier_id            = EXCLUDED.tier_id,
 		    cents              = EXCLUDED.cents,
 		    current_period_end = EXCLUDED.current_period_end,
-		    raw                = COALESCE(EXCLUDED.raw, premium_subscriptions.raw),
 		    updated_at         = NOW()`,
-		s.UserID, s.ViewerID, product, provider, s.ProviderUserID, s.Status, nullIfEmpty(s.TierID), s.Cents, s.CurrentPeriodEnd, rawArg)
+		s.UserID, s.ViewerID, product, provider, s.ProviderUserID, s.Status, nullIfEmpty(s.TierID), s.Cents, s.CurrentPeriodEnd)
 	if err != nil {
 		return fmt.Errorf("upsert subscription: %w", err)
 	}

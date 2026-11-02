@@ -523,11 +523,11 @@ func main() {
 						}
 					}
 					// Per-overlay 7TV emote-set override applies to all platforms.
-					if setID, err := overlayRouter.SevenTVEmoteSetIDForOverlay(ctx, overlay.OverlayID); err == nil && setID != "" {
+					if overlayCfg, err := overlayRouter.OverlayConfig(ctx, overlay.OverlayID); err == nil && overlayCfg.SevenTVEmoteSetID != "" {
 						if unified.Metadata == nil {
 							unified.Metadata = make(map[string]interface{})
 						}
-						unified.Metadata["seventv_emote_set_id"] = setID
+						unified.Metadata["seventv_emote_set_id"] = overlayCfg.SevenTVEmoteSetID
 					}
 
 					startEmote := time.Now()
@@ -616,12 +616,21 @@ func main() {
 						unified.Metadata["twitch_channel_hint"] = twitchCh
 					}
 				}
+				// One read of the overlay's config serves the 7TV override here and the
+				// pronoun toggle below. On a DB error both stay off: no override, no lookup.
+				overlayCfg, cfgErr := overlayRouter.OverlayConfig(ctx, overlay.OverlayID)
+				if cfgErr != nil {
+					log.Debug("Failed to load overlay config, skipping 7TV override and pronouns",
+						zap.String("overlay_id", overlay.OverlayID),
+						zap.Error(cfgErr),
+					)
+				}
 				// Per-overlay 7TV emote-set override applies to all platforms.
-				if setID, err := overlayRouter.SevenTVEmoteSetIDForOverlay(ctx, overlay.OverlayID); err == nil && setID != "" {
+				if overlayCfg.SevenTVEmoteSetID != "" {
 					if unified.Metadata == nil {
 						unified.Metadata = make(map[string]interface{})
 					}
-					unified.Metadata["seventv_emote_set_id"] = setID
+					unified.Metadata["seventv_emote_set_id"] = overlayCfg.SevenTVEmoteSetID
 				}
 
 				// Enrich with emotes
@@ -664,9 +673,10 @@ func main() {
 
 				// Must run after the viewer-identity enricher: that is what populates
 				// User.TwitchUsername, which the pronoun lookup keys off for
-				// non-Twitch platforms.
+				// non-Twitch platforms. Only an overlay that displays pronouns triggers
+				// the third-party lookup (ADR-0010 amendment).
 				startPronoun := time.Now()
-				if err := pronounEnricher.Enrich(ctx, unified); err != nil {
+				if err := pronounEnricher.Enrich(ctx, unified, overlayCfg.ShowPronouns); err != nil {
 					log.Warn("Failed to enrich pronouns",
 						zap.String("message_id", rawMsg.MessageID),
 						zap.Error(err),

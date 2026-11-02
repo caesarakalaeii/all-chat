@@ -439,11 +439,15 @@ spec:
 | Data Type | Retention Period | Deletion Method |
 |-----------|------------------|-----------------|
 | **User Accounts** | Until user deletion request | Hard delete (GDPR compliance) |
-| **OAuth Tokens** | Until expiry or revocation | Overwrite + hard delete |
+| **OAuth Tokens** | Until account deletion; legacy TikTok tokens, legacy Kick rows without `kick_user_id` and expired Instagram tokens 7 days after expiry | Cascade delete; retention-sweeper (ADR-0089) |
+| **Messages sent through All-Chat** (`viewer_message_history`) | 1 hour | retention-sweeper, every 15 minutes |
+| **YouTube quota audit log, alert events** | 30 days | retention-sweeper |
+| **Moderation actions** | 90 days | retention-sweeper |
+| **Abandoned device-link requests** | 1 hour after expiry | retention-sweeper |
 | **Logs** | 7 days (Loki `retention_period: 168h` in caesar-deployment) | Automatic deletion (Loki compactor) |
 | **Client IPs in service logs** | As logs; anonymised before logging (IPv4 last octet zeroed, IPv6 cut to /48) | Go services log only `shared/middleware.AnonymizeIP` output; gin services use `middleware.GinAccessLog()`, never `gin.Logger()`, which prints the full IP from the forwarded `X-Forwarded-For` |
 | **Client IPs in rate-limit keys** | Until the end of the one-minute window | Redis key expiry (`shared/ratelimit`, emote-service) |
-| **Client IPs in the edge access log** | As logs (full address) | Envoy Gateway's default stdout access log records `x-forwarded-for`; Alloy ships it to Loki. Configured in caesar-deployment, not here |
+| **Client IPs in the edge access log** | Not recorded | The `public` EnvoyProxy in caesar-deployment (`apps/infrastructure/gateway/gateway.yaml`) sets an access-log format without `x-forwarded-for`, client addresses or query strings |
 | **Metrics** | 90 days | Automatic deletion (Prometheus retention) |
 | **Overlays** | Until user deletion | Cascade delete (FK constraint) |
 
@@ -713,9 +717,9 @@ srv := &http.Server{
 
 | Requirement | Implementation |
 |-------------|----------------|
-| **Right to Access** | `GET /auth/me` returns user data |
+| **Right to Access** | `GET /auth/me/data-export` (streamer) and `GET /auth/viewer/data-export` (viewer) return everything stored about the account as one JSON file, credentials excluded; "Download my data" on `/settings` and `/settings/viewer`. Contents: `services/auth-service/README.md` → Data export |
 | **Right to Deletion** | `DELETE /auth/me` deletes user + cascades |
-| **Data Portability** | `GET /auth/export` returns JSON (planned) |
+| **Data Portability** | Same JSON export as Right to Access |
 | **Consent** | OAuth authorization flow |
 | **Data Minimization** | Only store necessary user data |
 | **Encryption** | Tokens encrypted at rest, TLS in transit |
@@ -724,7 +728,7 @@ srv := &http.Server{
 
 | Requirement | Implementation |
 |-------------|----------------|
-| **Right to Know** | `GET /auth/me` |
+| **Right to Know** | `GET /auth/me/data-export`, `GET /auth/viewer/data-export` |
 | **Right to Delete** | `DELETE /auth/me` |
 | **Right to Opt-Out** | Analytics opt-out (planned) |
 
