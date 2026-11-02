@@ -451,7 +451,6 @@ func main() {
 		log.Warn("TWITCH_CLIENT_SECRET not set - badge API will not auto-refresh tokens and may fail")
 	}
 
-	// Create handlers
 	proxyHandler := handlers.NewProxyHandler(registry)
 	healthHandler := handlers.NewHealthHandler(registry)
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
@@ -477,7 +476,6 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// Create router
 	router := gin.New()
 
 	// M3: restrict trusted proxies so c.ClientIP() (used by the global + auth
@@ -796,7 +794,6 @@ func main() {
 		protectedAPI.DELETE("/auth/chat-bots/custom/:platform", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/chat-bots/allchat/:platform", proxyHandler.ForwardRequest)
 
-		// Viewer protected routes
 		registerViewerRoutes(protectedAPI, proxyHandler.ForwardRequest)
 
 		// Overlay manager routes (all protected)
@@ -1052,7 +1049,6 @@ func main() {
 	// Get port from environment
 	port := getEnvOrDefault("PORT", "8080")
 
-	// Create HTTP server
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      router,
