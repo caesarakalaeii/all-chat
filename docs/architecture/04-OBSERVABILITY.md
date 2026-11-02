@@ -312,7 +312,7 @@ metadata:
 **Scrape Configuration** (`monitoring/kube-prometheus-values.yaml`):
 - Scrape interval: 30 seconds
 - Scrape timeout: 10 seconds
-- Retention: 15 days (Prometheus), 90 days (Mimir)
+- Retention: 15 days (Prometheus; there is no long-term metrics store)
 
 ---
 
@@ -347,13 +347,17 @@ logger.Info("Message published",
 
 ### Log Levels
 
-| Level | Usage | Retention |
-|-------|-------|-----------|
-| **DEBUG** | Development only | 7 days |
-| **INFO** | Normal operations | 30 days |
-| **WARN** | Potential issues | 30 days |
-| **ERROR** | Errors requiring attention | 90 days |
-| **FATAL** | Critical failures | 90 days |
+| Level | Usage |
+|-------|-------|
+| **DEBUG** | Development only |
+| **INFO** | Normal operations |
+| **WARN** | Potential issues |
+| **ERROR** | Errors requiring attention |
+| **FATAL** | Critical failures |
+
+Loki keeps every level for 7 days (`retention_period: 168h` in caesar-deployment
+`apps/platform/loki-stack/loki-values.yaml`); Tempo keeps traces for 7 days. The
+privacy policy (section 6) states these periods, so change them together.
 
 ### Log Collection
 

@@ -132,7 +132,7 @@ Each service has a detailed README:
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 - [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
 - [engagement-service](./services/engagement-service/README.md) - Cross-platform polls, predictions, and per-overlay viewer points economy (#523); streamer chat commands and keyword triggers with templated/JS replies, `{urlfetch}`, Twitch clips and images on alerts overlays (ADR-0079, ADR-0080)
-- [support-bot](./services/support-bot/README.md) - Discord support/admin agent over a locally hosted OpenAI-compatible LLM (Go, replaces the old claude-CLI TypeScript bot)
+- [support-bot](./services/support-bot/README.md) - Discord support/admin agent over an OpenAI-compatible LLM endpoint (external inference gateway in prod) (Go, replaces the old claude-CLI TypeScript bot)
 
 ### Development Guides
 
