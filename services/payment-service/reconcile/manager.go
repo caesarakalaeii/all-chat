@@ -139,7 +139,7 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 			continue
 		}
 
-		status, _, applyErr := m.entitlement.Apply(ctx, snap, t.UserID, t.ViewerID, nil)
+		status, _, applyErr := m.entitlement.Apply(ctx, snap, t.UserID, t.ViewerID)
 		if applyErr != nil {
 			m.logger.Error("Failed to apply reconciled membership",
 				subjectLabel(t), zap.Error(applyErr))

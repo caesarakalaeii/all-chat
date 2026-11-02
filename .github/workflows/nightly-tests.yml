@@ -35,6 +35,9 @@ jobs:
           - source-manager
           - token-refresh-service
           - moderation-service
+          # Its integrationtest package (testcontainers Postgres, skipped under
+          # -short) runs nowhere else.
+          - payment-service
           - engagement-service
           - alert-processor
           - discord-listener

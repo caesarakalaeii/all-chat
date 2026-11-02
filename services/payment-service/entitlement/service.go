@@ -50,13 +50,13 @@ func NewService(subs *repository.SubscriptionRepository, recomputer *premium.Rec
 // upserts the subscription row, and — when the subject is known — recomputes the
 // relevant is_premium column. The product is the viewer product iff viewerID is
 // set, otherwise the streamer product; the qualifying threshold follows the
-// product. raw is the original provider payload for audit (nil when not available,
-// e.g. reconcile / OAuth callback).
+// product. Only the snapshot's typed fields are stored; the provider payload is
+// not, because a webhook body carries the patron's email, name and address.
 //
 // At most one of userID / viewerID should be set. It is idempotent and convergent:
 // repeated or out-of-order calls converge because the upsert is keyed and the
 // recompute is a pure function of current rows.
-func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, userID, viewerID *string, raw []byte) (status string, isPremium bool, err error) {
+func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, userID, viewerID *string) (status string, isPremium bool, err error) {
 	product := repository.ProductStreamer
 	threshold := s.minCents
 	if viewerID != nil && *viewerID != "" {
@@ -86,7 +86,6 @@ func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, u
 		TierID:           snap.TierID,
 		Cents:            snap.EntitledCents,
 		CurrentPeriodEnd: snap.NextChargeDate,
-		Raw:              raw,
 	}); err != nil {
 		return status, false, err
 	}
