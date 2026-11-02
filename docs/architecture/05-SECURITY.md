@@ -439,7 +439,11 @@ spec:
 | Data Type | Retention Period | Deletion Method |
 |-----------|------------------|-----------------|
 | **User Accounts** | Until user deletion request | Hard delete (GDPR compliance) |
-| **OAuth Tokens** | Until expiry or revocation | Overwrite + hard delete |
+| **OAuth Tokens** | Until account deletion; legacy TikTok tokens, legacy Kick rows without `kick_user_id` and expired Instagram tokens 7 days after expiry | Cascade delete; retention-sweeper (ADR-0089) |
+| **Messages sent through All-Chat** (`viewer_message_history`) | 1 hour | retention-sweeper, every 15 minutes |
+| **YouTube quota audit log, alert events** | 30 days | retention-sweeper |
+| **Moderation actions** | 90 days | retention-sweeper |
+| **Abandoned device-link requests** | 1 hour after expiry | retention-sweeper |
 | **Logs** | 30 days | Automatic deletion (Loki retention) |
 | **Metrics** | 90 days | Automatic deletion (Prometheus retention) |
 | **Overlays** | Until user deletion | Cascade delete (FK constraint) |

@@ -597,6 +597,40 @@ kubectl exec -n allchat allchat-cluster-1 -- psql -U allchat -c "SELECT * FROM u
 
 ---
 
+## Batch jobs
+
+The image ships two more binaries next to `auth-service`, each run by a Kubernetes CronJob
+in caesar-deployment (`apps/workloads/all-chat/`):
+
+- **`/app/key-rotator`** (`cmd/key-rotator`, `key-rotator-cronjob.yaml`, weekly):
+  re-encrypts token columns to the current encryption key.
+- **`/app/retention-sweeper`** (`cmd/retention-sweeper`, `retention-sweeper-cronjob.yaml`,
+  every 15 minutes, ADR-0089): deletes rows past the retention periods the privacy policy
+  promises. It is the only thing that enforces them. Needs only `DATABASE_URL`; opens one
+  connection; deletes in batches (`--batch-size`, default 1000, `--batch-delay-ms`, default
+  100) with `FOR UPDATE SKIP LOCKED`, so it is safe to re-run and to overlap; logs
+  `rows_deleted` per table and exits non-zero if any table failed.
+
+  | Table | Deleted when |
+  |---|---|
+  | `viewer_message_history` | `created_at` more than 1 hour ago |
+  | `youtube_quota_audit_log` | `timestamp` more than 30 days ago |
+  | `alert_events` | `created_at` more than 30 days ago |
+  | `moderation_actions` | `created_at` more than 90 days ago |
+  | `device_link_requests` | expired more than 1 hour ago and never minted a device token |
+  | `tiktok_oauth_tokens` | `expiry` more than 7 days ago (legacy table, nothing refreshes it) |
+  | `kick_oauth_tokens` | `kick_user_id IS NULL` and `expiry` more than 7 days ago (legacy listener rows nothing refreshes) |
+  | `instagram_oauth_tokens` | `expires_at` more than 7 days ago (no refresh grant; NULL never expires) |
+
+  Every other credential table is left alone: an expired access token is still renewable
+  while a refresh token works, and those rows are still keyed on. ADR-0089 has the
+  per-table reasoning.
+
+  Its tests run the binary against a fully migrated Postgres:
+  `TEST_DATABASE_URL=postgres://... go test -tags=integration ./cmd/retention-sweeper/`.
+
+---
+
 ## Production Considerations
 
 1. **JWT Secret**: Use strong, random secret (min 32 characters). Store in Kubernetes Secret.

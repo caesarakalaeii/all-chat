@@ -347,12 +347,12 @@ export const admin = {
     nextPage: 'Next',
     activityTitle: 'Activity for “{username}”',
     activityDescription:
-      'Messages this viewer has sent through All-Chat, and whose chats they appear in.',
-    activityTotalMessages: 'Total messages',
+      'Messages this viewer sent through All-Chat in the last hour, and whose chats they appear in. Older messages are deleted.',
+    activityTotalMessages: 'Messages in the last hour',
     activityLastMessage: 'Last message',
     activityStreamerFallback: 'View streamer',
     activityOverlayLink: 'overlay',
-    activityEmpty: 'No message activity recorded for this viewer.',
+    activityEmpty: 'No messages from this viewer in the last hour.',
     activityClose: 'Close',
     // Two whole titles rather than a 'Revoke'/'Grant' word in front of the rest.
     revokePremiumTitle: 'Revoke premium for “{username}”?',

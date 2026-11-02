@@ -19,6 +19,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/auth-service ./cm
 # Build key-rotator sweeper (D-03/D-06 — idempotent per-table re-encryption job)
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/key-rotator ./cmd/key-rotator
 
+# Build retention-sweeper (ADR-0089 — deletes rows past the privacy-policy retention periods)
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/retention-sweeper ./cmd/retention-sweeper
+
 # Runtime stage
 FROM alpine:3.24
 
@@ -29,6 +32,7 @@ WORKDIR /app
 
 COPY --from=builder /app/auth-service .
 COPY --from=builder /app/key-rotator /app/key-rotator
+COPY --from=builder /app/retention-sweeper /app/retention-sweeper
 COPY LICENSE ./LICENSE
 
 RUN chown -R appuser:appuser /app
