@@ -218,7 +218,7 @@ function indicatorClass(
   status: PlatformStatus | undefined,
   countdown: number | undefined
 ): string {
-  if (!status) return isActive ? 'bg-white/10' : 'opacity-40 bg-surface/50'
+  if (!status) return isActive ? 'bg-lanes-fg-strong/10' : 'opacity-40 bg-surface/50'
   if (status.status === 'reconnecting' && countdown !== undefined) {
     return 'bg-yellow-500/20 opacity-100'
   }
@@ -236,7 +236,7 @@ function indicatorClass(
       : 'opacity-20 bg-surface/50'
   }
   if (status.status === 'connected') return 'bg-green-500/20 opacity-100'
-  return isActive ? 'bg-white/10' : 'opacity-40 bg-surface/50'
+  return isActive ? 'bg-lanes-fg-strong/10' : 'opacity-40 bg-surface/50'
 }
 
 /** An offline channel whose error names OAuth or a token needs re-authorising. */

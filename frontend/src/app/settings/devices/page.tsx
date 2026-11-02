@@ -84,7 +84,7 @@ function statusOf(t: TFunction, device: PairedDevice): string {
 function EmptyState() {
   const t = useTranslations()
   return (
-    <div className="rounded-none border border-dashed border-white/40 p-6 text-center">
+    <div className="rounded-none border border-dashed border-lanes-fg-strong/40 p-6 text-center">
       <p className="text-sm font-medium">{t('settings.devices.emptyHeading')}</p>
       <p className="text-sub mx-auto mt-2 max-w-md text-sm">
         {interpolateElements(t('settings.devices.emptyBody'), {
@@ -128,7 +128,7 @@ function DeviceRow({
   const t = useTranslations()
   const live = isLive(device)
   return (
-    <li className="flex flex-wrap items-start justify-between gap-3 rounded-none border border-white/40 px-4 py-3">
+    <li className="flex flex-wrap items-start justify-between gap-3 rounded-none border border-lanes-fg-strong/40 px-4 py-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{device.name}</p>
         <p className="text-sub mt-0.5 text-xs">
@@ -235,7 +235,7 @@ function DevicesContent() {
               <span className="sr-only">{t('settings.devices.loadingLabel')}</span>
             </div>
           ) : loadError ? (
-            <p role="alert" className="text-sm text-red-400">
+            <p role="alert" className="text-sm text-destructive">
               {loadError}
             </p>
           ) : devices.length === 0 ? (
@@ -282,7 +282,7 @@ function DevicesContent() {
       >
         <AlertDialog.Content
           size="sm"
-          className="rounded-none border-white bg-black text-[#f4f3ef]"
+          className="rounded-none border-lanes-fg-strong bg-lanes-panel text-lanes-fg"
         >
           <AlertDialog.Title>{t('settings.devices.revokeConfirmTitle')}</AlertDialog.Title>
           <AlertDialog.Description>

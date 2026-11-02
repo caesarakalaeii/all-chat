@@ -34,6 +34,7 @@ No bots. No IRC tokens. No complicated setup.
 - **Real-Time Delivery** — Messages arrive via WebSocket — no 5-second delay
 - **Smart Polling** — Listeners only run when your overlay is actually visible (see [How it works](#demand-driven-listeners))
 - **[Browser Extension](#browser-extension)** — Replace native site chat with All-Chat on Twitch, YouTube, and Kick
+- **Light or Dark** — the site has a light theme, one click from the nav and remembered per browser; your overlay in OBS keeps its own look
 - **Open Source** — AGPL 3.0 licensed, fully self-hostable
 
 ---

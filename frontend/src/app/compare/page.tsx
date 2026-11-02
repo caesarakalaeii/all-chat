@@ -317,7 +317,7 @@ export default function ComparePage() {
         <p>{interpolateElements(t('guides.compare.lastChecked'), { date: lastChecked })}</p>
         {/* Wider than the panel on purpose: on a phone the table scrolls inside
             this box instead of crushing eleven columns into the viewport. */}
-        <div className="my-4 overflow-x-auto border-2 border-white">
+        <div className="my-4 overflow-x-auto border-2 border-lanes-fg-strong">
           <table className="w-full min-w-4xl text-left text-sm">
             <caption className="text-sub px-3 py-2 text-left text-xs">
               {interpolateElements(t('guides.compare.caption'), { date: lastChecked })}

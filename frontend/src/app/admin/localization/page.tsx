@@ -231,7 +231,7 @@ export default function AdminLocalizationPage() {
             {queue.map((tr) => (
               <div key={`${tr.locale}:${tr.key}`} className="px-4 py-3">
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-bold text-violet-400">
+                  <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-bold text-twitch">
                     {tr.locale}
                   </span>
                   <span className="font-mono text-xs text-text-sub">{tr.key}</span>

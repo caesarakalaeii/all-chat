@@ -88,7 +88,7 @@ interface CssVar {
 }
 function CssVarTable({ rows }: { rows: readonly CssVar[] }) {
   return (
-    <div className="my-4 overflow-x-auto border-2 border-white">
+    <div className="my-4 overflow-x-auto border-2 border-lanes-fg-strong">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
           <tr>
@@ -101,7 +101,7 @@ function CssVarTable({ rows }: { rows: readonly CssVar[] }) {
           {rows.map((r) => (
             <tr key={r.name} className="align-top">
               <td className="px-4 py-2">
-                <span className="text-white">{r.name}</span>
+                <span className="text-lanes-fg-strong">{r.name}</span>
               </td>
               <td className="text-dim px-4 py-2">{r.default}</td>
               <td className="text-sub px-4 py-2">{t(r.effectKey)}</td>
@@ -124,7 +124,7 @@ interface Hook {
 }
 function HookTable({ rows }: { rows: readonly Hook[] }) {
   return (
-    <div className="my-4 overflow-x-auto border-2 border-white">
+    <div className="my-4 overflow-x-auto border-2 border-lanes-fg-strong">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
           <tr>
@@ -137,7 +137,7 @@ function HookTable({ rows }: { rows: readonly Hook[] }) {
           {rows.map((r) => (
             <tr key={r.selector} className="align-top">
               <td className="px-4 py-2">
-                <span className="text-white">{r.selector}</span>
+                <span className="text-lanes-fg-strong">{r.selector}</span>
               </td>
               <td className="text-dim px-4 py-2">{r.kind}</td>
               <td className="text-sub px-4 py-2">{t(r.targetsKey)}</td>
@@ -343,7 +343,7 @@ export default function DocsPage() {
           </div>
 
           {/* Table of contents */}
-          <nav className="mb-10 border-2 border-white p-5">
+          <nav className="mb-10 border-2 border-lanes-fg-strong p-5">
             <p className="text-dim mb-2 text-xs tracking-[0.15em] uppercase">
               {t('docs.guide.tocHeading')}
             </p>
@@ -753,7 +753,7 @@ export default function DocsPage() {
           </div>
 
           {/* Footer */}
-          <div className="text-dim mt-12 flex flex-col gap-3 border-t border-white/20 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-dim mt-12 flex flex-col gap-3 border-t border-lanes-fg-strong/20 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span>{t('docs.guide.footerCopyright', { year: new Date().getFullYear() })}</span>
             <div className="flex flex-wrap items-center gap-4">
               <Link href="/docs/api">{t('docs.guide.footerApiLink')}</Link>

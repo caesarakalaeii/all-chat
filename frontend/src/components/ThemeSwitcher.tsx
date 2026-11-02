@@ -134,8 +134,10 @@ export function ThemeSwitcher({ className }: ThemeSwitcherProps) {
         {t('marketing.themeSwitcher.heading')}
       </p>
 
+      {/* theme-dark: the card is a stream backdrop for the theme preview, dark in
+          either site theme. */}
       <div
-        className="panel-fill overflow-hidden rounded-xl border border-border-md bg-surface"
+        className="panel-fill theme-dark overflow-hidden rounded-xl border border-border-md bg-surface"
         role="group"
         aria-roledescription="carousel"
         aria-label={t('marketing.themeSwitcher.carouselLabel')}
