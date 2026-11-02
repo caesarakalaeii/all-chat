@@ -44,6 +44,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/caesar/all-chat/shared/middleware"
 	sharedredis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/sendall"
 	"github.com/caesar/all-chat/shared/tracing"
@@ -847,7 +848,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
+	router.Use(middleware.GinAccessLog())
 
 	// Add tracing middleware if enabled
 	if tracingEnabled {

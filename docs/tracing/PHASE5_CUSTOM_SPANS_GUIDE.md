@@ -385,7 +385,6 @@ func (h *Hub) broadcast(ctx context.Context, message []byte, overlayID string) {
         clientCtx, clientSpan := tracer.Start(ctx, "websocket.send",
             trace.WithAttributes(
                 attribute.String("client_id", client.ID),
-                attribute.String("client_ip", client.RemoteAddr),
             ),
         )
 

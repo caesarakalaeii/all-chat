@@ -313,11 +313,12 @@ func NewSigningClient(serviceName, secret string, logger *zap.Logger) (*http.Cli
 }
 
 // anonymizeIP truncates the last octet (IPv4) or last 80 bits (IPv6) for
-// DSGVO-compliant log output.
+// DSGVO-compliant log output; unparseable input is dropped, never passed
+// through. A copy of shared/middleware.AnonymizeIP (separate module).
 func anonymizeIP(raw string) string {
 	ip := net.ParseIP(raw)
 	if ip == nil {
-		return raw
+		return ""
 	}
 	if v4 := ip.To4(); v4 != nil {
 		v4[3] = 0

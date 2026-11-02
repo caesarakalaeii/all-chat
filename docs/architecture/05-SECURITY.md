@@ -440,7 +440,10 @@ spec:
 |-----------|------------------|-----------------|
 | **User Accounts** | Until user deletion request | Hard delete (GDPR compliance) |
 | **OAuth Tokens** | Until expiry or revocation | Overwrite + hard delete |
-| **Logs** | 30 days | Automatic deletion (Loki retention) |
+| **Logs** | 7 days (Loki `retention_period: 168h` in caesar-deployment) | Automatic deletion (Loki compactor) |
+| **Client IPs in service logs** | As logs; anonymised before logging (IPv4 last octet zeroed, IPv6 cut to /48) | Go services log only `shared/middleware.AnonymizeIP` output; gin services use `middleware.GinAccessLog()`, never `gin.Logger()`, which prints the full IP from the forwarded `X-Forwarded-For` |
+| **Client IPs in rate-limit keys** | Until the end of the one-minute window | Redis key expiry (`shared/ratelimit`, emote-service) |
+| **Client IPs in the edge access log** | As logs (full address) | Envoy Gateway's default stdout access log records `x-forwarded-for`; Alloy ships it to Loki. Configured in caesar-deployment, not here |
 | **Metrics** | 90 days | Automatic deletion (Prometheus retention) |
 | **Overlays** | Until user deletion | Cascade delete (FK constraint) |
 

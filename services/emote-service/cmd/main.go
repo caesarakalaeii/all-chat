@@ -236,7 +236,7 @@ func ginLogger(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
+		query := sharedmw.RedactQuery(c.Request.URL.RawQuery)
 
 		c.Next()
 
@@ -305,7 +305,7 @@ func rateLimitMiddleware(rl *rateLimiter, log *zap.Logger) gin.HandlerFunc {
 			return
 		}
 
-		key := rateLimitKey(c)
+		key, logKey := rateLimitKey(c)
 		allowed, retryAfter, err := rl.allow(c.Request.Context(), key)
 		if err != nil {
 			log.Error("Rate limiter error, allowing request", zap.Error(err))
@@ -318,7 +318,7 @@ func rateLimitMiddleware(rl *rateLimiter, log *zap.Logger) gin.HandlerFunc {
 				retrySeconds = 1
 			}
 			c.Header("Retry-After", strconv.Itoa(retrySeconds))
-			log.Warn("Rate limit exceeded", zap.String("key", key), zap.Int("retry_after_seconds", retrySeconds))
+			log.Warn("Rate limit exceeded", zap.String("key", logKey), zap.Int("retry_after_seconds", retrySeconds))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded", "retry_after": retrySeconds})
 			return
 		}
@@ -327,11 +327,15 @@ func rateLimitMiddleware(rl *rateLimiter, log *zap.Logger) gin.HandlerFunc {
 	}
 }
 
-func rateLimitKey(c *gin.Context) string {
+// rateLimitKey returns the Redis bucket key and the form of it that may be
+// logged. The key holds the raw API key or client IP; Redis drops it after the
+// window, but the 429 warning goes to Loki, so the log form keeps neither.
+func rateLimitKey(c *gin.Context) (key, logKey string) {
 	if apiKey := c.GetHeader(apiKeyHeader); apiKey != "" {
-		return "api:" + apiKey
+		return "api:" + apiKey, "api"
 	}
-	return "ip:" + c.ClientIP()
+	ip := c.ClientIP()
+	return "ip:" + ip, "ip:" + sharedmw.AnonymizeIP(ip)
 }
 
 type rateLimiter struct {
