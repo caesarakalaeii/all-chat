@@ -1,5 +1,5 @@
 -- Migration: 118_retention_sweeper
--- Description: Retention is enforced by the retention-sweeper CronJob (ADR-0087), so the
+-- Description: Retention is enforced by the retention-sweeper CronJob (ADR-0089), so the
 --   cleanup functions that were only ever scheduled through pg_cron are dropped.
 --
 -- pg_cron was never installed on the cluster (allchat-cluster creates only uuid-ossp and

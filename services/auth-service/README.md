@@ -605,7 +605,7 @@ in caesar-deployment (`apps/workloads/all-chat/`):
 - **`/app/key-rotator`** (`cmd/key-rotator`, `key-rotator-cronjob.yaml`, weekly):
   re-encrypts token columns to the current encryption key.
 - **`/app/retention-sweeper`** (`cmd/retention-sweeper`, `retention-sweeper-cronjob.yaml`,
-  every 15 minutes, ADR-0087): deletes rows past the retention periods the privacy policy
+  every 15 minutes, ADR-0089): deletes rows past the retention periods the privacy policy
   promises. It is the only thing that enforces them. Needs only `DATABASE_URL`; opens one
   connection; deletes in batches (`--batch-size`, default 1000, `--batch-delay-ms`, default
   100) with `FOR UPDATE SKIP LOCKED`, so it is safe to re-run and to overlap; logs
@@ -623,7 +623,7 @@ in caesar-deployment (`apps/workloads/all-chat/`):
   | `instagram_oauth_tokens` | `expires_at` more than 7 days ago (no refresh grant; NULL never expires) |
 
   Every other credential table is left alone: an expired access token is still renewable
-  while a refresh token works, and those rows are still keyed on. ADR-0087 has the
+  while a refresh token works, and those rows are still keyed on. ADR-0089 has the
   per-table reasoning.
 
   Its tests run the binary against a fully migrated Postgres:

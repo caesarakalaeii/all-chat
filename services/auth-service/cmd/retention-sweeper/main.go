@@ -15,7 +15,7 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // retention-sweeper deletes rows that are past the retention periods the privacy
-// policy promises (ADR-0087). It runs as a Kubernetes CronJob every 15 minutes and
+// policy promises (ADR-0089). It runs as a Kubernetes CronJob every 15 minutes and
 // exits; nothing else enforces these periods.
 //
 // Usage:
@@ -66,7 +66,7 @@ var rules = []rule{
 	// expiry alone proves nothing for youtube_oauth_tokens, twitch_oauth_tokens,
 	// patreon_oauth_tokens, mod_oauth_credentials, chat_bot_accounts, viewer_sessions
 	// or users; those rows are also still needed for ownership, webhook mapping or bot
-	// sends. Only the tables below have a rule that proves death (ADR-0087).
+	// sends. Only the tables below have a rule that proves death (ADR-0089).
 	//
 	// Legacy TikTok tokens: nothing reads, writes or refreshes the table any more.
 	{"tiktok_oauth_tokens", `expiry < NOW() - INTERVAL '7 days'`},

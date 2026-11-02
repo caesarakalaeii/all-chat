@@ -451,7 +451,7 @@ jobs:
           go mod download
           go test -tags=integration -v ./repository/...
 
-      # The retention sweeper's end-to-end tests (ADR-0087) run the binary against the
+      # The retention sweeper's end-to-end tests (ADR-0089) run the binary against the
       # same migrated Postgres, so every retention rule is checked against the real schema.
       - name: Run auth-service retention-sweeper integration tests
         run: |

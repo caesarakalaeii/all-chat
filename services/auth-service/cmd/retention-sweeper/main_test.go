@@ -16,7 +16,7 @@
 
 //go:build integration
 
-// End-to-end tests for the retention sweeper (ADR-0087). They call the binary's
+// End-to-end tests for the retention sweeper (ADR-0089). They call the binary's
 // run() against a Postgres with every migration applied, so each rule is checked
 // against the real schema, not a copy of it. CI runs them in the
 // test-engagement-integration job; locally point TEST_DATABASE_URL at a migrated
@@ -186,7 +186,7 @@ func seedLogs(f *fixture) {
 
 // seedCredentials seeds OAuth credentials: dead ones the sweep must delete, and
 // ones that look expired but can still be refreshed or are still needed, which it
-// must never touch (ADR-0087, "dead" per table).
+// must never touch (ADR-0089, "dead" per table).
 func seedCredentials(f *fixture) {
 	userID, _ := f.owner()
 	sessionID := f.viewerSession()

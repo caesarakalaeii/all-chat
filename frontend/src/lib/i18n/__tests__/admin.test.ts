@@ -517,7 +517,7 @@ describe('admin viewers page copy', () => {
     expect(t('admin.viewers.activityTitle', { username: 'kate' })).toBe(
       'Activity for \u201Ckate\u201D'
     )
-    // Sent messages are deleted after one hour (ADR-0087), so the dialog only
+    // Sent messages are deleted after one hour (ADR-0089), so the dialog only
     // ever covers the last hour and must say so.
     expect(t('admin.viewers.activityDescription')).toBe(
       'Messages this viewer sent through All-Chat in the last hour, and whose chats they appear in. Older messages are deleted.'

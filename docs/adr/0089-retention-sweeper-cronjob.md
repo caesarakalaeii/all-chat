@@ -1,4 +1,4 @@
-# ADR-0087: Enforce data retention with a sweeper CronJob
+# ADR-0089: Enforce data retention with a sweeper CronJob
 
 **Date**: 2026-11-02
 **Status**: Accepted

@@ -905,13 +905,13 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
-### ADR-0087: Enforce data retention with a sweeper CronJob
+### ADR-0089: Enforce data retention with a sweeper CronJob
 
 **Status**: Accepted (2026-11-02)
 **Problem**: The privacy policy's retention periods were never enforced: the cleanups were SQL functions scheduled only `IF EXISTS pg_cron`, pg_cron is not installed, and nothing else called them. Their token rule (delete when the access token expired 7+ days ago) would also have deleted credentials a refresh token could still renew.
 **Decision**: A `retention-sweeper` binary in the auth-service image, run by a CronJob every 15 minutes (`concurrencyPolicy: Forbid`), deletes in batches of 1000 with `FOR UPDATE SKIP LOCKED` over one connection: sent viewer messages after 1 hour, YouTube quota audit log and alert events after 30 days, moderation actions after 90 days, abandoned device-link requests 1 hour after expiry, and only the OAuth credentials provably dead 7 days after expiry (legacy TikTok rows, legacy Kick rows without `kick_user_id`, expired Instagram tokens). Migration 118 drops the pg_cron functions and adds the `created_at` indexes the deletes need.
 **Impact**: The periods hold and are tested against the migrated schema in CI. Other credential tables are not swept, because nothing in them proves death; they go with the account. The admin viewer Activity dialog now only covers the last hour.
-**→ Read**: [0087-retention-sweeper-cronjob.md](./0087-retention-sweeper-cronjob.md)
+**→ Read**: [0089-retention-sweeper-cronjob.md](./0089-retention-sweeper-cronjob.md)
 
 ---
 
