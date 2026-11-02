@@ -46,6 +46,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { type MessageKey, formatNumber, useTranslations } from '@/lib/i18n'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
+import { trackEvent } from '@/lib/analytics'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { usePrideMonth } from '@/hooks/usePrideMonth'
 import { LANE_COUNT, laneBaseWeights, useLaneWaves } from '@/hooks/useLaneWaves'
@@ -498,6 +499,15 @@ export function LanesHero({
             <br />
             {t('marketing.lanes.manifestoLine2')}
           </p>
+          {/* Viewers are the extension's audience, not the overlay's: one
+              chip routes them out of the streamer funnel. */}
+          <a
+            className="lanes-viewer-chip"
+            href="/browser-extension"
+            onClick={() => trackEvent('cta_click', { cta: 'extension', location: 'lanes-hero' })}
+          >
+            {t('marketing.lanes.viewerChip')}
+          </a>
         </div>
 
         {/* Bottom CTA bar. */}

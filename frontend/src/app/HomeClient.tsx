@@ -219,15 +219,13 @@ export default function HomeClient({ initialStats }: { initialStats: LandingStat
               />
             </summary>
             <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm text-text-sub">
-              <a
-                href="https://addons.mozilla.org/en-US/firefox/addon/all-chat-extension/"
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => trackEvent('outbound_click', { dest: 'ext_firefox' })}
+              <Link
+                href="/browser-extension"
+                onClick={() => trackEvent('cta_click', { cta: 'extension', location: 'explore' })}
                 className="underline-offset-4 hover:text-text hover:underline"
               >
                 {t('marketing.explore.extension')}
-              </a>
+              </Link>
               <Link
                 href="/docs/api"
                 onClick={() => trackEvent('cta_click', { cta: 'api-docs', location: 'explore' })}

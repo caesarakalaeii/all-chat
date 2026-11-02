@@ -1078,6 +1078,27 @@ span.font-semibold.text-sm.username-gradient {
   background: #000;
   padding: 8px 14px;
 }
+/* Viewer hint to /browser-extension. The headline layer ignores pointer
+ * events so the lanes stay scrollable; the chip opts back in. Warm-white
+ * plate like .cta-go so it reads as clickable among the black plates. */
+.lanes-viewer-chip {
+  pointer-events: auto;
+  margin-top: 2vh;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  background: #f4f3ef;
+  color: #000;
+  padding: 8px 14px;
+  text-decoration: none;
+}
+.lanes-viewer-chip:hover {
+  background: var(--lanes-kick);
+}
+.lanes-viewer-chip:focus-visible {
+  outline: 2px solid var(--lanes-kick);
+  outline-offset: 2px;
+}
 /* Bottom CTA bar over the lanes. */
 .ctabar {
   flex: 0 0 52px;
