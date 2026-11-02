@@ -436,11 +436,11 @@ func seedUser(t *testing.T, repo *OverlayRepository, username, displayName strin
 	return id
 }
 
-// TestGetAllOverlaysWithSourceCount_Owner verifies the admin listing joins the owner's
+// TestListOverlaysWithSourceCount_Owner verifies the admin listing joins the owner's
 // username/display_name from the users table, counts sources, and — via the LEFT JOIN —
 // still returns overlays whose owner has no matching users row (orphaned) with empty owner
 // fields rather than dropping them.
-func TestGetAllOverlaysWithSourceCount_Owner(t *testing.T) {
+func TestListOverlaysWithSourceCount_Owner(t *testing.T) {
 	repo, cleanup := setupTestDatabase(t)
 	defer cleanup()
 
@@ -459,7 +459,7 @@ func TestGetAllOverlaysWithSourceCount_Owner(t *testing.T) {
 	orphan := &models.Overlay{UserID: uuid.New().String(), Name: "Orphan Overlay", IsActive: true}
 	require.NoError(t, repo.Create(ctx, orphan))
 
-	results, err := repo.GetAllOverlaysWithSourceCount(ctx)
+	results, _, err := repo.ListOverlaysWithSourceCount(ctx, OverlayListFilter{}, 100, 0)
 	require.NoError(t, err)
 
 	byID := map[string]*OverlayWithSourceCount{}
@@ -476,6 +476,71 @@ func TestGetAllOverlaysWithSourceCount_Owner(t *testing.T) {
 	assert.Equal(t, "", byID[orphan.ID].OwnerUsername, "missing owner => empty username")
 	assert.Equal(t, "", byID[orphan.ID].OwnerDisplayName, "missing owner => empty display name")
 	assert.Equal(t, 0, byID[orphan.ID].SourcesCount)
+}
+
+// TestListOverlaysWithSourceCount_FilterAndPaging covers the server-side search,
+// id restriction and newest-first paging behind the paginated admin Overlays page.
+func TestListOverlaysWithSourceCount_FilterAndPaging(t *testing.T) {
+	repo, cleanup := setupTestDatabase(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	streamer := seedUser(t, repo, "streamer_one", "Streamer One")
+	other := seedUser(t, repo, "streamerxone", "Other")
+	ids := map[string]string{}
+	for i, o := range []struct{ name, owner string }{
+		{"Main Chat", streamer},
+		{"Alerts", other},
+		{"Backup", streamer},
+	} {
+		overlay := &models.Overlay{UserID: o.owner, Name: o.name, IsActive: true}
+		require.NoError(t, repo.Create(ctx, overlay))
+		_, err := repo.pool.Exec(ctx, `UPDATE overlays SET created_at = NOW() + make_interval(mins => $2) WHERE id = $1`, overlay.ID, i)
+		require.NoError(t, err)
+		ids[o.name] = overlay.ID
+	}
+
+	list := func(filter OverlayListFilter, limit, offset int) ([]string, int) {
+		t.Helper()
+		results, total, err := repo.ListOverlaysWithSourceCount(ctx, filter, limit, offset)
+		require.NoError(t, err)
+		names := make([]string, len(results))
+		for i, r := range results {
+			names[i] = r.Name
+		}
+		return names, total
+	}
+
+	cases := []struct {
+		name      string
+		filter    OverlayListFilter
+		wantNames []string
+	}{
+		{"no filter is newest first", OverlayListFilter{}, []string{"Backup", "Alerts", "Main Chat"}},
+		{"owner username, literal underscore", OverlayListFilter{Query: "STREAMER_ONE"}, []string{"Backup", "Main Chat"}},
+		{"overlay name", OverlayListFilter{Query: "chat"}, []string{"Main Chat"}},
+		{"overlay id", OverlayListFilter{Query: ids["Alerts"]}, []string{"Alerts"}},
+		{"owner id", OverlayListFilter{Query: other}, []string{"Alerts"}},
+		{"ids restrict", OverlayListFilter{IDs: []string{ids["Alerts"], ids["Main Chat"]}}, []string{"Alerts", "Main Chat"}},
+		{"ids and search combine", OverlayListFilter{Query: "streamer_one", IDs: []string{ids["Alerts"], ids["Main Chat"]}}, []string{"Main Chat"}},
+		{"malformed ids match nothing", OverlayListFilter{IDs: []string{"not-a-uuid"}}, []string{}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			names, total := list(tc.filter, 100, 0)
+			assert.Equal(t, tc.wantNames, names)
+			assert.Equal(t, len(tc.wantNames), total)
+		})
+	}
+
+	t.Run("pages do not overlap and report the full total", func(t *testing.T) {
+		first, total := list(OverlayListFilter{}, 2, 0)
+		second, total2 := list(OverlayListFilter{}, 2, 2)
+		assert.Equal(t, []string{"Backup", "Alerts"}, first)
+		assert.Equal(t, []string{"Main Chat"}, second)
+		assert.Equal(t, 3, total)
+		assert.Equal(t, 3, total2)
+	})
 }
 
 // TestListByUserIDWithSourceCount_Owner verifies the per-user admin listing applies the same
@@ -643,7 +708,7 @@ func TestOverlayRepository_OverlayTypeRoundTrip(t *testing.T) {
 		}
 		require.NoError(t, repo.Create(ctx, overlay))
 
-		all, err := repo.GetAllOverlaysWithSourceCount(ctx)
+		all, _, err := repo.ListOverlaysWithSourceCount(ctx, OverlayListFilter{}, 100, 0)
 		require.NoError(t, err)
 		for _, o := range all {
 			if o.ID == overlay.ID {
@@ -651,6 +716,6 @@ func TestOverlayRepository_OverlayTypeRoundTrip(t *testing.T) {
 				return
 			}
 		}
-		t.Fatal("created overlay missing from GetAllOverlaysWithSourceCount")
+		t.Fatal("created overlay missing from ListOverlaysWithSourceCount")
 	})
 }

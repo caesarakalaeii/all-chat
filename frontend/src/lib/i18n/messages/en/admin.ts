@@ -534,6 +534,14 @@ export const admin = {
     // words a range differently cannot reorder JSX siblings.
     customRange: 'days (1–{max})',
   },
+  // Endless scrolling on the paged admin lists (users, overlays, sources). The
+  // button doubles as the scroll sentinel, so keyboard and screen-reader users
+  // can load the next page without scrolling.
+  list: {
+    loadMore: 'Load more',
+    loadingMore: 'Loading...',
+    loadMoreError: "Couldn't load more. Try again",
+  },
 
   // Localization review (ADR-0063): /admin/localization. The admin half of
   // the beta-tester translation tool — see the translate namespace for the
