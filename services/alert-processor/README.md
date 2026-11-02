@@ -27,7 +27,8 @@ the message-processor's pending entries (ADR-0002 consumer-group pattern).
 - **Normalization reuse**: imports the message-processor's platform normalizers
   (Twitch, YouTube, TikTok, system) instead of duplicating EventData parsing
 - **Alert routing**: direct `overlay_chat_sources` UNION `share_requests`
-  fan-out, filtered to alert-capable overlay types
+  fan-out (an accepted share to the recipient overlay's owner), filtered to
+  alert-capable overlay types
 - **History**: every routed alert is persisted to `alert_events`, idempotent on
   `alert_id`
 - **Leaderboards**: `list` overlays get Redis sorted sets of summed

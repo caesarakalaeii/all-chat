@@ -18,6 +18,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/caesar/all-chat/services/share-service/models"
@@ -454,8 +455,85 @@ func (r *ShareRepository) GetThisStreamShares(ctx context.Context, userID string
 	return shares, rows.Err()
 }
 
+// Errors returned by Revoke, mapped to HTTP statuses by the handler.
+var (
+	ErrShareNotFound  = errors.New("share request not found")
+	ErrNotParticipant = errors.New("caller is not a participant in this share")
+	ErrShareNotActive = errors.New("share is not active")
+)
+
+// Revoke marks an accepted share 'revoked' and deactivates the recipient's
+// shared_overlay sources for it, in one transaction. callerUserID must be the sender or
+// the recipient. It returns the share's sender and recipient for the notification.
+func (r *ShareRepository) Revoke(ctx context.Context, shareID, callerUserID string) (senderUserID, recipientUserID string, err error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	err = tx.QueryRow(ctx,
+		`SELECT sender_user_id, recipient_user_id, status
+		 FROM share_requests WHERE id = $1 FOR UPDATE`, shareID).
+		Scan(&senderUserID, &recipientUserID, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", ErrShareNotFound
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get share request: %w", err)
+	}
+	if callerUserID != senderUserID && callerUserID != recipientUserID {
+		return "", "", ErrNotParticipant
+	}
+	if status != models.StatusAccepted {
+		return "", "", ErrShareNotActive
+	}
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE share_requests SET status = $1, responded_at = NOW() WHERE id = $2`,
+		models.StatusRevoked, shareID); err != nil {
+		return "", "", fmt.Errorf("failed to revoke share: %w", err)
+	}
+	if err := deactivateShareSources(ctx, tx, shareID); err != nil {
+		return "", "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return "", "", fmt.Errorf("failed to commit revocation: %w", err)
+	}
+	return senderUserID, recipientUserID, nil
+}
+
+// deactivateShareSources switches off the shared_overlay sources a share fed, for a share
+// that just left 'accepted'. Such a source stores the SENDER OVERLAY id as channel_id
+// (overlay-manager AddSource), not the share id, and sits on any overlay the recipient
+// owns. A second share of the same overlay to the same recipient that is still accepted
+// keeps them on.
+func deactivateShareSources(ctx context.Context, tx pgx.Tx, shareID string) error {
+	_, err := tx.Exec(ctx, `
+		UPDATE overlay_chat_sources ocs
+		SET is_active = false, updated_at = NOW()
+		FROM share_requests sr, overlays o
+		WHERE sr.id = $1
+		  AND ocs.platform = 'shared_overlay'
+		  AND ocs.channel_id = sr.sender_overlay_id::text
+		  AND o.id = ocs.overlay_id
+		  AND o.user_id = sr.recipient_user_id
+		  AND NOT EXISTS (
+		      SELECT 1 FROM share_requests other
+		      WHERE other.sender_overlay_id = sr.sender_overlay_id
+		        AND other.recipient_user_id = sr.recipient_user_id
+		        AND other.status = 'accepted'
+		        AND other.id <> sr.id
+		  )`, shareID)
+	if err != nil {
+		return fmt.Errorf("failed to deactivate shared sources: %w", err)
+	}
+	return nil
+}
+
 // ExpireAcceptedShare atomically sets a single accepted share to 'expired' and deactivates
-// its overlay_chat_sources entries. Mirrors RevokeShareRequest pattern.
+// the recipient's shared_overlay sources for it, like Revoke.
 // Idempotent: if the share is not in 'accepted' state, this is a no-op.
 func (r *ShareRepository) ExpireAcceptedShare(ctx context.Context, shareID string) error {
 	tx, err := r.db.Begin(ctx)
@@ -475,12 +553,8 @@ func (r *ShareRepository) ExpireAcceptedShare(ctx context.Context, shareID strin
 		return nil // Already expired or not found — idempotent
 	}
 
-	_, err = tx.Exec(ctx,
-		`UPDATE overlay_chat_sources SET is_active = false
-		 WHERE channel_id = $1 AND platform = 'shared_overlay'`,
-		shareID)
-	if err != nil {
-		return fmt.Errorf("failed to deactivate sources: %w", err)
+	if err := deactivateShareSources(ctx, tx, shareID); err != nil {
+		return err
 	}
 
 	return tx.Commit(ctx)

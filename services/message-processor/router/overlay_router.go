@@ -43,6 +43,10 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 // fill their replay buffer, credit-roll sessions and TTS with lines nothing
 // renders. The sender side of the share fan-out (o2) is not filtered: what a
 // recipient chat overlay receives depends on its own kind, not the sender's.
+// The fan-out needs an accepted share TO the recipient overlay's owner: the same
+// overlay is often shared with several people, and one live share must not keep
+// a revoked or expired recipient subscribed. ocs.is_active is no guard here, it
+// follows the recipient overlay's websocket connection.
 const findOverlaysForMessageSQL = `
 		-- Direct platform sources (overlays that have this platform/channel directly)
 		SELECT DISTINCT o.id, o.user_id
@@ -65,6 +69,7 @@ const findOverlaysForMessageSQL = `
 		    AND ocs.is_active = true
 		JOIN share_requests sr
 		    ON sr.sender_overlay_id = ocs.channel_id::uuid
+		    AND sr.recipient_user_id = o.user_id
 		    AND sr.status = 'accepted'
 		WHERE o.is_active = true
 		  AND o.overlay_type = 'chat'
