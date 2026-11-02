@@ -276,6 +276,9 @@ export const marketing: LocaleNamespace<'marketing'> = {
     metaTitle: 'Browser-Erweiterung: alle Chats auf Twitch, YouTube und Kick',
     metaDescription:
       'Nur am Zuschauen? Die kostenlose All-Chat-Erweiterung für Chrome und Firefox ersetzt den Chat auf Twitch, YouTube und Kick durch einen Feed mit allen Plattformen, auf denen der Streamer sendet.',
+    socialTitle: 'Nur am Zuschauen? Sieh alle Chats. | All-Chat-Browser-Erweiterung',
+    socialCardAlt: 'All-Chat-Browser-Erweiterung — Nur am Zuschauen? Sieh alle Chats.',
+    socialCardChip: 'KOSTENLOS FÜR CHROME + FIREFOX',
     navStreamers: 'für streamer',
     kicker: 'FÜR ZUSCHAUER · BROWSER-ERWEITERUNG',
     titleTop: 'NUR AM ZUSCHAUEN?',
