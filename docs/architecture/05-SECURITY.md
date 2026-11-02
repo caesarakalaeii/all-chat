@@ -710,9 +710,9 @@ srv := &http.Server{
 
 | Requirement | Implementation |
 |-------------|----------------|
-| **Right to Access** | `GET /auth/me` returns user data |
+| **Right to Access** | `GET /auth/me/data-export` (streamer) and `GET /auth/viewer/data-export` (viewer) return everything stored about the account as one JSON file, credentials excluded; "Download my data" on `/settings` and `/settings/viewer`. Contents: `services/auth-service/README.md` → Data export |
 | **Right to Deletion** | `DELETE /auth/me` deletes user + cascades |
-| **Data Portability** | `GET /auth/export` returns JSON (planned) |
+| **Data Portability** | Same JSON export as Right to Access |
 | **Consent** | OAuth authorization flow |
 | **Data Minimization** | Only store necessary user data |
 | **Encryption** | Tokens encrypted at rest, TLS in transit |
@@ -721,7 +721,7 @@ srv := &http.Server{
 
 | Requirement | Implementation |
 |-------------|----------------|
-| **Right to Know** | `GET /auth/me` |
+| **Right to Know** | `GET /auth/me/data-export`, `GET /auth/viewer/data-export` |
 | **Right to Delete** | `DELETE /auth/me` |
 | **Right to Opt-Out** | Analytics opt-out (planned) |
 
