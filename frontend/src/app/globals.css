@@ -1429,6 +1429,268 @@ span.font-semibold.text-sm.username-gradient {
   justify-content: center;
   gap: 14px;
 }
+/* /browser-extension (BrowserExtensionClient): the lanes hero reused without
+ * the WebGL waves, plus a mock stream page, a comparison table and the
+ * closing install band. Same palette and plates as the homepage. */
+/* The CTA is a store link here, and an <a> does not center its label the way
+ * a <button> does. `.ctabar a` would also paint its label white on white. */
+.ext-stage .cta-go,
+.ext-final .cta-go {
+  text-align: center;
+  color: #000;
+}
+.ext-final .cta-go {
+  margin-top: 0;
+}
+/* The homepage floor (48px) fits "ALLE CHATS."; "ZUSCHAUEN?" needs a lower
+ * one to stay inside 320-375px screens. */
+.ext-stage .lanes-headline h1 {
+  font-size: clamp(34px, 9vw, 150px);
+}
+.ext-demo {
+  text-align: center;
+}
+.ext-demo h2,
+.ext-compare h2 {
+  font-family: var(--font-archivo-black), sans-serif;
+  font-size: clamp(30px, 4.6vw, 58px);
+  letter-spacing: -0.01em;
+  line-height: 1;
+  margin-top: 28px;
+}
+.ext-demo h2 .accent,
+.ext-compare h2 .accent {
+  color: var(--lanes-kick);
+}
+.ext-demo > p {
+  margin: 20px auto 0;
+  max-width: 58ch;
+  font-size: 14px;
+  line-height: 1.75;
+  color: rgba(244, 243, 239, 0.75);
+}
+.ext-window {
+  margin: 48px auto 0;
+  max-width: 900px;
+  text-align: left;
+  background: #0d0d14;
+  outline: 1px solid rgba(244, 243, 239, 0.18);
+}
+.ext-window-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: #15151f;
+  font-size: 11px;
+  color: rgba(244, 243, 239, 0.7);
+}
+.ext-dots {
+  display: flex;
+  gap: 6px;
+}
+.ext-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(244, 243, 239, 0.25);
+}
+.ext-url {
+  flex: 1;
+  padding: 5px 12px;
+  background: rgba(5, 5, 8, 0.8);
+}
+.ext-window-body {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  min-height: 440px;
+}
+.ext-video {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding: 18px;
+  /* The stream picture is the lanes again, dimmed so the chat panel beside
+   * it stays the focus. */
+  background:
+    linear-gradient(rgba(5, 5, 8, 0.45), rgba(5, 5, 8, 0.45)),
+    linear-gradient(
+      180deg,
+      var(--lanes-twitch) 0 20%,
+      var(--lanes-youtube) 20% 40%,
+      var(--lanes-tiktok) 40% 60%,
+      var(--lanes-kick) 60% 80%,
+      var(--lanes-discord) 80% 100%
+    );
+}
+.ext-live {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  background: #000;
+  color: var(--lanes-youtube);
+}
+.ext-video-title {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  background: #000;
+  color: #f4f3ef;
+}
+.ext-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #0a0a10;
+  border-left: 1px solid rgba(244, 243, 239, 0.12);
+}
+.ext-tabs {
+  display: flex;
+  font-size: 11px;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(244, 243, 239, 0.12);
+}
+.ext-tabs span {
+  padding: 10px 14px;
+  color: rgba(244, 243, 239, 0.6);
+}
+.ext-tabs .on {
+  color: #f4f3ef;
+  box-shadow: inset 0 -2px 0 var(--lanes-kick);
+}
+.ext-panel .chat-feed {
+  flex: 1;
+  height: auto;
+  min-height: 300px;
+}
+.ext-panel .msg {
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 2px;
+}
+/* Platform tag: near-black ink on the lane color, the marquee's contrast
+ * pairing (4.6:1 and up on every lane). */
+.ext-src {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: var(--pc);
+  color: var(--lanes-bg);
+}
+.ext-input {
+  margin: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  color: rgba(244, 243, 239, 0.6);
+  border: 1px solid rgba(244, 243, 239, 0.2);
+}
+.ext-compare table {
+  width: 100%;
+  margin-top: 44px;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  line-height: 1.55;
+  text-align: left;
+}
+.ext-compare thead th {
+  padding: 0 14px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(244, 243, 239, 0.5);
+}
+.ext-compare tbody th,
+.ext-compare tbody td {
+  padding: 16px 14px;
+  vertical-align: top;
+  border-top: 1px solid rgba(244, 243, 239, 0.18);
+}
+.ext-compare tbody th {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ext-compare tbody td {
+  color: rgba(244, 243, 239, 0.75);
+}
+.ext-compare tr.us th,
+.ext-compare tr.us td {
+  background: rgba(86, 184, 71, 0.14);
+  color: #f4f3ef;
+  font-weight: 700;
+}
+.ext-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.ext-compare a,
+.ext-final a:not(.cta-go):not(.lanes-signin) {
+  color: #f4f3ef;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ext-compare a:focus-visible,
+.ext-final a:focus-visible {
+  outline: 2px solid var(--lanes-kick);
+  outline-offset: 2px;
+}
+.ext-footnote {
+  margin-top: 24px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: rgba(244, 243, 239, 0.65);
+}
+.ext-where {
+  margin-top: 14px;
+  max-width: 60ch;
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(244, 243, 239, 0.75);
+}
+@media (max-width: 800px) {
+  .ext-window-body {
+    grid-template-columns: 1fr;
+  }
+  .ext-video {
+    min-height: 170px;
+  }
+  .ext-panel {
+    border-left: 0;
+    border-top: 1px solid rgba(244, 243, 239, 0.12);
+  }
+  /* The table stacks into one block per tool. */
+  .ext-compare thead {
+    display: none;
+  }
+  .ext-compare tr {
+    display: block;
+    padding: 16px 0;
+    border-top: 1px solid rgba(244, 243, 239, 0.18);
+  }
+  .ext-compare tbody th,
+  .ext-compare tbody td {
+    display: block;
+    padding: 2px 14px;
+    border-top: 0;
+    white-space: normal;
+  }
+  .ext-sources {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 6px;
+  }
+}
+
 /* "Sign in with <platform>" (PlatformSignInButton, homepage + viewer page).
  * Google's sign-in pattern: a neutral button, light label, full-color
  * official logo. Label and fill never change color on hover — only the
