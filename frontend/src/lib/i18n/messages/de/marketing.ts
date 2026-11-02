@@ -280,8 +280,7 @@ export const marketing: LocaleNamespace<'marketing'> = {
     kicker: 'FÜR ZUSCHAUER · BROWSER-ERWEITERUNG',
     titleTop: 'NUR AM ZUSCHAUEN?',
     titleBottom: 'SIEH ALLE CHATS.',
-    titleCategory:
-      'Kostenlose Browser-Erweiterung für Chrome und Firefox: der Twitch-, YouTube-, Kick-, TikTok- und Discord-Chat des Streamers in einem Fenster auf twitch.tv, youtube.com und kick.com',
+    titleCategory: 'Multistream-Chat-Erweiterung für Zuschauer auf Twitch, YouTube und Kick',
     manifestoLine1: 'MULTICHAT-TOOLS SIND FÜR STREAMER GEBAUT.',
     manifestoLine2: 'DIESES HIER IST FÜR DICH.',
     ctaChrome: 'ZU CHROME HINZUFÜGEN — KOSTENLOS →',
