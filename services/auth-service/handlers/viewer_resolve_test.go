@@ -39,6 +39,14 @@ type mockViewerIdentityRepo struct {
 	getLinked             func(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
 	unlinkPlatform        func(ctx context.Context, viewerID uuid.UUID, platform string) error
 	migratePlatformUserID func(ctx context.Context, platform, oldID, newID string) error
+	eraseViewer           func(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) ([]repository.LinkedPlatform, error)
+}
+
+func (m *mockViewerIdentityRepo) EraseViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) ([]repository.LinkedPlatform, error) {
+	if m.eraseViewer != nil {
+		return m.eraseViewer(ctx, viewerID, platform, platformUserID)
+	}
+	return nil, nil
 }
 
 func (m *mockViewerIdentityRepo) GetOrCreateViewerByPlatform(ctx context.Context, platform, platformUserID string) (uuid.UUID, error) {

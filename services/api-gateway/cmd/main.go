@@ -797,16 +797,7 @@ func main() {
 		protectedAPI.DELETE("/auth/chat-bots/allchat/:platform", proxyHandler.ForwardRequest)
 
 		// Viewer protected routes
-		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
-		// AuthCookieForward so the handler can blacklist the viewer token on logout
-		// (audit #18); harmless when the viewer authenticated via the Authorization
-		// bearer header (the common case — viewer tokens live in localStorage).
-		protectedAPI.POST("/auth/viewer/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
-		protectedAPI.POST("/auth/viewer/chat/send", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
-		protectedAPI.PATCH("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/viewer/linked-platforms", proxyHandler.ForwardRequest)
-		protectedAPI.DELETE("/auth/viewer/linked-platforms/:platform", proxyHandler.ForwardRequest)
+		registerViewerRoutes(protectedAPI, proxyHandler.ForwardRequest)
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)
