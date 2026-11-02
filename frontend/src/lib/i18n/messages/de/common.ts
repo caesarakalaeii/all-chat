@@ -33,6 +33,9 @@ export const common: LocaleNamespace<'common'> = {
     logOut: 'Abmelden',
     signIn: 'Anmelden',
   },
+  theme: {
+    lightMode: 'Heller Modus',
+  },
   soundPresets: {
     chime: 'Chime',
     pop: 'Pop',

@@ -905,6 +905,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0087: A site-wide light theme
+
+**Status**: Accepted (2026-11-02)
+**Problem**: The site was dark-only; the legal pages' light button did nothing visible because those pages had moved onto the lanes art direction, which paints with literal colors the button never touched.
+**Decision**: `data-theme="light"` on `<html>` (stored per browser, applied before paint by an inline head script, kept across navigation by ThemeSync) restates the semantic tokens and new lanes role variables (`--lanes-fg`, `--lanes-panel`, …, also Tailwind colors via `@theme inline`). Dark stays the default. OBS overlay routes and preview iframes never take it; `.theme-dark` keeps chat-theme previews, the hero stage and stream mockups dark. Toggle in every site nav; not premium-gated.
+**Impact**: Dark mode unchanged apart from the toggle. Every new color needs a light value and every new broadcast-art area needs `.theme-dark`; `token-contrast.test.ts` locks AA in both themes and checks `.theme-dark` restates the dark values exactly.
+**→ Read**: [0087-site-light-theme.md](./0087-site-light-theme.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

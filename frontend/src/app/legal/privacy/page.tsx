@@ -80,7 +80,7 @@ export default function PrivacyPolicyPage() {
   return (
     <LegalLayout title={t('legal.privacy.title')} lastUpdated={t('legal.privacy.lastUpdated')}>
       <div className="space-y-4">
-        <div className="text-sub border-2 border-white/30 p-5">
+        <div className="text-sub border-2 border-lanes-fg-strong/30 p-5">
           {emphasise(
             t('legal.privacy.tldr', { label: t('legal.privacy.tldrLabel') }),
             t('legal.privacy.tldrLabel'),
@@ -290,7 +290,7 @@ export default function PrivacyPolicyPage() {
           {interpolateElements(t('legal.privacy.fontsBody'), {
             selfHosted: <Emphasis>{t('legal.privacy.fontsSelfHostedEmphasis')}</Emphasis>,
             proxyPath: (
-              <code className="border border-white/50 bg-black px-1 py-0.5 text-xs">
+              <code className="border border-lanes-fg-strong/50 bg-lanes-panel px-1 py-0.5 text-xs">
                 {FONT_PROXY_PATH}
               </code>
             ),

@@ -77,19 +77,19 @@ export function NumbersSection({
       )}
       <div className="numbers">
         <div>
-          <div className="figure" style={{ color: '#fff' }}>
+          <div className="figure" style={{ color: 'var(--lanes-fg-strong)' }}>
             {totalDisplay}
           </div>
           <div className="figure-caption">{t('marketing.numbers.totalLabel')}</div>
         </div>
         <div>
-          <div className="figure" style={{ color: '#fff' }}>
+          <div className="figure" style={{ color: 'var(--lanes-fg-strong)' }}>
             {formatNumber(users)}
           </div>
           <div className="figure-caption">{t('marketing.numbers.usersLabel')}</div>
         </div>
         <div>
-          <div className="figure" style={{ color: '#fff' }}>
+          <div className="figure" style={{ color: 'var(--lanes-fg-strong)' }}>
             {formatNumber(overlaysLive)}
           </div>
           <div className="figure-caption">{t('marketing.numbers.overlaysLabel')}</div>

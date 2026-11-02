@@ -418,7 +418,7 @@ export default function DeveloperDocsPage() {
             </p>
           </div>
 
-          <nav className="mb-10 border-2 border-white p-5">
+          <nav className="mb-10 border-2 border-lanes-fg-strong p-5">
             <p className="text-dim mb-2 text-xs tracking-[0.15em] uppercase">
               {t('docs.api.tocHeading')}
             </p>
@@ -595,7 +595,7 @@ export default function DeveloperDocsPage() {
           </div>
 
           {/* Footer */}
-          <div className="text-dim mt-12 flex flex-col gap-3 border-t border-white/20 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-dim mt-12 flex flex-col gap-3 border-t border-lanes-fg-strong/20 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span>{t('docs.api.footerCopyright', { year: new Date().getFullYear() })}</span>
             <div className="flex flex-wrap items-center gap-4">
               <Link href="/docs">{t('docs.api.footerGuideLink')}</Link>

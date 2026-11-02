@@ -546,12 +546,12 @@ export default function UsersPage() {
                               <p className="text-sm font-medium text-text">{user.display_name}</p>
                               <div className="ml-2 flex space-x-1">
                                 {user.is_ambassador && (
-                                  <span className="inline-flex items-center rounded border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-400">
+                                  <span className="inline-flex items-center rounded border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-info">
                                     {t('admin.users.badgeAmbassador')}
                                   </span>
                                 )}
                                 {user.is_beta_tester && !user.is_ambassador && (
-                                  <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400">
+                                  <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-twitch">
                                     {t('admin.users.badgeBeta')}
                                   </span>
                                 )}
@@ -930,10 +930,10 @@ export default function UsersPage() {
                   {selectedUser.is_beta_tester ? (
                     <>
                       <div className="mb-3 rounded-lg border border-violet-500/20 bg-violet-500/10 p-3">
-                        <p className="text-sm font-medium text-violet-400">
+                        <p className="text-sm font-medium text-twitch">
                           {t('admin.users.betaActiveTitle')}
                         </p>
-                        <p className="mt-1 text-xs text-violet-400/70">
+                        <p className="mt-1 text-xs text-twitch">
                           {t('admin.users.betaActiveBody')}
                         </p>
                       </div>
@@ -1002,7 +1002,7 @@ export default function UsersPage() {
                         render={
                           <Button
                             variant="outline"
-                            className="w-full border-violet-500/40 text-violet-400 hover:border-violet-500/60 hover:bg-violet-500/10"
+                            className="w-full border-violet-500/40 text-twitch hover:border-violet-500/60 hover:bg-violet-500/10"
                             aria-label={t('admin.users.grantBetaLabel', {
                               username: selectedUser.username,
                             })}
@@ -1047,10 +1047,10 @@ export default function UsersPage() {
                   {selectedUser.is_ambassador ? (
                     <>
                       <div className="mb-3 rounded-lg border border-sky-500/20 bg-sky-500/10 p-3">
-                        <p className="text-sm font-medium text-sky-400">
+                        <p className="text-sm font-medium text-info">
                           {t('admin.users.ambassadorActiveTitle')}
                         </p>
-                        <p className="mt-1 text-xs text-sky-400/70">
+                        <p className="mt-1 text-xs text-info">
                           {t('admin.users.ambassadorActiveBody')}
                         </p>
                       </div>
@@ -1170,7 +1170,7 @@ export default function UsersPage() {
                       </div>
                       <Button
                         variant="outline"
-                        className="w-full border-sky-500/40 text-sky-400 hover:border-sky-500/60 hover:bg-sky-500/10"
+                        className="w-full border-sky-500/40 text-info hover:border-sky-500/60 hover:bg-sky-500/10"
                         disabled={ambassadorLoading}
                         aria-label={t('admin.users.grantAmbassadorLabel', {
                           username: selectedUser.username,

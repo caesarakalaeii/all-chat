@@ -106,7 +106,10 @@ export function AddSourceModal({
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content size="sm" className="lanes-app rounded-none border-white bg-black">
+      <Dialog.Content
+        size="sm"
+        className="lanes-app rounded-none border-lanes-fg-strong bg-lanes-panel"
+      >
         {/* Title */}
         <DialogTitle className="mb-4 pr-8 text-xl">
           {t('dashboard.shares.addSourceTitle', { sender: senderName })}

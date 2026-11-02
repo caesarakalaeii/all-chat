@@ -147,7 +147,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
   if (error && overlays.length === 0) {
     return (
       <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-        <Dialog.Content className="lanes-app rounded-none border-white bg-black">
+        <Dialog.Content className="lanes-app rounded-none border-lanes-fg-strong bg-lanes-panel">
           <DialogTitle className="mb-4 pr-8 text-xl">
             {t('dashboard.shares.cannotAcceptTitle')}
           </DialogTitle>
@@ -162,7 +162,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Content className="lanes-app rounded-none border-white bg-black">
+      <Dialog.Content className="lanes-app rounded-none border-lanes-fg-strong bg-lanes-panel">
         {/* Title */}
         <DialogTitle className="mb-4 pr-8 text-xl">
           {t('dashboard.shares.acceptTitle', {
@@ -188,7 +188,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
               <label className="text-sub mb-2 block text-sm font-medium" htmlFor="overlay-select">
                 {interpolateElements(t('dashboard.shares.shareBackLabel'), {
                   required: (
-                    <span className="text-red-400">{t('dashboard.shares.requiredMarker')}</span>
+                    <span className="text-destructive">{t('dashboard.shares.requiredMarker')}</span>
                   ),
                 })}
               </label>
@@ -275,7 +275,7 @@ export function AcceptModal({ request, onClose, onAccepted, senderPlatform }: Ac
                           </span>
                         </div>
                         {!isValidCustomHours() && (
-                          <p id={hoursErrorId} className="mt-1 text-xs text-red-400">
+                          <p id={hoursErrorId} className="mt-1 text-xs text-destructive">
                             {t('dashboard.shares.expiryCustomError')}
                           </p>
                         )}
