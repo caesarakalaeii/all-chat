@@ -295,7 +295,6 @@ export default function CookieBanner() {
                           {t('legal.cookieBanner.thirdPartyLabel')}
                         </strong>
                       ),
-                      avatars: <strong>{t('legal.cookieBanner.thirdPartyAvatars')}</strong>,
                       github: <strong>{t('legal.cookieBanner.thirdPartyGithub')}</strong>,
                       privacy: (
                         <a
