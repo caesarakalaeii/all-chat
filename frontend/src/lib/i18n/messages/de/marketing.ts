@@ -276,34 +276,94 @@ export const marketing: LocaleNamespace<'marketing'> = {
     metaTitle: 'Browser-Erweiterung: alle Chats auf Twitch, YouTube und Kick',
     metaDescription:
       'Nur am Zuschauen? Die kostenlose All-Chat-Erweiterung für Chrome und Firefox ersetzt den Chat auf Twitch, YouTube und Kick durch einen Feed mit allen Plattformen, auf denen der Streamer sendet.',
-    breadcrumb: 'Browser-Erweiterung',
-    eyebrow: 'Für Zuschauer',
-    heading: 'Nur am Zuschauen? Sieh alle Chats selbst.',
-    intro:
-      'Bei Streams, die All-Chat nutzen, ersetzt die Erweiterung den Chat von Twitch, YouTube und Kick durch einen gemeinsamen Feed.',
-    installChrome: 'Zu Chrome hinzufügen',
-    installFirefox: 'Zu Firefox hinzufügen',
-    installNote:
-      'Kostenlos und Open Source. Edge und Brave installieren sie aus dem Chrome Web Store.',
-    featuresHeading: 'Was sich im Chat ändert',
-    featureMerged:
-      'Nachrichten von jeder Plattform, auf der der Streamer sendet, im Chatfenster, das du ohnehin offen hast.',
-    featureSend:
-      'Schreib mit deinem Twitch-, YouTube- oder Kick-Konto. Ein zusätzliches Konto brauchst du nicht.',
-    featureEmotes:
-      'Emotes von 7TV, BTTV und FFZ, Badges und Namensfarben erscheinen plattformübergreifend, und mit : bekommst du Emote-Vorschläge.',
-    featureEngage:
-      'Startet der Streamer eine All-Chat-Umfrage oder -Vorhersage, erscheint sie über dem Chat. Melde dich an, um mit einem Klick abzustimmen oder Punkte zu setzen.',
-    featureNative:
-      'Der native Chat bleibt erreichbar: Im Popup der Erweiterung schaltest du sie pro Seite ab. Auf Twitch wechselt ein Tab zwischen All-Chat und Twitch-Chat, und Kanalpunkte, Vorhersagen und Hype Trains funktionieren weiter.',
-    whereHeading: 'Bei welchen Streams sie funktioniert',
-    whereBody:
-      'Die Erweiterung zeigt den Chat-Feed, den ein Streamer in All-Chat eingerichtet hat. Auf einem Kanal ohne All-Chat lässt sie den nativen Chat in Ruhe und weist kurz darauf hin, dass der Streamer All-Chat nicht nutzt.',
-    sourceBody: 'Die Erweiterung steht unter der AGPL-3.0, ihr Code liegt auf {github}.',
-    sourceLinkText: 'GitHub',
-    streamerHeading: 'Du streamst selbst?',
+    navStreamers: 'für streamer',
+    kicker: 'FÜR ZUSCHAUER · BROWSER-ERWEITERUNG',
+    titleTop: 'NUR AM ZUSCHAUEN?',
+    titleBottom: 'SIEH ALLE CHATS.',
+    titleCategory:
+      'Kostenlose Browser-Erweiterung für Chrome und Firefox: der Twitch-, YouTube-, Kick-, TikTok- und Discord-Chat des Streamers in einem Fenster auf twitch.tv, youtube.com und kick.com',
+    manifestoLine1: 'MULTICHAT-TOOLS SIND FÜR STREAMER GEBAUT.',
+    manifestoLine2: 'DIESES HIER IST FÜR DICH.',
+    ctaChrome: 'ZU CHROME HINZUFÜGEN — KOSTENLOS →',
+    ctaFirefox: 'ZU FIREFOX HINZUFÜGEN — KOSTENLOS →',
+    altChrome: 'chrome · edge · brave →',
+    altFirefox: 'firefox →',
+    ctaNote: 'kostenlos · open source · agpl-3.0',
+    demoLabel: 'WAS DU SIEHST',
+    demoHeadingTop: 'GLEICHER STREAM.',
+    demoHeadingAccent: 'ALLE CHATS.',
+    demoBody:
+      'Die Erweiterung tauscht das Chatfenster auf twitch.tv, youtube.com und kick.com gegen den All-Chat-Feed des Streamers: Nachrichten aus Twitch, YouTube, Kick, TikTok und Discord in einer Live-Liste.',
+    demoAlt:
+      'Illustration: eine Twitch-Streamseite, deren Chatfenster Nachrichten aus Twitch, YouTube, Kick, TikTok und Discord in einer Liste zeigt.',
+    demoUrl: 'twitch.tv/deinstreamer',
+    demoLive: 'LIVE',
+    demoStreamTitle: 'deinstreamer ist live auf Twitch, YouTube, Kick, TikTok und Discord',
+    demoTabAllChat: '∞ AllChat',
+    demoTabNative: 'Twitch-Chat',
+    demoInput: 'Nachricht senden',
+    wedgeLabel: 'WARUM DIESE',
+    wedgeHeadingTop: 'ANDERE TOOLS FÜHREN CHATS',
+    wedgeHeadingMiddle: 'FÜR DEN STREAMER ZUSAMMEN.',
+    wedgeHeadingAccent: 'UNSERES FÜR DICH.',
+    themTitle: 'ALLES ANDERE',
+    them1: 'Multichat-Dashboards laufen auf dem Bildschirm des Streamers, nicht auf deinem',
+    them2: 'auf twitch.tv siehst du weiterhin nur den Twitch-Chat',
+    them3: 'Twitch Shared Chat verbindet nur Twitch-Kanäle',
+    them4: 'Emote-Erweiterungen bringen Emotes, keine anderen Plattformen',
+    usTitle: 'ALL·CHAT-ERWEITERUNG',
+    us1: 'jede Plattform, auf der der Streamer live ist, in deinem Chatfenster',
+    us2: 'funktioniert auf twitch.tv, youtube.com und kick.com',
+    us3: 'schreib zurück mit deinem eigenen Twitch-, YouTube- oder Kick-Konto',
+    us4: '7TV-, BTTV- und FFZ-Emotes in jeder Nachricht',
+    compareLabel: 'GEPRÜFT AM 2. NOVEMBER 2026',
+    compareHeadingTop: 'WIR HABEN NACHGESEHEN.',
+    compareHeadingAccent: 'NICHTS ANDERES MACHT DAS FÜR ZUSCHAUER.',
+    compareToolHeader: 'Tool',
+    compareViewerHeader: 'Was ein Zuschauer auf twitch.tv bekommt',
+    compareSourceHeader: 'Quelle',
+    rowSsnTool: 'Social Stream Ninja',
+    rowSsnViewer:
+      'Nichts im Chatfenster. Es führt über 100 Plattformen in einem Dashboard und OBS-Overlay zusammen, das der Streamer betreibt.',
+    rowRestreamTool: 'Restream Chat, SleepyChat',
+    rowRestreamViewer:
+      'Nichts im Chatfenster. Beide sind Dashboards und OBS-Overlays für den Streamer. Der Relay-Bot von Restream kann Nachrichten als Bot-Nachrichten in den Chat jeder Plattform posten.',
+    rowSharedTool: 'Twitch Shared Chat',
+    rowSharedViewer: 'Chat aus anderen Twitch-Kanälen, die gemeinsam streamen. Nur Twitch.',
+    rowEmotesTool: '7TV, BetterTTV, FrankerFaceZ',
+    rowEmotesViewer:
+      'Mehr Emotes und Chat-Werkzeuge für die Plattform, auf der du bist. Keine Nachrichten von anderen Plattformen.',
+    rowChatterinoTool: 'Chatterino',
+    rowChatterinoViewer: 'Eine eigene Desktop-Chat-App für Twitch.',
+    rowUsTool: 'All-Chat-Erweiterung',
+    rowUsViewer:
+      'Jede Plattform, auf der der Streamer live ist, im Chatfenster, das du ohnehin offen hast. Schreib zurück mit deinem eigenen Konto.',
+    compareFootnote:
+      'Geprüft an den eigenen Seiten jedes Tools. Eins übersehen? Sag es uns auf {discord}. Du suchst Tools für Streamer? Sieh dir die {compare} an.',
+    compareLinkText: 'Vergleichsseite',
+    featuresLabel: 'WAS SICH IM CHAT ÄNDERT',
+    featureMergedTitle: 'Jede Plattform',
+    featureMergedBody:
+      'Nachrichten von jeder Plattform, auf der der Streamer sendet, live in einer Liste, im Chatfenster, das du ohnehin offen hast.',
+    featureSendTitle: 'Schreib zurück',
+    featureSendBody:
+      'Melde dich mit Twitch, YouTube oder Kick an und schreib direkt aus dem Fenster. Kein zusätzliches Konto nötig.',
+    featureEmotesTitle: 'Deine Emotes',
+    featureEmotesBody:
+      'Emotes von 7TV, BTTV und FFZ, Badges und Namensfarben in jeder Nachricht. Mit : bekommst du Emote-Vorschläge.',
+    featureEngageTitle: 'Umfragen und Vorhersagen',
+    featureEngageBody:
+      'All-Chat-Umfragen und -Vorhersagen erscheinen über dem Chat. Melde dich an, um mit einem Klick abzustimmen oder Punkte zu setzen.',
+    featureNativeTitle: 'Nativer Chat bleibt',
+    featureNativeBody:
+      'Im Popup schaltest du sie pro Seite ab. Auf Twitch wechselt ein Tab zurück zum Twitch-Chat, und Kanalpunkte, Vorhersagen und Hype Trains funktionieren weiter.',
+    featureOpenTitle: 'Kostenlos und Open Source',
+    featureOpenBody: 'AGPL-3.0, Code auf GitHub. Läuft in Chrome, Edge, Brave und Firefox.',
+    finalMicro: 'kostenlos · open source · chrome, edge, brave, firefox',
+    finalWhere:
+      'Funktioniert bei Streams, die All-Chat nutzen. Überall sonst bleibt dein Chat genau, wie er ist.',
     streamerBody:
-      'Lege fest, was deine Zuschauer sehen: Klick im {dashboard} beim gewünschten Overlay auf „Als Extension-Overlay festlegen“. Zuschauer mit der Erweiterung sehen dann diesen Feed auf deinen Kanälen.',
+      'Du streamst selbst? Klick im {dashboard} beim Overlay, das deine Zuschauer sehen sollen, auf „Als Extension-Overlay festlegen“.',
     streamerLinkText: 'Dashboard',
   },
   ambassadors: {
