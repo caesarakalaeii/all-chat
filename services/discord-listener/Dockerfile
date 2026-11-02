@@ -1,4 +1,4 @@
-FROM golang:1.26.10-alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 
 WORKDIR /app
 
@@ -15,7 +15,7 @@ RUN go mod download
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/discord-listener ./cmd/
 
-FROM alpine:3.23
+FROM alpine:3.24
 
 RUN apk --no-cache add ca-certificates tzdata
 

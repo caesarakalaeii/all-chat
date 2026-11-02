@@ -10,6 +10,11 @@
   <a href="https://allch.at"><strong>Try it free at allch.at</strong></a> · <a href="https://discord.gg/xCGBSuz39P">Discord</a> · <a href="https://github.com/caesarakalaeii/all-chat/issues/new/choose">Report a Bug</a>
 </p>
 
+<p align="center">
+  <b>Just watching? See every chat yourself.</b><br />
+  Get the <a href="https://allch.at/browser-extension">All-Chat browser extension</a> for <a href="https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm">Chrome</a> or <a href="https://addons.mozilla.org/en-US/firefox/addon/all-chat-extension/">Firefox</a>.
+</p>
+
 ---
 
 ## What is All-Chat?
@@ -28,7 +33,7 @@ No bots. No IRC tokens. No complicated setup.
 - **Multiple Overlays**: one account runs several overlays, each with its own mix of chat sources and its own theme
 - **Real-Time Delivery** — Messages arrive via WebSocket — no 5-second delay
 - **Smart Polling** — Listeners only run when your overlay is actually visible (see [How it works](#demand-driven-listeners))
-- **Browser Extension** — Replace native site chat with All-Chat on Twitch, YouTube, and Kick
+- **[Browser Extension](#browser-extension)** — Replace native site chat with All-Chat on Twitch, YouTube, and Kick
 - **Open Source** — AGPL 3.0 licensed, fully self-hostable
 
 ---
@@ -133,9 +138,9 @@ scratch? See the **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** or t
 
 ## Browser Extension
 
-Don't just watch chat in OBS — **give your viewers unified chat too.**
+**Just watching? See every chat yourself.** On streams that use All-Chat, the [All-Chat Browser Extension](https://allch.at/browser-extension) swaps native chat on Twitch, YouTube, and Kick for one combined feed. Read and send messages across platforms without leaving the page you're watching. On a channel that doesn't use All-Chat, native chat stays as it is.
 
-The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-extension) replaces native site chat on Twitch, YouTube, and Kick with your All-Chat feed. Your community can read and send messages across platforms without leaving the page they're watching.
+**Streaming yourself?** In the dashboard, click **Set as Extension Overlay** on the overlay your viewers should see. Source code: [all-chat-extension](https://github.com/caesarakalaeii/all-chat-extension).
 
 **Install:**
 - [Chrome / Edge / Brave](https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm)

@@ -140,10 +140,12 @@ const HTTP_PORT = parseInt(process.env.PORT || '8089');
 // works because their PeerTTL window has a full interval of slack; 25s gives the
 // same margin without going full-second-fast.
 const DEMAND_SAFETY_INTERVAL_MS = parseInt(process.env.DEMAND_SAFETY_INTERVAL_MS || '25000'); // 25 seconds
-// How long a pod refuses to re-claim a lease it shed in rebalancing. One
-// demand cycle is enough for another pod to take it; matching the poll
-// interval keeps the hold from expiring before the next poll cycle arrives.
-const REBALANCE_HOLD_MS = DEMAND_SAFETY_INTERVAL_MS;
+// How long a pod refuses to re-claim a lease it shed in rebalancing. Two
+// demand cycles: the hold starts after the release, inside a poll, so a hold
+// of exactly one interval has expired by the time this pod's next poll
+// reaches its claim loop, and the releasing pod re-took the lease ~26s later
+// whenever the other pod had not claimed it yet.
+const REBALANCE_HOLD_MS = 2 * DEMAND_SAFETY_INTERVAL_MS;
 
 // Coordinator configuration (Phase 6)
 const COORDINATOR_URL = process.env.COORDINATOR_URL || 'http://source-manager:8088';
@@ -1085,10 +1087,7 @@ class TikTokListenerService {
       if (this.leadershipCoordinator) {
         await this.leadershipCoordinator.release(username);
       }
-      this.livePoller.removeTarget(username);
-      if (this.activeStreams.has(username)) {
-        await this.disconnectFromStream(username);
-      }
+      await this.disconnectFromStream(username);
       // Drop any silent-failure streak: a stale streak from a since-removed
       // overlay would give a re-added channel error backoff after one future
       // heartbeat timeout.
@@ -1205,12 +1204,9 @@ class TikTokListenerService {
           this.rebalanceHolds.set(username, Date.now() + holdMs);
         }
         for (const username of released) {
-          // Drop all local tracking for the released stream, including a
-          // poller target for an offline-but-demanded room: the poller's
-          // onLive callback connects without a lease check, so a surviving
-          // target would reconnect a stream whose lease another pod now holds.
-          // A later demand cycle re-adds it under a fresh lease.
-          this.livePoller.removeTarget(username);
+          // Drops all local tracking, including the poller target of an
+          // offline-but-demanded room; a later demand cycle re-adds it
+          // under a fresh lease.
           await this.disconnectFromStream(username);
         }
       }
@@ -1676,6 +1672,14 @@ class TikTokListenerService {
     }
   }
   private async disconnectFromStream(username: string): Promise<void> {
+    // Forget the poller target (and with it the backoff state and status
+    // cache) even when there is no connection: a room that lost its lease
+    // while offline lives only in the poller. Left there, it kept this pod
+    // polling a room another pod owns and, because a polled room is never
+    // re-claimed here, the owner released and re-took it every ~50s
+    // (2026-11-01: 70 leases lost to a Redis failover, hibiscups bounced
+    // all evening).
+    this.livePoller.removeTarget(username);
     const stream = this.activeStreams.get(username);
     if (!stream) return;
 
@@ -1686,8 +1690,7 @@ class TikTokListenerService {
       stream.connection.disconnect();
       this.activeStreams.delete(username);
 
-      // Remove from poller and clear backoff state
-      this.livePoller.removeTarget(username);
+      // Clear backoff state (the poller target went above)
       this.backoffManager.removeState(username);
       this.statusChecker.clearCache(username);
       // The heartbeat-forced path does not come through here (it disconnects

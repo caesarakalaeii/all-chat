@@ -84,20 +84,16 @@ services:
   # apps/workloads/all-chat/minio-*.yaml in caesar-deployment; create the
   # bucket locally with `make minio-setup`.
   #
-  # NOT minio/minio: MinIO stopped serving its images anonymously in
-  # Aug 2025 (Hub repo removed, quay login-gated), so a pull of the
-  # official tag fails and the container never starts. bitnamilegacy/minio
-  # is the last anonymously-pullable build of the same binary; its
-  # entrypoint execs `minio "$@"` when the first arg is "server", so the
-  # official single-node command below is unchanged.
+  # pgsty/silo is the maintained fork of the MinIO server: upstream
+  # minio/minio was archived on 2026-04-24 and stopped publishing images in
+  # Aug 2025. Same protocol and on-disk format, and its entrypoint maps a
+  # leading `server` arg to the silo binary, so the official single-node
+  # command below is unchanged. It runs as root by default, which a fresh
+  # root-owned named volume needs.
   minio:
-    image: bitnamilegacy/minio:2025.7.23-debian-12-r5
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
     container_name: allchat-minio
     command: server /data --console-address ":9001"
-    # The bitnami image defaults to UID 1001, but a fresh named volume is
-    # root-owned; the official minio image ran as root too, so keep that
-    # trust model instead of fighting the volume ownership.
-    user: root
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}

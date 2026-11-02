@@ -17,8 +17,8 @@
  */
 
 /**
- * The public homepage ("lanes" design), the upgrade page and the device-link
- * flow.
+ * The public homepage ("lanes" design), the upgrade page, the device-link
+ * flow and the viewer-facing /browser-extension page.
  *
  * The homepage is marketing art direction (mockup G): manifesto voice,
  * lowercase mono chrome, five platform lanes. Its copy lives under
@@ -63,6 +63,8 @@ export const marketing = {
     howItWorks: 'how it works ↓',
     backToDashboard: 'BACK TO YOUR DASHBOARD →',
     welcomeNote: 'welcome back, {name} — {count} overlays are live, yours is one click away',
+    // Hero hint for viewers, linking /browser-extension. The arrow rides inside the key.
+    viewerChip: 'VIEWER? SEE EVERY CHAT →',
     // Doubles as each sign-in button's aria-label, so one key keeps the
     // accessible name and the visible label from ever drifting apart.
     signInWith: 'Sign in with {platform}',
@@ -305,6 +307,42 @@ export const marketing = {
     api: 'Developer API',
     docsAndFaq: 'Docs & FAQ',
   },
+  // /browser-extension, the viewer-facing page for the browser extension.
+  // Claim only what the extension does today: it takes over chat only on
+  // channels whose streamer has set up All-Chat, and says so on the page.
+  extensionPage: {
+    metaTitle: 'Browser Extension: See Every Chat on Twitch, YouTube and Kick',
+    metaDescription:
+      'Just watching? The free All-Chat extension for Chrome and Firefox replaces Twitch, YouTube and Kick chat with one feed of every platform the streamer broadcasts to.',
+    breadcrumb: 'Browser extension',
+    eyebrow: 'For viewers',
+    heading: 'Just watching? See every chat yourself.',
+    intro:
+      'On streams that use All-Chat, the extension swaps Twitch, YouTube and Kick chat for one combined feed.',
+    installChrome: 'Add to Chrome',
+    installFirefox: 'Add to Firefox',
+    installNote: 'Free and open source. Edge and Brave install it from the Chrome Web Store.',
+    featuresHeading: 'What changes in chat',
+    featureMerged:
+      'Messages from every platform the streamer broadcasts to, in the chat panel you already watch.',
+    featureSend:
+      'Chat with your Twitch, YouTube or Kick account. There is no extra account to create.',
+    featureEmotes:
+      '7TV, BTTV and FFZ emotes, badges and name colors show up across platforms, and typing : suggests emotes.',
+    featureEngage:
+      'When the streamer runs an All-Chat poll or prediction, it appears above chat. Sign in to vote or wager points with one click.',
+    featureNative:
+      'Native chat stays in reach: switch the extension off per site from its popup. On Twitch a tab switches between All-Chat and Twitch chat, and channel points, predictions and hype trains keep working.',
+    whereHeading: 'Which streams it works on',
+    whereBody:
+      'The extension shows the chat feed a streamer has set up in All-Chat. On a channel that does not use All-Chat, it leaves the native chat alone and briefly notes that the streamer is not using All-Chat.',
+    sourceBody: 'The extension is licensed under AGPL-3.0, and its code is on {github}.',
+    sourceLinkText: 'GitHub',
+    streamerHeading: 'Streaming yourself?',
+    streamerBody:
+      'Choose what your viewers see: in the {dashboard}, click Set as Extension Overlay on the overlay you want. Viewers with the extension then see that feed on your channels.',
+    streamerLinkText: 'dashboard',
+  },
   ambassadors: {
     eyebrow: 'Ambassadors',
     title: 'Streamers who run on All-Chat',
@@ -358,7 +396,7 @@ export const marketing = {
       'No. Usage analytics are cookieless and self-hosted, and chat messages are automatically deleted after about an hour.',
     extensionQuestion: 'Is there a browser extension?',
     extensionAnswer:
-      'Yes. The All-Chat browser extension replaces native Twitch, YouTube, and Kick chat so your viewers can follow along across platforms.',
+      'Yes, for your viewers. On streams that use All-Chat, the extension for Chrome and Firefox replaces native Twitch, YouTube, and Kick chat with your merged feed, so viewers can read and chat across platforms. Install links are at allch.at/browser-extension.',
   },
   upgrade: {
     badge: 'All-Chat Premium',

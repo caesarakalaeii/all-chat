@@ -48,6 +48,7 @@ export const marketing: LocaleNamespace<'marketing'> = {
     backToDashboard: 'ZURÜCK ZU DEINEM DASHBOARD →',
     welcomeNote:
       'willkommen zurück, {name} — {count} Overlays sind live, deins ist einen Klick entfernt',
+    viewerChip: 'ZUSCHAUER? SIEH ALLE CHATS →',
     signInWith: 'Mit {platform} anmelden',
   },
   flowTwitch: {
@@ -271,6 +272,40 @@ export const marketing: LocaleNamespace<'marketing'> = {
     api: 'Entwickler-API',
     docsAndFaq: 'Docs & FAQ',
   },
+  extensionPage: {
+    metaTitle: 'Browser-Erweiterung: alle Chats auf Twitch, YouTube und Kick',
+    metaDescription:
+      'Nur am Zuschauen? Die kostenlose All-Chat-Erweiterung für Chrome und Firefox ersetzt den Chat auf Twitch, YouTube und Kick durch einen Feed mit allen Plattformen, auf denen der Streamer sendet.',
+    breadcrumb: 'Browser-Erweiterung',
+    eyebrow: 'Für Zuschauer',
+    heading: 'Nur am Zuschauen? Sieh alle Chats selbst.',
+    intro:
+      'Bei Streams, die All-Chat nutzen, ersetzt die Erweiterung den Chat von Twitch, YouTube und Kick durch einen gemeinsamen Feed.',
+    installChrome: 'Zu Chrome hinzufügen',
+    installFirefox: 'Zu Firefox hinzufügen',
+    installNote:
+      'Kostenlos und Open Source. Edge und Brave installieren sie aus dem Chrome Web Store.',
+    featuresHeading: 'Was sich im Chat ändert',
+    featureMerged:
+      'Nachrichten von jeder Plattform, auf der der Streamer sendet, im Chatfenster, das du ohnehin offen hast.',
+    featureSend:
+      'Schreib mit deinem Twitch-, YouTube- oder Kick-Konto. Ein zusätzliches Konto brauchst du nicht.',
+    featureEmotes:
+      'Emotes von 7TV, BTTV und FFZ, Badges und Namensfarben erscheinen plattformübergreifend, und mit : bekommst du Emote-Vorschläge.',
+    featureEngage:
+      'Startet der Streamer eine All-Chat-Umfrage oder -Vorhersage, erscheint sie über dem Chat. Melde dich an, um mit einem Klick abzustimmen oder Punkte zu setzen.',
+    featureNative:
+      'Der native Chat bleibt erreichbar: Im Popup der Erweiterung schaltest du sie pro Seite ab. Auf Twitch wechselt ein Tab zwischen All-Chat und Twitch-Chat, und Kanalpunkte, Vorhersagen und Hype Trains funktionieren weiter.',
+    whereHeading: 'Bei welchen Streams sie funktioniert',
+    whereBody:
+      'Die Erweiterung zeigt den Chat-Feed, den ein Streamer in All-Chat eingerichtet hat. Auf einem Kanal ohne All-Chat lässt sie den nativen Chat in Ruhe und weist kurz darauf hin, dass der Streamer All-Chat nicht nutzt.',
+    sourceBody: 'Die Erweiterung steht unter der AGPL-3.0, ihr Code liegt auf {github}.',
+    sourceLinkText: 'GitHub',
+    streamerHeading: 'Du streamst selbst?',
+    streamerBody:
+      'Lege fest, was deine Zuschauer sehen: Klick im {dashboard} beim gewünschten Overlay auf „Als Extension-Overlay festlegen“. Zuschauer mit der Erweiterung sehen dann diesen Feed auf deinen Kanälen.',
+    streamerLinkText: 'Dashboard',
+  },
   ambassadors: {
     eyebrow: 'Botschafter',
     title: 'Streamer, die auf All-Chat laufen',
@@ -322,7 +357,7 @@ export const marketing: LocaleNamespace<'marketing'> = {
       'Nein. Die Nutzungsanalyse läuft cookiefrei und selbst gehostet, und Chatnachrichten werden nach etwa einer Stunde automatisch gelöscht.',
     extensionQuestion: 'Gibt es eine Browser-Erweiterung?',
     extensionAnswer:
-      'Ja. Die All-Chat-Browser-Erweiterung ersetzt den nativen Twitch-, YouTube- und Kick-Chat, damit deine Zuschauer plattformübergreifend mitlesen.',
+      'Ja, für deine Zuschauer. Bei Streams, die All-Chat nutzen, ersetzt die Erweiterung für Chrome und Firefox den nativen Twitch-, YouTube- und Kick-Chat durch deinen zusammengeführten Feed, damit Zuschauer plattformübergreifend mitlesen und mitschreiben. Die Installationslinks stehen auf allch.at/browser-extension.',
   },
   upgrade: {
     badge: 'All-Chat Premium',
