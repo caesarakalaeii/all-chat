@@ -676,8 +676,10 @@ in caesar-deployment (`apps/workloads/all-chat/`):
 - **`/app/retention-sweeper`** (`cmd/retention-sweeper`, `retention-sweeper-cronjob.yaml`,
   every 15 minutes, ADR-0089): deletes rows past the retention periods the privacy policy
   promises. It is the only thing that enforces them. Needs only `DATABASE_URL`; opens one
-  connection; deletes in batches (`--batch-size`, default 1000, `--batch-delay-ms`, default
-  100) with `FOR UPDATE SKIP LOCKED`, so it is safe to re-run and to overlap; logs
+  connection, retrying a failed connect for up to a minute (a fresh pod's IP is not yet in
+  the Postgres NetworkPolicy allow-set when it starts); deletes in batches (`--batch-size`,
+  default 1000, `--batch-delay-ms`, default 100) with `FOR UPDATE SKIP LOCKED`, so it is
+  safe to re-run and to overlap; logs
   `rows_deleted` per table and exits non-zero if any table failed.
 
   | Table | Deleted when |
