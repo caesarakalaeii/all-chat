@@ -120,9 +120,10 @@ type eventDef struct {
 }
 
 // eventDefs is every event type a profile can be set for, using the raw
-// event_type names the listeners publish on chat:raw. Event types the
-// alert-processor forwards but that are not listed (like_aggregate,
-// watch_streak, ...) still reach the overlay, just without a profile.
+// event_type names the listeners publish on chat:raw. Every type listed here
+// passes the alert-processor's consumer; the public types it forwards without
+// a profile (like_aggregate, watch_streak, ...) are listed there
+// (profileLessAlertEvents), and any other type never reaches an alert overlay.
 var eventDefs = []eventDef{
 	{"subscription", "twitch", "{username} just subscribed!", Value{1, "months", "Tier 1"}},
 	{"resubscription", "twitch", "{username} resubscribed for {count} months!", Value{12, "months", "Tier 1 - 12 months"}},
