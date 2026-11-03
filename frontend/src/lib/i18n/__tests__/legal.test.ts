@@ -236,7 +236,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.metaSubheading')).toBe('Facebook & Instagram (beta)')
     expect(t('legal.privacy.tldr')).toBe(
-      '{label} All-Chat only collects what we need to sign you in, connect your streaming platforms and run your overlays, alerts and chat tools. Tokens are encrypted, the chat shown in your overlays is not stored in our database, and we never sell your data. Section\u00A06 lists how long we keep each kind of data. We use cookieless, self-hosted analytics (no tracking cookies; see Section\u00A05.8).'
+      '{label} All-Chat only collects what we need to sign you in, connect your streaming platforms and run your overlays, alerts and chat tools. Tokens are encrypted, the chat shown in your overlays is not stored in our database apart from the records listed in Sections\u00A02.2 and 2.4, and we never sell your data. Section\u00A06 lists how long we keep each kind of data. We use cookieless, self-hosted analytics (no tracking cookies; see Section\u00A05.8).'
     )
     expect(t('legal.privacy.tldrLabel')).toBe('TL;DR:')
     expect(t('legal.privacy.openSourceCallout')).toBe(
@@ -245,16 +245,16 @@ describe('privacy policy copy', () => {
     expect(t('legal.privacy.openSourceCalloutLabel')).toBe('Open Source Transparency:')
     expect(t('legal.privacy.githubLinkText')).toBe('GitHub')
     expect(t('legal.privacy.accountLegalBasis')).toBe(
-      'Legal basis: Art.\u00A06(1)(b) DSGVO – performance of a contract (providing the service you signed up for).'
+      'Legal basis: Art.\u00A06(1)(b) DSGVO – performance of a contract (providing the service you signed up for). Records of bans and of your acceptance of the Terms rest on Art.\u00A06(1)(f) DSGVO – our legitimate interest in preventing abuse and in being able to show what you agreed to.'
     )
     expect(t('legal.privacy.chatLegalBasis')).toBe(
-      'Legal basis: Art.\u00A06(1)(b) DSGVO for you as the streamer. For the viewers whose messages and events we process, Art.\u00A06(1)(f) DSGVO – the legitimate interest of the streamer and of All-Chat in showing chat and events that were posted publicly on the platform, and in preventing abuse.'
+      "Legal basis: Art.\u00A06(1)(b) DSGVO for you as the streamer. For the viewers whose messages and events we process, Art.\u00A06(1)(f) DSGVO – the legitimate interest of the streamer and of All-Chat in showing chat and events posted in the streamer's channel to its audience, and in preventing abuse. Most of this chat is public. Some is posted to a narrower audience, such as members-only or unlisted YouTube streams and private Discord channels, and AutoMod holds are messages Twitch has not shown in chat."
     )
     expect(t('legal.privacy.featuresLegalBasis')).toBe(
       'Legal basis: Art.\u00A06(1)(b) DSGVO. The ambassador showcase rests on your consent (Art.\u00A06(1)(a) DSGVO), which you can withdraw at any time.'
     )
     expect(t('legal.privacy.viewerLegalBasis')).toBe(
-      'Legal basis: Art.\u00A06(1)(b) DSGVO for the features you use. Linking several platform identities rests on your consent (Art.\u00A06(1)(a) DSGVO); you can unlink platforms at any time from the viewer settings. Recording participation by chat command rests on Art.\u00A06(1)(f) DSGVO – the legitimate interest of the streamer and of All-Chat in running the poll, prediction or points game you joined.'
+      "Legal basis: Art.\u00A06(1)(b) DSGVO for the features you use. Linking several platform identities rests on your consent (Art.\u00A06(1)(a) DSGVO); you can unlink a platform at any time from the viewer settings, except the one you are signed in with and your last remaining one, which deleting your viewer data removes. Recording participation by chat command, and the points a streamer's rules award automatically, rest on Art.\u00A06(1)(f) DSGVO – the legitimate interest of the streamer and of All-Chat in running the poll, prediction or points game."
     )
     expect(t('legal.privacy.extensionLegalBasis')).toBe(
       'Legal basis: Art.\u00A06(1)(b) DSGVO – providing the extension features you installed it for.'
@@ -284,22 +284,22 @@ describe('privacy policy copy', () => {
       'You sign in to All-Chat with Twitch, YouTube (Google) or Kick. For your account and for every platform you connect as a chat source we store:'
     )
     expect(t('legal.privacy.accountIdentifiers')).toBe(
-      'Platform identifiers (user ID, username, display name) and the profile image the platform provides'
+      'For the platform you sign in with: your user ID, username, display name and profile image. For each platform you connect as a source: its user or channel ID and name'
     )
     expect(t('legal.privacy.accountTokens')).toBe(
-      'Encrypted OAuth access and refresh tokens with their scopes and expiry dates, for each platform you authorise (Twitch, YouTube, Kick, and in beta Facebook and Instagram)'
+      'Encrypted OAuth tokens with their scopes and, where the platform sets one, their expiry date, for each platform you authorise (Twitch, YouTube, Kick, and in beta Facebook and Instagram). Refresh tokens are stored where the platform issues them; Facebook Page tokens have none and do not expire'
     )
     expect(t('legal.privacy.accountNameOnly')).toBe(
-      'For platforms you add by name or address only (TikTok, Owncast, GoodGame, Picarto, Altstream), just the channel name or server address you enter; for Discord, the server ID and name and the channels you pick for the All-Chat bot'
+      'For platforms you add by name or address only (TikTok, Owncast, GoodGame, Picarto, Altstream), just the channel name or server address you enter; for Discord, the server ID, name and icon and the channels you pick for the All-Chat bot, and, if you link your Discord account, its Discord user ID and username'
     )
     expect(t('legal.privacy.accountStatus')).toBe(
       'Your account status: premium, beta tester or ambassador status, admin role, and any ban with its reason'
     )
     expect(t('legal.privacy.accountTermsAcceptance')).toBe(
-      'Whether and when you accepted the current Terms of Service and this Privacy Policy'
+      'Whether you have accepted the current Terms of Service and this Privacy Policy, and when you last accepted them in the prompt shown after login. We do not record which version you accepted'
     )
     expect(t('legal.privacy.accountNoEmail')).toBe(
-      'We do not receive an email address from any chat platform.'
+      'We do not store an email address from any chat platform. Kick includes your email address in the profile it returns at sign-in; we discard it.'
     )
     expect(t('legal.privacy.chatIntro')).toBe(
       'While an overlay or chat view is connected, we receive and process:'
@@ -308,20 +308,23 @@ describe('privacy policy copy', () => {
       'Chat messages from the channels you connected, including emotes, GIFs and attachments'
     )
     expect(t('legal.privacy.chatAuthor')).toBe(
-      'Per-message author details (platform user ID, username, display name, color, avatar, badges and roles)'
+      'Per-message author details (platform user ID, username, display name, color, avatar, badges and roles, and where available their pronouns and the All-Chat name color, avatar frame and flair they chose)'
     )
     expect(t('legal.privacy.chatEvents')).toBe(
-      'Channel events: follows, subscriptions and gifted subscriptions, bits and cheers, Super Chats and Super Stickers, memberships, raids, channel point redemptions, TikTok gifts, likes, shares and follows, and your most recent YouTube subscribers'
+      'Channel events: on Twitch, follows, subscriptions, resubscriptions and gifted subscriptions, bits, cheers and Power-ups, raids, channel point redemptions and chat notices such as announcements, watch streaks, gift and Prime upgrades, pay-it-forward gifts and charity donations; on YouTube, Super Chats, Super Stickers, memberships, membership milestones and gifted memberships, and your most recent subscribers; on TikTok, gifts, likes, shares, follows, subscriptions, questions, Super Fan joins and boxes, and treasure chests'
     )
     expect(t('legal.privacy.chatModeration')).toBe(
       'Moderation events (deleted messages, timeouts, bans) and, if you turn on the moderation log, Twitch AutoMod holds and moderator actions, which are shown only to you'
     )
     expect(t('legal.privacy.chatRetention')).toBe(
-      'Chat messages are {emphasis}. They pass through memory and short-lived queues: a five-minute replay buffer so a reconnecting overlay can catch up, a capped processing queue that is continuously overwritten, and a seven-day queue for messages that failed processing so we can fix the fault.'
+      'Chat messages are {emphasis}. They pass through memory and short-lived queues: a replay buffer with the last 500 messages of each overlay, so a reconnecting overlay can catch up, which is deleted five minutes after its last message; an incoming queue that holds the most recent 100,000 messages across all channels and is continuously overwritten (Redis keeps it in an on-disk log, and at current traffic a message stays in it for less than a day); queues that hold the most recent 10,000 chat commands and Twitch poll and prediction events; and a seven-day queue for messages that failed processing so we can fix the fault.'
     )
     expect(t('legal.privacy.chatRetentionEmphasis')).toBe('not written to our database')
     expect(t('legal.privacy.chatDerived')).toBe(
-      'Some features keep data derived from events: the alert log (sender name, event type and amount) for 30 days, list-overlay leaderboards for a rolling 30 days, and credit-roll session totals for 48 hours.'
+      "Some features keep data derived from events: the alert log (the sender's platform user ID and name, the event type and amount, and the event's details as the platform sends them, such as a channel point reward with the text the viewer entered) for 30 days; list-overlay leaderboards (platform user IDs, names and scores) until 30 days pass without a new entry; and credit-roll session boards (platform user IDs, names, avatars and event details, including the full message of raids and mystery gifts) until 48 hours pass without a new entry."
+    )
+    expect(t('legal.privacy.chatStreamHistory')).toBe(
+      "We also keep a record of each overlay's stream sessions (start and end, event counts and the total value of paid events) and, for each connected channel, when it was last seen live or offline and its typical streaming days and times."
     )
     expect(t('legal.privacy.featuresIntro')).toBe(
       'To run your overlays and tools we store what you configure:'
@@ -333,7 +336,7 @@ describe('privacy policy copy', () => {
       'Alert, goal, list and credit-roll settings, including any custom HTML, CSS and JavaScript and the image and sound addresses you choose'
     )
     expect(t('legal.privacy.featuresMedia')).toBe(
-      'Media you upload (images, audio and video up to 10\u00A0MiB each). Uploaded files are stored on our own servers and can be opened by anyone who has their unguessable address, so that they play in OBS'
+      'Media you upload (images, audio and video up to 10\u00A0MiB each). Uploaded files are stored on our own servers and can be opened by anyone who has their address, so that they play in OBS. The address contains your account ID, a random part that makes it unguessable, and the name of the file you uploaded'
     )
     expect(t('legal.privacy.featuresTts')).toBe(
       'Text-to-speech settings, including your own ElevenLabs API key, stored encrypted'
@@ -347,6 +350,9 @@ describe('privacy policy copy', () => {
     expect(t('legal.privacy.featuresModerators')).toBe(
       'Moderators you invite to an overlay (display name, invitation label and the platform account they are expected to use), and the encrypted platform credentials a moderator connects'
     )
+    expect(t('legal.privacy.featuresModerationLog')).toBe(
+      "A log of the moderation actions you and your moderators take through All-Chat: who acted and for whom, the overlay, platform and channel, the action, the target's platform user ID and message ID, the reason and the outcome"
+    )
     expect(t('legal.privacy.featuresSharing')).toBe(
       'Share requests you send to or receive from other streamers'
     )
@@ -357,7 +363,10 @@ describe('privacy policy copy', () => {
       'If you are an ambassador and opt in to the public showcase: your username, display name, profile image, platform and tagline, shown publicly on allch.at'
     )
     expect(t('legal.privacy.viewerAccountBody')).toBe(
-      'Viewers can sign in with Twitch, YouTube or Kick through the browser extension, the participation page or the viewer settings. We store the platform user ID, username, display name, avatar and encrypted tokens (Twitch: no extra permissions; YouTube: read-only access and basic profile; Kick: basic profile), and the name color, avatar frame, flair and viewer premium status you have. Unlinking a platform deletes its tokens and revokes them at the platform.'
+      'Viewers can sign in with Twitch, YouTube or Kick through the browser extension, the participation page or the viewer settings. For each sign-in we keep a session record with the platform user ID, username, display name, avatar and encrypted tokens (Twitch: no extra permissions; YouTube: read-only access and basic profile; Kick: basic profile) and counters of the chat messages you send, for rate limiting; signing out deletes it. We also store the name color, avatar frame, flair and viewer premium status you have. Unlinking a platform deletes its tokens and revokes them at the platform.'
+    )
+    expect(t('legal.privacy.viewerStreamerLink')).toBe(
+      'If you sign in as a viewer with the same platform account that you use as a streamer on All-Chat, we link the viewer session to your streamer account automatically, so your viewer profile carries your premium status.'
     )
     expect(t('legal.privacy.viewerIdentityBody')).toBe(
       'If you choose to link several platform accounts (e.g.\u00A0Twitch + YouTube), we create a unified viewer profile that associates your platform identities. This is {emphasis}.'
@@ -366,7 +375,7 @@ describe('privacy policy copy', () => {
       'opt-in only and requires your explicit action'
     )
     expect(t('legal.privacy.viewerEngagementBody')).toBe(
-      "When you vote in a poll, enter a prediction or earn points in a streamer's channel, including by typing a chat command without ever signing in, we create a viewer record for your platform account (platform user ID and username) and store your votes, predictions and points for that streamer's overlay. Points exist only within that streamer's overlay."
+      "When you vote in a poll or enter a prediction in a streamer's channel, including by typing a chat command without ever signing in, we create a viewer record for your platform account. It holds only the platform and your platform user ID, not your username. We store your votes and predictions, and your points balance and each points transaction, for that streamer's overlay. If the streamer has turned points on, you earn them under the streamer's rules for watching while signed in to the extension or the participation page (at most one entry per minute), and for subscribing, gifting subscriptions or memberships, cheering bits and sending Super Chats or Super Stickers. Earning points this way creates a viewer record for you too, even if you have never used All-Chat. Points exist only within that streamer's overlay."
     )
     expect(t('legal.privacy.viewerSentMessages')).toBe(
       'Chat messages sent through All-Chat are logged for rate-limiting and abuse detection and {emphasis}.'
@@ -375,7 +384,7 @@ describe('privacy policy copy', () => {
       'automatically deleted after one hour'
     )
     expect(t('legal.privacy.extensionBody')).toBe(
-      "The All-Chat browser extension runs on twitch.tv, youtube.com and kick.com. On each channel page you open it asks All-Chat whether that streamer uses All-Chat, which sends us the channel name together with your IP address, even when you are not signed in. Signed in, it shows the streamer's merged chat and lets you vote, predict and use points. When you chat from the extension, your message goes from your browser straight to the platform using the session you are already signed in with; your platform cookies are never sent to All-Chat. The extension contains no analytics or telemetry."
+      "The All-Chat browser extension runs on twitch.tv, youtube.com and kick.com. On each channel page you open it asks All-Chat whether that streamer uses All-Chat, which sends us the channel name together with your IP address, even when you are not signed in. It shows the streamer's merged chat without sign-in. Signed in, it also lets you vote, predict and use points, and while you watch it tells All-Chat once a minute that you are watching, so the streamer's points rules can award watch time. When you chat from the extension, your message goes from your browser straight to the platform using the session you are already signed in with; your platform cookies are never sent to All-Chat. The extension contains no analytics or telemetry."
     )
     expect(t('legal.privacy.logDataIntro')).toBe(
       'For observability and abuse prevention we record:'
@@ -387,11 +396,16 @@ describe('privacy policy copy', () => {
       'For rate limiting, your full IP address as a counter key for one minute; it is not logged'
     )
     expect(t('legal.privacy.logDataMetrics')).toBe(
-      'API usage metrics, cache hits, and connection status'
+      'API usage metrics, cache hits and connection status, some of them broken down by channel ID, YouTube video ID or Discord server ID'
     )
-    expect(t('legal.privacy.logDataTraces')).toBe('Error traces and diagnostic logs')
+    expect(t('legal.privacy.logDataTraces')).toBe(
+      'Traces of a 10% sample of all requests (method, path, host and user agent), error traces and diagnostic logs'
+    )
+    expect(t('legal.privacy.logDataIdentifiers')).toBe(
+      'Where a request or background job concerns a particular account, logs can also contain the All-Chat user or viewer ID, platform usernames and channel names, a Patreon user ID or a Discord user ID'
+    )
     expect(t('legal.privacy.patreonIntro')).toBe(
-      'Premium features are unlocked through a paid membership on Patreon. If you connect your Patreon account to All-Chat, we store:'
+      'Premium features are unlocked through a paid membership on Patreon, or granted by us free of charge, for example to beta testers and ambassadors. If you connect your Patreon account to All-Chat, we store:'
     )
     expect(t('legal.privacy.patreonUserId')).toBe('Your Patreon user ID')
     expect(t('legal.privacy.patreonTokens')).toBe(
@@ -404,16 +418,16 @@ describe('privacy policy copy', () => {
       "If you support us on Patreon without connecting All-Chat, Patreon's notifications still reach us; we then store only your Patreon user ID and membership state, so the membership can be matched once you connect."
     )
     expect(t('legal.privacy.patreonNoPaymentData')).toBe(
-      "We do {not} receive or store your payment details; payments are processed entirely by Patreon. Patreon's membership notifications also contain your email address, name and other profile details; we discard them without storing them. Patreon notifies us via webhooks when your membership changes, and a periodic reconciliation keeps the state current. Disconnecting Patreon in the Settings page deletes the stored tokens and revokes subscription-derived premium."
+      "We do {not} receive or store your payment details; payments are processed entirely by Patreon. Patreon's membership notifications also contain your email address, name and other profile details; we discard them without storing them. Patreon notifies us via webhooks when your membership changes, and a periodic reconciliation keeps the state current. Disconnecting Patreon in the Settings page deletes the stored tokens, unlinks the membership from your account and ends the premium that came from your subscription."
     )
     expect(t('legal.privacy.notEmphasis')).toBe('not')
     expect(t('legal.privacy.supportEmailBody')).toBe(
       'If you email us, we use your message and email address to answer you. Our support mailbox is hosted by Google (Gmail).'
     )
     expect(t('legal.privacy.supportDiscordBody')).toBe(
-      "In our Discord server, the support bot reads messages that mention it or are posted in its threads, together with the usernames and thread history it needs for context, and answers using a language model run by an external AI inference provider acting as our processor. The bot keeps short notes to remember recurring problems and can turn a support request into a public issue on our GitHub repository, so do not post anything in a support thread that you do not want to be public. Discord processes your messages under Discord's own privacy policy."
+      "In our Discord server, the support bot reads messages that mention it, that are posted in its threads or that use its /support command, together with the usernames, the recent messages of the thread and any message you reply to (with its author's username) that it needs for context, and answers using a language model run by an external AI inference provider acting as our processor. To answer, it can look up our service logs, metrics and system status and pass redacted summaries of them to the model; these can concern your account or overlay. The bot also checks every message posted in the server for spam: if an account posts the same message in three or more channels within ten minutes, the bot bans it and deletes about a day of its messages. The bot keeps short notes to remember recurring problems and can turn a support request into a public issue on our GitHub repository, so do not post anything in a support thread that you do not want to be public. Discord processes your messages under Discord's own privacy policy."
     )
-    expect(t('legal.privacy.useIntro')).toBe('Everything we store directly supports the service:')
+    expect(t('legal.privacy.useIntro')).toBe('We use the data we store to:')
     expect(t('legal.privacy.useAuthenticate')).toBe(
       'Authenticate against the platforms you authorize'
     )
@@ -429,6 +443,13 @@ describe('privacy policy copy', () => {
     expect(t('legal.privacy.usePremium')).toBe('Unlock premium features based on your membership')
     expect(t('legal.privacy.useMonitor')).toBe('Monitor service reliability and debug incidents')
     expect(t('legal.privacy.useAbuse')).toBe('Detect and prevent abuse (rate-limiting, bans)')
+    expect(t('legal.privacy.useRecords')).toBe(
+      'Keep accountability records: your acceptance of the Terms, the moderation action log and the log of administrator act-as-user sessions'
+    )
+    expect(t('legal.privacy.useAnalytics')).toBe('Measure how the site is used (Section\u00A05.8)')
+    expect(t('legal.privacy.useShowcase')).toBe(
+      'Show the ambassadors who opted in on the public showcase'
+    )
     expect(t('legal.privacy.storagePostgres')).toBe(
       'PostgreSQL for account data, overlays, configuration and encrypted tokens'
     )
@@ -436,6 +457,9 @@ describe('privacy policy copy', () => {
       'Redis for sessions, message fan-out, short-lived buffers, leaderboards, caches and rate limiting'
     )
     expect(t('legal.privacy.storageMedia')).toBe('Object storage for the media you upload')
+    expect(t('legal.privacy.storageObservability')).toBe(
+      'Our log, trace and metrics stores (Section\u00A02.6) and the analytics database (Section\u00A05.8)'
+    )
     expect(t('legal.privacy.storageLocation')).toBe(
       'All of the above runs on our own infrastructure on servers located in {country} (hosting provider: Hetzner Online GmbH; data centres in Falkenstein and Nuremberg, Germany, and Helsinki, Finland)'
     )
@@ -450,10 +474,10 @@ describe('privacy policy copy', () => {
       'OAuth tokens and API keys encrypted with AES-GCM before they reach the database; access tokens you create are stored only as hashes'
     )
     expect(t('legal.privacy.safeguardsHttps')).toBe(
-      'HTTPS for all external traffic; internal services isolated via Kubernetes network policies'
+      'HTTPS for all traffic between your browser and All-Chat, and encrypted connections to the platforms wherever they offer them. An Owncast server you add with an http:// address is contacted unencrypted. Internal services are isolated via Kubernetes network policies'
     )
     expect(t('legal.privacy.safeguardsAccess')).toBe(
-      'Role-scoped infrastructure access and audit logging. Administrators can look up accounts and overlays and can temporarily act as a user to resolve support issues; every such session is logged'
+      'Administrative access to the servers is limited to the operator. In our admin tools, administrators can look up accounts, overlays and viewers with their message counts, ban accounts, grant premium, and temporarily act as a user to resolve support issues; every act-as-user session is logged'
     )
     expect(t('legal.privacy.safeguardsPatching')).toBe(
       'Regular dependency upgrades and security patching'
@@ -591,13 +615,21 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.retentionAccountLabel')).toBe('Account, overlay and feature settings:')
     expect(t('legal.privacy.retentionMedia')).toBe(
-      '{label} deleted with the item they belong to or with your account; the files stop being served within 15 minutes'
+      '{label} kept until you delete your account; the files then stop being served within 15 minutes. Removing a file from an alert does not delete the upload; contact us to have a single file deleted'
     )
     expect(t('legal.privacy.retentionMediaLabel')).toBe('Uploaded media:')
     expect(t('legal.privacy.retentionTokens')).toBe(
-      '{label} deleted when you disconnect the platform in the Settings or delete your account; the platform you sign in with stays connected until you delete your account'
+      '{label} deleted when you disconnect the platform or Patreon in the Settings, remove a custom bot account, unlink a platform in the viewer settings, or delete your account or your viewer data; the platform you sign in with stays connected until you delete your account. Deleting your account does not revoke the tokens at the platforms; to withdraw the grant there too, remove All-Chat from the connected apps of your platform account'
     )
     expect(t('legal.privacy.retentionTokensLabel')).toBe('OAuth tokens:')
+    expect(t('legal.privacy.retentionSessions')).toBe(
+      '{label} the streamer sign-in cookie expires after 24 hours and the refresh token that renews it after 14 days; a viewer session is kept until you sign out or delete your viewer data'
+    )
+    expect(t('legal.privacy.retentionSessionsLabel')).toBe('Sign-in sessions:')
+    expect(t('legal.privacy.retentionAccessTokens')).toBe(
+      '{label} unused pairing requests are deleted one hour after they expire; personal access tokens and paired devices are kept until you revoke them or delete your account'
+    )
+    expect(t('legal.privacy.retentionAccessTokensLabel')).toBe('Access tokens and device pairing:')
     expect(t('legal.privacy.retentionSentMessages')).toBe(
       '{label} automatically deleted after one hour (checked every 15 minutes)'
     )
@@ -605,33 +637,71 @@ describe('privacy policy copy', () => {
       'Chat messages sent through All-Chat:'
     )
     expect(t('legal.privacy.retentionDisplayedMessages')).toBe(
-      '{label} not stored in our database; up to 5 minutes in the replay buffer, up to 7 days if processing failed'
+      '{label} not stored in our database; in the replay buffer until 500 newer messages replace them, and at most five minutes after its last message; in the incoming queue until 100,000 newer messages have arrived (currently less than a day); up to 7 days if processing failed'
     )
     expect(t('legal.privacy.retentionDisplayedMessagesLabel')).toBe(
       'Chat messages displayed in overlays:'
     )
+    expect(t('legal.privacy.retentionQueues')).toBe(
+      '{label} until 10,000 newer entries have arrived'
+    )
+    expect(t('legal.privacy.retentionQueuesLabel')).toBe(
+      'Chat command and Twitch engagement queues:'
+    )
     expect(t('legal.privacy.retentionAlerts')).toBe('{label} deleted after 30 days')
     expect(t('legal.privacy.retentionAlertsLabel')).toBe('Alert log:')
     expect(t('legal.privacy.retentionLeaderboards')).toBe(
-      '{label} a rolling 30 days for list overlays, 48 hours for credit rolls'
+      '{label} until 30 days pass without a new entry for list overlays, 48 hours for credit rolls'
     )
     expect(t('legal.privacy.retentionLeaderboardsLabel')).toBe('Leaderboards:')
+    expect(t('legal.privacy.retentionStreamHistory')).toBe(
+      "{label} an overlay's stream sessions until you delete the overlay; when a connected channel was last live and its typical streaming times, with no deletion period, also after the account is deleted"
+    )
+    expect(t('legal.privacy.retentionStreamHistoryLabel')).toBe('Stream history:')
     expect(t('legal.privacy.retentionEngagement')).toBe(
       '{label} kept until the streamer deletes the overlay or you delete your viewer data'
     )
     expect(t('legal.privacy.retentionEngagementLabel')).toBe('Votes, predictions and points:')
+    expect(t('legal.privacy.retentionViewerRecords')).toBe(
+      '{label} kept until you delete your viewer data'
+    )
+    expect(t('legal.privacy.retentionViewerRecordsLabel')).toBe(
+      'Viewer records and linked platform identities:'
+    )
     expect(t('legal.privacy.retentionModeration')).toBe(
-      '{label} deleted after 90 days, also when the account involved is deleted earlier, so abuse can still be investigated'
+      '{label} deleted after 90 days. Until then it is kept even if the account involved is deleted, so abuse can still be investigated'
     )
     expect(t('legal.privacy.retentionModerationLabel')).toBe('Moderation action log:')
+    expect(t('legal.privacy.retentionAdminLog')).toBe(
+      '{label} kept until the account involved is deleted, with no other deletion period'
+    )
+    expect(t('legal.privacy.retentionAdminLogLabel')).toBe(
+      'Log of administrator act-as-user sessions:'
+    )
+    expect(t('legal.privacy.retentionBans')).toBe(
+      '{label} the platform IDs of banned accounts are kept with no deletion period, also after an unban or after the account is deleted, so that a ban cannot be evaded by signing up again'
+    )
+    expect(t('legal.privacy.retentionBansLabel')).toBe('Bans:')
     expect(t('legal.privacy.retentionLogs')).toBe(
       '{label} logs and traces for 7 days, metrics for 15 days'
     )
     expect(t('legal.privacy.retentionLogsLabel')).toBe('Usage logs:')
-    expect(t('legal.privacy.retentionCaches')).toBe('{label} 24 hours')
+    expect(t('legal.privacy.retentionCaches')).toBe(
+      '{label} TikTok avatar images for 48 hours after the chatter was last seen; other avatar data, Twitch display names and pronouns for 24 hours'
+    )
     expect(t('legal.privacy.retentionCachesLabel')).toBe('Avatar and pronoun caches:')
     expect(t('legal.privacy.retentionQuotaLogs')).toBe('{label} deleted after 30 days')
     expect(t('legal.privacy.retentionQuotaLogsLabel')).toBe('YouTube quota audit logs:')
+    expect(t('legal.privacy.retentionBotNotes')).toBe(
+      '{label} kept with no deletion period; once there are 500, the least used older note is removed for each new one'
+    )
+    expect(t('legal.privacy.retentionBotNotesLabel')).toBe('Support bot notes:')
+    expect(t('legal.privacy.retentionAnalytics')).toBe('{label} kept with no deletion period')
+    expect(t('legal.privacy.retentionAnalyticsLabel')).toBe('Usage analytics:')
+    expect(t('legal.privacy.retentionSupportEmail')).toBe(
+      '{label} kept in our mailbox with no deletion period'
+    )
+    expect(t('legal.privacy.retentionSupportEmailLabel')).toBe('Support emails:')
     expect(t('legal.privacy.retentionBackups')).toBe(
       '{label} kept for 30 days, after which the storage provider erases them within a further 30 days. Data that you delete, or that expires under the periods above, can therefore remain in backups for up to 60 days; it is not used for anything other than restoring the service'
     )
@@ -644,7 +714,7 @@ describe('privacy policy copy', () => {
     expect(t('legal.privacy.rightsRectification')).toBe('{label} Correct inaccurate information')
     expect(t('legal.privacy.rightsRectificationLabel')).toBe('Rectification (Art.\u00A016):')
     expect(t('legal.privacy.rightsErasure')).toBe(
-      '{label} Delete your account and all associated data from the Settings page, delete your viewer data from the viewer settings, or contact us'
+      '{label} Delete your account and its data from the Settings page, delete your viewer data from the viewer settings, or contact us. Some records remain after deletion, as Section\u00A06 describes: the moderation action log for up to 90 days, the platform IDs of banned accounts, the live history of your channels, translations you contributed (without your user ID), and backups for up to 60 days'
     )
     expect(t('legal.privacy.rightsErasureLabel')).toBe('Erasure (Art.\u00A017):')
     expect(t('legal.privacy.rightsRestriction')).toBe(
@@ -660,7 +730,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.rightsObjectionLabel')).toBe('Objection (Art.\u00A021):')
     expect(t('legal.privacy.rightsWithdraw')).toBe(
-      '{label} Disconnect platforms, unlink viewer identities or leave the ambassador showcase at any time'
+      '{label} Disconnect platforms (except the one you sign in with), unlink viewer identities or leave the ambassador showcase at any time'
     )
     expect(t('legal.privacy.rightsWithdrawLabel')).toBe('Withdraw consent:')
     expect(t('legal.privacy.rightsContact')).toBe(
@@ -696,7 +766,7 @@ describe('privacy policy copy', () => {
       'privacy-friendly, cookieless usage analytics'
     )
     expect(t('legal.privacy.childrenBody')).toBe(
-      'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.'
+      'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it from our live systems immediately; copies in backups expire within 60 days (Section\u00A06).'
     )
     expect(t('legal.privacy.transfersBody')).toBe(
       'All-Chat itself is hosted on servers located in Germany and Finland, both within the EU (see Section\u00A04.1). Some recipients are outside the EU: Cloudflare (US), Twitch and Amazon (US), Google, YouTube and Google Cloud (US), TikTok (various), Kick (Australia), Discord (US), Meta (US, beta), Patreon (US), GitHub (US), ElevenLabs (US, only with your own API key), and the emote, GIF and pronoun services named in Section\u00A05.'
@@ -947,7 +1017,7 @@ describe('legal rendered sentences', () => {
     expect(
       t('legal.privacy.retentionTokens', { label: t('legal.privacy.retentionTokensLabel') })
     ).toBe(
-      'OAuth tokens: deleted when you disconnect the platform in the Settings or delete your account; the platform you sign in with stays connected until you delete your account'
+      'OAuth tokens: deleted when you disconnect the platform or Patreon in the Settings, remove a custom bot account, unlink a platform in the viewer settings, or delete your account or your viewer data; the platform you sign in with stays connected until you delete your account. Deleting your account does not revoke the tokens at the platforms; to withdraw the grant there too, remove All-Chat from the connected apps of your platform account'
     )
     expect(t('legal.terms.licenseBody', { license: t('legal.terms.licenseLinkText') })).toBe(
       'All-Chat is released under the GNU Affero General Public License v3.0 (AGPL-3.0). That means you may use, study, modify, and distribute the software as long as your derivative works also inherit the AGPL-3.0 terms. If you run a modified version of All-Chat as a hosted service, you must provide the source to your users.'

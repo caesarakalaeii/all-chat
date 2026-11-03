@@ -164,6 +164,7 @@ export default function PrivacyPolicyPage() {
             )}
           </p>
           <p className={noteClasses}>{t('legal.privacy.chatDerived')}</p>
+          <p className={noteClasses}>{t('legal.privacy.chatStreamHistory')}</p>
           <p className={noteClasses}>{t('legal.privacy.chatLegalBasis')}</p>
         </div>
 
@@ -178,6 +179,7 @@ export default function PrivacyPolicyPage() {
             <li>{t('legal.privacy.featuresCommands')}</li>
             <li>{t('legal.privacy.featuresAccessTokens')}</li>
             <li>{t('legal.privacy.featuresModerators')}</li>
+            <li>{t('legal.privacy.featuresModerationLog')}</li>
             <li>{t('legal.privacy.featuresSharing')}</li>
             <li>{t('legal.privacy.featuresTranslations')}</li>
             <li>{t('legal.privacy.featuresShowcase')}</li>
@@ -188,6 +190,7 @@ export default function PrivacyPolicyPage() {
         <div>
           <h3 className="text-lg">{t('legal.privacy.viewerSubheading')}</h3>
           <p>{t('legal.privacy.viewerAccountBody')}</p>
+          <p>{t('legal.privacy.viewerStreamerLink')}</p>
           <p>
             {emphasise(
               t('legal.privacy.viewerIdentityBody', {
@@ -228,6 +231,7 @@ export default function PrivacyPolicyPage() {
             <li>{t('legal.privacy.logDataRateLimit')}</li>
             <li>{t('legal.privacy.logDataMetrics')}</li>
             <li>{t('legal.privacy.logDataTraces')}</li>
+            <li>{t('legal.privacy.logDataIdentifiers')}</li>
           </ul>
           <p className={noteClasses}>{t('legal.privacy.logDataLegalBasis')}</p>
         </div>
@@ -280,6 +284,9 @@ export default function PrivacyPolicyPage() {
           <li>{t('legal.privacy.usePremium')}</li>
           <li>{t('legal.privacy.useMonitor')}</li>
           <li>{t('legal.privacy.useAbuse')}</li>
+          <li>{t('legal.privacy.useRecords')}</li>
+          <li>{t('legal.privacy.useAnalytics')}</li>
+          <li>{t('legal.privacy.useShowcase')}</li>
         </ul>
       </section>
 
@@ -291,6 +298,7 @@ export default function PrivacyPolicyPage() {
           <li>{t('legal.privacy.storagePostgres')}</li>
           <li>{t('legal.privacy.storageRedis')}</li>
           <li>{t('legal.privacy.storageMedia')}</li>
+          <li>{t('legal.privacy.storageObservability')}</li>
           <li>
             {emphasise(
               t('legal.privacy.storageLocation', { country: t('legal.privacy.storageCountry') }),
@@ -443,6 +451,11 @@ export default function PrivacyPolicyPage() {
           {labelledRow('legal.privacy.retentionAccount', 'legal.privacy.retentionAccountLabel')}
           {labelledRow('legal.privacy.retentionMedia', 'legal.privacy.retentionMediaLabel')}
           {labelledRow('legal.privacy.retentionTokens', 'legal.privacy.retentionTokensLabel')}
+          {labelledRow('legal.privacy.retentionSessions', 'legal.privacy.retentionSessionsLabel')}
+          {labelledRow(
+            'legal.privacy.retentionAccessTokens',
+            'legal.privacy.retentionAccessTokensLabel'
+          )}
           {labelledRow(
             'legal.privacy.retentionSentMessages',
             'legal.privacy.retentionSentMessagesLabel'
@@ -451,22 +464,39 @@ export default function PrivacyPolicyPage() {
             'legal.privacy.retentionDisplayedMessages',
             'legal.privacy.retentionDisplayedMessagesLabel'
           )}
+          {labelledRow('legal.privacy.retentionQueues', 'legal.privacy.retentionQueuesLabel')}
           {labelledRow('legal.privacy.retentionAlerts', 'legal.privacy.retentionAlertsLabel')}
           {labelledRow(
             'legal.privacy.retentionLeaderboards',
             'legal.privacy.retentionLeaderboardsLabel'
           )}
           {labelledRow(
+            'legal.privacy.retentionStreamHistory',
+            'legal.privacy.retentionStreamHistoryLabel'
+          )}
+          {labelledRow(
             'legal.privacy.retentionEngagement',
             'legal.privacy.retentionEngagementLabel'
+          )}
+          {labelledRow(
+            'legal.privacy.retentionViewerRecords',
+            'legal.privacy.retentionViewerRecordsLabel'
           )}
           {labelledRow(
             'legal.privacy.retentionModeration',
             'legal.privacy.retentionModerationLabel'
           )}
+          {labelledRow('legal.privacy.retentionAdminLog', 'legal.privacy.retentionAdminLogLabel')}
+          {labelledRow('legal.privacy.retentionBans', 'legal.privacy.retentionBansLabel')}
           {labelledRow('legal.privacy.retentionLogs', 'legal.privacy.retentionLogsLabel')}
           {labelledRow('legal.privacy.retentionCaches', 'legal.privacy.retentionCachesLabel')}
           {labelledRow('legal.privacy.retentionQuotaLogs', 'legal.privacy.retentionQuotaLogsLabel')}
+          {labelledRow('legal.privacy.retentionBotNotes', 'legal.privacy.retentionBotNotesLabel')}
+          {labelledRow('legal.privacy.retentionAnalytics', 'legal.privacy.retentionAnalyticsLabel')}
+          {labelledRow(
+            'legal.privacy.retentionSupportEmail',
+            'legal.privacy.retentionSupportEmailLabel'
+          )}
           {labelledRow('legal.privacy.retentionBackups', 'legal.privacy.retentionBackupsLabel')}
         </ul>
       </section>
