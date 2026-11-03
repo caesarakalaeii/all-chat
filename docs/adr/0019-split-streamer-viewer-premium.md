@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-20
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-03 (brought in line with the current implementation; the subscription's subject now comes from the connection, see ADR-0018)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -50,7 +50,7 @@ We want a **cheaper, separately-priced viewer subscription** that grants only vi
 
 - **One Patreon account ↔ one all-chat identity.** A connection is anchored to *exactly one* subject (`user` XOR `viewer`). The existing `UNIQUE(patreon_user_id)` (token) and `UNIQUE(provider, provider_user_id)` (subscription) are kept and now mean "one connection per Patreon account". A single human who is *both* a streamer and a distinct viewer can link Patreon to only one; the other side is covered by the existing inheritance term where applicable. (Documented limitation.)
 - **Product = connection subject, gated by a per-product cents threshold.** A viewer connection ⇒ `product='viewer'`, active iff `patron_status=active_patron AND cents >= PATREON_VIEWER_MIN_TIER_CENTS` (cheaper). A user connection ⇒ `product='streamer'`, active iff `cents >= PATREON_MIN_TIER_CENTS` (unchanged). This realizes ROADMAP's "cheaper tier → viewer" as two config thresholds, reusing `SubscriptionStatusFor(snap, threshold)` unchanged. (An explicit tier-id→product map is deferred — cents thresholds are simpler and Patreon already returns entitled cents.)
-- **Viewer "Connect Patreon" lives in `payment-service`, authenticated by a viewer JWT.** Reuses `shared/auth.ValidateViewerJWTWithKeyChain` (same signing keychain, `ViewerClaims.ViewerID`). Keeps the inbound payment surface isolated per ADR-0018 rather than bolting Patreon OAuth onto auth-service. New routes: `GET /api/v1/payment/viewer/patreon/connect`, `GET /api/v1/payment/viewer/status`, `DELETE /api/v1/payment/viewer/patreon/connection`. The OAuth **callback** and the **webhook** stay single endpoints; the callback's Redis state carries the subject, the webhook resolves the subject from the polymorphic token row.
+- **Viewer "Connect Patreon" lives in `payment-service`, authenticated by a viewer JWT.** Reuses `shared/auth.ValidateViewerJWTWithKeyChain` (same signing keychain, `ViewerClaims.ViewerID`). Keeps the inbound payment surface isolated per ADR-0018 rather than bolting Patreon OAuth onto auth-service. New routes: `GET /api/v1/payment/viewer/patreon/connect`, `GET /api/v1/payment/viewer/status`, `DELETE /api/v1/payment/viewer/patreon/connection`. The OAuth **callback** and the **webhook** stay single endpoints; the callback's Redis state carries the subject, the webhook resolves the subject from the polymorphic token row. The subscription row's subject (`user_id` or `viewer_id`) is likewise read from the token row on every write, and a viewer disconnect deletes the viewer's membership rows (ADR-0018, "The membership link follows the connection").
 - **`viewers.is_premium` becomes a single-writer derived column via `RecomputeViewer`:**
   ```
   viewers.is_premium = Effective(
