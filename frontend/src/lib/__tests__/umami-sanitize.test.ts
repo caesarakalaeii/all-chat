@@ -63,10 +63,51 @@ describe('sanitizeUrl', () => {
     )
   })
 
-  it('keeps non-sensitive query params on an external referrer', () => {
+  it('drops every non-utm query param on an external referrer', () => {
     expect(sanitizeUrl('https://www.google.com/search?q=all-chat')).toBe(
-      'https://www.google.com/search?q=all-chat'
+      'https://www.google.com/search'
     )
+  })
+
+  // Allowlist: only utm_* survives. Each of these keys reached analytics
+  // under the old denylist.
+  it('drops the TTS bearer token from the OBS overlay URL', () => {
+    expect(sanitizeUrl(`/overlay/${OVERLAY_ID}?tts_token=eyJhbGciOi.eyJzdWIiOi.sig`)).toBe(
+      '/overlay/:id'
+    )
+  })
+
+  it('drops existing_username from the auth callback', () => {
+    expect(
+      sanitizeUrl('/auth/callback?error=duplicate_account&existing_username=someone&platform=twitch')
+    ).toBe('/auth/callback')
+  })
+
+  it('drops the user and overlay params of admin pages', () => {
+    expect(sanitizeUrl('/admin/users?user=someone')).toBe('/admin/users')
+    expect(sanitizeUrl(`/admin/overlays?overlay=${OVERLAY_ID}`)).toBe('/admin/overlays')
+  })
+
+  it('drops a query param it has never heard of', () => {
+    expect(sanitizeUrl('/dashboard?someFutureParam=identifying-value')).toBe('/dashboard')
+  })
+
+  it('keeps utm_source', () => {
+    expect(sanitizeUrl('/?utm_source=reddit')).toBe('/?utm_source=reddit')
+  })
+
+  it('collapses a UUID inside a kept query value', () => {
+    expect(sanitizeUrl(`/?utm_content=${OVERLAY_ID}&utm_term=x${SOURCE_ID}`)).toBe(
+      '/?utm_content=:id&utm_term=x:id'
+    )
+  })
+
+  it('sanitises an absolute URL with query and hash', () => {
+    expect(
+      sanitizeUrl(
+        `https://allch.at/overlay/${OVERLAY_ID}?tts_token=secret&utm_medium=obs&user=someone#access_token=leak`
+      )
+    ).toBe('https://allch.at/overlay/:id?utm_medium=obs')
   })
 })
 
