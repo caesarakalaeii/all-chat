@@ -140,7 +140,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Date**: 2025-11-11
 **Problem**: PostgreSQL in Kubernetes needs high availability, automated failover and backups, and the team prefers declarative configuration with minimal manual operations.
 **Decision**: Use the CloudNativePG operator; the team already had production experience with it. The CNPG `Cluster` manifest (`allchat-cluster`, 3 instances) is owned by the deployment pipeline, not this repo.
-**Impact**: Operator-driven failover measured at roughly 22 seconds in early deploys, Prometheus metrics out of the box, and connection budgets via `shared/database` (per ADR-0039) with `max_connections` raised to 300; no S3 `barmanObjectStore` backup is configured yet, so PITR remains an open follow-up.
+**Impact**: Operator-driven failover measured at roughly 22 seconds in early deploys, Prometheus metrics out of the box, and connection budgets via `shared/database` (per ADR-0039) with `max_connections` raised to 300; WAL archiving and nightly base backups go to Hetzner Object Storage through the Barman Cloud plugin (30-day PITR window), copied on to Backblaze B2.
 **→ Read**: [0003-cloudnative-postgres.md](./0003-cloudnative-postgres.md)
 
 ---
@@ -774,7 +774,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Date**: 2026-10-01
 **Problem**: Event data already flows through `chat:raw` as event-typed messages (Twitch/YouTube/TikTok listeners), but nothing routes it to a non-chat rendering surface, keeps event history, or holds streamer-uploaded alert media — and the chat pipeline must not grow a second job.
 **Decision**: Three new overlay kinds (`overlays.overlay_type` 'alerts'/'goal'/'list', default 'chat'); a separate **alert-processor** consuming `chat:raw` with its own consumer group `alert-processors`, normalizing via the message-processor's own normalizers (one-direction import), routing to alert-capable overlays, persisting to `alert_events`, publishing to `overlay:{id}:alerts`, and scoring `list` leaderboards — with idempotency as a first-class contract (deterministic UUIDv5 alert ids + ON CONFLICT DO NOTHING for history, per-alert SET NX claim inside one atomic Lua script for boards, ACK only after persist+publish). Alert media in single-node MinIO (public-read behind `media.allch.at`, presigned direct uploads, unguessable `{user_id}/{uuid}/{filename}` keys, `media_objects` index, 10 MiB cap).
-**Impact**: Alert features land without touching listeners or the chat pipeline; a broken alert-processor degrades to "no alerts", never "no chat"; redelivery can animate an alert twice (accepted, cosmetic) but never double-writes history or double-counts a board; single-node MinIO defers distribution/replication as follow-ups.
+**Impact**: Alert features land without touching listeners or the chat pipeline; a broken alert-processor degrades to "no alerts", never "no chat"; redelivery can animate an alert twice (accepted, cosmetic) but never double-writes history or double-counts a board; single-node MinIO defers distribution/replication as follow-ups, and its bucket is mirrored nightly to Hetzner Object Storage and Backblaze B2.
 **→ Read**: [0068-event-alerts-platform.md](./0068-event-alerts-platform.md)
 
 ---
