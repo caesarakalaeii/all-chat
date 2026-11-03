@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-01
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-03 (brought in line with the current implementation; alert media now backed up off-cluster)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
@@ -96,8 +96,12 @@ not a chat overlay, nothing keeps event history, and no service can hold uploade
    indexes issued keys in `media_objects` (migration 099). Object keys are
    `{user_id}/{uuid}/{filename}` — the random uuid segment makes public-read URLs
    unguessable, the `user_id` prefix scopes ownership checks on delete. Single-node MinIO
-   defers distribution, replication and lifecycle management; they are follow-ups, as is
-   moving the bucket off the hand-provisioned instance (issue #948).
+   (now the pgsty/silo fork) defers distribution, replication and lifecycle management;
+   they are follow-ups, as is moving the bucket off the hand-provisioned instance (issue
+   #948). The bucket is backed up: a nightly `mc mirror` CronJob in caesar-deployment
+   (`backup-offsite-mirror`) copies it to Hetzner Object Storage, with a versioned
+   target so a deletion stays recoverable for 30 days (see ADR-0003 → Backups). The
+   Backblaze B2 copy it also made is paused.
 
 ## Consequences
 

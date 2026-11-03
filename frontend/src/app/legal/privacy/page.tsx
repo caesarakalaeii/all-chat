@@ -258,6 +258,7 @@ export default function PrivacyPolicyPage() {
               )
             )}
           </li>
+          <li>{t('legal.privacy.storageBackups')}</li>
         </ul>
         <h3 className="text-lg">{t('legal.privacy.safeguardsSubheading')}</h3>
         <ul className={listClasses}>
@@ -367,6 +368,9 @@ export default function PrivacyPolicyPage() {
           })}
         </p>
         <p className={noteClasses}>{t('legal.privacy.analyticsConsentNote')}</p>
+
+        <h3 className="text-lg">{t('legal.privacy.backupsSubheading')}</h3>
+        <p>{t('legal.privacy.backupsBody')}</p>
       </section>
 
       {/* --- Data Retention --- */}
@@ -385,6 +389,7 @@ export default function PrivacyPolicyPage() {
           )}
           {labelledRow('legal.privacy.retentionLogs', 'legal.privacy.retentionLogsLabel')}
           {labelledRow('legal.privacy.retentionQuotaLogs', 'legal.privacy.retentionQuotaLogsLabel')}
+          {labelledRow('legal.privacy.retentionBackups', 'legal.privacy.retentionBackupsLabel')}
         </ul>
       </section>
 

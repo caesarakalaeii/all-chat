@@ -2,7 +2,7 @@
 
 **Date**: 2025-11-11
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-03 (brought in line with the current implementation; backups and PITR wired through the Barman Cloud plugin)
 **Deciders**: Infrastructure Team, Database Lead
 
 ---
@@ -167,9 +167,10 @@ spec:
    - Measured in early deploys: ~22 seconds average failover time
 
 3. **PITR Capability in the Operator**:
-   - CNPG natively supports continuous WAL archiving to S3-compatible storage
-     and restore to any timestamp once a `barmanObjectStore` is configured
-   - Not yet wired for this deployment (see Consequences)
+   - CNPG supports continuous WAL archiving to S3-compatible storage and
+     restore to any timestamp; since CNPG 1.26 this goes through the Barman
+     Cloud plugin rather than the deprecated in-tree `barmanObjectStore`
+   - Wired for this deployment: see Backups below
 
 4. **Operational Simplicity**:
    - Single CRD (`Cluster`) for entire PostgreSQL setup
@@ -227,10 +228,14 @@ spec:
    - Fewer Stack Overflow answers than the Zalando operator
    - **Mitigation**: Excellent official docs
 
-4. **No S3 Barman Backup Configured**:
-   - The live `allchat-cluster` has no `spec.backup` section: no scheduled
-     `ScheduledBackup`, no ObjectStore destination, no PITR source is wired yet
-   - **Mitigation**: Wire `barmanObjectStore` before relying on PITR (open follow-up)
+4. **Backups Depend on One External Store**:
+   - WAL and base backups go to Hetzner Object Storage (see Backups below). A
+     wrong key or a missing bucket stops WAL archiving, and Postgres then keeps
+     every unarchived segment until the 20Gi volume fills. A Hetzner outage
+     also leaves no second copy while the Backblaze B2 copy is paused
+   - **Mitigation**: `AllChatPostgresWALArchivingFailing` pages on failing or
+     stalled archiving long before the disk fills; `AllChatPostgresBackupStale`
+     warns when the newest base backup is older than 30h
 
 5. **Connection Ceiling**:
    - At `max_connections = 200` the per-service pools pinned Postgres at its
@@ -275,6 +280,11 @@ spec:
   instances: 3
   monitoring:
     enablePodMonitor: true              # Prometheus auto-discovery
+  plugins:                              # WAL archiving + base backups (see Backups)
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: allchat-hetzner
   affinity:
     podAntiAffinityType: required       # one instance per node
     topologyKey: kubernetes.io/hostname
@@ -302,14 +312,30 @@ spec:
       memory: "2Gi"
       cpu: "2"
 ```
-The manifest sets no `spec.backup` and no `primaryUpdateStrategy` override
-(CNPG's default applies); `synchronous_commit` stays at its default `on`.
+The manifest sets no `primaryUpdateStrategy` override (CNPG's default
+applies); `synchronous_commit` stays at its default `on`.
 
-### Scheduled Backup / PgBouncer Pooler (not deployed)
+### Backups
 
-The deployment pipeline contains no `ScheduledBackup`, no `Pooler` and no
-`barmanObjectStore` for this cluster, so neither automated backups nor PITR is
-wired up. A Pooler is also unnecessary: services connect to `allchat-cluster-rw`
+Owned by the deployment pipeline (caesar-deployment), like the Cluster:
+
+- **Postgres**: the Barman Cloud plugin (`argocd/apps/plugin-barman-cloud.yaml`)
+  archives WAL continuously and takes a base backup every night at 23:00 UTC
+  (`ScheduledBackup` `allchat-cluster-daily`) to the `allchat-hetzner`
+  `ObjectStore` on Hetzner Object Storage (`apps/workloads/all-chat/backup-objectstore.yaml`).
+  The recovery window is 30 days (`retentionPolicy`), to within CNPG's 5-minute
+  `archive_timeout`.
+- **Second copy**: paused. The `backup-offsite-mirror` CronJob copied the
+  Barman archive to Backblaze B2 every night; that copy is off until the B2
+  account's processor terms are confirmed, so Hetzner holds the only copy.
+- **Restore**: a new `Cluster` with `bootstrap.recovery` from that
+  `ObjectStore` (`externalClusters[].plugin`, `serverName: allchat-cluster`),
+  never the live cluster itself. The header of `backup-objectstore.yaml` has
+  the details.
+
+### PgBouncer Pooler (not deployed)
+
+A Pooler is unnecessary: services connect to `allchat-cluster-rw`
 directly (the manifest disables the `ro`/`r` services; there are no read
 replicas to load-balance) and cap their own pools via the connection budget
 (ADR-0039).
@@ -347,8 +373,8 @@ kubectl exec -n allchat allchat-cluster-1 -- psql -U postgres -c "SELECT count(*
 
 Failover was exercised directly against the operator during the early deployment
 phase and measured at roughly 20-25 seconds per scenario (pod deletion, network
-partition, WAL disk full). No S3 backup or PITR restore has been exercised,
-because no `barmanObjectStore` backup target is wired into the cluster yet.
+partition, WAL disk full). A restore from the Barman archive into a scratch
+cluster has not been exercised yet; until it has, the backups are unproven.
 
 ---
 
@@ -367,8 +393,8 @@ because no `barmanObjectStore` backup target is wired into the cluster yet.
 
 **Reason**: Team experience, automated failover (<30s), operational simplicity, cost-effectiveness.
 
-**Trade-off**: Operator dependency, smaller community (but excellent docs), no S3 backup/PITR wired yet.
+**Trade-off**: Operator dependency, smaller community (but excellent docs); backups depend on Hetzner Object Storage (the Backblaze B2 copy is paused).
 
-**Status**: Deployed in production: 3-instance CNPG cluster with automated failover.
-Automated S3 backups and PITR are not wired up yet (see Consequences).
+**Status**: Deployed in production: 3-instance CNPG cluster with automated failover,
+continuous WAL archiving and nightly base backups (30-day PITR window).
 

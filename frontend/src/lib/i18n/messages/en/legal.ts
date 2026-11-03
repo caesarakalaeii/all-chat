@@ -86,7 +86,7 @@ export const legal = {
   // heading, paragraph, list item and legal basis, and nothing reworded.
   privacy: {
     title: 'Privacy Policy (Datenschutzerklärung)',
-    lastUpdated: 'July 30, 2026',
+    lastUpdated: 'November 3, 2026',
     // Every DSGVO article reference carries a U+00A0 from an &nbsp; entity.
     // It is part of the rendered text, so it stays escaped here to be
     // visible to a reviewer.
@@ -118,6 +118,7 @@ export const legal = {
     youtubeNoticeSubheading: '5.4 YouTube-Specific Notice',
     noSalesSubheading: '5.5 No Data Sales',
     analyticsSubheading: '5.6 Usage Analytics (Self-Hosted, Cookieless)',
+    backupsSubheading: '5.7 Backup Storage',
     twitchSubheading: 'Twitch',
     youtubeSubheading: 'YouTube',
     tiktokSubheading: 'TikTok',
@@ -200,6 +201,8 @@ export const legal = {
     storageLocation:
       'All of the above runs on our own infrastructure on servers located in {country} (hosting provider: Hetzner Online GmbH)',
     storageCountry: 'Germany',
+    storageBackups:
+      'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany), and are transferred there over encrypted connections (see Sections\u00A05.7 and 6)',
     safeguardsEncryption: 'OAuth tokens encrypted with AES-GCM before touching the database',
     safeguardsHttps:
       'HTTPS at the ingress layer for all external traffic; internal services isolated via Kubernetes network policies',
@@ -250,6 +253,8 @@ export const legal = {
     analyticsIpNotStoredEmphasis: 'IP address is not stored',
     analyticsConsentNote:
       'Because the tracker stores no information on, and reads none from, your device, it does not require consent under §\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in measuring and improving the service.',
+    backupsBody:
+      'So that the service can be restored after data loss, we keep backups of the database (including account and overlay data, encrypted OAuth tokens and the chat messages and logs retained under Section\u00A06) and of uploaded alert media with Hetzner Online GmbH (Germany), acting as a processor under Art.\u00A028 DSGVO. The provider only stores the backups; we read them only to restore the service. The processing rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in not losing your data.',
     // Retention rows: the bolded label opens the row and the rest continues
     // the sentence it starts, per the legal.cookieBanner convention.
     retentionAccount: '{label} kept until you delete your account',
@@ -265,6 +270,9 @@ export const legal = {
     retentionLogsLabel: 'Usage logs:',
     retentionQuotaLogs: '{label} retained for 30 days',
     retentionQuotaLogsLabel: 'YouTube quota audit logs:',
+    retentionBackups:
+      '{label} kept for 30 days, after which the storage provider erases them within a further 30 days. Data that you delete, or that expires under the periods above, can therefore remain in backups for up to 60 days; it is not used for anything other than restoring the service',
+    retentionBackupsLabel: 'Backups:',
     // The Art. 15-21 data subject rights. Same {label} shape as the
     // retention rows above.
     rightsIntro: 'You can exercise the following at any time:',
