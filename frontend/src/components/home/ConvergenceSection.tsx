@@ -161,7 +161,7 @@ export function ConvergenceSection() {
         })}
       </p>
 
-      <div className="frame panel-fill">
+      <div className="frame panel-fill theme-dark">
         <div className="frame-head">
           <span className="live">{t('marketing.convergence.liveLabel')}</span>
           <span>{t('marketing.convergence.frameUrl')}</span>

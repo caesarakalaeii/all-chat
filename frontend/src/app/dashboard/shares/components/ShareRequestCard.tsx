@@ -54,7 +54,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
             <img
               src={request.sender.profile_image_url || '/default-avatar.png'}
               alt={request.sender.username}
-              className="h-10 w-10 border-2 border-white object-cover"
+              className="h-10 w-10 border-2 border-lanes-fg-strong object-cover"
             />
             <div className="ml-3">
               <p className="font-medium">{request.sender.display_name}</p>
@@ -64,7 +64,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
         )}
         {!request.sender && (
           <div className="flex items-center">
-            <div className="h-10 w-10 border-2 border-white bg-white/10"></div>
+            <div className="h-10 w-10 border-2 border-lanes-fg-strong bg-lanes-fg-strong/10"></div>
             <div className="ml-3">
               <p className="text-sub text-sm">{t('dashboard.shares.loadingUser')}</p>
             </div>
@@ -86,7 +86,7 @@ export function ShareRequestCard({ request, onUpdate }: ShareRequestCardProps) {
       </p>
 
       {/* Status indicator */}
-      <div className="mt-3 border-t border-white/20 pt-3">
+      <div className="mt-3 border-t border-lanes-fg-strong/20 pt-3">
         <StatusBadge status={request.status} />
         {request.status === 'accepted' && (
           <button

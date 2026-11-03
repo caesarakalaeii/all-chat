@@ -12,9 +12,20 @@
   --font-mono: var(--font-dm-mono);
 }
 
+/* Lanes role colors as Tailwind colors (border-lanes-fg-strong/20,
+   bg-lanes-panel, …) for markup on the lanes pages. `inline` makes each
+   utility read the role variable itself, so it follows the light theme and
+   the .theme-dark scope with nothing to restate. */
+@theme inline {
+  --color-lanes-fg: var(--lanes-fg);
+  --color-lanes-fg-strong: var(--lanes-fg-strong);
+  --color-lanes-panel: var(--lanes-panel);
+}
+
 /* ============================================================
-   DESIGN TOKENS — single authoritative dark-only token system
-   Three-tier hierarchy: base → semantic → component
+   DESIGN TOKENS — single authoritative token system, dark by default
+   Three-tier hierarchy: base → semantic → component. The light theme
+   (ADR-0087) restates the semantic tier below the @theme block.
    ============================================================ */
 @theme {
   /* --------------------------------------------------
@@ -195,6 +206,154 @@
   --radius-xl: 16px;
   --radius-2xl: 24px;
   --radius-full: 9999px;
+}
+
+/* ============================================================
+   LANES ROLE COLORS — what the lanes art direction (.lanes-home,
+   .lanes-app) paints with. Dark values are the literals those pages were
+   designed with; the light theme below restates them. Brand-adjacent
+   page constants, NOT design tokens: plain :root, outside @theme, so
+   Tailwind generates no utilities for them.
+   ============================================================ */
+:root {
+  /* Text and rules (rules are this color at an alpha), headings, the page
+   * background and the panel/input fill. */
+  --lanes-fg: #f4f3ef;
+  --lanes-fg-strong: #fff;
+  /* Secondary text (captions, placeholders). A solid color in light: the
+   * 50% alpha it is in dark lands near 3.5:1 on a light page. */
+  --lanes-fg-dim: rgba(244, 243, 239, 0.5);
+  --lanes-page: #050508;
+  --lanes-panel: #000;
+  /* Feedback: brand colors desaturated ~25% — at full saturation the five
+   * lanes side by side read as neon stripes. Used as lane fills and as text,
+   * so the light values are darkened to keep text contrast. */
+  --lanes-twitch: #8464d6;
+  --lanes-youtube: #d95c50;
+  --lanes-tiktok: #62aeb4;
+  --lanes-kick: #56b847;
+  --lanes-discord: #6a72c9;
+}
+
+/* ============================================================
+   LIGHT THEME (ADR-0087) — data-theme="light" on <html>, set by
+   lib/theme.ts (never on OBS overlay routes). Restates the semantic
+   tokens; the shadcn aliases follow on their own because they are
+   computed on this same element. Every text color clears WCAG AA on
+   bg, surface and surface-2: locked by token-contrast.test.ts.
+   ============================================================ */
+:root[data-theme='light'] {
+  /* Warm paper, the same as the lanes pages' light page, so app and lanes
+   * pages meet without a seam. */
+  --color-bg: oklch(0.965 0.005 95); /* #f4f3f0 */
+  --color-surface: oklch(1 0 0); /* #fff */
+  --color-surface-2: oklch(0.94 0.006 95); /* #ecebe6 */
+  --color-border: oklch(0.21 0.012 270 / 0.1);
+  --color-border-md: oklch(0.21 0.012 270 / 0.16);
+  --color-text: oklch(0.21 0.012 270); /* #16181e */
+  --color-text-sub: oklch(0.43 0.012 270); /* #4d5057 */
+  --color-text-dim: oklch(0.5 0.012 270); /* #60636a */
+  /* Platform and status colors darkened to clear 4.5:1 as text on white. */
+  --color-twitch: oklch(0.5 0.21 293); /* #6d3bcd */
+  --color-youtube: oklch(0.52 0.2 27); /* #c2181d */
+  --color-kick: oklch(0.5 0.15 142); /* #21771a */
+  --color-tiktok: oklch(0.5 0.09 200); /* #007277 */
+  --color-owncast: oklch(0.5 0.17 290); /* #654abb */
+  --color-goodgame: oklch(0.5 0.08 250); /* #3e668f */
+  --color-picarto: oklch(0.5 0.13 150); /* #137738 */
+  --color-facebook: oklch(0.5 0.17 255); /* #0060c1 */
+  --color-instagram: oklch(0.52 0.19 355); /* #b5236e */
+  --color-altstream: oklch(0.54 0.16 45); /* #b64700 */
+  --color-discord: oklch(0.5 0.17 275); /* #4b53c2 */
+  --color-destructive: oklch(0.52 0.19 25); /* #be222a */
+  --color-success: oklch(0.5 0.13 152); /* #05773b */
+  --color-warning: oklch(0.52 0.11 75); /* #8d5e00 */
+  --color-info: oklch(0.5 0.13 240); /* #006aa5 */
+  --color-premium: oklch(0.53 0.13 55); /* #a35303 */
+  --color-badge-bg: oklch(0.21 0.012 270 / 0.07);
+  --color-nav-bg: oklch(0.965 0.005 95 / 0.85);
+
+  --lanes-fg: #14161b;
+  --lanes-fg-strong: #000;
+  --lanes-fg-dim: #5b5d65;
+  --lanes-page: #f4f3ef;
+  --lanes-panel: #fff;
+  --lanes-twitch: #654db6;
+  --lanes-youtube: #b2392b;
+  --lanes-tiktok: #147175;
+  --lanes-kick: #357426;
+  --lanes-discord: #4f5aac;
+}
+/* The body grid is drawn in white lines, invisible on a light page. */
+:root[data-theme='light'] body {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+}
+
+/* Stays dark in either theme: chat-theme previews and the homepage's stream
+ * mockups show what a viewer sees on stream, which the site theme must not
+ * change. Custom properties inherit as computed values, so this restates the
+ * dark values (and every alias computed from one) rather than referring back
+ * to them; token-contrast.test.ts fails if it drifts from the dark theme. */
+.theme-dark {
+  --color-bg: var(--color-neutral-950);
+  --color-surface: var(--color-neutral-900);
+  --color-surface-2: var(--color-neutral-800);
+  --color-border: oklch(from var(--color-neutral-100) l c h / 0.06);
+  --color-border-md: oklch(from var(--color-neutral-100) l c h / 0.1);
+  --color-text: var(--color-neutral-100);
+  --color-text-sub: var(--color-neutral-400);
+  --color-text-dim: oklch(0.575 0.008 270);
+  --color-twitch: #a37bff;
+  --color-youtube: #ff4444;
+  --color-kick: #53fc18;
+  --color-tiktok: #69c9d0;
+  --color-owncast: #9b7ff5;
+  --color-goodgame: #7fa3d1;
+  --color-picarto: #27b756;
+  --color-facebook: #3b93f5;
+  --color-instagram: #ed6fa4;
+  --color-altstream: #f97316;
+  --color-discord: #737df6;
+  --color-destructive: oklch(0.66 0.19 25);
+  --color-success: oklch(0.76 0.17 152);
+  --color-warning: oklch(0.8 0.15 80);
+  --color-info: oklch(0.75 0.13 240);
+  --color-premium: oklch(0.82 0.14 65);
+  --color-badge-bg: oklch(from var(--color-neutral-100) l c h / 0.07);
+  --color-nav-bg: oklch(from var(--color-neutral-950) l c h / 0.8);
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-text);
+  --color-popover: var(--color-surface);
+  --color-popover-foreground: var(--color-text);
+  --color-primary: var(--color-twitch);
+  --color-primary-foreground: var(--color-bg);
+  --color-secondary: var(--color-surface-2);
+  --color-secondary-foreground: var(--color-text);
+  --color-muted: var(--color-surface-2);
+  --color-muted-foreground: var(--color-text-sub);
+  --color-accent: var(--color-surface-2);
+  --color-accent-foreground: var(--color-text);
+  --color-destructive-foreground: var(--color-bg);
+  --color-input: var(--color-border-md);
+  --color-ring: var(--color-twitch);
+  --shadow-glow-twitch: 0 0 20px color-mix(in oklch, var(--color-twitch) 40%, transparent);
+  --shadow-glow-youtube: 0 0 20px color-mix(in oklch, var(--color-youtube) 40%, transparent);
+  --shadow-glow-kick: 0 0 20px color-mix(in oklch, var(--color-kick) 40%, transparent);
+  --shadow-glow-tiktok: 0 0 20px color-mix(in oklch, var(--color-tiktok) 40%, transparent);
+  --lanes-fg: #f4f3ef;
+  --lanes-fg-strong: #fff;
+  --lanes-fg-dim: rgba(244, 243, 239, 0.5);
+  --lanes-page: #050508;
+  --lanes-panel: #000;
+  --lanes-twitch: #8464d6;
+  --lanes-youtube: #d95c50;
+  --lanes-tiktok: #62aeb4;
+  --lanes-kick: #56b847;
+  --lanes-discord: #6a72c9;
 }
 
 /* ============================================================
@@ -506,28 +665,8 @@ span.font-semibold.text-sm.username-gradient {
 }
 
 /* ============================================================
-   LEGAL PAGES — light mode override + raw HTML prose styling
+   LEGAL PAGES — raw HTML prose styling
    ============================================================ */
-
-/* Light mode token overrides — scoped to #legal-wrapper.legal-light */
-#legal-wrapper.legal-light {
-  --color-bg: #f8f9fa;
-  --color-surface: #ffffff;
-  --color-surface-2: #f0f1f3;
-  --color-border: rgba(0, 0, 0, 0.1);
-  --color-border-md: rgba(0, 0, 0, 0.15);
-  --color-text: #1a1a2e;
-  --color-text-sub: #374151;
-  --color-text-dim: #6b7280;
-  --color-nav-bg: rgba(255, 255, 255, 0.9);
-  background-image: none;
-}
-
-/* Remove the grid background on body when legal-light is active */
-#legal-wrapper.legal-light,
-#legal-wrapper.legal-light * {
-  background-image: none;
-}
 
 /* Prose styling for raw HTML content (Impressum ConfigMap) */
 .legal-prose h2 {
@@ -619,7 +758,7 @@ span.font-semibold.text-sm.username-gradient {
    Self-contained light/dark surface. Intentionally IGNORES the
    overlay marketplace themes (custom_css / visual_settings): the
    route never injects those <style> tags, so this token block is
-   the only styling authority. Mirrors the #legal-wrapper pattern.
+   the only styling authority, with its own light switch.
    ============================================================ */
 .overlay-view {
   /* Dark defaults come from the global @theme tokens; restate the
@@ -698,16 +837,8 @@ span.font-semibold.text-sm.username-gradient {
    the lanes.
    ============================================================ */
 .lanes-home {
-  --lanes-bg: #050508;
-  --lanes-text: #f4f3ef;
-  /* Feedback: brand colors desaturated ~25% — at full saturation the five
-   * lanes side by side read as neon stripes. These are page-local constants,
-   * NOT design tokens (comment at the top of this block). */
-  --lanes-twitch: #8464d6;
-  --lanes-youtube: #d95c50;
-  --lanes-tiktok: #62aeb4;
-  --lanes-kick: #56b847;
-  --lanes-discord: #6a72c9;
+  /* Brand lane colors and the page/ink roles live on :root (LANES ROLE
+   * COLORS, near the top) so the light theme can restate them. */
   /* Pride month rainbow (LanesHero data-pride), top lane to bottom.
    * Mirrors PRIDE_LANE_COLORS in components/home/lanePalette.ts. */
   --lanes-pride-1: #d95c50;
@@ -715,8 +846,8 @@ span.font-semibold.text-sm.username-gradient {
   --lanes-pride-3: #dcc24a;
   --lanes-pride-4: #56b847;
   --lanes-pride-5: #8464d6;
-  background: var(--lanes-bg);
-  color: var(--lanes-text);
+  background: var(--lanes-page);
+  color: var(--lanes-fg);
   font-family: var(--font-space-mono), monospace;
 }
 
@@ -781,9 +912,25 @@ span.font-semibold.text-sm.username-gradient {
   .lanes-tr .nav-themes {
     display: none;
   }
+  /* The theme switch (ADR-0087) takes the room Discord had; the footer links
+   * Discord on every page. */
+  .lanes-tr .nav-discord {
+    display: none;
+  }
   .lanes-tr .lanes-lang {
     padding-left: 0;
     border-left: 0;
+  }
+}
+/* WCAG 1.4.10 reflow at 320px: brand chip and nav share one row, so the
+ * insets and gaps tighten until they fit. */
+@media (max-width: 359px) {
+  .lanes-tl {
+    left: 12px;
+  }
+  .lanes-tr {
+    right: 12px;
+    gap: 8px;
   }
 }
 /* Logged-in dashboard chip: solid warm white on black ink. */
@@ -821,6 +968,21 @@ span.font-semibold.text-sm.username-gradient {
   outline: 2px solid #f4f3ef;
   outline-offset: 2px;
 }
+/* The theme switch (ADR-0087) after the language switch: an icon in the
+ * chrome's ink, over the same dark chip. */
+.lanes-tr .theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  color: #f4f3ef;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.lanes-tr .theme-toggle:focus-visible {
+  outline: 2px solid #f4f3ef;
+  outline-offset: 2px;
+}
 
 /* Proportional platform lanes. */
 .lanes-stage {
@@ -828,6 +990,10 @@ span.font-semibold.text-sm.username-gradient {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  /* Its own backdrop, dark in either site theme (.theme-dark on the stage):
+   * the WebGL bands are translucent tints (LANE_ALPHAS ~0.25) made to sit
+   * on near-black, and wash out to white over a light page. */
+  background: var(--lanes-page);
   /* Hero scroll effect: LanesHero sets --hero-progress (0 at rest, 1 once
    * the stage has scrolled one viewport height) and the two properties
    * below carry the stage away — translate is capped so the lanes never
@@ -948,7 +1114,7 @@ span.font-semibold.text-sm.username-gradient {
  * others 5.4:1 and up — WCAG AA for the 11px marquee on every lane,
  * same ink vocabulary as the .warkicker chip. */
 .lane .flow {
-  color: var(--lanes-bg);
+  color: var(--lanes-page);
 }
 .flow b {
   font-weight: 700;
@@ -994,11 +1160,11 @@ span.font-semibold.text-sm.username-gradient {
 .lane[data-p='twitch'] .wordmark,
 .lane[data-p='youtube'] .wordmark,
 .lane[data-p='discord'] .wordmark {
-  color: color-mix(in oklab, var(--lanes-bg) 55%, transparent);
+  color: color-mix(in oklab, var(--lanes-page) 55%, transparent);
 }
 .lane[data-p='tiktok'] .wordmark,
 .lane[data-p='kick'] .wordmark {
-  color: color-mix(in oklab, var(--lanes-bg) 40%, transparent);
+  color: color-mix(in oklab, var(--lanes-page) 40%, transparent);
 }
 
 /* Headline chips across the lanes. */
@@ -1011,7 +1177,7 @@ span.font-semibold.text-sm.username-gradient {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  color: var(--lanes-text);
+  color: var(--lanes-fg);
   text-align: center;
   padding: 0 16px;
 }
@@ -1021,7 +1187,7 @@ span.font-semibold.text-sm.username-gradient {
   font-size: clamp(48px, 9vw, 150px);
   line-height: 1.06;
   letter-spacing: -0.01em;
-  background: #000;
+  background: var(--lanes-panel);
   padding: 0.04em 0.22em;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
@@ -1057,7 +1223,7 @@ span.font-semibold.text-sm.username-gradient {
   display: inline-flex;
   align-items: baseline;
   gap: 0.45em;
-  background: #000;
+  background: var(--lanes-panel);
   padding: 10px 16px;
 }
 .lanes-total b {
@@ -1075,7 +1241,7 @@ span.font-semibold.text-sm.username-gradient {
   letter-spacing: 0.06em;
   line-height: 1.55;
   color: var(--lanes-kick);
-  background: #000;
+  background: var(--lanes-panel);
   padding: 8px 14px;
 }
 /* Viewer hint to /browser-extension. The headline layer ignores pointer
@@ -1087,8 +1253,8 @@ span.font-semibold.text-sm.username-gradient {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
-  background: #f4f3ef;
-  color: #000;
+  background: var(--lanes-fg);
+  color: var(--lanes-panel);
   padding: 8px 14px;
   text-decoration: none;
 }
@@ -1109,8 +1275,8 @@ span.font-semibold.text-sm.username-gradient {
   align-items: center;
   gap: 16px;
   padding: 0 24px;
-  background: #000;
-  color: #f4f3ef;
+  background: var(--lanes-panel);
+  color: var(--lanes-fg);
 }
 /* Grid, not space-between: the note and the trailing link have different
  * widths, so space-between leaves the button off-center. */
@@ -1128,8 +1294,8 @@ span.font-semibold.text-sm.username-gradient {
   font-family: var(--font-space-mono), monospace;
   font-weight: 700;
   font-size: 14px;
-  background: #f4f3ef;
-  color: #000;
+  background: var(--lanes-fg);
+  color: var(--lanes-panel);
   border: none;
   padding: 14px 28px;
   cursor: pointer;
@@ -1145,7 +1311,7 @@ span.font-semibold.text-sm.username-gradient {
   outline-offset: 2px;
 }
 .ctabar a {
-  color: #f4f3ef;
+  color: var(--lanes-fg);
   font-size: 12px;
 }
 
@@ -1158,7 +1324,7 @@ span.font-semibold.text-sm.username-gradient {
 .mono-label {
   font-size: 11px;
   letter-spacing: 0.25em;
-  color: rgba(244, 243, 239, 0.5);
+  color: var(--lanes-fg-dim);
   font-weight: 700;
 }
 
@@ -1184,10 +1350,10 @@ span.font-semibold.text-sm.username-gradient {
   max-width: 54ch;
   font-size: 14px;
   line-height: 1.75;
-  color: rgba(244, 243, 239, 0.75);
+  color: color-mix(in srgb, var(--lanes-fg) 75%, transparent);
 }
 .converge p b {
-  color: #fff;
+  color: var(--lanes-fg-strong);
 }
 
 /* Live overlay preview frame. */
@@ -1302,8 +1468,8 @@ span.font-semibold.text-sm.username-gradient {
   font-weight: 700;
 }
 .wcol.bad {
-  outline: 2px dashed rgba(244, 243, 239, 0.3);
-  color: rgba(244, 243, 239, 0.75);
+  outline: 2px dashed color-mix(in srgb, var(--lanes-fg) 30%, transparent);
+  color: color-mix(in srgb, var(--lanes-fg) 75%, transparent);
 }
 .wcol.bad li::before {
   content: '✕';
@@ -1312,8 +1478,8 @@ span.font-semibold.text-sm.username-gradient {
 .wcol.good {
   /* Feedback: was solid #fff with black text — a spotlight that out-shouted
    * the heading. Now a translucent warm panel like the other surfaces. */
-  background: rgba(244, 243, 239, 0.08);
-  color: var(--lanes-text);
+  background: color-mix(in srgb, var(--lanes-fg) 8%, transparent);
+  color: var(--lanes-fg);
 }
 .wcol.good li {
   font-weight: 700;
@@ -1348,7 +1514,7 @@ span.font-semibold.text-sm.username-gradient {
 .numbers + .numbers {
   margin-top: 56px;
   padding-top: 44px;
-  border-top: 1px solid rgba(244, 243, 239, 0.28);
+  border-top: 1px solid color-mix(in srgb, var(--lanes-fg) 28%, transparent);
 }
 .figure {
   font-family: var(--font-archivo-black), sans-serif;
@@ -1361,7 +1527,7 @@ span.font-semibold.text-sm.username-gradient {
   margin-top: 8px;
   font-size: 11px;
   letter-spacing: 0.2em;
-  color: rgba(244, 243, 239, 0.5);
+  color: var(--lanes-fg-dim);
   font-weight: 700;
 }
 
@@ -1376,7 +1542,7 @@ span.font-semibold.text-sm.username-gradient {
   font-size: 15px;
   /* 0.5, not lower: 15px is not WCAG large text, and 0.5 is the first step
    * of the warm-white ramp that clears 4.5:1 on the page black (4.88:1). */
-  color: rgba(244, 243, 239, 0.5);
+  color: var(--lanes-fg-dim);
 }
 .step h3 {
   margin-top: 12px;
@@ -1387,7 +1553,7 @@ span.font-semibold.text-sm.username-gradient {
   margin-top: 8px;
   font-size: 13px;
   line-height: 1.7;
-  color: rgba(244, 243, 239, 0.65);
+  color: color-mix(in srgb, var(--lanes-fg) 65%, transparent);
 }
 
 /* Final band. Feedback: the sign-in strip should own the full screen, not
@@ -1416,7 +1582,7 @@ span.font-semibold.text-sm.username-gradient {
 .final .micro {
   margin-top: 16px;
   font-size: 11.5px;
-  color: rgba(244, 243, 239, 0.5);
+  color: var(--lanes-fg-dim);
 }
 .final .welcome h2 {
   text-transform: uppercase;
@@ -1437,7 +1603,7 @@ span.font-semibold.text-sm.username-gradient {
 .ext-stage .cta-go,
 .ext-final .cta-go {
   text-align: center;
-  color: #000;
+  color: var(--lanes-panel);
 }
 .ext-final .cta-go {
   margin-top: 0;
@@ -1467,7 +1633,7 @@ span.font-semibold.text-sm.username-gradient {
   max-width: 58ch;
   font-size: 14px;
   line-height: 1.75;
-  color: rgba(244, 243, 239, 0.75);
+  color: color-mix(in srgb, var(--lanes-fg) 75%, transparent);
 }
 .ext-window {
   margin: 48px auto 0;
@@ -1582,7 +1748,7 @@ span.font-semibold.text-sm.username-gradient {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   background: var(--pc);
-  color: var(--lanes-bg);
+  color: var(--lanes-page);
 }
 .ext-input {
   margin: 10px;
@@ -1605,25 +1771,25 @@ span.font-semibold.text-sm.username-gradient {
   font-weight: 700;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: rgba(244, 243, 239, 0.5);
+  color: var(--lanes-fg-dim);
 }
 .ext-compare tbody th,
 .ext-compare tbody td {
   padding: 16px 14px;
   vertical-align: top;
-  border-top: 1px solid rgba(244, 243, 239, 0.18);
+  border-top: 1px solid color-mix(in srgb, var(--lanes-fg) 18%, transparent);
 }
 .ext-compare tbody th {
   font-weight: 700;
   white-space: nowrap;
 }
 .ext-compare tbody td {
-  color: rgba(244, 243, 239, 0.75);
+  color: color-mix(in srgb, var(--lanes-fg) 75%, transparent);
 }
 .ext-compare tr.us th,
 .ext-compare tr.us td {
   background: rgba(86, 184, 71, 0.14);
-  color: #f4f3ef;
+  color: var(--lanes-fg);
   font-weight: 700;
 }
 .ext-sources {
@@ -1634,7 +1800,7 @@ span.font-semibold.text-sm.username-gradient {
 }
 .ext-compare a,
 .ext-final a:not(.cta-go):not(.lanes-signin) {
-  color: #f4f3ef;
+  color: var(--lanes-fg);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -1647,14 +1813,14 @@ span.font-semibold.text-sm.username-gradient {
   margin-top: 24px;
   font-size: 12.5px;
   line-height: 1.7;
-  color: rgba(244, 243, 239, 0.65);
+  color: color-mix(in srgb, var(--lanes-fg) 65%, transparent);
 }
 .ext-where {
   margin-top: 14px;
   max-width: 60ch;
   font-size: 13px;
   line-height: 1.7;
-  color: rgba(244, 243, 239, 0.75);
+  color: color-mix(in srgb, var(--lanes-fg) 75%, transparent);
 }
 @media (max-width: 800px) {
   .ext-window-body {
@@ -1674,7 +1840,7 @@ span.font-semibold.text-sm.username-gradient {
   .ext-compare tr {
     display: block;
     padding: 16px 0;
-    border-top: 1px solid rgba(244, 243, 239, 0.18);
+    border-top: 1px solid color-mix(in srgb, var(--lanes-fg) 18%, transparent);
   }
   .ext-compare tbody th,
   .ext-compare tbody td {
@@ -1710,18 +1876,18 @@ span.font-semibold.text-sm.username-gradient {
   letter-spacing: 0.02em;
   padding: 14px 24px;
   min-height: 48px;
-  border: 1px solid rgba(244, 243, 239, 0.4);
+  border: 1px solid color-mix(in srgb, var(--lanes-fg) 40%, transparent);
   border-radius: 0;
-  background: #000;
+  background: var(--lanes-panel);
   cursor: pointer;
-  color: #f4f3ef;
+  color: var(--lanes-fg);
   transition: background 0.15s;
 }
 .lanes-signin:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--lanes-fg-strong) 12%, transparent);
 }
 .lanes-signin:focus-visible {
-  outline: 2px solid #f4f3ef;
+  outline: 2px solid var(--lanes-fg);
   outline-offset: 2px;
 }
 .lanes-signin[data-p='twitch'] {
@@ -1791,10 +1957,10 @@ span.font-semibold.text-sm.username-gradient {
 }
 .faq-list {
   margin-top: 44px;
-  border-top: 1px solid rgba(244, 243, 239, 0.28);
+  border-top: 1px solid color-mix(in srgb, var(--lanes-fg) 28%, transparent);
 }
 .faq-item {
-  border-bottom: 1px solid rgba(244, 243, 239, 0.28);
+  border-bottom: 1px solid color-mix(in srgb, var(--lanes-fg) 28%, transparent);
 }
 .faq-item summary {
   display: flex;
@@ -1815,18 +1981,18 @@ span.font-semibold.text-sm.username-gradient {
   outline-offset: 2px;
 }
 .faq-item summary:hover {
-  color: #f4f3ef;
-  background: rgba(244, 243, 239, 0.04);
+  color: var(--lanes-fg);
+  background: color-mix(in srgb, var(--lanes-fg) 4%, transparent);
 }
 .faq-item[open] summary {
-  color: #f4f3ef;
+  color: var(--lanes-fg);
 }
 .faq-item p {
   padding: 0 4px 26px;
   max-width: 72ch;
   font-size: 13.5px;
   line-height: 1.75;
-  color: rgba(244, 243, 239, 0.75);
+  color: color-mix(in srgb, var(--lanes-fg) 75%, transparent);
 }
 
 /* Ambassadors (lanes restyle): black panels, hard borders, offset shadow. */
@@ -1837,7 +2003,7 @@ span.font-semibold.text-sm.username-gradient {
   margin-top: 28px;
 }
 .ambassadors .dim {
-  color: rgba(244, 243, 239, 0.65);
+  color: color-mix(in srgb, var(--lanes-fg) 65%, transparent);
 }
 .ambassador-grid {
   list-style: none;
@@ -1851,13 +2017,13 @@ span.font-semibold.text-sm.username-gradient {
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  background: #000;
-  border: 1px solid rgba(244, 243, 239, 0.28);
+  background: var(--lanes-panel);
+  border: 1px solid color-mix(in srgb, var(--lanes-fg) 28%, transparent);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   padding: 20px;
 }
 .ambassador-card a {
-  color: #f4f3ef;
+  color: var(--lanes-fg);
   text-decoration-color: var(--lanes-youtube);
 }
 
@@ -1867,8 +2033,8 @@ span.font-semibold.text-sm.username-gradient {
 .theme-showcase .rounded-xl {
   border-radius: 0;
   border-width: 1px;
-  border-color: rgba(244, 243, 239, 0.28);
-  background: #000;
+  border-color: color-mix(in srgb, var(--lanes-fg) 28%, transparent);
+  background: var(--lanes-panel);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 .theme-showcase .rounded-full {
@@ -1882,22 +2048,22 @@ span.font-semibold.text-sm.username-gradient {
 .theme-showcase .bg-twitch {
   /* Active carousel dot: white on black instead of the twitch purple the
    * app-wide token would give here. */
-  background: #f4f3ef !important;
+  background: var(--lanes-fg) !important;
 }
 .theme-showcase .border-t {
   border-top-width: 1px;
-  border-color: rgba(244, 243, 239, 0.28);
+  border-color: color-mix(in srgb, var(--lanes-fg) 28%, transparent);
 }
 .theme-showcase p,
 .theme-showcase h2 {
-  color: #f4f3ef;
+  color: var(--lanes-fg);
 }
 .theme-showcase .text-text-sub,
 .theme-showcase .text-text-sub * {
-  color: rgba(244, 243, 239, 0.65) !important;
+  color: color-mix(in srgb, var(--lanes-fg) 65%, transparent) !important;
 }
 .theme-showcase .text-text {
-  color: #f4f3ef !important;
+  color: var(--lanes-fg) !important;
 }
 .ambassador-card a:hover {
   color: var(--lanes-youtube);
@@ -1937,16 +2103,9 @@ span.font-semibold.text-sm.username-gradient {
    product-page vocabulary: panels, buttons, inputs, tables, chips.
    ============================================================ */
 .lanes-app {
-  --lanes-bg: #050508;
-  --lanes-text: #f4f3ef;
-  /* Same desaturated palette as .lanes-home (see comment there). */
-  --lanes-twitch: #8464d6;
-  --lanes-youtube: #d95c50;
-  --lanes-tiktok: #62aeb4;
-  --lanes-kick: #56b847;
-  --lanes-discord: #6a72c9;
-  background: var(--lanes-bg);
-  color: var(--lanes-text);
+  /* Same palette as .lanes-home: the role colors on :root. */
+  background: var(--lanes-page);
+  color: var(--lanes-fg);
   font-family: var(--font-space-mono), monospace;
 }
 
@@ -1972,9 +2131,9 @@ span.font-semibold.text-sm.username-gradient {
  * 3px hard white border with an 8px offset shadow read as brutalist
  * chrome on every surface, which is why it was cut. */
 .lanes-panel {
-  background: #000;
-  color: var(--lanes-text);
-  border: 1px solid rgba(244, 243, 239, 0.28);
+  background: var(--lanes-panel);
+  color: var(--lanes-fg);
+  border: 1px solid color-mix(in srgb, var(--lanes-fg) 28%, transparent);
   border-radius: 0;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
@@ -1991,10 +2150,10 @@ span.font-semibold.text-sm.username-gradient {
   font-size: 13px;
   letter-spacing: 0.02em;
   padding: 10px 20px;
-  border: 1px solid rgba(244, 243, 239, 0.4);
+  border: 1px solid color-mix(in srgb, var(--lanes-fg) 40%, transparent);
   border-radius: 0;
-  background: #f4f3ef;
-  color: #000;
+  background: var(--lanes-fg);
+  color: var(--lanes-panel);
   cursor: pointer;
   text-decoration: none;
   transition: background 0.15s;
@@ -2009,11 +2168,11 @@ span.font-semibold.text-sm.username-gradient {
 }
 .lanes-btn.ghost {
   background: transparent;
-  color: #fff;
+  color: var(--lanes-fg-strong);
 }
 .lanes-btn.ghost:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: #fff;
+  background: color-mix(in srgb, var(--lanes-fg-strong) 12%, transparent);
+  border-color: var(--lanes-fg-strong);
 }
 .lanes-btn.danger {
   /* The brand red --lanes-youtube (#ff3b30) is a lane color, not a text
@@ -2034,8 +2193,8 @@ span.font-semibold.text-sm.username-gradient {
 .lanes-btn:disabled,
 .lanes-btn:disabled:hover {
   background: transparent;
-  border-color: rgba(244, 243, 239, 0.25);
-  color: rgba(244, 243, 239, 0.6);
+  border-color: color-mix(in srgb, var(--lanes-fg) 25%, transparent);
+  color: color-mix(in srgb, var(--lanes-fg) 60%, transparent);
   cursor: not-allowed;
 }
 /* The shadcn Switch inside lanes pages: square, kick-green when on, same
@@ -2043,7 +2202,7 @@ span.font-semibold.text-sm.username-gradient {
  * retired brand accent, and was the one rounded control on these pages. */
 .lanes-app [data-slot='switch'] {
   border-radius: 0;
-  background: rgba(244, 243, 239, 0.2);
+  background: color-mix(in srgb, var(--lanes-fg) 20%, transparent);
 }
 .lanes-app [data-slot='switch'][data-checked] {
   background: var(--lanes-kick);
@@ -2060,10 +2219,10 @@ span.font-semibold.text-sm.username-gradient {
 .lanes-app input:not([type='checkbox']):not([type='radio']),
 .lanes-app select,
 .lanes-app textarea {
-  background: #000;
-  border: 1px solid rgba(244, 243, 239, 0.35);
+  background: var(--lanes-panel);
+  border: 1px solid color-mix(in srgb, var(--lanes-fg) 35%, transparent);
   border-radius: 0;
-  color: #f4f3ef;
+  color: var(--lanes-fg);
   font-size: 14px;
   padding: 10px 12px;
 }
@@ -2076,7 +2235,7 @@ span.font-semibold.text-sm.username-gradient {
 }
 .lanes-app input::placeholder,
 .lanes-app textarea::placeholder {
-  color: rgba(244, 243, 239, 0.5);
+  color: var(--lanes-fg-dim);
 }
 
 /* Headings: Archivo Black, uppercase, tight. Sizes come from utilities. */
@@ -2086,13 +2245,13 @@ span.font-semibold.text-sm.username-gradient {
   font-family: var(--font-archivo-black), sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.01em;
-  color: #fff;
+  color: var(--lanes-fg-strong);
 }
 
 /* Links inside app copy: white with a red underline accent, matching the
  * banner treatment. */
 .lanes-app a {
-  color: #fff;
+  color: var(--lanes-fg-strong);
   text-decoration-color: var(--lanes-youtube);
 }
 .lanes-app a:hover {
@@ -2101,16 +2260,21 @@ span.font-semibold.text-sm.username-gradient {
 /* .lanes-app a outranks .lanes-btn on <a class="lanes-btn"> (class+element
  * beats class), which would paint the primary button white-on-white. */
 .lanes-app a.lanes-btn {
-  color: #000;
+  color: var(--lanes-panel);
 }
-.lanes-app a.lanes-btn.ghost,
+.lanes-app a.lanes-btn.ghost {
+  color: var(--lanes-fg-strong);
+}
+/* White on the red fill in either theme. */
 .lanes-app a.lanes-btn.danger {
   color: #fff;
 }
 .lanes-app a.lanes-btn:hover {
-  color: #000;
+  color: var(--lanes-panel);
 }
-.lanes-app a.lanes-btn.ghost:hover,
+.lanes-app a.lanes-btn.ghost:hover {
+  color: var(--lanes-fg-strong);
+}
 .lanes-app a.lanes-btn.danger:hover {
   color: #fff;
 }
@@ -2125,11 +2289,11 @@ span.font-semibold.text-sm.username-gradient {
   letter-spacing: 0.1em;
   font-size: 11px;
   text-align: left;
-  border-bottom: 2px solid #fff;
+  border-bottom: 2px solid var(--lanes-fg-strong);
   padding: 8px 12px;
 }
 .lanes-app td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid color-mix(in srgb, var(--lanes-fg-strong) 15%, transparent);
   padding: 10px 12px;
 }
 
@@ -2139,11 +2303,11 @@ span.font-semibold.text-sm.username-gradient {
  * page of reading. */
 .lanes-app .legal-prose {
   font-family: var(--font-barlow), sans-serif;
-  color: var(--lanes-text);
+  color: var(--lanes-fg);
 }
 .lanes-app .legal-prose p,
 .lanes-app .legal-prose li {
-  color: var(--lanes-text);
+  color: var(--lanes-fg);
   /* Reading measure: the panel runs ~90ch wide, tables and code want that
    * width, paragraphs don't. */
   max-width: 72ch;
@@ -2165,17 +2329,17 @@ span.font-semibold.text-sm.username-gradient {
 
 /* Muted text ramp. */
 .lanes-app .text-sub {
-  color: rgba(244, 243, 239, 0.7);
+  color: color-mix(in srgb, var(--lanes-fg) 70%, transparent);
 }
 .lanes-app .text-dim {
-  color: rgba(244, 243, 239, 0.5);
+  color: var(--lanes-fg-dim);
 }
 
 /* The shared AppNav, restyled when it sits inside .lanes-app. The nav
  * itself is unchanged for routes that don't opt in (link, moderate). */
 .lanes-app .app-nav {
-  background: #000;
-  border-bottom: 3px solid #fff;
+  background: var(--lanes-panel);
+  border-bottom: 3px solid var(--lanes-fg-strong);
   backdrop-filter: none;
   font-family: var(--font-space-mono), monospace;
 }
@@ -2183,24 +2347,24 @@ span.font-semibold.text-sm.username-gradient {
   font-family: var(--font-archivo-black), sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  color: #fff;
+  color: var(--lanes-fg-strong);
 }
 .lanes-app .app-nav a {
   text-decoration: none;
 }
 .lanes-app .app-nav .nav-link {
-  color: rgba(244, 243, 239, 0.65);
+  color: color-mix(in srgb, var(--lanes-fg) 65%, transparent);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .lanes-app .app-nav .nav-link:hover {
-  color: #fff;
+  color: var(--lanes-fg-strong);
 }
 .lanes-app .app-nav .nav-link.active {
-  background: #fff;
-  color: #000;
+  background: var(--lanes-fg-strong);
+  color: var(--lanes-panel);
 }
 .lanes-app .app-nav .nav-link.active::after {
   display: none;
@@ -2210,13 +2374,13 @@ span.font-semibold.text-sm.username-gradient {
  * root layout outside .lanes-home, so the variant is opt-in: CookieBanner
  * adds .lanes-cookie (plus the next/font variable classes) on '/' only. */
 .lanes-cookie {
-  background: #000 !important;
+  background: var(--lanes-panel) !important;
   /* The --lanes-* palette is scoped to .lanes-home, which the banner mounts
    * outside of; it redeclares the two accents its hover rules use. */
   --lanes-youtube: #d95c50;
   --lanes-kick: #56b847;
-  color: #f4f3ef !important;
-  border: 1px solid rgba(244, 243, 239, 0.28) !important;
+  color: var(--lanes-fg) !important;
+  border: 1px solid color-mix(in srgb, var(--lanes-fg) 28%, transparent) !important;
   border-radius: 0 !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
   font-family: var(--font-space-mono), monospace;
@@ -2225,12 +2389,12 @@ span.font-semibold.text-sm.username-gradient {
   font-family: var(--font-archivo-black), sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  color: #f4f3ef !important;
+  color: var(--lanes-fg) !important;
 }
 .lanes-cookie p,
 .lanes-cookie summary,
 .lanes-cookie details {
-  color: rgba(244, 243, 239, 0.85) !important;
+  color: color-mix(in srgb, var(--lanes-fg) 85%, transparent) !important;
 }
 /* Feedback: strong labels used to pop full white, which is exactly the
  * "highlighted too much" complaint. Emphasis stays typographic (weight),
@@ -2240,17 +2404,17 @@ span.font-semibold.text-sm.username-gradient {
   font-weight: 700;
 }
 .lanes-cookie a {
-  color: #f4f3ef !important;
+  color: var(--lanes-fg) !important;
   text-decoration-color: var(--lanes-youtube) !important;
 }
 .lanes-cookie a:hover {
   color: var(--lanes-youtube) !important;
 }
 .lanes-cookie .lanes-cookie-ack {
-  background: #f4f3ef !important;
-  color: #000 !important;
+  background: var(--lanes-fg) !important;
+  color: var(--lanes-panel) !important;
   border-radius: 0 !important;
-  border: 1px solid #f4f3ef !important;
+  border: 1px solid var(--lanes-fg) !important;
   font-family: var(--font-space-mono), monospace;
   font-weight: 700;
   font-size: 16px;
@@ -2260,14 +2424,14 @@ span.font-semibold.text-sm.username-gradient {
   background: var(--lanes-kick) !important;
 }
 .lanes-cookie .lanes-cookie-more {
-  border: 1px solid rgba(244, 243, 239, 0.4) !important;
+  border: 1px solid color-mix(in srgb, var(--lanes-fg) 40%, transparent) !important;
   border-radius: 0 !important;
   background: transparent !important;
-  color: #f4f3ef !important;
+  color: var(--lanes-fg) !important;
   font-family: var(--font-space-mono), monospace;
   font-weight: 700;
   font-size: 16px;
 }
 .lanes-cookie .lanes-cookie-more:hover {
-  background: rgba(244, 243, 239, 0.1) !important;
+  background: color-mix(in srgb, var(--lanes-fg) 10%, transparent) !important;
 }

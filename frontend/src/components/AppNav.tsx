@@ -25,6 +25,7 @@ import { useAuthStore } from '@/lib/stores/auth-store'
 import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
 import { viewerApi } from '@/lib/api/viewer'
 import { InfinityLogo } from '@/components/InfinityLogo'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { DiscordIcon } from '@/components/icons/DiscordIcon'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
 import { trackEvent } from '@/lib/analytics'
@@ -120,6 +121,7 @@ export function AppNav() {
         </Link>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1 pl-2">
+        <ThemeToggle className="flex size-8 items-center justify-center rounded-sm text-text-sub transition-colors hover:text-text focus-visible:ring-2 focus-visible:ring-twitch focus-visible:outline-none" />
         {/* Discord is the primary support channel — keep it reachable from every
             app page, not just the homepage footer (users reported they couldn't
             find it there). Icon-only below sm to save nav width. */}
