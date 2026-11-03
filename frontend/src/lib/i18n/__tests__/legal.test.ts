@@ -41,9 +41,11 @@ describe('cookie banner chrome', () => {
   it('keeps the heading and the two lead paragraphs whole', () => {
     expect(t('legal.cookieBanner.title')).toBe('Privacy & Data Storage')
     expect(t('legal.cookieBanner.storageBody')).toBe(
-      'All-Chat uses {storage} to save your authentication tokens and keep you logged in. This is essential for the service to function properly.'
+      'All-Chat uses {storage} to keep you logged in and to remember your preferences. This is essential for the service to function properly.'
     )
-    expect(t('legal.cookieBanner.storageEmphasis')).toBe('browser local storage')
+    expect(t('legal.cookieBanner.storageEmphasis')).toBe(
+      'two essential cookies and browser storage'
+    )
     expect(t('legal.cookieBanner.noTrackingBody')).toBe(
       '{emphasis} We do not share your data with third parties for advertising purposes.'
     )
@@ -56,14 +58,14 @@ describe('cookie banner chrome', () => {
     expect(t('legal.cookieBanner.acknowledge')).toBe('I Understand')
     expect(t('legal.cookieBanner.learnMore')).toBe('Learn More')
     expect(t('legal.cookieBanner.footer')).toBe(
-      'Your data is stored locally in your browser and transmitted securely via HTTPS'
+      'Your overlays, settings and platform tokens are stored on our servers, and traffic between your browser and All-Chat is encrypted with HTTPS'
     )
   })
 })
 
 describe('cookie banner disclosure list', () => {
   it('keeps the summary', () => {
-    expect(t('legal.cookieBanner.detailsSummary')).toBe('What data do we store locally?')
+    expect(t('legal.cookieBanner.detailsSummary')).toBe('What do we store in your browser?')
   })
 
   it('keeps each stored-data row whole', () => {
@@ -71,15 +73,15 @@ describe('cookie banner disclosure list', () => {
     // sentence, so the row is one string with a {label} placeholder. Splitting
     // at the hyphen would strand a fragment a translator cannot reorder.
     expect(t('legal.cookieBanner.tokensRow')).toBe(
-      '{label} - Required to keep you logged in and authenticate with the streaming platforms you connect'
+      '{label} - Two essential cookies keep you logged in as a streamer, and viewer sign-in is kept in local storage. Your streaming platform tokens stay on our servers and never reach your browser'
     )
-    expect(t('legal.cookieBanner.tokensLabel')).toBe('Authentication tokens')
+    expect(t('legal.cookieBanner.tokensLabel')).toBe('Sign-in')
     expect(t('legal.cookieBanner.preferencesRow')).toBe(
-      '{label} - Your overlay configurations and settings'
+      '{label} - Your language, light or dark mode, chat view and editor layout, onboarding progress, dismissed notices and theme marketplace favorites. Your overlays and settings are stored on our servers'
     )
     expect(t('legal.cookieBanner.preferencesLabel')).toBe('User preferences')
     expect(t('legal.cookieBanner.noTrackingRow')).toBe(
-      "{label} - We don't track your browsing behavior"
+      "{label} - We don't follow you across other websites"
     )
     expect(t('legal.cookieBanner.noTrackingLabel')).toBe('No tracking cookies')
     expect(t('legal.cookieBanner.noAdsRow')).toBe(
@@ -674,14 +676,17 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.googleSettingsPageLinkText')).toBe('Google security settings page')
     expect(t('legal.privacy.cookiesIntro')).toBe(
-      'All-Chat uses {emphasis} (not cookies) for essential functionality:'
+      'All-Chat uses two essential cookies and {emphasis} for essential functionality:'
     )
-    expect(t('legal.privacy.localStorageEmphasis')).toBe('browser localStorage')
+    expect(t('legal.privacy.localStorageEmphasis')).toBe('browser storage')
     expect(t('legal.privacy.cookiesTokens')).toBe(
-      'Authentication tokens (JWT) to keep you logged in'
+      'Sign-in: two first-party cookies keep you logged in as a streamer. access_token lasts 24 hours; refresh_token lasts 14 days and is sent only to our sign-in endpoints. Both are httpOnly, so scripts on the page cannot read them. Viewer sign-in is kept as a token (JWT) in localStorage. Your streaming platform tokens stay on our servers and are never stored in your browser'
     )
     expect(t('legal.privacy.cookiesPreferences')).toBe(
-      'User preferences, cached theme lists and last-visited state'
+      'Preferences in localStorage: your language, that you saw the cookie notice, light or dark mode, the theme and layout of chat views, the editor layout, onboarding progress, dismissed notices, theme marketplace favorites and a cache of its themes, and when you last saw each overlay so that a reconnecting chat view can catch up'
+    )
+    expect(t('legal.privacy.cookiesSession')).toBe(
+      'In sessionStorage, until you close the tab: the platform you started signing in with, so that a completed sign-in can be counted in our analytics (Section\u00A05.8)'
     )
     expect(t('legal.privacy.cookiesNoAdvertising')).toBe(
       "We do not use advertising cookies or cross-site tracking. We do use {emphasis} (self-hosted Umami) – it sets nothing on your device and stores no personal identifier; see Section\u00A05.8 for the full description. Fonts are self-hosted (Section\u00A05.5) and do not set cookies. The only third-party cookies that can occur come from Twitch's clip player, which the credit roll embeds as a fallback (Section\u00A05.2)."

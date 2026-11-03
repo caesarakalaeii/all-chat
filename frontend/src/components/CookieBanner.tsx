@@ -23,16 +23,17 @@
  *
  * This component displays a cookie consent banner that complies with GDPR requirements.
  *
- * Current Cookie Usage in All-Chat:
- * - Essential: localStorage items for authentication (jwt_token). The refresh
- *   token is stored in-memory only (audit H3) and is never persisted to
- *   localStorage.
- * - Analytics: Self-hosted Umami — cookieless, sets nothing on the device, stores no personal data
- * - Functional: None (no additional functional cookies)
- * - Third-party: None (no third-party cookies)
+ * What All-Chat keeps in the browser (Privacy Policy, Section 8):
+ * - Essential cookies: access_token and refresh_token, both httpOnly
+ *   (shared/auth/cookie.go). Platform tokens never reach the browser.
+ * - localStorage: the viewer JWT and UI preferences (locale, theme, layouts,
+ *   onboarding, dismissals, marketplace cache, last-seen replay markers).
+ * - sessionStorage: the sign-in platform for analytics attribution.
+ * - Analytics: self-hosted Umami, cookieless; from browser storage it reads
+ *   only the umami.disabled opt-out flag.
+ * - Third-party cookies: only Twitch's clip player, embedded as a fallback.
  *
- * The banner informs users about essential data storage and provides links to
- * privacy policy and terms of service as required by GDPR.
+ * Keep this list and the banner copy in step with the policy.
  */
 
 import { useState, useEffect } from 'react'

@@ -526,6 +526,7 @@ export default function PrivacyPolicyPage() {
         <ul className={listClasses}>
           <li>{t('legal.privacy.cookiesTokens')}</li>
           <li>{t('legal.privacy.cookiesPreferences')}</li>
+          <li>{t('legal.privacy.cookiesSession')}</li>
         </ul>
         <p>
           {emphasise(

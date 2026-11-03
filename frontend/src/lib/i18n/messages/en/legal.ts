@@ -32,22 +32,23 @@ export const legal = {
     iconLabel: 'Cookie',
     title: 'Privacy & Data Storage',
     storageBody:
-      'All-Chat uses {storage} to save your authentication tokens and keep you logged in. This is essential for the service to function properly.',
-    storageEmphasis: 'browser local storage',
+      'All-Chat uses {storage} to keep you logged in and to remember your preferences. This is essential for the service to function properly.',
+    storageEmphasis: 'two essential cookies and browser storage',
     noTrackingBody:
       '{emphasis} We do not share your data with third parties for advertising purposes.',
     noTrackingEmphasis:
       'We use no tracking cookies, and our usage analytics are cookieless and store no personal data.',
-    detailsSummary: 'What data do we store locally?',
+    detailsSummary: 'What do we store in your browser?',
     // Each row keeps its bolded label inside the sentence as {label}: the text
     // after the hyphen continues the sentence the label starts, so handing a
     // translator the two halves separately would leave them unable to reorder.
     tokensRow:
-      '{label} - Required to keep you logged in and authenticate with the streaming platforms you connect',
-    tokensLabel: 'Authentication tokens',
-    preferencesRow: '{label} - Your overlay configurations and settings',
+      '{label} - Two essential cookies keep you logged in as a streamer, and viewer sign-in is kept in local storage. Your streaming platform tokens stay on our servers and never reach your browser',
+    tokensLabel: 'Sign-in',
+    preferencesRow:
+      '{label} - Your language, light or dark mode, chat view and editor layout, onboarding progress, dismissed notices and theme marketplace favorites. Your overlays and settings are stored on our servers',
     preferencesLabel: 'User preferences',
-    noTrackingRow: "{label} - We don't track your browsing behavior",
+    noTrackingRow: "{label} - We don't follow you across other websites",
     noTrackingLabel: 'No tracking cookies',
     noAdsRow: "{label} - We don't serve ads or share data with advertisers",
     noAdsLabel: 'No advertising cookies',
@@ -67,7 +68,8 @@ export const legal = {
     termsOfService: 'Terms of Service',
     acknowledge: 'I Understand',
     learnMore: 'Learn More',
-    footer: 'Your data is stored locally in your browser and transmitted securely via HTTPS',
+    footer:
+      'Your overlays, settings and platform tokens are stored on our servers, and traffic between your browser and All-Chat is encrypted with HTTPS',
   },
   // Chrome on all three legal routes.
   layout: {
@@ -437,10 +439,14 @@ export const legal = {
     youtubeRevoke:
       "For YouTube Data: You can revoke All-Chat's access to your YouTube data via the {googleSettings}.",
     googleSettingsPageLinkText: 'Google security settings page',
-    cookiesIntro: 'All-Chat uses {emphasis} (not cookies) for essential functionality:',
-    localStorageEmphasis: 'browser localStorage',
-    cookiesTokens: 'Authentication tokens (JWT) to keep you logged in',
-    cookiesPreferences: 'User preferences, cached theme lists and last-visited state',
+    cookiesIntro: 'All-Chat uses two essential cookies and {emphasis} for essential functionality:',
+    localStorageEmphasis: 'browser storage',
+    cookiesTokens:
+      'Sign-in: two first-party cookies keep you logged in as a streamer. access_token lasts 24 hours; refresh_token lasts 14 days and is sent only to our sign-in endpoints. Both are httpOnly, so scripts on the page cannot read them. Viewer sign-in is kept as a token (JWT) in localStorage. Your streaming platform tokens stay on our servers and are never stored in your browser',
+    cookiesPreferences:
+      'Preferences in localStorage: your language, that you saw the cookie notice, light or dark mode, the theme and layout of chat views, the editor layout, onboarding progress, dismissed notices, theme marketplace favorites and a cache of its themes, and when you last saw each overlay so that a reconnecting chat view can catch up',
+    cookiesSession:
+      'In sessionStorage, until you close the tab: the platform you started signing in with, so that a completed sign-in can be counted in our analytics (Section\u00A05.8)',
     cookiesNoAdvertising:
       "We do not use advertising cookies or cross-site tracking. We do use {emphasis} (self-hosted Umami) – it sets nothing on your device and stores no personal identifier; see Section\u00A05.8 for the full description. Fonts are self-hosted (Section\u00A05.5) and do not set cookies. The only third-party cookies that can occur come from Twitch's clip player, which the credit roll embeds as a fallback (Section\u00A05.2).",
     cookielessAnalyticsEmphasis: 'privacy-friendly, cookieless usage analytics',
