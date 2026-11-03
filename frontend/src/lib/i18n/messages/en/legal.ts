@@ -202,7 +202,7 @@ export const legal = {
       'All of the above runs on our own infrastructure on servers located in {country} (hosting provider: Hetzner Online GmbH)',
     storageCountry: 'Germany',
     storageBackups:
-      'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany) and in Backblaze B2 (Amsterdam, Netherlands), and are transferred over encrypted connections (see Sections\u00A05.7 and 6)',
+      'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany) and in Backblaze B2 (Amsterdam, Netherlands). They are transferred over encrypted connections, and the Backblaze copy is also encrypted at rest (see Sections\u00A05.7 and 6)',
     safeguardsEncryption: 'OAuth tokens encrypted with AES-GCM before touching the database',
     safeguardsHttps:
       'HTTPS at the ingress layer for all external traffic; internal services isolated via Kubernetes network policies',
