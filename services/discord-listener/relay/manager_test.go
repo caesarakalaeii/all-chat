@@ -20,7 +20,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // captureCallsPoster records calls to Post for assertion in tests.
@@ -182,4 +184,25 @@ func TestParseRelayPayload_KickParsed(t *testing.T) {
 	assert.Equal(t, "Alice [Kick]", rp.Username)
 	assert.Equal(t, "hello", rp.Content)
 	assert.Equal(t, "https://av.url", rp.AvatarURL)
+}
+
+// Moving a relay to another channel provisions a new webhook for the same overlay; the running
+// drain must switch to it instead of posting into the old channel until a restart.
+func TestSyncRelayConfigs_FollowsAChangedWebhookURL(t *testing.T) {
+	const oldURL, newURL = "https://discord.com/api/webhooks/1/old", "https://discord.com/api/webhooks/2/new"
+	repo := &stubRepository{configs: []relayConfig{{OverlayID: "overlay-1", WebhookURL: oldURL}}}
+	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1"}) // never dialled successfully; no message is needed
+	defer func() { _ = rdb.Close() }()
+	m := NewManager(repo, &captureCallsPoster{}, rdb, nil, nil, nil)
+	defer m.Stop()
+	ctx := context.Background()
+
+	require.NoError(t, m.SyncRelayConfigs(ctx))
+	repo.configs = []relayConfig{{OverlayID: "overlay-1", WebhookURL: newURL}}
+	require.NoError(t, m.SyncRelayConfigs(ctx))
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	assert.Equal(t, newURL, m.activeConf["overlay-1"])
+	assert.Len(t, m.activeSubs, 1)
 }

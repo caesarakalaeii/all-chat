@@ -74,9 +74,8 @@ type DiscordPoster interface {
 
 // webhookPoster sends messages to Discord webhook URLs.
 type webhookPoster struct {
-	client  *http.Client
-	baseURL string // overridable for tests; empty in production (uses webhookURL directly)
-	logger  *zap.Logger
+	client *http.Client
+	logger *zap.Logger
 }
 
 // NewWebhookPoster creates a production DiscordPoster that sends via webhooks.
@@ -121,15 +120,20 @@ func (p *webhookPoster) doPost(ctx context.Context, webhookURL string, msg Relay
 		return fmt.Errorf("failed to marshal webhook body: %w", err)
 	}
 
+	// The token is in the URL, and both errors below quote it, so they are rebuilt redacted.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create request for %s: invalid webhook URL", redactWebhookURL(webhookURL))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	// No Authorization header — webhook token is embedded in the URL.
 
 	resp, err := p.client.Do(req)
 	if err != nil {
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			urlErr.URL = redactWebhookURL(webhookURL)
+		}
 		return fmt.Errorf("discord webhook POST failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -187,6 +191,6 @@ func (p *webhookPoster) doPost(ctx context.Context, webhookURL string, msg Relay
 		return nil
 
 	default:
-		return fmt.Errorf("discord webhook POST returned unexpected status %d for %s", resp.StatusCode, webhookURL)
+		return fmt.Errorf("discord webhook POST returned unexpected status %d for %s", resp.StatusCode, redactWebhookURL(webhookURL))
 	}
 }
