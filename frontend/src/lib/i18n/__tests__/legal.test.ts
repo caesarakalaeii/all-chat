@@ -425,7 +425,7 @@ describe('privacy policy copy', () => {
       'If you email us, we use your message and email address to answer you. Our support mailbox is hosted by Google (Gmail).'
     )
     expect(t('legal.privacy.supportDiscordBody')).toBe(
-      "In our Discord server, the support bot reads messages that mention it, that are posted in its threads or that use its /support command, together with the usernames, the recent messages of the thread and any message you reply to (with its author's username) that it needs for context, and answers using a language model run by an external AI inference provider acting as our processor. To answer, it can look up our service logs, metrics and system status and pass redacted summaries of them to the model; these can concern your account or overlay. The bot also checks every message posted in the server for spam: if an account posts the same message in three or more channels within ten minutes, the bot bans it and deletes about a day of its messages. The bot keeps short notes to remember recurring problems and can turn a support request into a public issue on our GitHub repository, so do not post anything in a support thread that you do not want to be public. Discord processes your messages under Discord's own privacy policy."
+      "In our Discord server, the support bot reads messages that mention it, that are posted in its threads or that use its /support command, together with the usernames, the recent messages of the thread and any message you reply to (with its author's username) that it needs for context, and answers using a language model run by an external AI inference provider in Germany acting as our processor. To answer, it can look up our service logs, metrics and system status and pass redacted summaries of them to the model; these can concern your account or overlay. The bot also checks every message posted in the server for spam: if an account posts the same message in three or more channels within ten minutes, the bot bans it and deletes about a day of its messages. The bot keeps short notes to remember recurring problems and can turn a support request into a public issue on our GitHub repository, so do not post anything in a support thread that you do not want to be public. Discord processes your messages under Discord's own privacy policy."
     )
     expect(t('legal.privacy.useIntro')).toBe('We use the data we store to:')
     expect(t('legal.privacy.useAuthenticate')).toBe(
@@ -566,7 +566,7 @@ describe('privacy policy copy', () => {
     expect(t('legal.privacy.processorsAi')).toBe(
       '{label} – messages addressed to the support bot in our Discord server (Section\u00A02.8)'
     )
-    expect(t('legal.privacy.aiLabel')).toBe('AI inference provider')
+    expect(t('legal.privacy.aiLabel')).toBe('AI inference provider (Germany)')
     expect(t('legal.privacy.processorsDiscord')).toBe(
       '{label} – our monitoring alerts are posted to our own Discord server; an alert about a failing source can name its YouTube channel ID or TikTok username'
     )
