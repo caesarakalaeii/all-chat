@@ -40,6 +40,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -337,10 +338,10 @@ func rateLimitKey(c *gin.Context) string {
 type rateLimiter struct {
 	limit  int
 	window time.Duration
-	client sharedRedis.Client
+	client redis.Cmdable
 }
 
-func newRedisRateLimiter(client sharedRedis.Client, limit int, window time.Duration) *rateLimiter {
+func newRedisRateLimiter(client redis.Cmdable, limit int, window time.Duration) *rateLimiter {
 	return &rateLimiter{
 		limit:  limit,
 		window: window,
@@ -368,27 +369,24 @@ func (rl *rateLimiter) allow(ctx context.Context, key string) (bool, time.Durati
 		return true, 0, nil
 	}
 
+	// The key holds the raw client IP, which the privacy policy keeps only for
+	// one window. INCR and EXPIRE therefore run in one MULTI/EXEC, so the key
+	// can never exist without a TTL. NX keeps the window fixed and gives a key
+	// that somehow has no TTL one on its next hit.
 	redisKey := "rate:" + key
-	count, err := rl.client.Incr(ctx, redisKey).Result()
-	if err != nil {
+	var count *redis.IntCmd
+	var ttl *redis.DurationCmd
+	if _, err := rl.client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		count = pipe.Incr(ctx, redisKey)
+		pipe.ExpireNX(ctx, redisKey, rl.window)
+		ttl = pipe.TTL(ctx, redisKey)
+		return nil
+	}); err != nil {
 		return true, 0, err
 	}
 
-	if count == 1 {
-		if err := rl.client.Expire(ctx, redisKey, rl.window).Err(); err != nil {
-			return true, 0, err
-		}
+	if count.Val() <= int64(rl.limit) {
 		return true, 0, nil
 	}
-
-	if count <= int64(rl.limit) {
-		return true, 0, nil
-	}
-
-	ttl, err := rl.client.TTL(ctx, redisKey).Result()
-	if err != nil || ttl < 0 {
-		ttl = rl.window
-	}
-
-	return false, ttl, nil
+	return false, ttl.Val(), nil
 }
