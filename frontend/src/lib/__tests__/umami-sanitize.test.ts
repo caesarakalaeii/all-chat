@@ -79,7 +79,9 @@ describe('sanitizeUrl', () => {
 
   it('drops existing_username from the auth callback', () => {
     expect(
-      sanitizeUrl('/auth/callback?error=duplicate_account&existing_username=someone&platform=twitch')
+      sanitizeUrl(
+        '/auth/callback?error=duplicate_account&existing_username=someone&platform=twitch'
+      )
     ).toBe('/auth/callback')
   })
 
