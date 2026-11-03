@@ -23,6 +23,7 @@ package entitlement
 
 import (
 	"context"
+	"errors"
 
 	"github.com/caesar/all-chat/services/payment-service/metrics"
 	"github.com/caesar/all-chat/services/payment-service/patreon"
@@ -50,7 +51,10 @@ func NewService(subs *repository.SubscriptionRepository, recomputer *premium.Rec
 // upserts the subscription row, and — when the subject is known — recomputes the
 // relevant is_premium column. The product is the viewer product iff viewerID is
 // set, otherwise the streamer product; the qualifying threshold follows the
-// product. Only the snapshot's typed fields are stored; the provider payload is
+// product. The row is linked to the subject only while the subject has this
+// Patreon account connected (see SubscriptionRepository.Upsert), so a stale
+// subject is recomputed without premium from this row. Only the snapshot's typed
+// fields are stored; the provider payload is
 // not, because a webhook body carries the patron's email, name and address.
 //
 // At most one of userID / viewerID should be set. It is idempotent and convergent:
@@ -77,8 +81,6 @@ func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, u
 	}
 
 	if err = s.subs.Upsert(ctx, repository.Subscription{
-		UserID:           userID,
-		ViewerID:         viewerID,
 		Product:          product,
 		Provider:         "patreon",
 		ProviderUserID:   snap.PatreonUserID,
@@ -118,4 +120,30 @@ func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, u
 	}
 
 	return status, isPremium, nil
+}
+
+// PruneDisconnected deletes the memberships still linked to a subject that no
+// longer has that Patreon account connected and recomputes each such subject, so
+// premium they kept is revoked. It returns how many rows it deleted. The reconcile
+// pass runs it; disconnect itself already deletes the subject's rows.
+func (s *Service) PruneDisconnected(ctx context.Context) (int, error) {
+	subs, err := s.subs.DeleteDisconnected(ctx)
+	if err != nil {
+		return 0, err
+	}
+	// The rows are gone once deleted, so a later pass cannot retry a failed
+	// recompute: keep going and report every failure rather than stopping early.
+	var errs []error
+	for _, sub := range subs {
+		if sub.UserID != nil {
+			_, err = s.recomputer.Recompute(ctx, *sub.UserID)
+		} else {
+			_, err = s.recomputer.RecomputeViewer(ctx, *sub.ViewerID)
+		}
+		errs = append(errs, err)
+	}
+	if len(subs) > 0 {
+		s.logger.Info("Deleted memberships of disconnected Patreon accounts", zap.Int("count", len(subs)))
+	}
+	return len(subs), errors.Join(errs...)
 }
