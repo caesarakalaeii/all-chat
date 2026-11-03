@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-01
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation; alert media now backed up off-cluster; the consumer passes only alert event types, so the owner-only moderation log never reaches alert overlays)
+**Revised**: 2026-11-03 (brought in line with the current implementation; alert media now backed up off-cluster, to Hetzner and Backblaze B2; the consumer passes only alert event types, so the owner-only moderation log never reaches alert overlays)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
@@ -104,8 +104,8 @@ not a chat overlay, nothing keeps event history, and no service can hold uploade
    they are follow-ups, as is moving the bucket off the hand-provisioned instance (issue
    #948). The bucket is backed up: a nightly `mc mirror` CronJob in caesar-deployment
    (`backup-offsite-mirror`) copies it to Hetzner Object Storage, with a versioned
-   target so a deletion stays recoverable for 30 days (see ADR-0003 → Backups). The
-   Backblaze B2 copy it also made is paused.
+   target so a deletion stays recoverable for 30 days (see ADR-0003 → Backups),
+   and to Backblaze B2 the same way.
 
 ## Consequences
 

@@ -42,7 +42,7 @@ All-Chat is designed as a **Kubernetes-native** application, leveraging Kubernet
 - **Storage**: node-local `local-path` volumes (no CSI snapshots)
 - **Backups**: Postgres WAL + nightly base backups to Hetzner Object Storage
   (30-day PITR window), silo alert media mirrored nightly to the same store;
-  the Backblaze B2 copy is paused. See ADR-0003 → Backups.
+  both are copied nightly to Backblaze B2 (Amsterdam). See ADR-0003 → Backups.
 - **Cost**: ~€50-100/month
 
 **Phase 2+ - Production Scale**:

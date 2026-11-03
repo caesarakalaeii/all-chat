@@ -2,7 +2,7 @@
 
 **Date**: 2025-11-11
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation; backups and PITR wired through the Barman Cloud plugin)
+**Revised**: 2026-11-03 (brought in line with the current implementation; backups and PITR wired through the Barman Cloud plugin; nightly Backblaze B2 copy resumed)
 **Deciders**: Infrastructure Team, Database Lead
 
 ---
@@ -228,11 +228,11 @@ spec:
    - Fewer Stack Overflow answers than the Zalando operator
    - **Mitigation**: Excellent official docs
 
-4. **Backups Depend on One External Store**:
+4. **WAL Archiving Depends on One External Store**:
    - WAL and base backups go to Hetzner Object Storage (see Backups below). A
      wrong key or a missing bucket stops WAL archiving, and Postgres then keeps
-     every unarchived segment until the 20Gi volume fills. A Hetzner outage
-     also leaves no second copy while the Backblaze B2 copy is paused
+     every unarchived segment until the 20Gi volume fills. During a Hetzner outage
+     the nightly Backblaze B2 copy remains, up to a day behind
    - **Mitigation**: `AllChatPostgresWALArchivingFailing` pages on failing or
      stalled archiving long before the disk fills; `AllChatPostgresBackupStale`
      warns when the newest base backup is older than 30h
@@ -325,9 +325,11 @@ Owned by the deployment pipeline (caesar-deployment), like the Cluster:
   `ObjectStore` on Hetzner Object Storage (`apps/workloads/all-chat/backup-objectstore.yaml`).
   The recovery window is 30 days (`retentionPolicy`), to within CNPG's 5-minute
   `archive_timeout`.
-- **Second copy**: paused. The `backup-offsite-mirror` CronJob copied the
-  Barman archive to Backblaze B2 every night; that copy is off until the B2
-  account's processor terms are confirmed, so Hetzner holds the only copy.
+- **Second copy**: the `backup-offsite-mirror` CronJob copies the Barman
+  archive to Backblaze B2 (EU Central region, Amsterdam) every night with
+  `mc mirror --remove`; the B2 bucket is versioned and keeps noncurrent
+  versions for 30 days, like the Hetzner one. Backblaze acts as a processor
+  under the DPA that its Terms of Service incorporate.
 - **Restore**: a new `Cluster` with `bootstrap.recovery` from that
   `ObjectStore` (`externalClusters[].plugin`, `serverName: allchat-cluster`),
   never the live cluster itself. The header of `backup-objectstore.yaml` has
@@ -393,7 +395,7 @@ cluster has not been exercised yet; until it has, the backups are unproven.
 
 **Reason**: Team experience, automated failover (<30s), operational simplicity, cost-effectiveness.
 
-**Trade-off**: Operator dependency, smaller community (but excellent docs); backups depend on Hetzner Object Storage (the Backblaze B2 copy is paused).
+**Trade-off**: Operator dependency, smaller community (but excellent docs); WAL archiving depends on Hetzner Object Storage, with a nightly copy on Backblaze B2.
 
 **Status**: Deployed in production: 3-instance CNPG cluster with automated failover,
 continuous WAL archiving and nightly base backups (30-day PITR window).

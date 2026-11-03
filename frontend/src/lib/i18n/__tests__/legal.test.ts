@@ -823,6 +823,21 @@ describe('privacy policy retention, rights and the rest', () => {
     )
   })
 
+  it('names both backup providers and where the copies are stored', () => {
+    expect(t('legal.privacy.storageBackups')).toBe(
+      'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany) and, as a second copy, in Backblaze B2 (Amsterdam, Netherlands), and are transferred there over encrypted connections (see Sections\u00A05.7 and 6)'
+    )
+    expect(t('legal.privacy.backupsBody')).toBe(
+      'So that the service can be restored after data loss, we keep backups of the database (including account and overlay data, encrypted OAuth tokens and the chat messages and logs retained under Section\u00A06) and of uploaded alert media with Hetzner Online GmbH (Germany), and a second copy with Backblaze, Inc. (US) in its Amsterdam data centre (Netherlands). Both act as processors under Art.\u00A028 DSGVO. The providers only store the backups; we read them only to restore the service. The processing rests on Art.\u00A06(1)(f) DSGVO \u2013 our legitimate interest in not losing your data.'
+    )
+    expect(t('legal.privacy.retentionBackups', { label: 'Backups:' })).toBe(
+      'Backups: kept for 30 days, after which the storage providers erase them within a further 30 days. Data that you delete, or that expires under the periods above, can therefore remain in backups for up to 60 days; it is not used for anything other than restoring the service'
+    )
+    expect(t('legal.privacy.transfersBody')).toMatch(
+      / Our second backup copy is stored with Backblaze, Inc\., a US company, in its Amsterdam data centre \(Netherlands\)\.$/
+    )
+  })
+
   it('keeps the children, transfers, updates and open source sections', () => {
     expect(t('legal.privacy.childrenBody')).toBe(
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.'
