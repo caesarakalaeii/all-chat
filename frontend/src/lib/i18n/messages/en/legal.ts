@@ -201,8 +201,8 @@ export const legal = {
     storagePostgres: 'PostgreSQL for account data, overlays, and encrypted OAuth tokens',
     storageRedis: 'Redis for ephemeral sessions, message fan-out, and rate limiting',
     storageLocation:
-      'All of the above runs on our own infrastructure on servers located in {country} (hosting provider: Hetzner Online GmbH)',
-    storageCountry: 'Germany',
+      'All of the above runs on our own infrastructure on servers located in {country} (hosting provider: Hetzner Online GmbH; data centres in Falkenstein and Nuremberg, Germany, and Helsinki, Finland)',
+    storageCountry: 'Germany and Finland',
     storageBackups:
       'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany), and are transferred there over encrypted connections (see Sections\u00A05.7 and 6)',
     safeguardsEncryption: 'OAuth tokens encrypted with AES-GCM before touching the database',
@@ -311,7 +311,7 @@ export const legal = {
     childrenBody:
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.',
     transfersBody:
-      'All-Chat itself is hosted on servers located in Germany (see Section\u00A04.1). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US.',
+      'All-Chat itself is hosted on servers located in Germany and Finland, both within the EU (see Section\u00A04.1). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US.',
     transfersLegalBasis:
       "Where a provider is certified under the EU–US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded.",
     updatesBody:
