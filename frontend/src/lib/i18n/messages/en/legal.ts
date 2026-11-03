@@ -36,8 +36,7 @@ export const legal = {
     storageEmphasis: 'two essential cookies and browser storage',
     noTrackingBody:
       '{emphasis} We do not share your data with third parties for advertising purposes.',
-    noTrackingEmphasis:
-      'We use no tracking cookies, and our usage analytics are cookieless and store no personal data.',
+    noTrackingEmphasis: 'We use no tracking cookies, and our usage analytics are cookieless.',
     detailsSummary: 'What do we store in your browser?',
     // Each row keeps its bolded label inside the sentence as {label}: the text
     // after the hyphen continues the sentence the label starts, so handing a
@@ -53,7 +52,7 @@ export const legal = {
     noAdsRow: "{label} - We don't serve ads or share data with advertisers",
     noAdsLabel: 'No advertising cookies',
     analyticsRow:
-      '{label} - We measure aggregate usage with self-hosted Umami. It sets no cookies and stores no personal identifier, and public overlays are only counted in aggregate',
+      '{label} - We measure usage with self-hosted Umami. It sets no cookies and recognises returning visitors only by a pseudonymous hash that changes every month. Public overlay pages are counted too, tagged as overlay views',
     analyticsLabel: 'Cookieless analytics',
     fontsNote:
       '{label} All fonts (including ones originally distributed by Google Fonts) are self-hosted on our infrastructure – your IP address is never sent to Google.',
@@ -359,20 +358,24 @@ export const legal = {
     noSalesBody:
       'We never sell or rent your data. We may disclose information when required by law or to respond to legitimate security incidents.',
     analyticsBody:
-      'To understand how the site is used and where to improve it, we run {umami}, an open-source analytics tool that we {selfHost}. It is {cookieless}: it sets no cookies, creates no persistent identifier, and performs no cross-site or cross-device tracking. The data is processed on our own infrastructure and is {notShared} (unlike Google Analytics or similar services).',
+      'To understand how the site is used and where to improve it, we run {umami}, an open-source analytics tool that we {selfHost}. It is {cookieless}: it sets no cookies and performs no cross-site or cross-device tracking. To count unique visitors it derives a pseudonymous visitor hash that changes every month. The data is stored on our own infrastructure. Like all our traffic, requests to the analytics server pass through Cloudflare (Section\u00A04.1); apart from that, the data is {notShared} (unlike Google Analytics or similar services).',
     umamiLinkText: 'Umami',
     analyticsSelfHostEmphasis: 'host ourselves',
     analyticsCookielessEmphasis: 'cookieless',
     analyticsNotSharedEmphasis: 'not shared with any third party',
-    analyticsRecordsIntro: 'For each page view it records aggregate, non-identifying information:',
-    analyticsRecordsPage: 'The page you visited and the referring URL',
-    analyticsRecordsBrowser: 'Browser, operating system, device type, and screen size',
+    analyticsRecordsIntro: 'For each page view it records:',
+    analyticsRecordsPage:
+      'The page you visited, its title and the referring URL. In both URLs we keep only utm_ campaign parameters from the query and replace IDs with a placeholder',
+    analyticsRecordsBrowser:
+      'Browser, operating system, device type, screen size and browser language',
     analyticsRecordsCountry: 'Approximate country, derived from your IP address at request time',
+    analyticsRecordsEvents:
+      'Some interactions, recorded as named events: signing in (with the platform, or the reason it failed), creating an overlay, adding or configuring a source (with its platform), turning on moderation, copying the OBS address, using the overlay editor, onboarding steps, previewing or applying a theme, turning on text-to-speech or sounds, accepting a share, and clicks on buttons and outbound links (with the destination)',
     analyticsIpNote:
-      'Your {ipNotStored}: it is used only momentarily to derive the country and to generate a daily, salted hash for counting unique visits, after which it is discarded. Public overlay pages (the pages OBS loads as a browser source) are only counted as an aggregate overlay view, with the overlay ID removed from the address. Analytics run only on allch.at, not on beta.allch.at. You can block the analytics script with any browser content blocker without affecting the site.',
+      'Your {ipNotStored}: it is used only momentarily to derive the country and, with a salt that changes every month, the visitor hash for counting unique visits, after which it is discarded. Public overlay pages (the pages OBS loads as a browser source) are recorded like other page views, tagged as overlay views and with the overlay ID replaced by a placeholder. Analytics run only on allch.at, not on beta.allch.at. You can block the analytics script with any browser content blocker without affecting the site.',
     analyticsIpNotStoredEmphasis: 'IP address is not stored',
     analyticsConsentNote:
-      'Because the tracker stores no information on, and reads none from, your device, it does not require consent under §\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in measuring and improving the service.',
+      'The tracker stores nothing on your device. To build the record above it reads your screen size, browser language and the page title, and it checks your browser storage for an opt-out flag (umami.disabled); if that flag is set, it sends nothing. We do not ask for consent under §\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in measuring and improving the service.',
     backupsBody:
       'So that the service can be restored after data loss, we keep backups of the database (including account and overlay data, encrypted OAuth tokens and the chat messages and logs retained under Section\u00A06) and of uploaded alert media with Hetzner Online GmbH (Germany), acting as a processor under Art.\u00A028 DSGVO. The provider only stores the backups; we read them only to restore the service. The processing rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in not losing your data.',
     // Retention rows: the bolded label opens the row and the rest continues
@@ -448,7 +451,7 @@ export const legal = {
     cookiesSession:
       'In sessionStorage, until you close the tab: the platform you started signing in with, so that a completed sign-in can be counted in our analytics (Section\u00A05.8)',
     cookiesNoAdvertising:
-      "We do not use advertising cookies or cross-site tracking. We do use {emphasis} (self-hosted Umami) – it sets nothing on your device and stores no personal identifier; see Section\u00A05.8 for the full description. Fonts are self-hosted (Section\u00A05.5) and do not set cookies. The only third-party cookies that can occur come from Twitch's clip player, which the credit roll embeds as a fallback (Section\u00A05.2).",
+      "We do not use advertising cookies or cross-site tracking. We do use {emphasis} (self-hosted Umami) – it sets nothing on your device and recognises returning visitors only by a pseudonymous hash that changes every month; see Section\u00A05.8 for the full description. Fonts are self-hosted (Section\u00A05.5) and do not set cookies. The only third-party cookies that can occur come from Twitch's clip player, which the credit roll embeds as a fallback (Section\u00A05.2).",
     cookielessAnalyticsEmphasis: 'privacy-friendly, cookieless usage analytics',
     childrenBody:
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.',
@@ -493,7 +496,7 @@ export const legal = {
   // are contractual statements, and a reworded term is a different term.
   terms: {
     title: 'Terms of Service (Nutzungsbedingungen)',
-    lastUpdated: 'November 2, 2026',
+    lastUpdated: 'November 3, 2026',
     acceptanceHeading: '1. Acceptance of Terms',
     // The <Link> to the privacy policy sits mid-sentence, so the sentence is
     // whole with the link text as a param. Same shape throughout this section.
@@ -556,7 +559,7 @@ export const legal = {
     // The no-break space before 5.8 was an &nbsp; entity and the dash an
     // &ndash;. Both are part of the rendered text, not markup.
     privacyBody:
-      'Your use of All-Chat is also governed by our {privacy}, which explains what we collect, how it is used, and your rights under the DSGVO. For transparency: All-Chat measures aggregate usage with {analytics} (Umami) that set nothing on your device and store no personal identifier – see Section\u00A05.8 of the Privacy Policy.',
+      'Your use of All-Chat is also governed by our {privacy}, which explains what we collect, how it is used, and your rights under the DSGVO. For transparency: All-Chat measures usage with {analytics} (Umami) that set nothing on your device and recognise returning visitors only by a pseudonymous hash that changes every month – see Section\u00A05.8 of the Privacy Policy.',
     privacyAnalyticsEmphasis: 'self-hosted, cookieless analytics',
     licenseHeading: '10. Open Source License',
     // The link text carries the "(AGPL-3.0)" suffix that the sentence's own

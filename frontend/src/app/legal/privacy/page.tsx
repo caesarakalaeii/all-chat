@@ -423,6 +423,7 @@ export default function PrivacyPolicyPage() {
           <li>{t('legal.privacy.analyticsRecordsPage')}</li>
           <li>{t('legal.privacy.analyticsRecordsBrowser')}</li>
           <li>{t('legal.privacy.analyticsRecordsCountry')}</li>
+          <li>{t('legal.privacy.analyticsRecordsEvents')}</li>
         </ul>
         <p className={noteClasses}>
           {interpolateElements(t('legal.privacy.analyticsIpNote'), {

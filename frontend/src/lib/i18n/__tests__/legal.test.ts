@@ -50,7 +50,7 @@ describe('cookie banner chrome', () => {
       '{emphasis} We do not share your data with third parties for advertising purposes.'
     )
     expect(t('legal.cookieBanner.noTrackingEmphasis')).toBe(
-      'We use no tracking cookies, and our usage analytics are cookieless and store no personal data.'
+      'We use no tracking cookies, and our usage analytics are cookieless.'
     )
   })
 
@@ -89,7 +89,7 @@ describe('cookie banner disclosure list', () => {
     )
     expect(t('legal.cookieBanner.noAdsLabel')).toBe('No advertising cookies')
     expect(t('legal.cookieBanner.analyticsRow')).toBe(
-      '{label} - We measure aggregate usage with self-hosted Umami. It sets no cookies and stores no personal identifier, and public overlays are only counted in aggregate'
+      '{label} - We measure usage with self-hosted Umami. It sets no cookies and recognises returning visitors only by a pseudonymous hash that changes every month. Public overlay pages are counted too, tagged as overlay views'
     )
     expect(t('legal.cookieBanner.analyticsLabel')).toBe('Cookieless analytics')
   })
@@ -557,30 +557,31 @@ describe('privacy policy copy', () => {
       'We never sell or rent your data. We may disclose information when required by law or to respond to legitimate security incidents.'
     )
     expect(t('legal.privacy.analyticsBody')).toBe(
-      'To understand how the site is used and where to improve it, we run {umami}, an open-source analytics tool that we {selfHost}. It is {cookieless}: it sets no cookies, creates no persistent identifier, and performs no cross-site or cross-device tracking. The data is processed on our own infrastructure and is {notShared} (unlike Google Analytics or similar services).'
+      'To understand how the site is used and where to improve it, we run {umami}, an open-source analytics tool that we {selfHost}. It is {cookieless}: it sets no cookies and performs no cross-site or cross-device tracking. To count unique visitors it derives a pseudonymous visitor hash that changes every month. The data is stored on our own infrastructure. Like all our traffic, requests to the analytics server pass through Cloudflare (Section\u00A04.1); apart from that, the data is {notShared} (unlike Google Analytics or similar services).'
     )
     expect(t('legal.privacy.umamiLinkText')).toBe('Umami')
     expect(t('legal.privacy.analyticsSelfHostEmphasis')).toBe('host ourselves')
     expect(t('legal.privacy.analyticsCookielessEmphasis')).toBe('cookieless')
     expect(t('legal.privacy.analyticsNotSharedEmphasis')).toBe('not shared with any third party')
-    expect(t('legal.privacy.analyticsRecordsIntro')).toBe(
-      'For each page view it records aggregate, non-identifying information:'
-    )
+    expect(t('legal.privacy.analyticsRecordsIntro')).toBe('For each page view it records:')
     expect(t('legal.privacy.analyticsRecordsPage')).toBe(
-      'The page you visited and the referring URL'
+      'The page you visited, its title and the referring URL. In both URLs we keep only utm_ campaign parameters from the query and replace IDs with a placeholder'
     )
     expect(t('legal.privacy.analyticsRecordsBrowser')).toBe(
-      'Browser, operating system, device type, and screen size'
+      'Browser, operating system, device type, screen size and browser language'
     )
     expect(t('legal.privacy.analyticsRecordsCountry')).toBe(
       'Approximate country, derived from your IP address at request time'
     )
+    expect(t('legal.privacy.analyticsRecordsEvents')).toBe(
+      'Some interactions, recorded as named events: signing in (with the platform, or the reason it failed), creating an overlay, adding or configuring a source (with its platform), turning on moderation, copying the OBS address, using the overlay editor, onboarding steps, previewing or applying a theme, turning on text-to-speech or sounds, accepting a share, and clicks on buttons and outbound links (with the destination)'
+    )
     expect(t('legal.privacy.analyticsIpNote')).toBe(
-      'Your {ipNotStored}: it is used only momentarily to derive the country and to generate a daily, salted hash for counting unique visits, after which it is discarded. Public overlay pages (the pages OBS loads as a browser source) are only counted as an aggregate overlay view, with the overlay ID removed from the address. Analytics run only on allch.at, not on beta.allch.at. You can block the analytics script with any browser content blocker without affecting the site.'
+      'Your {ipNotStored}: it is used only momentarily to derive the country and, with a salt that changes every month, the visitor hash for counting unique visits, after which it is discarded. Public overlay pages (the pages OBS loads as a browser source) are recorded like other page views, tagged as overlay views and with the overlay ID replaced by a placeholder. Analytics run only on allch.at, not on beta.allch.at. You can block the analytics script with any browser content blocker without affecting the site.'
     )
     expect(t('legal.privacy.analyticsIpNotStoredEmphasis')).toBe('IP address is not stored')
     expect(t('legal.privacy.analyticsConsentNote')).toBe(
-      'Because the tracker stores no information on, and reads none from, your device, it does not require consent under §\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in measuring and improving the service.'
+      'The tracker stores nothing on your device. To build the record above it reads your screen size, browser language and the page title, and it checks your browser storage for an opt-out flag (umami.disabled); if that flag is set, it sends nothing. We do not ask for consent under §\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in measuring and improving the service.'
     )
     expect(t('legal.privacy.backupsBody')).toBe(
       'So that the service can be restored after data loss, we keep backups of the database (including account and overlay data, encrypted OAuth tokens and the chat messages and logs retained under Section\u00A06) and of uploaded alert media with Hetzner Online GmbH (Germany), acting as a processor under Art.\u00A028 DSGVO. The provider only stores the backups; we read them only to restore the service. The processing rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in not losing your data.'
@@ -689,7 +690,7 @@ describe('privacy policy copy', () => {
       'In sessionStorage, until you close the tab: the platform you started signing in with, so that a completed sign-in can be counted in our analytics (Section\u00A05.8)'
     )
     expect(t('legal.privacy.cookiesNoAdvertising')).toBe(
-      "We do not use advertising cookies or cross-site tracking. We do use {emphasis} (self-hosted Umami) – it sets nothing on your device and stores no personal identifier; see Section\u00A05.8 for the full description. Fonts are self-hosted (Section\u00A05.5) and do not set cookies. The only third-party cookies that can occur come from Twitch's clip player, which the credit roll embeds as a fallback (Section\u00A05.2)."
+      "We do not use advertising cookies or cross-site tracking. We do use {emphasis} (self-hosted Umami) – it sets nothing on your device and recognises returning visitors only by a pseudonymous hash that changes every month; see Section\u00A05.8 for the full description. Fonts are self-hosted (Section\u00A05.5) and do not set cookies. The only third-party cookies that can occur come from Twitch's clip player, which the credit roll embeds as a fallback (Section\u00A05.2)."
     )
     expect(t('legal.privacy.cookielessAnalyticsEmphasis')).toBe(
       'privacy-friendly, cookieless usage analytics'
@@ -754,7 +755,7 @@ describe('privacy policy copy', () => {
 describe('terms of service copy', () => {
   it('keeps every terms of service string whole', () => {
     expect(t('legal.terms.title')).toBe('Terms of Service (Nutzungsbedingungen)')
-    expect(t('legal.terms.lastUpdated')).toBe('November 2, 2026')
+    expect(t('legal.terms.lastUpdated')).toBe('November 3, 2026')
     expect(t('legal.terms.acceptanceHeading')).toBe('1. Acceptance of Terms')
     expect(t('legal.terms.acceptanceBody')).toBe(
       'By accessing or using All-Chat you agree to these Terms of Service and our {privacy}. If you disagree with any part, you should discontinue use immediately.'
@@ -850,7 +851,7 @@ describe('terms of service copy', () => {
     )
     expect(t('legal.terms.privacyHeading')).toBe('9. Privacy')
     expect(t('legal.terms.privacyBody')).toBe(
-      'Your use of All-Chat is also governed by our {privacy}, which explains what we collect, how it is used, and your rights under the DSGVO. For transparency: All-Chat measures aggregate usage with {analytics} (Umami) that set nothing on your device and store no personal identifier – see Section\u00A05.8 of the Privacy Policy.'
+      'Your use of All-Chat is also governed by our {privacy}, which explains what we collect, how it is used, and your rights under the DSGVO. For transparency: All-Chat measures usage with {analytics} (Umami) that set nothing on your device and recognise returning visitors only by a pseudonymous hash that changes every month – see Section\u00A05.8 of the Privacy Policy.'
     )
     expect(t('legal.terms.privacyAnalyticsEmphasis')).toBe('self-hosted, cookieless analytics')
     expect(t('legal.terms.licenseHeading')).toBe('10. Open Source License')
