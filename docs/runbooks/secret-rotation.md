@@ -139,6 +139,12 @@ refreshes reactively on 401). When it is a consumer, mount both keys on it too:
 | youtube-listener-innertube | TOKEN\_ENCRYPTION\_KEY\_V1 | token-encryption-key-v1 |
 `tiktok-listener` is Node.js scope — deferred (D-17 partial).
 
+`discord-listener` encrypts Discord relay webhook URLs (`overlay_chat_sources.config.relay_webhook_url`,
+ADR-0091). The sweeper does not cover them: discord-listener re-encrypts them to the current kid
+itself on every relay sync (every 30 s). Mount every `TOKEN_ENCRYPTION_KEY_V<n>` on it like the
+other consumers, and keep an old key mounted until it has run with the new one:
+| discord-listener | TOKEN\_ENCRYPTION\_KEY\_V1 | token-encryption-key-v1 |
+
 ### Step 1 — Determine the current latest kid
 
 ```bash

@@ -174,6 +174,16 @@ func (m *Manager) SyncRelayConfigs(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Unsubscribe from removed overlays, and from overlays whose webhook changed (the relay
+	// moved channel) so the loop below restarts their drain on the new URL.
+	for overlayID, sub := range m.activeSubs {
+		if webhookURL, ok := desired[overlayID]; !ok || webhookURL != m.activeConf[overlayID] {
+			_ = sub.Close()
+			delete(m.activeSubs, overlayID)
+			delete(m.activeConf, overlayID)
+		}
+	}
+
 	// Subscribe to new overlays.
 	for overlayID, webhookURL := range desired {
 		if _, active := m.activeSubs[overlayID]; active {
@@ -187,15 +197,6 @@ func (m *Manager) SyncRelayConfigs(ctx context.Context) error {
 
 		m.wg.Add(1)
 		go m.drainOverlay(ctx, overlayID, sub, webhookURL)
-	}
-
-	// Unsubscribe from removed overlays.
-	for overlayID, sub := range m.activeSubs {
-		if _, ok := desired[overlayID]; !ok {
-			_ = sub.Close()
-			delete(m.activeSubs, overlayID)
-			delete(m.activeConf, overlayID)
-		}
 	}
 
 	if m.logger != nil {

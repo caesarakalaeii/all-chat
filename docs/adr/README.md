@@ -965,6 +965,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0091: Discord relay webhook URLs are encrypted at rest and server-owned
+
+**Status**: ✅ Accepted
+**Date**: 2026-11-03
+**Problem**: The Discord relay webhook URL (a credential: it embeds the webhook token) sat in plaintext in `overlay_chat_sources.config.relay_webhook_url`, was returned to the browser by every overlay-manager source response and shipped in the GDPR data export, and could be set by any client through the source create/PATCH config, which made discord-listener POST chat to whatever URL was stored. A moved relay also kept posting into the old channel, and poster errors logged the full URL.
+**Decision**: discord-listener encrypts the URL with the shared `MultiKeyEncryptor` (`TOKEN_ENCRYPTION_KEY_V<n>`, optional as in the other listeners) and, on every relay sync, decrypts it, re-encrypts plaintext (legacy, recognised by `://`, which base64 never contains) or old-key values in place with a compare-and-set update, and skips values that are undecryptable or not Discord webhook URLs. overlay-manager never returns the key (`ChatSource.MarshalJSON`) and never accepts it from a client; PATCH carries the stored value over only while `relay_channel_id` is unchanged. The relay manager restarts a relay whose URL changed; the data export drops the key; poster errors name only the webhook id.
+**Impact**: No migration or backfill job: legacy rows are encrypted on the first sync once discord-listener has the key, which its deployment must now mount (`allchat-secrets` / `token-encryption-key-v1`). Until then the relay keeps working but new URLs stay plaintext. The key-rotator does not cover this key; discord-listener rotates it itself, so it needs new keys like the other consumers.
+**→ Read**: [0091-discord-relay-webhook-encrypted-and-server-owned.md](./0091-discord-relay-webhook-encrypted-and-server-owned.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number
