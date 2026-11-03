@@ -412,6 +412,19 @@ GET /status
   enforce-mode IRC (ADR-0026) stops that channel's chat entirely until re-consent. This alert did
   not exist during the 2026-09-26 silent-chat-loss incident and the same event produced nothing
   but a log line.
+- `listener_eventsub_helix_responses_total{operation,code}` - every Helix call the subscription
+  manager makes (`create`, `delete`, `get_existing`, `get_user`), by HTTP status (`error` for a
+  transport failure). `code="401"` means Twitch rejected the app access token; the manager then
+  discards the cached token and the next call requests a new one. `AllChatTwitchEventSubAppTokenRejected`
+  (caesar-deployment, critical) fires when 401s keep coming anyway.
+- `listener_eventsub_app_token_requests_total{result}` - client-credentials token requests, `success`
+  or `failure`. `AllChatTwitchEventSubAppTokenUnavailable` (critical) fires when no request
+  succeeded for 10m, which is what a rotated or wrong client secret looks like.
+
+Neither condition shows up in chat volume: subscriptions that already exist keep delivering, so
+only channels that are new, re-linked or revoked go silent. On 2026-11-03 the cached app token was
+invalidated by Twitch well before its expiry, every create and delete returned 401 for hours, and
+the only signal was user reports.
 
 ## Troubleshooting
 
@@ -437,6 +450,10 @@ Should return:
 ```bash
 kubectl logs -n allchat -l app=twitch-eventsub-listener | grep subscription
 ```
+
+**`status 401` / `Invalid OAuth token` on every call:** Twitch rejected the app access token. The
+manager discards it and fetches a new one on the next call, so persistent 401s mean the new token
+is rejected too: check whether the client secret was rotated, then restart the deployment.
 
 **Verify leader election:**
 ```bash
