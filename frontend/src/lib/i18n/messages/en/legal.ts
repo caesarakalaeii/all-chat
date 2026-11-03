@@ -202,7 +202,7 @@ export const legal = {
       'All of the above runs on our own infrastructure on servers located in {country} (hosting provider: Hetzner Online GmbH)',
     storageCountry: 'Germany',
     storageBackups:
-      'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany) and in Backblaze B2 (Amsterdam, Netherlands). They are transferred over encrypted connections, and the Backblaze copy is also encrypted at rest (see Sections\u00A05.7 and 6)',
+      'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany), and are transferred there over encrypted connections (see Sections\u00A05.7 and 6)',
     safeguardsEncryption: 'OAuth tokens encrypted with AES-GCM before touching the database',
     safeguardsHttps:
       'HTTPS at the ingress layer for all external traffic; internal services isolated via Kubernetes network policies',
@@ -254,7 +254,7 @@ export const legal = {
     analyticsConsentNote:
       'Because the tracker stores no information on, and reads none from, your device, it does not require consent under §\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in measuring and improving the service.',
     backupsBody:
-      'So that the service can be restored after data loss, we keep backups of the database (including account and overlay data, encrypted OAuth tokens and the chat messages and logs retained under Section\u00A06) and of uploaded alert media with two storage providers acting as processors under Art.\u00A028 DSGVO: Hetzner Online GmbH (Germany) and Backblaze, Inc. (USA), whose copy is stored in its data center in Amsterdam, Netherlands. The providers only store the backups; we read them only to restore the service. The processing rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in not losing your data.',
+      'So that the service can be restored after data loss, we keep backups of the database (including account and overlay data, encrypted OAuth tokens and the chat messages and logs retained under Section\u00A06) and of uploaded alert media with Hetzner Online GmbH (Germany), acting as a processor under Art.\u00A028 DSGVO. The provider only stores the backups; we read them only to restore the service. The processing rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in not losing your data.',
     // Retention rows: the bolded label opens the row and the rest continues
     // the sentence it starts, per the legal.cookieBanner convention.
     retentionAccount: '{label} kept until you delete your account',
@@ -271,7 +271,7 @@ export const legal = {
     retentionQuotaLogs: '{label} retained for 30 days',
     retentionQuotaLogsLabel: 'YouTube quota audit logs:',
     retentionBackups:
-      '{label} kept for 30 days, after which the storage providers erase them within a further 30 days. Data that you delete, or that expires under the periods above, can therefore remain in backups for up to 60 days; it is not used for anything other than restoring the service',
+      '{label} kept for 30 days, after which the storage provider erases them within a further 30 days. Data that you delete, or that expires under the periods above, can therefore remain in backups for up to 60 days; it is not used for anything other than restoring the service',
     retentionBackupsLabel: 'Backups:',
     // The Art. 15-21 data subject rights. Same {label} shape as the
     // retention rows above.
@@ -309,7 +309,7 @@ export const legal = {
     childrenBody:
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.',
     transfersBody:
-      'All-Chat itself is hosted on servers located in Germany (see Section\u00A04.1); one copy of our backups is stored by Backblaze, Inc. (USA) in its data center in the Netherlands (see Section\u00A05.7). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US. Backblaze is certified under the EU–US Data Privacy Framework.',
+      'All-Chat itself is hosted on servers located in Germany (see Section\u00A04.1). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US.',
     transfersLegalBasis:
       "Where a provider is certified under the EU–US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded.",
     updatesBody:

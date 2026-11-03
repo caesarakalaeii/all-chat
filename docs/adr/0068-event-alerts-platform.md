@@ -99,8 +99,9 @@ not a chat overlay, nothing keeps event history, and no service can hold uploade
    (now the pgsty/silo fork) defers distribution, replication and lifecycle management;
    they are follow-ups, as is moving the bucket off the hand-provisioned instance (issue
    #948). The bucket is backed up: a nightly `mc mirror` CronJob in caesar-deployment
-   (`backup-offsite-mirror`) copies it to Hetzner Object Storage and Backblaze B2, with
-   versioned targets so a deletion stays recoverable for 30 days (see ADR-0003 → Backups).
+   (`backup-offsite-mirror`) copies it to Hetzner Object Storage, with a versioned
+   target so a deletion stays recoverable for 30 days (see ADR-0003 → Backups). The
+   Backblaze B2 copy it also made is paused.
 
 ## Consequences
 
