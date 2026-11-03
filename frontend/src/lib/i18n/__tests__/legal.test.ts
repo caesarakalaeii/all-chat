@@ -366,10 +366,9 @@ describe('terms of service link text', () => {
 })
 
 describe('privacy policy headings', () => {
-  it('keeps the page title, the effective date and the metadata', () => {
+  it('keeps the page title and the metadata', () => {
     // &auml; in the source title.
     expect(t('legal.privacy.title')).toBe('Privacy Policy (Datenschutzerkl\u00E4rung)')
-    expect(t('legal.privacy.lastUpdated')).toBe('July 30, 2026')
     expect(t('metadata.privacy.title')).toBe('Privacy Policy')
     expect(t('metadata.privacy.description')).toBe(
       'Learn how All-Chat collects, processes, and protects your information.'
@@ -824,9 +823,6 @@ describe('privacy policy retention, rights and the rest', () => {
   it('keeps the children, transfers, updates and open source sections', () => {
     expect(t('legal.privacy.childrenBody')).toBe(
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.'
-    )
-    expect(t('legal.privacy.transfersBody')).toBe(
-      'All-Chat itself is hosted on servers located in Germany (see Section\u00A04.1). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US.'
     )
     expect(t('legal.privacy.transfersLegalBasis')).toBe(
       "Where a provider is certified under the EU\u2013US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded."

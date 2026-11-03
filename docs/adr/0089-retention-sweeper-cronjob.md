@@ -177,8 +177,8 @@ files recreate the functions and 118 drops them again on each run.
   (ADR-0003 → Backups) keep WAL and base backups for a 30-day recovery window
   on Hetzner Object Storage and Backblaze B2, and both buckets keep what Barman
   expires for another 30 days as noncurrent versions, so a deleted row survives
-  in the backups for up to about 60 days. The privacy policy's retention
-  section does not yet say so.
+  in the backups for up to about 60 days. The privacy policy says so in its
+  retention section (Backups row) and names both providers in Section 5.7.
 
 ## Implementation
 
