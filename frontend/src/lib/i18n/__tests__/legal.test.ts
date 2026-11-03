@@ -102,10 +102,10 @@ describe('cookie banner disclosure list', () => {
     // Three emphasised runs in one sentence, one of them a link, so the sentence
     // stays whole and each run is its own placeholder.
     expect(t('legal.cookieBanner.thirdPartyNote')).toBe(
-      '{label} Pages that show chat load avatars, badges and emotes from the streaming platforms and emote providers, and the credit-roll theme marketplace loads themes from the {github}. These requests transmit your IP address to the respective providers. See our {privacy} for details.'
+      '{label} Pages that show chat load avatars, badges and emotes from the streaming platforms and emote providers. The alerts editor searches GIFs on KLIPY, the credit roll plays Twitch clips from Twitch, and the credit-roll theme marketplace loads themes from {github}. These requests transmit your IP address to the respective providers. See our {privacy} for details.'
     )
     expect(t('legal.cookieBanner.thirdPartyLabel')).toBe('Third-party resources:')
-    expect(t('legal.cookieBanner.thirdPartyGithub')).toBe('GitHub API')
+    expect(t('legal.cookieBanner.thirdPartyGithub')).toBe('GitHub')
   })
 
   it('keeps the agreement paragraph whole', () => {
@@ -240,7 +240,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.tldrLabel')).toBe('TL;DR:')
     expect(t('legal.privacy.openSourceCallout')).toBe(
-      '{label} All-Chat is licensed under AGPL-3.0. Review the entire codebase—including how we store and process your data—on {github}.'
+      '{label} All-Chat is licensed under AGPL-3.0. Review the application code, including how we store and process your data, on {github}.'
     )
     expect(t('legal.privacy.openSourceCalloutLabel')).toBe('Open Source Transparency:')
     expect(t('legal.privacy.githubLinkText')).toBe('GitHub')
@@ -510,7 +510,7 @@ describe('privacy policy copy', () => {
       'In beta or early access: Owncast (the server you enter), GoodGame, Picarto, Altstream, and Facebook and Instagram (Meta Platforms, Inc., US)'
     )
     expect(t('legal.privacy.platformApisEmotes')).toBe(
-      '7TV, BetterTTV and FrankerFaceZ for emote sets (only channel IDs are sent)'
+      '7TV, BetterTTV and FrankerFaceZ for emote sets. Our servers send them only channel IDs; the browser extension requests emote sets from them directly, which also sends them your IP address'
     )
     expect(t('legal.privacy.platformApisPronouns')).toBe(
       'The alejo.io pronoun service: for overlays with pronoun display turned on (the default; you can switch it off per overlay), we send the Twitch username of each chatter, or the Twitch account a viewer linked, to look up their pronouns, and cache the answer for 24 hours'
@@ -523,7 +523,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.ipAddressEmphasis')).toBe('IP address')
     expect(t('legal.privacy.browserResourcesPlatforms')).toBe(
-      'Avatars, badges, emotes and attachments from Twitch, YouTube, Kick, TikTok and Discord, GIFs in Twitch chat (Giphy), and in beta Picarto and Altstream'
+      'Avatars, badges, emotes and attachments from Twitch, YouTube, Kick, TikTok and Discord, GIFs in Twitch chat (Giphy), images from Picarto (beta) and Altstream (early access), and, in the settings and the editor, the icons of your Discord servers'
     )
     expect(t('legal.privacy.browserResourcesEmotes')).toBe(
       'Emote images from 7TV, BetterTTV and FrankerFaceZ'
@@ -533,7 +533,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.klipyLabel')).toBe('KLIPY')
     expect(t('legal.privacy.browserResourcesGithub')).toBe(
-      '{label} (api.github.com) – loads community themes from our public repository in the credit-roll theme marketplace'
+      '{label} (api.github.com and raw.githubusercontent.com) – loads community themes from our public repository in the credit-roll theme marketplace'
     )
     expect(t('legal.privacy.githubApiLabel')).toBe('GitHub API')
     expect(t('legal.privacy.browserResourcesClips')).toBe(
@@ -544,8 +544,12 @@ describe('privacy policy copy', () => {
       '{label} – images and sounds load from the addresses the streamer configures'
     )
     expect(t('legal.privacy.alertMediaLabel')).toBe('Alert media')
+    expect(t('legal.privacy.browserResourcesTts')).toBe(
+      "{label} – when an overlay reads chat aloud with your browser's built-in voices, some browsers send the text to their vendor to turn it into speech, for example for the online voices in Chrome or Edge"
+    )
+    expect(t('legal.privacy.browserTtsLabel')).toBe('Browser text-to-speech')
     expect(t('legal.privacy.processorsIntro')).toBe(
-      'Besides our hosting provider and Cloudflare (Section\u00A04.1), these services receive data only when you use the feature that needs them:'
+      'Besides our hosting provider and Cloudflare (Section\u00A04.1), these services receive data in the cases below:'
     )
     expect(t('legal.privacy.processorsElevenlabs')).toBe(
       "{label} – if you turn on ElevenLabs text-to-speech with your own API key, the text of each message read aloud, optionally preceded by the sender's display name, is sent from our servers to ElevenLabs under your ElevenLabs account"
@@ -563,6 +567,10 @@ describe('privacy policy copy', () => {
       '{label} – messages addressed to the support bot in our Discord server (Section\u00A02.8)'
     )
     expect(t('legal.privacy.aiLabel')).toBe('AI inference provider')
+    expect(t('legal.privacy.processorsDiscord')).toBe(
+      '{label} – our monitoring alerts are posted to our own Discord server; an alert about a failing source can name its YouTube channel ID or TikTok username'
+    )
+    expect(t('legal.privacy.discordLabel')).toBe('Discord (US)')
     expect(t('legal.privacy.streamerRequestsBody')).toBe(
       "A streamer's chat commands can fetch an address the streamer chooses. That request comes from our servers and can include the name of the viewer who used the command and the text they wrote; who receives it depends only on the streamer's configuration. Likewise, custom code in an alert runs in a sandbox in the browser that shows the alert and can contact any address the streamer's code names."
     )
@@ -769,7 +777,7 @@ describe('privacy policy copy', () => {
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it from our live systems immediately; copies in backups expire within 60 days (Section\u00A06).'
     )
     expect(t('legal.privacy.transfersBody')).toBe(
-      'All-Chat itself is hosted on servers located in Germany and Finland, both within the EU (see Section\u00A04.1). Some recipients are outside the EU: Cloudflare (US), Twitch and Amazon (US), Google, YouTube and Google Cloud (US), TikTok (various), Kick (Australia), Discord (US), Meta (US, beta), Patreon (US), GitHub (US), ElevenLabs (US, only with your own API key), and the emote, GIF and pronoun services named in Section\u00A05.'
+      'All-Chat itself is hosted on servers located in Germany and Finland, both within the EU (see Section\u00A04.1). Some recipients are outside the EU: Cloudflare (US), Twitch Interactive, Inc. (US, an Amazon company), Google, YouTube and Google Cloud (US), TikTok (on servers TikTok chooses, which can be outside the EU), Kick (Australia) and Pusher (UK), whose realtime service Kick uses for chat in one of its two modes, Discord (US), Meta (US, beta), GoodGame (Russia, beta), Patreon (US), GitHub (US), ElevenLabs (US, only with your own API key), and the emote, GIF and pronoun services named in Section\u00A05. Picarto (beta) and Altstream (early access) do not state where they are based, so we treat them as recipients outside the EU. An Owncast server (beta) is wherever its operator runs it.'
     )
     expect(t('legal.privacy.transfersLegalBasis')).toBe(
       "Where a provider is certified under the EU–US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded."
@@ -779,10 +787,10 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.updatesLastUpdatedEmphasis')).toBe('Last Updated')
     expect(t('legal.privacy.openSourceAuditable')).toBe(
-      'All source code is publicly auditable under AGPL-3.0'
+      'The All-Chat application code is publicly auditable under AGPL-3.0'
     )
     expect(t('legal.privacy.openSourceNoTracking')).toBe(
-      'No hidden tracking — our analytics are cookieless and documented (Section\u00A05.8), and the whole stack is verifiable on GitHub'
+      'No hidden tracking: our analytics are cookieless and documented (Section\u00A05.8), and the application code that sends them is verifiable on GitHub. Our server configuration is not public'
     )
     expect(t('legal.privacy.openSourceScrutiny')).toBe(
       'Privacy practices are open to community scrutiny'
@@ -790,20 +798,20 @@ describe('privacy policy copy', () => {
     expect(t('legal.privacy.openSourceRepository')).toBe('Source: {repository}')
     expect(t('legal.privacy.repositoryLinkText')).toBe('github.com/caesarakalaeii/all-chat')
     expect(t('legal.privacy.twitchNote')).toBe(
-      'Through EventSub we receive chat, channel events (follows, subscriptions, bits, raids, channel point redemptions) and, if you enable them, polls, predictions and moderation events. Optional permissions you grant let All-Chat send chat messages, moderate, create clips and post as a bot. We do not access payment data or channel analytics. Disconnecting Twitch in the Settings deletes your stored tokens and revokes them at Twitch.'
+      'Through EventSub we receive chat, channel events (follows, subscriptions, bits and Power-ups, raids, channel point redemptions and chat notices), moderation events (deleted messages, timeouts and bans) and, if you grant the extra permissions, polls, predictions and the moderation log (AutoMod holds and moderator actions). The permissions you grant when adding Twitch as a source include letting the All-Chat bot account read and post in your chat. Optional permissions let All-Chat send chat messages as you, moderate and create clips. We do not access payment data or channel analytics. Disconnecting Twitch in the Settings deletes your stored tokens and revokes them at Twitch. If you sign in with Twitch, you cannot disconnect it.'
     )
     expect(t('legal.privacy.youtubeNote')).toBe(
-      "We read live chat through YouTube's public live chat endpoints or, in the premium official-API mode, the YouTube live chat API. With your permission we read your most recent subscribers for alerts and your subscriber count for goals, and optional permissions let All-Chat send messages and moderate. We do not access video content or channel analytics. API usage is subject to YouTube's quota limits. You can revoke access via {googleSettings}, or disconnect YouTube in the All-Chat Settings, which deletes your stored OAuth tokens and revokes them at Google."
+      "We read live chat through YouTube's public live chat endpoints or, in the premium official-API mode, the YouTube live chat API. With your permission we read your most recent subscribers for alerts and your subscriber count for goals, and optional permissions let All-Chat send messages and time out or ban chatters. We do not access video content or channel analytics. API usage is subject to YouTube's quota limits. You can revoke access via {googleSettings}, or disconnect YouTube in the All-Chat Settings, which deletes your stored OAuth tokens and revokes them at Google. Your YouTube sources then keep reading public chat, which needs no token, until you remove them. If you sign in with YouTube, you cannot disconnect it."
     )
     expect(t('legal.privacy.googleSettingsLinkText')).toBe('Google security settings')
     expect(t('legal.privacy.tiktokNote')).toBe(
-      'TikTok offers no official chat API, so you only enter your TikTok handle and no TikTok login is involved. We read the public LIVE chat and events (gifts, likes, follows, shares) without accessing your videos, followers or other content. Remove the source to stop.'
+      'TikTok offers no official chat API, so you only enter a TikTok handle and no TikTok login is involved. Any public handle can be added; we do not check that it belongs to you. We read the public LIVE chat and events (gifts, likes, follows, shares, subscriptions, questions, Super Fan joins and boxes, and treasure chests) without accessing videos, followers or other content. Removing the source stops it for your overlays; we keep reading that handle while another All-Chat user has it as a source.'
     )
     expect(t('legal.privacy.kickNote')).toBe(
-      "We use Kick's OAuth for sign-in and sources and connect to Kick's realtime service to receive chat. Optional permissions let All-Chat send messages and moderate. We do not access channel analytics or payment data. Disconnecting Kick in the Settings deletes your stored tokens and revokes them at Kick."
+      "We use Kick's OAuth for sign-in and sources and connect to Kick's realtime service to receive chat. When that service runs in its Pusher mode, our servers use the stored Kick token of the account that linked your channel to subscribe to its chat. Optional permissions let All-Chat send messages and moderate. We do not access channel analytics or payment data. Disconnecting Kick in the Settings deletes your stored tokens and revokes them at Kick; your Kick sources then keep reading public chat until you remove them. If you sign in with Kick, you cannot disconnect it."
     )
     expect(t('legal.privacy.discordNote')).toBe(
-      'When you add the All-Chat bot to a server, we store the server ID and name and read messages, including content and attachments, in the channels you configure. Chat from your other platforms can be relayed into a Discord channel through a webhook. We do not read direct messages or channels you did not configure.'
+      'When you add the All-Chat bot to a server, we store the server ID, name and icon and read messages, including content and attachments, in the channels you configure. On your instruction, All-Chat can delete messages there and time out, ban and unban members. Chat from your other platforms can be relayed into a Discord channel through a webhook. If you link your Discord account, we store its Discord user ID and username. We do not read direct messages or channels you did not configure. Removing the server from All-Chat makes the bot leave it.'
     )
     expect(t('legal.privacy.owncastNote')).toBe(
       "You enter the address of an Owncast server. We connect to it anonymously, read its public configuration and register an anonymous chat user there to receive chat. The server's operator, not All-Chat, controls the data on that server."
@@ -812,7 +820,7 @@ describe('privacy policy copy', () => {
       'We read public chat anonymously using the channel name you enter. No login with these platforms is involved, and we never post or moderate there.'
     )
     expect(t('legal.privacy.metaNote')).toBe(
-      'You connect a Facebook Page or an Instagram professional account through Meta. We poll live video comments and, on Facebook, can delete comments and block users on your instruction; Instagram is read-only. Both stay inactive until Meta has approved All-Chat in its app review. Disconnecting deletes the stored tokens and the Facebook or Instagram sources; to revoke the grant at Meta itself, remove All-Chat from the apps connected to your Facebook account.'
+      'You connect a Facebook Page or an Instagram professional account through Meta. On Facebook we poll live video comments and can delete comments and block users on your instruction. Until Meta has approved All-Chat in its app review, this works only for accounts that Meta lets test our app. We currently do not read Instagram comments: connecting Instagram only stores the account and its tokens. Disconnecting deletes the stored tokens and the Facebook or Instagram sources; to revoke the grant at Meta itself, remove All-Chat from the apps connected to your Facebook account.'
     )
     expect(t('legal.privacy.contactEmailRow')).toBe('Email: {email}')
     expect(t('legal.privacy.contactHostedNote')).toBe(

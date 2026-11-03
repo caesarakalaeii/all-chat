@@ -359,6 +359,7 @@ export default function PrivacyPolicyPage() {
           {labelledRow('legal.privacy.browserResourcesGithub', 'legal.privacy.githubApiLabel')}
           {labelledRow('legal.privacy.browserResourcesClips', 'legal.privacy.clipsLabel')}
           {labelledRow('legal.privacy.browserResourcesAlertMedia', 'legal.privacy.alertMediaLabel')}
+          {labelledRow('legal.privacy.browserResourcesTts', 'legal.privacy.browserTtsLabel')}
         </ul>
         <p className={noteClasses}>{t('legal.privacy.browserResourcesLegalBasis')}</p>
 
@@ -369,6 +370,7 @@ export default function PrivacyPolicyPage() {
           {labelledRow('legal.privacy.processorsPatreon', 'legal.privacy.patreonLabel')}
           {labelledRow('legal.privacy.processorsGoogleCloud', 'legal.privacy.googleLabel')}
           {labelledRow('legal.privacy.processorsAi', 'legal.privacy.aiLabel')}
+          {labelledRow('legal.privacy.processorsDiscord', 'legal.privacy.discordLabel')}
         </ul>
 
         <h3 className="text-lg">{t('legal.privacy.streamerRequestsSubheading')}</h3>
