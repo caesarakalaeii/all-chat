@@ -2,13 +2,16 @@
 
 **Date**: 2026-08-18
 **Status**: Accepted — recorded in full as [ADR-0051](./0051-personal-access-tokens-for-non-browser-clients.md)
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 > **Read this first.** The decision described below is real, is built, and is
 > live. Its canonical record is **ADR-0051, "Personal Access Tokens for
 > Non-Browser Clients"**, and that is the number to cite in code comments and
-> commit messages — roughly sixteen non-documentation files already do.
-> This file exists because the work was planned under the number 0049 while
+> commit messages — roughly sixteen non-documentation files already do; a
+> growing minority say "ADR-0049" when they really mean the PAT, so readers
+> need this note to know which of the two they landed on. This file exists
+> because the work was planned under the number 0049 while
 > 0049, 0050 and 0051 were landing in parallel, and a reader who follows an
 > older reference here should find the reasoning rather than a dead end. It
 > restates that reasoning rather than deciding anything separately; where the

@@ -1,7 +1,8 @@
 # ADR-0024: Streamer Send-to-All Combined Pill via Pre-Register + Reconcile
 
 **Date**: 2026-06-22
-**Status**: ✅ Accepted
+**Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: Caesar
 
 ## Context and Problem Statement

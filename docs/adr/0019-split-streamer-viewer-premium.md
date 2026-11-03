@@ -2,6 +2,7 @@
 
 **Date**: 2026-06-20
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -74,7 +75,7 @@ We want a **cheaper, separately-priced viewer subscription** that grants only vi
 
 ### Negative
 - One Patreon account grants premium to a single all-chat identity (documented limitation).
-- Modifies the just-built, not-yet-deployed ADR-0018 tables via migration 064 (acceptable: 063 is not in production, and a forward migration is the auditable path — 063 is not edited).
+- Adds the viewer product via a forward migration (064) beside ADR-0018's tables rather than editing 063, keeping the auditable migration history.
 - A new viewer-JWT-authenticated inbound surface inside payment-service (small; reuses existing verify + isolation).
 - Streamer→viewer inheritance revocation is *eventually* convergent (on next viewer activity / reconcile), not instant, unless a cascade from the user recompute is added (deferred; no worse than today).
 
@@ -83,10 +84,10 @@ We want a **cheaper, separately-priced viewer subscription** that grants only vi
 - **Migration**: `migrations/064_viewer_premium_product.sql` (+ `_down`).
 - **Shared**: `shared/premium/recompute.go` — add `RecomputeViewer(viewerID)` (reuses `Effective`); keep `Recompute` for users.
 - **payment-service**: subject-aware `entitlement.Apply` (`Subject{UserID, ViewerID, Product}`, per-product threshold); `repository` token+subscription carry `viewer_id`/`product`, `GetByPatreonUserID` returns the subject, `ListAll` returns subjects; viewer connect/status/disconnect handlers; subject in OAuth-state; reconcile iterates both subjects; `cmd/main.go` adds `PATREON_VIEWER_MIN_TIER_CENTS` + viewer routes + viewer-JWT middleware.
-- **auth-service**: `LinkViewerToUser` and `SetViewerPremium` route through `RecomputeViewer`; admin writes `viewers.premium_admin_override` (tri-state), mirroring share-service's `UpdateUserPremium`.
+- **auth-service**: `LinkViewerToUser` and `SetViewerPremium` route through `RecomputeViewer`; admin writes `viewers.premium_admin_override` (tri-state, with the ADR-0027 optional expiry), mirroring share-service's `UpdateUserPremium`.
 - **Gateway**: `service_config.go` already routes `/api/v1/payment/*`; add the viewer connect routes (public callback already covered).
-- **Frontend**: a viewer-facing subscribe/pricing page (viewer-authenticated) mirroring `settings/premium`, + `lib/api/payment.ts` viewer methods; clarify per-product entitlements.
-- **Config**: `PATREON_VIEWER_MIN_TIER_CENTS` (configmap + `.env.example`).
+- **Frontend**: `frontend/src/app/settings/viewer/premium/page.tsx` (viewer-facing connect/status page, mirroring `settings/premium`) served by `lib/api/viewer.ts` viewer-premium methods (`getPremiumStatus` / `startPatreonConnect` / `disconnectPatreon`).
+- **Config**: `PATREON_VIEWER_MIN_TIER_CENTS` (`deployments/k8s/base/configmap.yaml` + `.env.example`).
 - **Tests**: unit (`Effective` reused; product/threshold mapping; subject resolution); testcontainers E2E mirroring ADR-0018 (viewer webhook flips `viewers.is_premium`; admin-override survives lapse; inheritance preserved; one-subject CHECK); migration 064 re-run idempotency.
 
 ## Related Decisions

@@ -2,6 +2,7 @@
 
 **Date**: 2026-04-08
 **Status**: Accepted
+**Revised**: 2026-11-03 (notes that IRC enforce mode in production means Twitch chat no longer flows through the IRC path the guard was built for)
 
 ---
 
@@ -19,6 +20,8 @@ Add received-vs-published message drift detection to the twitch-listener livenes
 
 - **`messagesReceived`**: incremented on each IRC PRIVMSG (in `handlePrivateMessage`).
 - **`messagesPublished`**: incremented after each successful ring buffer accept (in `handlePrivateMessage`, after `publisher.Publish` returns nil).
+
+Since the IRC deprecation entered enforce mode in production (ADR-0026), the listener joins no chat channels, so the IRC receive/publish path this guard was built for no longer carries chat traffic; Twitch chat now flows through the EventSub listener, which has the shared ring-buffer protection. The detector remains wired and operational as designed.
 
 If `received` advances but `published` has not advanced for `stallWindow` (default 5 minutes), `IsZombie()` returns `true` and the liveness probe returns HTTP 503.
 
