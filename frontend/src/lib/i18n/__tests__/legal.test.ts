@@ -465,7 +465,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.storageCountry')).toBe('Germany and Finland')
     expect(t('legal.privacy.storageBackups')).toBe(
-      'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany), and are transferred there over encrypted connections (see Sections\u00A05.9 and 6)'
+      'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany) and, as a second copy, in Backblaze B2 (Amsterdam, Netherlands), and are transferred there over encrypted connections (see Sections\u00A05.9 and 6)'
     )
     expect(t('legal.privacy.storageCloudflare')).toBe(
       'All traffic to allch.at passes through Cloudflare, Inc. (US), which provides DNS, TLS and protection against attacks as our processor. Cloudflare therefore sees your IP address and the requests you make, including overlay and chat traffic.'
@@ -549,7 +549,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.browserTtsLabel')).toBe('Browser text-to-speech')
     expect(t('legal.privacy.processorsIntro')).toBe(
-      'Besides our hosting provider and Cloudflare (Section\u00A04.1), these services receive data in the cases below:'
+      'Besides our hosting and backup providers and Cloudflare (Sections\u00A04.1 and 5.9), these services receive data in the cases below:'
     )
     expect(t('legal.privacy.processorsElevenlabs')).toBe(
       "{label} – if you turn on ElevenLabs text-to-speech with your own API key, the text of each message read aloud, optionally preceded by the sender's display name, is sent from our servers to ElevenLabs under your ElevenLabs account"
@@ -616,7 +616,7 @@ describe('privacy policy copy', () => {
       'The tracker stores nothing on your device. To build the record above it reads your screen size, browser language and the page title, and it checks your browser storage for an opt-out flag (umami.disabled); if that flag is set, it sends nothing. We do not ask for consent under §\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in measuring and improving the service.'
     )
     expect(t('legal.privacy.backupsBody')).toBe(
-      'So that the service can be restored after data loss, we keep backups of the database (including account and overlay data, encrypted OAuth tokens and the chat messages and logs retained under Section\u00A06) and of uploaded alert media with Hetzner Online GmbH (Germany), acting as a processor under Art.\u00A028 DSGVO. The provider only stores the backups; we read them only to restore the service. The processing rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in not losing your data.'
+      'So that the service can be restored after data loss, we keep backups of the database (including account and overlay data, encrypted OAuth tokens and the chat messages and logs retained under Section\u00A06) and of uploaded alert media with Hetzner Online GmbH (Germany), and a second copy with Backblaze, Inc. (US) in its Amsterdam data centre (Netherlands). Both act as processors under Art.\u00A028 DSGVO. The providers only store the backups; we read them only to restore the service. The processing rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in not losing your data.'
     )
     expect(t('legal.privacy.retentionAccount')).toBe(
       '{label} kept until you delete them or your account'
@@ -711,7 +711,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.retentionSupportEmailLabel')).toBe('Support emails:')
     expect(t('legal.privacy.retentionBackups')).toBe(
-      '{label} kept for 30 days, after which the storage provider erases them within a further 30 days. Data that you delete, or that expires under the periods above, can therefore remain in backups for up to 60 days; it is not used for anything other than restoring the service'
+      '{label} kept for 30 days, after which the storage providers erase them within a further 30 days. Data that you delete, or that expires under the periods above, can therefore remain in backups for up to 60 days; it is not used for anything other than restoring the service'
     )
     expect(t('legal.privacy.retentionBackupsLabel')).toBe('Backups:')
     expect(t('legal.privacy.rightsIntro')).toBe('You can exercise the following at any time:')
@@ -777,7 +777,7 @@ describe('privacy policy copy', () => {
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it from our live systems immediately; copies in backups expire within 60 days (Section\u00A06).'
     )
     expect(t('legal.privacy.transfersBody')).toBe(
-      'All-Chat itself is hosted on servers located in Germany and Finland, both within the EU (see Section\u00A04.1). Some recipients are outside the EU: Cloudflare (US), Twitch Interactive, Inc. (US, an Amazon company), Google, YouTube and Google Cloud (US), TikTok (on servers TikTok chooses, which can be outside the EU), Kick (Australia) and Pusher (UK), whose realtime service Kick uses for chat in one of its two modes, Discord (US), Meta (US, beta), GoodGame (Russia, beta), Patreon (US), GitHub (US), ElevenLabs (US, only with your own API key), and the emote, GIF and pronoun services named in Section\u00A05. Picarto (beta) and Altstream (early access) do not state where they are based, so we treat them as recipients outside the EU. An Owncast server (beta) is wherever its operator runs it.'
+      'All-Chat itself is hosted on servers located in Germany and Finland, both within the EU (see Section\u00A04.1). Some recipients are outside the EU: Cloudflare (US), Backblaze (US; our backup copy is stored in its Amsterdam data centre), Twitch Interactive, Inc. (US, an Amazon company), Google, YouTube and Google Cloud (US), TikTok (on servers TikTok chooses, which can be outside the EU), Kick (Australia) and Pusher (UK), whose realtime service Kick uses for chat in one of its two modes, Discord (US), Meta (US, beta), GoodGame (Russia, beta), Patreon (US), GitHub (US), ElevenLabs (US, only with your own API key), and the emote, GIF and pronoun services named in Section\u00A05. Picarto (beta) and Altstream (early access) do not state where they are based, so we treat them as recipients outside the EU. An Owncast server (beta) is wherever its operator runs it.'
     )
     expect(t('legal.privacy.transfersLegalBasis')).toBe(
       "Where a provider is certified under the EU–US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded."
