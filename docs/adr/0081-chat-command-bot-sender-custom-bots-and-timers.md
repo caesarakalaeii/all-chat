@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-23
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -151,4 +152,4 @@ an admin and exists for Twitch and YouTube only. The admin page is
   feature reaches beta.allch.at once its backend is on main. It stays behind the
   `chat_commands` early-access gate and the beta-only `/commands` page.
 - **Supersedes in part.** ADR-0079's "a reply is posted from the streamer's own
-  account" and "timers are left out" no longer hold.
+  account" and "timers are left out" no longer hold; its body says so.

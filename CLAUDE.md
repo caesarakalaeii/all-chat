@@ -156,7 +156,7 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 - The same reasoning applies one directory down, which is where this rule was learned the hard way. Written as a rule about the repo root, it moved the problem rather than solving it: the identical documents reappeared in `docs/` and reached roughly 9,000 lines. They lasted because they cross-link almost only to each other, so the cluster looks referenced from the inside while nothing living points at it. (On 2026-09-02 that cluster was deleted: 18 files — metrics and events write-ups, a documentation-refactoring report, a quota checkpoint, an OAuth checklist, two service-level implementation summaries, and five stale `.txt` files that were either raw YouTube API dumps or offline copies of Google's own docs pages. Their names are deliberately not listed here, because a rule that recites the banned filenames is itself a file that matches them; recover them from git history if you need them. No index of them was left behind, on purpose.)
 - **The default answer is the PR description, not a committed file.** Write the point-in-time account in the pull request or the commit body, where it is dated, attributed and never has to be maintained. `docs/phase-reports/` is the one exception, for a lasting record that genuinely needs to outlive the PR — and it is an exception to argue for, not a default to reach for. If it will not be maintained, it does not go in the tree.
 - Three questions decide what to do with an existing doc. Does it describe a single past change? Delete it. Does it state facts about how the system works today? Fix those facts in place. Does it record a decision and why it was taken? Leave it alone — and if it is stale but still the only record of a rationale, give it a dated deprecation banner as its first line instead of deleting it.
-- `docs/adr/` is exempt and off-limits. ADRs are the historical record by design; a superseded one has its `Status:` updated at most. Never delete one, never banner one.
+- `docs/adr/` describes the current state. An ADR records a decision *and* how the system implements it today: when code changes what an ADR says, fix the ADR body in the same change, fold amendments from later ADRs into it (with a cross-link), and add or bump a `**Revised**: YYYY-MM-DD` line under `**Status**`. A replaced ADR gets `Superseded by ADR-XXXX` and a body that points at its successor; a removed feature gets `Withdrawn`. Never delete an ADR or renumber one.
 
 **Update docs in the same change as the code.** When you change behavior, update the living docs it affects in the same PR: `README.md`, `CLAUDE.md`, `docs/GETTING_STARTED.md`, the relevant `services/*/README.md`, and the ADR index. A doc that contradicts the code is worse than no doc.
 
@@ -232,7 +232,7 @@ services/<service-name>/
 Listeners (Twitch/YouTube/Kick/TikTok/Discord/Owncast/GoodGame/Picarto/Altstream/Facebook/Instagram)
   ↓ publish raw messages
 Redis Streams (chat:raw)
-  ↓ consume via XREADGROUP (group: message-processors)
+  ↓ consume via XREADGROUP (group: message-processor)
 Message Processor
   ├─ Normalize (platform → unified format)
   ├─ Enrich (7TV, BTTV, FFZ emotes)

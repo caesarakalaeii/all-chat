@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-22
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -117,8 +118,10 @@ code that dials it.
 - **Storage.** `chat_commands.image_url` (migration 114) is a template of at
   most 1000 characters. An image alone is enough for a command to be valid.
 - **Rendering.** It is rendered with the chatter's input withheld: `{user}`,
-  `{query}`, `{1}`…`{9}`, `{touser}` and their JS globals are empty. It must
-  come out as an absolute https URL or nothing is shown. `{urlfetch}` and
+  `{query}` and the `{1}`…`{9}`/`{touser}` arguments and their JS globals are
+  empty (`chatcmd.ImageURL` in
+  `services/engagement-service/chatcmd/fetch.go`). It must come out as an
+  absolute https URL or nothing is shown. `{urlfetch}` and
   `{js}` work, so `!dog` can show an image from an API.
 - **Delivery.** When a command with an image fires, engagement-service
   publishes a `chat_command` alert (`shared/alerts`) on `overlay:{id}:alerts`
@@ -141,8 +144,8 @@ code that dials it.
   name our IP. The User-Agent identifies the feature, and per-command cooldowns
   plus the preview rate limit bound the volume.
 - **Images need an alerts overlay.** Creating one is behind the
-  `alerts_overlay` premium gate, so for most accounts images are effectively
-  premium today. The `chat_commands` gate stays open.
+  `alerts_overlay` premium gate (migration 108), so for most accounts images
+  are effectively premium today.
 - **The guard is in code.** Any new code that dials a user-chosen URL must use
   `shared/safehttp`. overlay-manager's Owncast name lookup
   (`SourcesHandler.httpClient`) is never set in production, so it never
@@ -152,6 +155,6 @@ code that dials it.
 - **Staging.**
   - The owncast-listener runs from `:beta`, so its fix ships with the beta
     merge.
-  - urlfetch and images need engagement-service, overlay-manager (it saves a
-    `chat_command` profile) and the api-gateway (it applies the image) on
-    `:main`, like the rest of ADR-0079.
+  - urlfetch and images need engagement-service, overlay-manager (it saves the
+    `chat_command` alert profile) and the api-gateway (it resolves the image
+    through `alerts.Resolve`) on `:main`, like the rest of ADR-0079.

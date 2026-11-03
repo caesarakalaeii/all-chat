@@ -151,7 +151,7 @@ Messages not showing up?
 │
 └─ Messages arrive delayed (>5 seconds)?
    ├─ Redis Streams backlog high?
-   │  Solution: Check XPENDING chat:raw message-processors
+   │  Solution: Check XPENDING chat:raw message-processor
    │  Guide: QUICK-REF-REDIS-OPERATIONS.md#streams-backlog
    │
    ├─ Message Processor slow?
