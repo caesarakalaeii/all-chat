@@ -600,10 +600,10 @@ describe('privacy policy usage, storage and sharing', () => {
     expect(t('legal.privacy.storageRedis')).toBe(
       'Redis for ephemeral sessions, message fan-out, and rate limiting'
     )
-    expect(t('legal.privacy.storageLocation', { country: 'Germany' })).toBe(
-      'All of the above runs on our own infrastructure on servers located in Germany (hosting provider: Hetzner Online GmbH)'
+    expect(t('legal.privacy.storageLocation', { country: 'Germany and Finland' })).toBe(
+      'All of the above runs on our own infrastructure on servers located in Germany and Finland (hosting provider: Hetzner Online GmbH; data centres in Falkenstein and Nuremberg, Germany, and Helsinki, Finland)'
     )
-    expect(t('legal.privacy.storageCountry')).toBe('Germany')
+    expect(t('legal.privacy.storageCountry')).toBe('Germany and Finland')
     expect(t('legal.privacy.safeguardsEncryption')).toBe(
       'OAuth tokens encrypted with AES-GCM before touching the database'
     )
@@ -826,6 +826,9 @@ describe('privacy policy retention, rights and the rest', () => {
   it('keeps the children, transfers, updates and open source sections', () => {
     expect(t('legal.privacy.childrenBody')).toBe(
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.'
+    )
+    expect(t('legal.privacy.transfersBody')).toMatch(
+      /^All-Chat itself is hosted on servers located in Germany and Finland, both within the EU \(see Section\u00A04\.1\)\./
     )
     expect(t('legal.privacy.transfersLegalBasis')).toBe(
       "Where a provider is certified under the EU\u2013US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded."
