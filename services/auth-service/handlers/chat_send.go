@@ -642,12 +642,23 @@ func (h *ChatSendHandler) refreshStreamerTokenIfNeeded(ctx context.Context, user
 	return nil
 }
 
+// streamerTwitchBroadcasterID returns the streamer's Twitch id when the streamer can send
+// to Twitch as themselves: only a Twitch-login account holds a Twitch token on its users
+// row. A Kick or YouTube account can carry a linked twitch_id, but its users-row token is
+// for its own platform, and Twitch rejects it.
+func streamerTwitchBroadcasterID(user *models.User) (string, bool) {
+	if user.AuthProvider != "twitch" || user.TwitchID == nil || *user.TwitchID == "" {
+		return "", false
+	}
+	return *user.TwitchID, true
+}
+
 // sendStreamerTwitchMessage sends a message to Twitch chat as the streamer (broadcaster)
 func (h *ChatSendHandler) sendStreamerTwitchMessage(ctx context.Context, user *models.User, message string) error {
-	if user.TwitchID == nil || *user.TwitchID == "" {
+	broadcasterID, ok := streamerTwitchBroadcasterID(user)
+	if !ok {
 		return fmt.Errorf("no Twitch account linked")
 	}
-	broadcasterID := *user.TwitchID
 
 	reqBody := map[string]string{
 		"broadcaster_id": broadcasterID,
@@ -950,8 +961,8 @@ func (h *ChatSendHandler) handleStreamerSendToAll(c *gin.Context, ctx context.Co
 	// Candidate platforms: those the streamer has a platform identity on. senderID is
 	// the platform-native id that appears as the author on the echoed-back message.
 	idsByPlatform := map[string]string{}
-	if user.TwitchID != nil && *user.TwitchID != "" {
-		idsByPlatform["twitch"] = *user.TwitchID
+	if twitchID, ok := streamerTwitchBroadcasterID(user); ok {
+		idsByPlatform["twitch"] = twitchID
 	}
 	if _, kickID, kickErr := h.resolveKickSender(ctx, user); kickErr == nil {
 		idsByPlatform["kick"] = kickID
