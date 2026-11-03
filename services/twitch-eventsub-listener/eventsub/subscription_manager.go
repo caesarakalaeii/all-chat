@@ -24,10 +24,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 )
 
@@ -38,6 +41,23 @@ const (
 	// TokenURL is the OAuth token endpoint for app access tokens
 	TokenURL = "https://id.twitch.tv/oauth2/token"
 )
+
+// Every Helix call this package makes, by operation and HTTP status ("error" for a transport
+// failure). code="401" is the app access token being rejected: on 2026-11-03 Twitch invalidated
+// the cached token long before its expires_in, every create/delete returned 401 for hours, and
+// nothing alerted because chat on already-existing subscriptions kept flowing.
+var helixResponsesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "listener_eventsub_helix_responses_total",
+	Help: "Twitch Helix responses seen by the EventSub subscription manager, by operation (create|delete|get_existing|get_user) and HTTP status code (\"error\" = transport failure). Sustained code=\"401\" means Twitch rejects the app access token.",
+}, []string{"operation", "code"})
+
+// Client-credentials token requests. result="failure" means no app token can be obtained at all
+// (wrong or rotated client secret, id.twitch.tv down): every subscription call then fails before
+// reaching Helix.
+var appTokenRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "listener_eventsub_app_token_requests_total",
+	Help: "Twitch client-credentials (app access token) requests, by result (success|failure).",
+}, []string{"result"})
 
 // SubscriptionManager manages EventSub subscriptions via the Twitch API
 type SubscriptionManager struct {
@@ -85,24 +105,42 @@ func (sm *SubscriptionManager) getAccessToken(ctx context.Context) (string, erro
 		return sm.accessToken, nil
 	}
 
-	// Request new token using client credentials flow
+	token, expiresIn, err := sm.requestAppToken(ctx)
+	if err != nil {
+		appTokenRequestsTotal.WithLabelValues("failure").Inc()
+		return "", err
+	}
+	appTokenRequestsTotal.WithLabelValues("success").Inc()
+
+	sm.accessToken = token
+	sm.tokenExpiry = time.Now().Add(expiresIn)
+
+	sm.logger.Info("Obtained app access token",
+		zap.Duration("expires_in", time.Until(sm.tokenExpiry)),
+	)
+
+	return sm.accessToken, nil
+}
+
+// requestAppToken runs the client-credentials flow. Caller holds sm.mu.
+func (sm *SubscriptionManager) requestAppToken(ctx context.Context) (string, time.Duration, error) {
 	tokenURL := fmt.Sprintf("%s?client_id=%s&client_secret=%s&grant_type=client_credentials",
 		sm.tokenURL, sm.clientID, sm.clientSecret)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create token request: %w", err)
+		return "", 0, fmt.Errorf("failed to create token request: %w", err)
 	}
 
 	resp, err := sm.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to request token: %w", err)
+		return "", 0, fmt.Errorf("failed to request token: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("token request failed with status %d: %s", resp.StatusCode, string(body))
+		return "", 0, fmt.Errorf("token request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var tokenResp struct {
@@ -112,17 +150,41 @@ func (sm *SubscriptionManager) getAccessToken(ctx context.Context) (string, erro
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf("failed to decode token response: %w", err)
+		return "", 0, fmt.Errorf("failed to decode token response: %w", err)
 	}
 
-	sm.accessToken = tokenResp.AccessToken
-	sm.tokenExpiry = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+	return tokenResp.AccessToken, time.Duration(tokenResp.ExpiresIn) * time.Second, nil
+}
 
-	sm.logger.Info("Obtained app access token",
-		zap.Duration("expires_in", time.Until(sm.tokenExpiry)),
-	)
+// helixDo sends a Helix request authorized with token and records its outcome. A 401 evicts the
+// cached app token so the next call fetches a fresh one: Twitch can invalidate an app token well
+// before its expires_in, and the cache used to keep sending the dead token until the pod
+// restarted (2026-11-03: every subscription create and delete failed for hours).
+func (sm *SubscriptionManager) helixDo(req *http.Request, operation, token string) (*http.Response, error) {
+	resp, err := sm.httpClient.Do(req)
+	if err != nil {
+		helixResponsesTotal.WithLabelValues(operation, "error").Inc()
+		return nil, err
+	}
+	helixResponsesTotal.WithLabelValues(operation, strconv.Itoa(resp.StatusCode)).Inc()
+	if resp.StatusCode == http.StatusUnauthorized {
+		sm.evictAppToken(token)
+	}
+	return resp, nil
+}
 
-	return sm.accessToken, nil
+// evictAppToken drops the cached app token if it is still the one Twitch rejected. The equality
+// check keeps a late 401 from discarding a token another call already replaced, and makes a 401
+// on a user token (SubscribeWithUserToken) a no-op.
+func (sm *SubscriptionManager) evictAppToken(rejected string) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if rejected == "" || rejected != sm.accessToken {
+		return
+	}
+	sm.accessToken = ""
+	sm.tokenExpiry = time.Time{}
+	sm.logger.Warn("Twitch rejected the app access token (401); discarded it, the next call requests a new one")
 }
 
 // SubscribeChannelPoints creates a subscription for channel point redemptions
@@ -485,7 +547,7 @@ func (sm *SubscriptionManager) Unsubscribe(ctx context.Context, broadcasterID st
 		req.Header.Set("Client-Id", sm.clientID)
 		req.Header.Set("Authorization", "Bearer "+token)
 
-		resp, err := sm.httpClient.Do(req)
+		resp, err := sm.helixDo(req, "delete", token)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("failed to delete subscription %s: %w", key, err)
@@ -510,6 +572,11 @@ func (sm *SubscriptionManager) Unsubscribe(ctx context.Context, broadcasterID st
 			}
 		}
 		resp.Body.Close()
+		// The token was just evicted; the rest of the batch would only repeat the 401. The cache
+		// entries stay, so the next sync retries them with a fresh token.
+		if resp.StatusCode == http.StatusUnauthorized {
+			break
+		}
 	}
 
 	return firstErr
@@ -540,7 +607,7 @@ func (sm *SubscriptionManager) UnsubscribeType(ctx context.Context, broadcasterI
 	req.Header.Set("Client-Id", sm.clientID)
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := sm.httpClient.Do(req)
+	resp, err := sm.helixDo(req, "delete", token)
 	if err != nil {
 		return fmt.Errorf("failed to delete subscription: %w", err)
 	}
@@ -622,7 +689,7 @@ func (sm *SubscriptionManager) subscribeWithCondition(ctx context.Context, subsc
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := sm.httpClient.Do(req)
+	resp, err := sm.helixDo(req, "create", token)
 	if err != nil {
 		return "", fmt.Errorf("failed to create subscription: %w", err)
 	}
@@ -709,7 +776,7 @@ func (sm *SubscriptionManager) getExistingSubscriptionID(ctx context.Context, su
 	req.Header.Set("Client-Id", sm.clientID)
 	req.Header.Set("Authorization", "Bearer "+token)
 
-	resp, err := sm.httpClient.Do(req)
+	resp, err := sm.helixDo(req, "get_existing", token)
 	if err != nil {
 		return "", fmt.Errorf("failed to get existing subscription: %w", err)
 	}
@@ -783,7 +850,7 @@ func (sm *SubscriptionManager) GetUserIDByLogin(ctx context.Context, login strin
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Client-Id", sm.clientID)
 
-	resp, err := sm.httpClient.Do(req)
+	resp, err := sm.helixDo(req, "get_user", token)
 	if err != nil {
 		return "", fmt.Errorf("failed to get user: %w", err)
 	}
