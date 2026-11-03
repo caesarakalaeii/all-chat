@@ -26,6 +26,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 )
@@ -220,6 +221,46 @@ WHERE id = $1
 	}
 
 	return nil
+}
+
+// ErrPlatformIDTaken means another account already owns the platform id, so it was not
+// recorded on this one.
+var ErrPlatformIDTaken = errors.New("platform id already belongs to another account")
+
+// platformIDColumns maps a platform to its users column. Facebook and Instagram have none.
+var platformIDColumns = map[string]string{
+	"twitch":  "twitch_id",
+	"youtube": "google_id",
+	"kick":    "kick_id",
+}
+
+// SetPlatformID records a linked platform identity on the user, so a later login with that
+// platform finds this account. It only fills an empty column: an id already recorded stays,
+// whichever value it holds. Reports whether the column now holds platformID.
+func (r *UserRepository) SetPlatformID(ctx context.Context, userID, platform, platformID string) (bool, error) {
+	column, ok := platformIDColumns[platform]
+	if !ok || platformID == "" {
+		return false, nil
+	}
+
+	var stored *string
+	err := r.db.QueryRow(ctx,
+		`UPDATE users SET `+column+` = COALESCE(`+column+`, $2), updated_at = NOW()
+		 WHERE id = $1
+		 RETURNING `+column,
+		userID, platformID,
+	).Scan(&stored)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return false, ErrPlatformIDTaken
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrUserNotFound
+		}
+		return false, fmt.Errorf("failed to set %s: %w", column, err)
+	}
+	return stored != nil && *stored == platformID, nil
 }
 
 // Delete removes a user by ID

@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-13
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-03 (brought in line with the current implementation; linked platform ids now persisted)
 **Deciders**: All-Chat Platform Team
 
 ---
@@ -95,9 +95,18 @@ Consumers extend their lookups to both credential sources:
   EventSub partition. Under ADR-0015 that was a fallback to IRC; since ADR-0026's enforce phase
   dropped IRC, the channel's chat goes quiet until the credential is repaired (re-add with
   `force_verify`).
-- `linkPlatformToUser` still does not persist `google_id`/`kick_id`/`twitch_id` on users (known
-  gap, unchanged by this ADR): account *linking* as an identity feature remains unimplemented;
-  this ADR only fixes credential storage for chat reading.
+- Linking now also records the platform id on the account. `linkPlatformToUser` calls
+  `UserRepository.SetPlatformID`, which fills `twitch_id`/`google_id`/`kick_id` only when the
+  column is empty and leaves it alone when another account already owns the id. Migration 121
+  backfills `twitch_id` and `kick_id` from `twitch_oauth_tokens` / `kick_oauth_tokens` for links
+  made before, skipping ids that another account owns or that more than one account linked
+  (YouTube is not backfilled: `youtube_oauth_tokens` stores channel ids, not the Google id).
+  A login with a linked platform therefore lands on the linking account; before, it missed the
+  account, tried to create a second one and failed on the username index ("Failed to process
+  user", 2026-11-03). That login authenticates only: profile fields, tokens and `granted_scopes`
+  on the users row stay the login provider's (`linkMayReplacePrimaryCredentials`). Streamer sends
+  as themselves to Twitch still require a Twitch-login account, because only that account holds
+  a Twitch token on its users row.
 
 ## Verification
 
