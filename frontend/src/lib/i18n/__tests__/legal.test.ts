@@ -495,6 +495,9 @@ describe('privacy policy collection sections', () => {
     expect(t('legal.privacy.authProfileImages')).toBe('Profile images provided by the platform')
     expect(t('legal.privacy.authTokens')).toBe('Encrypted OAuth access and refresh tokens')
     expect(t('legal.privacy.authScopes')).toBe('Token scopes and expiration dates')
+    expect(t('legal.privacy.authTermsAcceptance')).toBe(
+      'Whether and when you accepted the current Terms of Service and this Privacy Policy'
+    )
   })
 
   it('keeps the chat data list and its retention sentence', () => {

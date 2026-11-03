@@ -106,6 +106,8 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW(),
 			onboarding_completed_at TIMESTAMP NULL,
+			tos_accepted BOOLEAN NOT NULL DEFAULT FALSE,
+			tos_accepted_at TIMESTAMP NULL,
 			CONSTRAINT check_auth_ids CHECK (
 				(auth_provider = 'twitch' AND twitch_id IS NOT NULL) OR
 				(auth_provider = 'youtube' AND google_id IS NOT NULL) OR
@@ -989,6 +991,73 @@ func TestUserRepository_SetOnboardingCompleted(t *testing.T) {
 	// Unknown user surfaces ErrUserNotFound.
 	if _, err := repo.SetOnboardingCompleted(ctx, "550e8400-e29b-41d4-a716-446655440000", true); err != ErrUserNotFound {
 		t.Errorf("SetOnboardingCompleted(unknown) error = %v, want ErrUserNotFound", err)
+	}
+}
+
+// TestUserRepository_AcceptTos covers the terms-acceptance lifecycle: fresh users
+// read false through scanUser (so the prompt shows), accepting flips it, and the
+// operator reset for changed terms (a plain UPDATE) re-arms the prompt.
+func TestUserRepository_AcceptTos(t *testing.T) {
+	pool, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	repo := newTestUserRepository(t, pool)
+	ctx := context.Background()
+
+	twitchID := "555000222"
+	testUser := &models.User{
+		TwitchID:       &twitchID,
+		AuthProvider:   "twitch",
+		Username:       "tos_user",
+		DisplayName:    "ToS User",
+		AccessToken:    "access",
+		RefreshToken:   "refresh",
+		TokenExpiresAt: time.Now().Add(24 * time.Hour),
+	}
+	if err := repo.Create(ctx, testUser); err != nil {
+		t.Fatalf("Failed to create test user: %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, testUser.ID)
+	if err != nil {
+		t.Fatalf("GetByID() failed: %v", err)
+	}
+	if got.TosAccepted {
+		t.Error("fresh user TosAccepted = true, want false")
+	}
+
+	if err := repo.AcceptTos(ctx, testUser.ID); err != nil {
+		t.Fatalf("AcceptTos() failed: %v", err)
+	}
+	got, err = repo.GetByID(ctx, testUser.ID)
+	if err != nil {
+		t.Fatalf("GetByID() failed: %v", err)
+	}
+	if !got.TosAccepted {
+		t.Error("TosAccepted still false after accepting")
+	}
+	var acceptedAt *time.Time
+	if err := pool.QueryRow(ctx, `SELECT tos_accepted_at FROM users WHERE id = $1`, testUser.ID).Scan(&acceptedAt); err != nil {
+		t.Fatalf("read tos_accepted_at: %v", err)
+	}
+	if acceptedAt == nil {
+		t.Error("tos_accepted_at not stamped on acceptance")
+	}
+
+	// Terms changed: the operator resets the column and the prompt is back.
+	if _, err := pool.Exec(ctx, `UPDATE users SET tos_accepted = FALSE`); err != nil {
+		t.Fatalf("reset tos_accepted: %v", err)
+	}
+	got, err = repo.GetByID(ctx, testUser.ID)
+	if err != nil {
+		t.Fatalf("GetByID() failed: %v", err)
+	}
+	if got.TosAccepted {
+		t.Error("TosAccepted = true after reset, want false")
+	}
+
+	if err := repo.AcceptTos(ctx, "550e8400-e29b-41d4-a716-446655440000"); err != ErrUserNotFound {
+		t.Errorf("AcceptTos(unknown) error = %v, want ErrUserNotFound", err)
 	}
 }
 
