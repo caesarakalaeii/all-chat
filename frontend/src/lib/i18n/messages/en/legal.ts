@@ -162,6 +162,8 @@ export const legal = {
     authProfileImages: 'Profile images provided by the platform',
     authTokens: 'Encrypted OAuth access and refresh tokens',
     authScopes: 'Token scopes and expiration dates',
+    authTermsAcceptance:
+      'Whether and when you accepted the current Terms of Service and this Privacy Policy',
     chatIntro: 'For active overlays we temporarily process:',
     chatMessages: 'Messages flowing through connected channels',
     chatMetadata: 'Message metadata (timestamps, emotes, badges, highlights)',
@@ -443,5 +445,21 @@ export const legal = {
     // <code> elements.
     operatorHint:
       'If you are the operator: mount a ConfigMap containing your Impressum HTML to {path} or set the {variable} environment variable. See the deployment documentation for details.',
+  },
+  // The blocking post-login prompt shown while users.tos_accepted is false:
+  // for new accounts on their first login and for everyone after a reset when
+  // the terms change, so the copy fits both. Both documents are links the user
+  // can open (new tab) before accepting.
+  tosAcceptance: {
+    title: 'Terms of Service and Privacy Policy',
+    body: 'Please read our {terms} and {privacy} and accept them to continue using All-Chat.',
+    termsLinkText: 'Terms of Service',
+    privacyLinkText: 'Privacy Policy',
+    newTabHint: 'Opens in a new tab',
+    agreement: 'I have read and accept the Terms of Service and the Privacy Policy.',
+    accept: 'Accept',
+    accepting: 'Saving…',
+    logout: 'Log out',
+    error: 'Your acceptance could not be saved. Please try again.',
   },
 } as const

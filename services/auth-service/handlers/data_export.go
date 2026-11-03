@@ -86,7 +86,7 @@ var streamerExportSections = []exportSection{
 		SELECT id, username, display_name, profile_image_url, auth_provider, twitch_id, google_id, kick_id,
 		       is_premium, premium_admin_override, premium_admin_override_expires_at,
 		       is_beta_tester, is_ambassador, is_admin, is_banned, banned_at, banned_reason,
-		       onboarding_completed_at, created_at, updated_at
+		       onboarding_completed_at, tos_accepted, tos_accepted_at, created_at, updated_at
 		FROM users WHERE id = $1`},
 
 	// Which platform accounts are connected and what they may do; never the tokens themselves.

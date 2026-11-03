@@ -240,7 +240,8 @@ Authorization: Bearer <jwt-token>
 ### User Profile
 
 ```bash
-# Current user (includes onboarding_completed_at; null = first-run setup guide is shown)
+# Current user (includes onboarding_completed_at; null = first-run setup guide is shown,
+# and tos_accepted; false = the post-login Terms of Service prompt is shown)
 GET /api/v1/auth/me
 Authorization: Bearer <jwt-token>
 
@@ -250,6 +251,16 @@ PATCH /api/v1/auth/me/onboarding
 Authorization: Bearer <jwt-token>
 Body: { "completed": true }
 → Returns: { "onboarding_completed_at": "2026-07-17T12:00:00Z" }
+
+# Accept the current Terms of Service and Privacy Policy (sets users.tos_accepted = TRUE
+# and stamps tos_accepted_at). Rejected with 403 during admin impersonation and for
+# personal access tokens. There is no API to un-accept. Migration 122 marked every
+# existing account as accepted and makes new accounts accept on their first login;
+# when the terms change, re-arm the prompt for everyone in the database with
+# `UPDATE users SET tos_accepted = FALSE;`.
+POST /api/v1/auth/me/tos-acceptance
+Authorization: Bearer <jwt-token>
+→ Returns: { "tos_accepted": true }
 ```
 
 ### Data export (DSGVO Art. 15/20)

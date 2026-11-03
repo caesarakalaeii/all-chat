@@ -735,8 +735,9 @@ func main() {
 	{
 		// Auth service - protected routes
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest)  // DSGVO Art. 20 data portability
-		protectedAPI.PATCH("/auth/me/onboarding", proxyHandler.ForwardRequest) // first-run setup guide state
+		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest)     // DSGVO Art. 20 data portability
+		protectedAPI.PATCH("/auth/me/onboarding", proxyHandler.ForwardRequest)    // first-run setup guide state
+		protectedAPI.POST("/auth/me/tos-acceptance", proxyHandler.ForwardRequest) // post-login Terms of Service acceptance
 		protectedAPI.POST("/auth/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/stop-impersonation", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)

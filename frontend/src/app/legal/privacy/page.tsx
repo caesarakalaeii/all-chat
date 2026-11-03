@@ -137,6 +137,7 @@ export default function PrivacyPolicyPage() {
             <li>{t('legal.privacy.authProfileImages')}</li>
             <li>{t('legal.privacy.authTokens')}</li>
             <li>{t('legal.privacy.authScopes')}</li>
+            <li>{t('legal.privacy.authTermsAcceptance')}</li>
           </ul>
           <p className={noteClasses}>{t('legal.privacy.authLegalBasis')}</p>
         </div>
