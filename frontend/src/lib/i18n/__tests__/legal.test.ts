@@ -841,7 +841,7 @@ describe('terms of service copy', () => {
     expect(t('legal.terms.privacyLinkText')).toBe('Privacy Policy')
     expect(t('legal.terms.descriptionHeading')).toBe('2. Description of Service')
     expect(t('legal.terms.descriptionBody')).toBe(
-      'All-Chat combines live chat and events from Twitch, YouTube, Kick, TikTok and Discord, and in beta or early access from Owncast, GoodGame, Picarto, Altstream, Facebook and Instagram, into overlays you show on your stream: chat, alerts, goals, lists and credit rolls. It also lets you send chat messages, moderate across platforms, run chat commands, bots, timers, polls, predictions and a points game, have chat read aloud, and connect the browser extension, desktop plugins and API tokens. You broadcast overlays via OBS or any browser source.'
+      'All-Chat combines live chat and events from Twitch, YouTube, Kick, TikTok and Discord, and in beta or early access from Owncast, GoodGame, Picarto, Altstream and Facebook, into overlays you show on your stream: chat, alerts and credit rolls, and on beta.allch.at also goals and lists. It also lets you send chat messages, moderate across platforms, run polls, predictions and a points game, have chat read aloud, and connect the browser extension, desktop plugins and API tokens. On beta.allch.at it also runs chat commands, custom bots and timers. You broadcast overlays via OBS or any browser source.'
     )
     expect(t('legal.terms.accountsHeading')).toBe('3. Accounts & Authentication')
     expect(t('legal.terms.accountsIntro')).toBe(
@@ -894,7 +894,7 @@ describe('terms of service copy', () => {
       'You are responsible for your content and for what your custom code, chat commands, bots and alert media do. Uploaded media can be opened by anyone who has its address. We may remove content that breaks these Terms or the law.'
     )
     expect(t('legal.terms.contentTranslations')).toBe(
-      'Translations you contribute are published as part of All-Chat under the AGPL-3.0. By submitting them you confirm that you may license them on those terms.'
+      'Translations you contribute that we accept are published as part of All-Chat under the AGPL-3.0. By submitting them you confirm that you may license them on those terms.'
     )
     expect(t('legal.terms.thirdPartyHeading')).toBe('6. Third-Party Integrations')
     expect(t('legal.terms.thirdPartyIntro')).toBe(
@@ -910,7 +910,7 @@ describe('terms of service copy', () => {
       'Platform-specific quotas can impact overlay functionality'
     )
     expect(t('legal.terms.thirdPartyUnofficial')).toBe(
-      "Some integrations (TikTok, YouTube's public chat endpoints, Picarto, Twitch clip playback) use unofficial interfaces that the platform can change or block at any time"
+      "Some integrations (TikTok, YouTube's public chat endpoints, Kick chat, Picarto, Twitch clip playback) use unofficial interfaces that the platform can change or block at any time"
     )
     expect(t('legal.terms.thirdPartyOwnAccounts')).toBe(
       'Services you connect with your own account or API key, such as ElevenLabs or Patreon, are governed by their own terms'
@@ -925,7 +925,7 @@ describe('terms of service copy', () => {
     )
     expect(t('legal.terms.pointsHeading')).toBe('8. Points, Polls & Predictions')
     expect(t('legal.terms.pointsBody')).toBe(
-      "Points are a virtual score a streamer awards within their own overlay. They have no monetary value and cannot be bought, sold, transferred to another streamer's overlay or paid out. Predictions are a game played with these points only. Streamers are responsible for running polls, predictions and points in line with the platforms' rules and the law that applies to them."
+      "Points are a virtual score within a streamer's overlay. Viewers earn them under rules the streamer sets: for watching, and for subscribing, gifting subscriptions, cheering bits or sending Super Chats on the platform. All-Chat does not sell points. They have no monetary value, cannot be transferred to another viewer or to another streamer's overlay, and cannot be paid out. Their only use is predictions, a game played with these points only. Streamers are responsible for running polls, predictions and points in line with the platforms' rules and the law that applies to them."
     )
     expect(t('legal.terms.privacyHeading')).toBe('9. Privacy')
     expect(t('legal.terms.privacyBody')).toBe(
@@ -987,7 +987,7 @@ describe('terms of service copy', () => {
     )
     expect(t('legal.terms.changesHeading')).toBe('15. Changes to Terms')
     expect(t('legal.terms.changesBody')).toBe(
-      'We may update these Terms over time. Material changes will be announced in the dashboard, and the new version will be posted here with an updated effective date.'
+      'We may update these Terms over time. When we make material changes, we post the new version here with an updated date and ask streamers to accept it in a prompt after their next login. Viewers who only use the browser extension, the participation page or the viewer settings are not shown that prompt.'
     )
     expect(t('legal.terms.terminationHeading')).toBe('16. Termination')
     expect(t('legal.terms.terminationBody')).toBe(

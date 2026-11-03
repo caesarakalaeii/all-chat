@@ -20,6 +20,7 @@ import Link from 'next/link'
 import LegalLayout from '@/components/legal/LegalLayout'
 import { getTranslations } from '@/lib/i18n'
 import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
+import { PATREON_PAGE_URL } from '@/lib/constants'
 
 // getTranslations, not the hook: this route is a Server Component.
 const t = getTranslations()
@@ -241,7 +242,7 @@ export default function TermsOfServicePage() {
           {interpolateElements(t('legal.terms.premiumBody'), {
             patreon: (
               <a
-                href="https://www.patreon.com"
+                href={PATREON_PAGE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={linkClasses}
