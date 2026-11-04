@@ -279,11 +279,11 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ### ADR-0016: Per-Link Twitch Credentials for Non-Twitch-Login Accounts
 
-**Status**: ✅ Accepted (revised 2026-11-03)
+**Status**: ✅ Accepted (revised 2026-11-04)
 **Date**: 2026-06-13
 **Problem**: The EventSub partition predicate matched chat grants only on Twitch-login users rows, which belong to the login provider; YouTube/Kick-login streamers completing the Twitch add-source consent had nowhere to persist the grant (and the platform-ID link itself was silently dropped). Verified in production: 11 of 46 IRC-partitioned channels had no self-service path to EventSub at all.
 **Decision**: Store add-source Twitch credentials per link in `twitch_oauth_tokens` (migration 056), keyed by `(user_id, twitch_login)` with encrypted tokens and `granted_scopes`, written only when the flow is the Twitch add-source from a non-Twitch-login account. Consumers look at both credential sources: overlay-manager's `chat_via_eventsub` predicate, a `LEFT JOIN LATERAL` credential union in twitch-eventsub-listener (valid+scoped first, users row breaks ties), and a `twitch_link` token type in token-refresh-service.
-**Impact**: "Connect Twitch" works identically for every account type and lands these accounts on the EventSub listener, which ADR-0026's enforce phase left as the only Twitch chat path; a channel is EventSub-eligible through either source with a deterministic choice. If a linked credential dies, the channel's chat goes quiet until the credential is repaired (re-add with `force_verify`). Since 2026-11-03 linking also records the platform id on the account (migration 121 backfills older Twitch and Kick links), so a login with a linked platform reaches the linking account; it authenticates only and never replaces the login provider's profile, tokens or scopes.
+**Impact**: "Connect Twitch" works identically for every account type and lands these accounts on the EventSub listener, which ADR-0026's enforce phase left as the only Twitch chat path; a channel is EventSub-eligible through either source with a deterministic choice. If a linked credential dies, the channel's chat goes quiet until the credential is repaired (re-add with `force_verify`). Since 2026-11-03 linking also records the platform id on the account (migration 121 backfills older Twitch and Kick links), so a login with a linked platform reaches the linking account; it authenticates only and never replaces the login provider's profile, tokens or scopes. Disconnecting that platform in Settings clears the id again (ADR-0090).
 **→ Read**: [0016-linked-twitch-credentials.md](./0016-linked-twitch-credentials.md)
 
 ---
@@ -964,10 +964,10 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **→ Read**: [0089-retention-sweeper-cronjob.md](./0089-retention-sweeper-cronjob.md)
 ### ADR-0090: Disconnecting a linked platform deletes its tokens
 
-**Status**: Accepted (2026-11-02)
+**Status**: Accepted (2026-11-02, revised 2026-11-04)
 **Problem**: The privacy policy promised that OAuth tokens are deleted on disconnect, but Twitch, YouTube, Kick, Facebook and Instagram links (and delegated-moderator credentials) had no disconnect, and viewer unlink kept the session's tokens.
 **Decision**: `GET`/`DELETE /api/v1/auth/me/connections[/:platform]` (session-only) behind a Settings card. A disconnect deletes the platform's token rows and moderator credential in one transaction, then revokes them at Twitch, Google or Kick best effort (Meta has no revoke). Facebook and Instagram sources are removed with their token; Twitch, YouTube and Kick sources stay and fall back (Twitch stops, YouTube reads via InnerTube, Kick subscribes without auth). The sign-in platform is refused and goes only with the account. Viewer unlink wipes and revokes the unlinked session's tokens. youtube-listener's refresh write-back no longer UPSERTs.
-**Impact**: The policy is true for every linked platform. Platform user id columns stay; reconnecting stores new tokens.
+**Impact**: The policy is true for every linked platform. The disconnect also clears the platform's id column on `users` (`twitch_id`/`google_id`/`kick_id`), so that platform stops signing in to the account; reconnecting stores new tokens and records it again.
 **→ Read**: [0090-disconnecting-a-linked-platform.md](./0090-disconnecting-a-linked-platform.md)
 
 ---

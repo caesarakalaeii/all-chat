@@ -280,7 +280,9 @@ DELETE /api/v1/auth/me/connections/:platform
 ```
 
 A disconnect deletes, in one transaction, every row the user holds in that platform's
-token table and (Twitch, YouTube, Kick) their delegated-moderator credential, then
+token table and (Twitch, YouTube, Kick) their delegated-moderator credential, and
+clears the platform's id on the `users` row (`twitch_id`, `google_id`, `kick_id`) that
+linking records, so that platform no longer signs in to the account. It then
 revokes the deleted tokens at Twitch, Google or Kick (`oauth/revoke.go`). Revocation is
 best effort and never fails the request; Meta has no revoke for the stored Page token.
 Facebook and Instagram sources are removed from the user's overlays in the same

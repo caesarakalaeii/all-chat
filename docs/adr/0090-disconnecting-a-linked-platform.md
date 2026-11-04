@@ -2,6 +2,7 @@
 
 **Date**: 2026-11-02
 **Status**: Accepted
+**Revised**: 2026-11-04 (a disconnect also clears the platform id that linking records on the account)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -34,7 +35,9 @@ api-gateway, session-only, refused while impersonating) and
 
 1. **Delete first, then revoke.** One transaction deletes every row the user holds
    in the platform's token table and, for Twitch, YouTube and Kick, their
-   `mod_oauth_credentials` row. Only then are the deleted tokens sent to the
+   `mod_oauth_credentials` row, and clears the platform's id column on `users`
+   (`twitch_id`, `google_id` or `kick_id`), which linking fills so that platform's login
+   reaches the account (ADR-0016). Only then are the deleted tokens sent to the
    provider's revoke endpoint (Twitch `id.twitch.tv/oauth2/revoke`, Google
    `oauth2.googleapis.com/revoke`, Kick `id.kick.com/oauth/revoke`), each distinct
    token once, refresh token first. A provider that refuses or is down is logged;
@@ -84,9 +87,12 @@ api-gateway, session-only, refused while impersonating) and
 
 - Each linked platform has a working disconnect, and the privacy policy is true for
   them. The sign-in platform's tokens go only with the account.
-- The platform user id columns on `users` (`twitch_id`, `google_id`, `kick_id`) are
-  identifiers, not tokens, and are left alone; reconnecting through add-source stores
-  new tokens.
+- A disconnected platform no longer signs in to the account: its id column on `users`
+  is cleared with the tokens, so the account stops claiming that platform account and
+  another account may link it. Reconnecting through add-source stores new tokens and
+  records the id again. A login with the disconnected platform is then a login with an
+  unknown account; it creates a new one, or fails on the username index when the name
+  is taken (as before linked ids were recorded).
 - A Twitch EventSub subscription created by a pod that restarted before the
   disconnect is not tracked by the new leader and is not deleted by this sync
   (pre-existing; the listener has no orphan sweep).

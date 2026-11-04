@@ -117,8 +117,9 @@ func (r *UserRepository) ListPlatformConnections(ctx context.Context, userID str
 
 // DisconnectPlatform deletes, in one transaction, every OAuth token the user holds
 // for a linked platform: its per-link token table and, where the platform has them,
-// the user's delegated-moderator credentials. It returns the deleted tokens
-// decrypted so the caller can revoke them at the provider.
+// the user's delegated-moderator credentials. It also clears the platform id linking
+// recorded on the users row, so that platform no longer signs in to the account. It
+// returns the deleted tokens decrypted so the caller can revoke them at the provider.
 //
 // The login provider is refused with ErrLoginPlatform: its tokens on the users row
 // are how the account exists, and its per-link rows are rewritten on every sign-in.
@@ -161,6 +162,12 @@ func (r *UserRepository) DisconnectPlatform(ctx context.Context, userID, platfor
 			return nil, fmt.Errorf("failed to delete %s moderator credentials: %w", platform, err)
 		}
 		removed = append(removed, mod...)
+	}
+	// Undo SetPlatformID: the disconnected platform must stop signing in to this account.
+	if column, ok := platformIDColumns[platform]; ok {
+		if _, err := tx.Exec(ctx, `UPDATE users SET `+column+` = NULL, updated_at = NOW() WHERE id = $1`, userID); err != nil {
+			return nil, fmt.Errorf("failed to clear linked %s id: %w", platform, err)
+		}
 	}
 	if t.sourcesNeedToken {
 		if _, err := tx.Exec(ctx, `

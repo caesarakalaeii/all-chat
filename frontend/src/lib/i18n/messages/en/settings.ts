@@ -60,11 +60,11 @@ export const settings = {
     disconnecting: 'Disconnecting…',
     disconnectTitle: 'Disconnect {platform}?',
     effectTwitch:
-      'This deletes your Twitch tokens and asks Twitch to revoke them. Your Twitch sources stay on your overlays but stop receiving chat, and sending and moderation on Twitch stop, until you connect Twitch again.',
+      'This deletes your Twitch tokens and asks Twitch to revoke them. Your Twitch sources stay on your overlays but stop receiving chat, and sending and moderation on Twitch stop, until you connect Twitch again. Until then, you also cannot sign in to this account with Twitch.',
     effectYoutube:
-      'This deletes your YouTube tokens and asks Google to revoke them. Your YouTube sources keep reading public streams, which needs no token. Unlisted and members-only streams, subscriber alerts, sending and moderation on YouTube stop until you connect YouTube again.',
+      'This deletes your YouTube tokens and asks Google to revoke them. Your YouTube sources keep reading public streams, which needs no token. Unlisted and members-only streams, subscriber alerts, sending and moderation on YouTube stop until you connect YouTube again. Until then, you also cannot sign in to this account with YouTube.',
     effectKick:
-      'This deletes your Kick tokens and asks Kick to revoke them. Your Kick sources keep receiving chat. Sending and moderation on Kick stop until you connect Kick again.',
+      'This deletes your Kick tokens and asks Kick to revoke them. Your Kick sources keep receiving chat. Sending and moderation on Kick stop until you connect Kick again. Until then, you also cannot sign in to this account with Kick.',
     effectFacebook:
       'This deletes your Facebook Page tokens and removes your Facebook sources from your overlays. Meta offers no way for us to revoke the token, so also remove All-Chat from the apps connected to your Facebook account.',
     effectInstagram:

@@ -73,6 +73,9 @@ describe('ConnectedPlatformsCard', () => {
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByText('Disconnect YouTube?')).toBeInTheDocument()
     expect(within(dialog).getByText(/asks Google to revoke them/)).toBeInTheDocument()
+    expect(
+      within(dialog).getByText(/cannot sign in to this account with YouTube/)
+    ).toBeInTheDocument()
     // Nothing is deleted until the user confirms.
     expect(mockDelete).not.toHaveBeenCalled()
 

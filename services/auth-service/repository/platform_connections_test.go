@@ -190,6 +190,41 @@ func TestDisconnectPlatform_DeletesEveryCredentialOfThatPlatformOnly(t *testing.
 	}
 }
 
+// Linking records the platform id on the users row so that platform's login finds the
+// account (SetPlatformID, ADR-0016). Disconnecting must undo that too: otherwise the
+// disconnected platform still signs in to the account, and no other account can link it.
+func TestDisconnectPlatform_ClearsTheLinkedPlatformID(t *testing.T) {
+	repo, streamer, bystander, cleanup := connectionsTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+	for platform, id := range map[string]string{"twitch": "1001", "kick": "2002"} {
+		recorded, err := repo.SetPlatformID(ctx, streamer, platform, id)
+		if err != nil || !recorded {
+			t.Fatalf("SetPlatformID(%s) = %v, %v", platform, recorded, err)
+		}
+	}
+
+	if _, err := repo.DisconnectPlatform(ctx, streamer, "twitch"); err != nil {
+		t.Fatalf("DisconnectPlatform: %v", err)
+	}
+
+	ids := func(userID string) (twitch, kick, google *string) {
+		must(t, repo.db.QueryRow(ctx, `SELECT twitch_id, kick_id, google_id FROM users WHERE id = $1`, userID).
+			Scan(&twitch, &kick, &google))
+		return
+	}
+	twitch, kick, google := ids(streamer)
+	if twitch != nil {
+		t.Errorf("twitch_id = %q after disconnecting Twitch, want NULL", *twitch)
+	}
+	if kick == nil || *kick != "2002" || google == nil || *google != "streamer" {
+		t.Errorf("kick_id = %v, google_id = %v: other platform ids must stay", kick, google)
+	}
+	if twitch, _, _ := ids(bystander); twitch == nil || *twitch != "bystander" {
+		t.Errorf("bystander twitch_id = %v, want untouched", twitch)
+	}
+}
+
 func TestDisconnectPlatform_MetaPlatformsHaveNoRefreshToken(t *testing.T) {
 	repo, streamer, _, cleanup := connectionsTestRepo(t)
 	defer cleanup()
