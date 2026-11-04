@@ -178,6 +178,11 @@ without any real streaming platform. It only ever targets the fixed test overlay
 (`TEST_STREAM_OVERLAY_ID`, seeded by migration `058`). Disable with
 `TEST_STREAM_ENABLED=false`.
 
+The public status page depends on it: status.allch.at's end-to-end chat
+delivery row (caesar-deployment `apps/workloads/status`, ADR-0085) opens a
+passive socket on this overlay and starts a 5 s run every minute. Disabling the
+generator or changing the overlay id turns that row red.
+
 **Just connect — no trigger needed.** A `DemandWatcher` reuses the api-gateway
 connection-presence signal (`overlay:connected:{id}` / the `overlay:connections`
 channel — the same demand signal the youtube-listener uses). The moment a client
@@ -364,7 +369,10 @@ normalizers := map[string]normalizer.Normalizer{
 - API Gateway subscribes to these channels
 - Fan-out to all overlays displaying this chat source: the chat overlays only
   (`overlay_type = 'chat'`, `router/overlay_router.go`). Alerts/goal/list overlays
-  carry the same sources but are fed by the alert-processor (ADR-0070)
+  carry the same sources but are fed by the alert-processor (ADR-0070). A shared
+  overlay reaches a recipient overlay only while a share of the sender overlay to
+  that overlay's owner is `accepted`; revoking or expiring it stops the route at
+  once, even if other people still hold a share of the same overlay
 
 ```go
 // publisher/pubsub.go

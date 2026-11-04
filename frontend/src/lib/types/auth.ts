@@ -53,3 +53,14 @@ export interface User {
 export interface LoginResponse {
   auth_url: string
 }
+
+/** A linked platform whose OAuth tokens the account can hold (GET /auth/me/connections). */
+export type ConnectablePlatform = 'twitch' | 'youtube' | 'kick' | 'facebook' | 'instagram'
+
+export interface PlatformConnection {
+  platform: ConnectablePlatform
+  /** The channel, login or Page names the tokens belong to. */
+  accounts: string[]
+  /** The platform the account signs in with; its tokens go only with the account. */
+  is_login: boolean
+}

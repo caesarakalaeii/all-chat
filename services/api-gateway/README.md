@@ -179,6 +179,8 @@ registration in [`cmd/main.go`](./cmd/main.go).
 | GET | `/api/v1/auth/me/data-export` | Yes | DSGVO Art. 15/20 data export |
 | PATCH | `/api/v1/auth/me/onboarding` | Yes | Finish or re-arm the first-run setup guide |
 | POST | `/api/v1/auth/me/tos-acceptance` | Yes | Accept the current Terms of Service and Privacy Policy |
+| GET | `/api/v1/auth/me/connections` | Yes | Platforms whose OAuth tokens the account holds (ADR-0090) |
+| DELETE | `/api/v1/auth/me/connections/:platform` | Yes | Disconnect a linked platform: delete and revoke its tokens (ADR-0090) |
 | POST | `/api/v1/auth/logout` | Yes | Logout |
 
 ### Overlay Manager Routes
@@ -301,7 +303,7 @@ The gateway logs all requests with:
 - Method and path
 - Response status code
 - Latency
-- Client IP
+- Client IP, anonymised (IPv4 last octet zeroed, IPv6 cut to /48; `shared/middleware.AnonymizeIP`)
 - User agent
 
 **Example Log**:
@@ -314,7 +316,7 @@ The gateway logs all requests with:
   "path": "/api/v1/overlays",
   "status": 200,
   "latency": "15ms",
-  "client_ip": "192.168.1.1"
+  "client_ip": "192.168.1.0"
 }
 ```
 

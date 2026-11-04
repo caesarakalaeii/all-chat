@@ -24,7 +24,7 @@
  */
 
 import { apiClient } from './client'
-import type { User, LoginResponse } from '../types/auth'
+import type { User, LoginResponse, ConnectablePlatform, PlatformConnection } from '../types/auth'
 import type { ChatBotPlatform, ChatBotStatus } from '../types/engagement'
 
 export const authApi = {
@@ -92,6 +92,22 @@ export const authApi = {
    */
   async updateOnboarding(completed: boolean): Promise<{ onboarding_completed_at: string | null }> {
     return apiClient.patch('/api/v1/auth/me/onboarding', { completed })
+  },
+
+  /** Every platform whose OAuth tokens the account holds. */
+  async getConnections(): Promise<PlatformConnection[]> {
+    const res = await apiClient.get<{ connections: PlatformConnection[] }>(
+      '/api/v1/auth/me/connections'
+    )
+    return res.connections
+  },
+
+  /**
+   * Delete the account's tokens for a linked platform and revoke them at the provider.
+   * Rejected with 409 for the platform the account signs in with.
+   */
+  async disconnectPlatform(platform: ConnectablePlatform): Promise<void> {
+    await apiClient.delete(`/api/v1/auth/me/connections/${platform}`)
   },
 
   /**

@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-13
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation; linked platform ids now persisted)
+**Revised**: 2026-11-04 (disconnecting a linked platform clears its id, ADR-0090); 2026-11-03 (brought in line with the current implementation; linked platform ids now persisted)
 **Deciders**: All-Chat Platform Team
 
 ---
@@ -106,7 +106,9 @@ Consumers extend their lookups to both credential sources:
   user", 2026-11-03). That login authenticates only: profile fields, tokens and `granted_scopes`
   on the users row stay the login provider's (`linkMayReplacePrimaryCredentials`). Streamer sends
   as themselves to Twitch still require a Twitch-login account, because only that account holds
-  a Twitch token on its users row.
+  a Twitch token on its users row. Disconnecting the linked platform in Settings
+  ([ADR-0090](./0090-disconnecting-a-linked-platform.md)) clears the id again together with the
+  tokens, so that platform's login stops reaching the account.
 
 ## Verification
 

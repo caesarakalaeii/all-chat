@@ -451,7 +451,6 @@ func main() {
 		log.Warn("TWITCH_CLIENT_SECRET not set - badge API will not auto-refresh tokens and may fail")
 	}
 
-	// Create handlers
 	proxyHandler := handlers.NewProxyHandler(registry)
 	healthHandler := handlers.NewHealthHandler(registry)
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
@@ -477,7 +476,6 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// Create router
 	router := gin.New()
 
 	// M3: restrict trusted proxies so c.ClientIP() (used by the global + auth
@@ -736,6 +734,10 @@ func main() {
 		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest)     // DSGVO Art. 20 data portability
 		protectedAPI.PATCH("/auth/me/onboarding", proxyHandler.ForwardRequest)    // first-run setup guide state
 		protectedAPI.POST("/auth/me/tos-acceptance", proxyHandler.ForwardRequest) // post-login Terms of Service acceptance
+		// Connected platforms (Settings): list, and disconnect a linked platform, which
+		// deletes its OAuth tokens and revokes them at the provider. Session-only in auth-service.
+		protectedAPI.GET("/auth/me/connections", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/me/connections/:platform", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/stop-impersonation", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
@@ -795,18 +797,7 @@ func main() {
 		protectedAPI.DELETE("/auth/chat-bots/custom/:platform", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/chat-bots/allchat/:platform", proxyHandler.ForwardRequest)
 
-		// Viewer protected routes
-		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
-		// AuthCookieForward so the handler can blacklist the viewer token on logout
-		// (audit #18); harmless when the viewer authenticated via the Authorization
-		// bearer header (the common case — viewer tokens live in localStorage).
-		protectedAPI.POST("/auth/viewer/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
-		protectedAPI.POST("/auth/viewer/chat/send", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
-		protectedAPI.PATCH("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/viewer/linked-platforms", proxyHandler.ForwardRequest)
-		protectedAPI.DELETE("/auth/viewer/linked-platforms/:platform", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/viewer/data-export", proxyHandler.ForwardRequest) // DSGVO Art. 15/20 for viewers
+		registerViewerRoutes(protectedAPI, proxyHandler.ForwardRequest)
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)
@@ -1061,7 +1052,6 @@ func main() {
 	// Get port from environment
 	port := getEnvOrDefault("PORT", "8080")
 
-	// Create HTTP server
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      router,

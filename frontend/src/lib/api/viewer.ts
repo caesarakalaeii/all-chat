@@ -133,6 +133,14 @@ export const viewerApi = {
   },
 
   /**
+   * Permanently erase the signed-in viewer's own data (ADR-0088). The server revokes
+   * the token; the caller clears it locally with viewerLogout().
+   */
+  async deleteViewerData(): Promise<void> {
+    await viewerApiClient.delete('/api/v1/auth/viewer/me')
+  },
+
+  /**
    * Everything stored about the signed-in viewer identity, as the JSON export
    * the privacy policy promises (DSGVO Art. 15/20).
    */

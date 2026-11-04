@@ -317,6 +317,18 @@ func main() {
 
 	streamerInfoHandler := handlers.NewStreamerInfoHandler(log, userRepo, db)
 
+	// Connected platforms (Settings): list and disconnect. A disconnect revokes the
+	// deleted tokens at the provider where one has a revoke endpoint; Facebook and
+	// Instagram have none for the stored Page token, so they are deleted locally only.
+	connectionRevokers := map[string]handlers.TokenRevoker{"twitch": twitchOAuth}
+	if youtubeOAuth != nil {
+		connectionRevokers["youtube"] = youtubeOAuth
+	}
+	if kickOAuth != nil {
+		connectionRevokers["kick"] = kickOAuth
+	}
+	platformConnectionsHandler := handlers.NewPlatformConnectionsHandler(userRepo, connectionRevokers, log)
+
 	// Seed the persistent total-users gauge from the database so Grafana retains
 	// an accurate baseline even after pod restarts (Prometheus counters are ephemeral).
 	if counts, err := userRepo.CountByAuthProvider(ctx); err != nil {
@@ -514,6 +526,11 @@ func main() {
 		protected.PATCH("/me/onboarding", legacyAuthHandler.HandleUpdateOnboarding)
 		protected.POST("/me/tos-acceptance", legacyAuthHandler.HandleAcceptTos)
 
+		// Connected platforms. Session-only (the handler refuses a PAT); disconnecting is
+		// also refused while impersonating.
+		protected.GET("/me/connections", platformConnectionsHandler.HandleListConnections)
+		protected.DELETE("/me/connections/:platform", platformConnectionsHandler.HandleDisconnect)
+
 		// Personal access tokens for non-browser clients. Session-only by design (the
 		// handler refuses a PAT-authenticated request): a leaked token must not be able
 		// to mint more tokens or revoke the victim's, and the plaintext is shown once.
@@ -648,6 +665,7 @@ func main() {
 	{
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
+		viewerProtected.DELETE("/me", viewerAuthHandler.HandleDeleteViewer) // erase own viewer data (ADR-0088)
 		viewerProtected.POST("/chat/send", chatSendHandler.HandleSendMessage)
 		viewerProtected.GET("/cosmetics", viewerCosmeticsHandler.HandleGetCosmetics)
 		viewerProtected.PATCH("/cosmetics", viewerCosmeticsHandler.HandlePatchCosmetics)

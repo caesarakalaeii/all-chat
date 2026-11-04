@@ -446,6 +446,9 @@ spec:
 | **Moderation actions** | 90 days | retention-sweeper |
 | **Abandoned device-link requests** | 1 hour after expiry | retention-sweeper |
 | **Logs / traces** | 7 days | Automatic deletion (Loki / Tempo retention) |
+| **Client IPs in service logs** | As logs; anonymised before logging (IPv4 last octet zeroed, IPv6 cut to /48) | Go services log only `shared/middleware.AnonymizeIP` output; gin services use `middleware.GinAccessLog()`, never `gin.Logger()`, which prints the full IP from the forwarded `X-Forwarded-For` |
+| **Client IPs in rate-limit keys** | Until the end of the one-minute window | Redis key expiry (`shared/ratelimit`, emote-service) |
+| **Client IPs in the edge access log** | Not recorded | The `public` EnvoyProxy in caesar-deployment (`apps/infrastructure/gateway/gateway.yaml`) sets an access-log format without `x-forwarded-for`, client addresses or query strings |
 | **Metrics** | 15 days | Automatic deletion (Prometheus retention) |
 | **Overlays** | Until user deletion | Cascade delete (FK constraint) |
 

@@ -53,6 +53,19 @@ notification to confirm completion, so the service never learns whether the PUT 
 whose object never arrived is a harmless orphan — `GET /media` lists the registry, not the bucket,
 and deleting a row only logs a failed MinIO removal rather than failing the request.
 
+### Orphaned objects are swept (ADR-0088)
+
+The opposite orphan is not harmless: an object whose row is gone stays downloadable at its
+public URL. That is what account deletion leaves behind (`media_objects` rows go with the user
+through `ON DELETE CASCADE`), and what a failed MinIO removal on `DELETE` leaves. Every replica
+therefore sweeps the bucket at startup and then every `MEDIA_ORPHAN_SWEEP_INTERVAL` (default
+15 minutes; `orphans/`): it lists the bucket and removes each object that has no registry row,
+so a deleted account's files stop being served within one interval. Only keys of this
+service's `{user_id}/{uuid}/{filename}` shape are considered. A failed registry lookup stops
+the sweep without removing anything (it is never read as "no row"); a failed removal is
+logged and retried by the next sweep. A live upload cannot be swept by race: the row is
+written before the upload URL is handed out.
+
 ### Status codes worth knowing
 
 - **503** on every media route when `MINIO_ENDPOINT` is unset: the service still starts (env-gating,
@@ -80,6 +93,7 @@ and deleting a row only logs a failed MinIO removal rather than failing the requ
 | `MINIO_REGION` | `us-east-1` | region presigned URLs are signed for (MinIO's default) |
 | `MEDIA_PRESIGN_EXPIRY` | `5m` | presigned PUT lifetime (Go duration) |
 | `MEDIA_MAX_OBJECTS_PER_USER` | `100` | per-user quota on registered media |
+| `MEDIA_ORPHAN_SWEEP_INTERVAL` | `15m` | how often objects without a registry row are removed (Go duration, must be positive; ADR-0088) |
 | `OTEL_ENABLED` | `false` | OpenTelemetry tracing; the k8s manifest sets `true` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | OTLP collector endpoint |
 | `ENVIRONMENT` | `development` | environment recorded on spans |
@@ -101,4 +115,13 @@ or Postgres needed:
 
 ```sh
 GOTOOLCHAIN=go1.27.3 go test ./...
+```
+
+The orphan sweep also has an integration test against a real Postgres with the migrations
+applied (the bucket stays an in-memory fake): deleting a user cascades its rows and the next
+sweep removes exactly its files. CI's integration job runs it; locally:
+
+```sh
+TEST_DATABASE_URL=postgres://allchat:allchat_dev_password@localhost:5432/allchat \
+  go test -tags=integration ./orphans/
 ```

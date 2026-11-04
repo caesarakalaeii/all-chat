@@ -37,6 +37,34 @@ export const settings: LocaleNamespace<'settings'> = {
     checkFailed:
       'Konnte nicht prüfen, welche Sprachen du verwenden kannst. Englisch ist immer verfügbar.',
   },
+  connections: {
+    heading: 'Verbundene Plattformen',
+    body: 'All-Chat speichert für jede verbundene Plattform ein OAuth-Token. Wenn du eine Plattform trennst, werden ihre Tokens gelöscht.',
+    loading: 'Verbundene Plattformen werden geladen',
+    loadFailed: 'Deine verbundenen Plattformen konnten nicht geladen werden.',
+    empty: 'Keine Plattformen verbunden.',
+    signInBadge: 'Anmeldung',
+    signInNote:
+      'Du meldest dich mit {platform} an, deshalb kann es hier nicht getrennt werden. Die Tokens werden gelöscht, wenn du dein Konto löschst.',
+    disconnect: 'Trennen',
+    disconnectLabel: '{platform} trennen',
+    disconnecting: 'Wird getrennt…',
+    disconnectTitle: '{platform} trennen?',
+    effectTwitch:
+      'Deine Twitch-Tokens werden gelöscht und Twitch wird gebeten, sie zu widerrufen. Deine Twitch-Quellen bleiben in deinen Overlays, empfangen aber keinen Chat mehr, und Senden und Moderation auf Twitch funktionieren nicht mehr, bis du Twitch wieder verbindest. Bis dahin kannst du dich auch nicht mit Twitch bei diesem Konto anmelden.',
+    effectYoutube:
+      'Deine YouTube-Tokens werden gelöscht und Google wird gebeten, sie zu widerrufen. Deine YouTube-Quellen lesen weiterhin öffentliche Streams, dafür ist kein Token nötig. Nicht gelistete Streams und Streams nur für Mitglieder, Abo-Alerts, Senden und Moderation auf YouTube funktionieren nicht mehr, bis du YouTube wieder verbindest. Bis dahin kannst du dich auch nicht mit YouTube bei diesem Konto anmelden.',
+    effectKick:
+      'Deine Kick-Tokens werden gelöscht und Kick wird gebeten, sie zu widerrufen. Deine Kick-Quellen empfangen weiterhin Chat. Senden und Moderation auf Kick funktionieren nicht mehr, bis du Kick wieder verbindest. Bis dahin kannst du dich auch nicht mit Kick bei diesem Konto anmelden.',
+    effectFacebook:
+      'Deine Tokens für Facebook-Seiten werden gelöscht und deine Facebook-Quellen werden aus deinen Overlays entfernt. Meta bietet uns keinen Weg, das Token zu widerrufen. Entferne All-Chat deshalb auch aus den Apps, die mit deinem Facebook-Konto verbunden sind.',
+    effectInstagram:
+      'Deine Instagram-Tokens werden gelöscht und deine Instagram-Quellen werden aus deinen Overlays entfernt. Meta bietet uns keinen Weg, das Token zu widerrufen. Entferne All-Chat deshalb auch aus den Apps, die mit deinem Facebook-Konto verbunden sind.',
+    disconnectCancel: 'Abbrechen',
+    disconnectConfirm: 'Ja, trennen',
+    disconnectedToast: '{platform} getrennt',
+    disconnectFailedToast: '{platform} konnte nicht getrennt werden',
+  },
   dataExport: {
     download: 'Meine Daten herunterladen',
     downloading: 'Datei wird vorbereitet…',
@@ -159,6 +187,18 @@ export const settings: LocaleNamespace<'settings'> = {
     disconnecting: 'Verbindung wird getrennt…',
     loadLinkedFailed: 'Verknüpfte Plattformen konnten nicht geladen werden',
     disconnectFailed: 'Plattformverbindung konnte nicht getrennt werden',
+    deleteHeading: 'Zuschauerdaten löschen',
+    deleteBody:
+      'Lösche deine Zuschauer-Identität endgültig: verknüpfte Plattformen, Namensfarbe und Avatar-Kosmetik, Punkte, Umfragestimmen und Vorhersagen in allen Kanälen, die Nachrichten, die du über All-Chat gesendet hast, und deine Zuschauer-Verbindung zu Patreon. Stimmen und Punkte, die du ohne Anmeldung per Chat-Befehl gesammelt hast, gehören dazu. Ein Streamer-Konto, das du hast, bleibt unberührt.',
+    deleteButton: 'Meine Zuschauerdaten löschen',
+    deleteConfirmTitle: 'Deine Zuschauerdaten löschen?',
+    deleteConfirmBody:
+      'Alles Genannte wird sofort gelöscht und du wirst abgemeldet. Das lässt sich nicht rückgängig machen. Eine Patreon-Mitgliedschaft wird dadurch nicht gekündigt; kündige sie bei Patreon. Wenn du weiter in Kanälen chattest, die All-Chat-Umfragen oder -Punkte nutzen, entstehen ab dann neue Daten.',
+    deleteCancel: 'Abbrechen',
+    deleteConfirm: 'Ja, meine Zuschauerdaten löschen',
+    deleting: 'Wird gelöscht…',
+    deleteFailed: 'Deine Zuschauerdaten konnten nicht gelöscht werden. Bitte versuche es erneut.',
+    deletedToast: 'Deine Zuschauerdaten wurden gelöscht',
   },
   apiTokens: {
     heading: 'API-Tokens',
