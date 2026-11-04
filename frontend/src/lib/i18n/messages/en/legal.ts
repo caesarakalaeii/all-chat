@@ -86,7 +86,7 @@ export const legal = {
   // heading, paragraph, list item and legal basis, and nothing reworded.
   privacy: {
     title: 'Privacy Policy (Datenschutzerklärung)',
-    lastUpdated: 'November 3, 2026',
+    lastUpdated: 'November 4, 2026',
     // Every DSGVO article reference carries a U+00A0 from an &nbsp; entity.
     // It is part of the rendered text, so it stays escaped here to be
     // visible to a reviewer.
