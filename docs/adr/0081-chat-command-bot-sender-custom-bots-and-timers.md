@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-23
 **Status**: Accepted
-**Revised**: 2026-11-04 (a Twitch send dropped with `is_sent=false` is a failure)
+**Revised**: 2026-11-04 (a Twitch send dropped with `is_sent=false` is a failure; undelivered posts are shown in the editor)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -114,6 +114,17 @@ working while the operator connects the bot accounts and streamers grant
 For `purpose: "timer"`, YouTube reads the live chat id only from the Redis
 stream state the YouTube listeners keep. It never falls back to the Data API
 lookup, so an offline channel costs nothing.
+
+A post that goes out but is not delivered does **not** fall back to self: the
+streamer would suddenly answer under their own name. Instead it is made visible.
+Each bot-send result carries `sender`, `error_kind` and `detail`, the platform's
+own explanation (Twitch's drop reason, or the message of a 401/403).
+engagement-service sends replies and timer posts through `consumer.SendStatus`,
+which keeps the last undelivered post per streamer and platform in Redis
+(`chatcmd:sendfail:{owner}`, 7 days, cleared by the next delivered post).
+`GET /chat-commands` returns them as `send_failures`, and `/commands` explains
+each one: what the platform said, and who has to act (the streamer, their bot,
+or us for the All-Chat Bot).
 
 ### Connecting bot accounts
 

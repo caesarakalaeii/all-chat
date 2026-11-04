@@ -44,18 +44,25 @@ type chatCommandStore interface {
 	OwnerStatus(ctx context.Context, userID uuid.UUID) (repository.ChatCommandOwnerStatus, error)
 }
 
+// sendFailureLister reads the streamer's last undelivered bot posts
+// (consumer.SendStatus).
+type sendFailureLister interface {
+	Failures(ctx context.Context, owner uuid.UUID) ([]models.SendFailure, error)
+}
+
 // ChatCommands serves the chat commands editor (ADR-0079). Commands belong to the
 // authenticated streamer; there is no overlay in the path.
 type ChatCommands struct {
 	store    chatCommandStore
+	failures sendFailureLister
 	onChange func()       // resyncs chatcmd:channels after a write
 	fetch    *http.Client // {urlfetch} in previews
 	log      *zap.Logger
 }
 
 // NewChatCommands creates the handler. onChange runs after every successful write.
-func NewChatCommands(store chatCommandStore, onChange func(), log *zap.Logger) *ChatCommands {
-	return &ChatCommands{store: store, onChange: onChange, fetch: chatcmd.FetchClient(), log: log}
+func NewChatCommands(store chatCommandStore, failures sendFailureLister, onChange func(), log *zap.Logger) *ChatCommands {
+	return &ChatCommands{store: store, failures: failures, onChange: onChange, fetch: chatcmd.FetchClient(), log: log}
 }
 
 type chatCommandBody struct {
@@ -140,7 +147,15 @@ func (h *ChatCommands) List(c *gin.Context) {
 		h.fail(c, "chat command owner status", err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"commands": cmds, "status": status})
+	// Best effort: the editor still works when Redis does not answer.
+	failures, err := h.failures.Failures(c.Request.Context(), userID)
+	if err != nil {
+		h.log.Warn("chat command send failures", zap.Error(err))
+	}
+	if failures == nil {
+		failures = []models.SendFailure{}
+	}
+	c.JSON(http.StatusOK, gin.H{"commands": cmds, "status": status, "send_failures": failures})
 }
 
 // Create adds a command. Gated by RequireEarlyAccess and RequirePremium(GateChatCommands) in main.go.

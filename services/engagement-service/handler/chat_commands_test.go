@@ -34,7 +34,12 @@ import (
 )
 
 type memCmdStore struct {
-	cmds []models.ChatCommand
+	cmds     []models.ChatCommand
+	failures []models.SendFailure
+}
+
+func (m *memCmdStore) Failures(context.Context, uuid.UUID) ([]models.SendFailure, error) {
+	return m.failures, nil
 }
 
 func (m *memCmdStore) ListChatCommands(_ context.Context, userID uuid.UUID) ([]models.ChatCommand, error) {
@@ -91,7 +96,7 @@ var testOwner = uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 func newCmdRouter(store *memCmdStore, changes *int, userID string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := NewChatCommands(store, func() { *changes++ }, zap.NewNop())
+	h := NewChatCommands(store, store, func() { *changes++ }, zap.NewNop())
 	r := gin.New()
 	g := r.Group("/", func(c *gin.Context) {
 		if userID != "" {
@@ -231,4 +236,20 @@ func TestChatCommandsPreviewImage(t *testing.T) {
 		assert.Equal(t, want.image, out.Image, body)
 		assert.Len(t, out.Errors, want.errs, body)
 	}
+}
+
+// The editor learns why replies are missing: the last undelivered post per platform.
+func TestChatCommandsListShowsSendFailures(t *testing.T) {
+	store := &memCmdStore{failures: []models.SendFailure{{Platform: "twitch", Sender: "allchat_bot",
+		ErrorKind: "reauth_required", Detail: "The sender must have authorized the app."}}}
+	r := newCmdRouter(store, new(int), testOwner.String())
+	w := do(r, http.MethodGet, "/chat-commands", "")
+	require.Equal(t, http.StatusOK, w.Code)
+	var body struct {
+		SendFailures []models.SendFailure `json:"send_failures"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body.SendFailures, 1)
+	assert.Equal(t, "reauth_required", body.SendFailures[0].ErrorKind)
+	assert.Equal(t, "allchat_bot", body.SendFailures[0].Sender)
 }

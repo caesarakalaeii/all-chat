@@ -75,6 +75,7 @@ chatcmd consumer (NOACK, at most once): match → min_role → echo guard → pe
 - **Who can use it.** `min_role`: everyone < subscriber < vip < moderator < broadcaster. Roles come from Twitch/Kick badges and YouTube owner/moderator/member flags; TikTok and Discord chatters count as everyone.
 - **Where it replies.** In the chat the message came from, from the streamer's own account, and only when that channel is the streamer's own (Twitch login, `youtube_oauth_tokens`, Kick login or `kick_oauth_tokens`). TikTok, Discord and the beta platforms cannot be replied to; clips still fire from them.
 - **YouTube replies are premium.** Each spends YouTube Data API quota, so a reply in YouTube chat is sent only when the owner has `users.is_premium`.
+- **Undelivered posts are shown.** Replies and timer posts go through `consumer.SendStatus`, which keeps the last undelivered post per platform in `chatcmd:sendfail:{owner}` (7 days, cleared by the next delivered post) with who sent it and the platform's own explanation; the editor shows them (ADR-0081).
 - **Loop guard.** Each sent reply is remembered for 60s (`chatcmd:echo:*`); a message with that text cannot fire a command, so a reply containing its own keyword does not answer itself.
 - **Templates** (`chatcmd/`): `{user}` `{touser}` `{query}` `{1}`…`{9}` `{count}` `{random 1 6}` `{pick a | b}` `{time Europe/Berlin}` `{platform}` `{channel}` `{clip}`, `{urlfetch https://…}` and `{js …}`. JavaScript runs in QuickJS (`modernc.org/quickjs`) with no host functions, 100 ms of eval time for all blocks of a reply, 16 MB memory, 256 KB stack; chat input reaches it as data, never as code. A failing block renders `[js error]`.
 - **urlfetch** (ADR-0080): inserts a response body (trimmed, ≤ 32 KB). Only https on port 443, no credentials, ≤ 3 per reply, 3 s each, through `shared/safehttp`, which refuses every non-public address at dial time (also on redirects). Variables inside the URL are query-escaped. Inside `{js}` the body arrives as a string literal (`null` on failure), so `JSON.parse({urlfetch …})` works. A failure renders `[urlfetch error]`.
@@ -82,7 +83,7 @@ chatcmd consumer (NOACK, at most once): match → min_role → echo guard → pe
 
 | Method + Path | Auth | Purpose |
 |---|---|---|
-| `GET /chat-commands` | streamer | the streamer's commands + `status` (premium, Twitch send/clip grants, `consent_overlay_id` for the grant flow) |
+| `GET /chat-commands` | streamer | the streamer's commands + `status` (premium, Twitch send/clip grants, `consent_overlay_id` for the grant flow) + `send_failures` (the last undelivered bot post per platform: `platform`, `sender`, `error_kind`, `detail`, `at`) |
 | `POST /chat-commands` | streamer · `chat_commands` gate | create (`kind`, `trigger`, `response`, `create_clip`, `image_url`, `sound_url`, `alert_text`, `min_role`, `cooldown_seconds`, `enabled`); max 100 per streamer |
 | `PUT /chat-commands/:cid` | streamer · `chat_commands` gate | replace a command |
 | `DELETE /chat-commands/:cid` | streamer | delete (never gated) |

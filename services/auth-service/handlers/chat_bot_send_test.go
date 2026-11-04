@@ -473,6 +473,38 @@ func TestHandleInternalBotSend_LinkedKickStreamerGetsKickReply(t *testing.T) {
 	assert.Equal(t, "Bearer kick-linked-token", calls[0].authorization)
 }
 
+// A reply Twitch refused carries Twitch's own explanation, so the streamer can be
+// told what to change (here: the bot account needs a verified phone number).
+func TestHandleInternalBotSend_DroppedTwitchReplyCarriesTheReason(t *testing.T) {
+	streamer := streamerFixture("u1")
+	store := &stubBotStore{settings: "bot", global: map[string]*repository.ChatBotAccount{
+		"twitch": {Platform: "twitch", PlatformUserID: "botuid"}}}
+	_, h := newBotTestHandler(t, store, streamer)
+	transport := h.httpClient.Transport.(*recordingTransport)
+	transport.prefixes = []string{"https://api.twitch.tv/", "https://id.twitch.tv/"}
+	transport.tokenBody = `{"access_token":"app-token","expires_in":3600}`
+	transport.chatBody = twitchDroppedBody
+
+	w := botSendRequest(t, h, streamer, `{"user_id":"u1","message":"hello","platforms":["twitch"]}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp struct {
+		Results []BotSendResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Results, 1)
+	assert.Equal(t, BotSendResult{Platform: "twitch", Success: false, Sender: botSenderAllChatBot,
+		Error: "message_dropped", ErrorKind: "message_dropped",
+		Detail: "A verified phone number is required to chat in this channel."}, resp.Results[0])
+}
+
+// A bot whose authorization Twitch revoked gets Twitch's message, not the raw body.
+func TestClassifyPlatformStatusKeepsThePlatformMessage(t *testing.T) {
+	err := classifyPlatformStatus("twitch", http.StatusUnauthorized,
+		`{"error":"Unauthorized","status":401,"message":"The sender must have authorized the app with the user:write:chat and user:bot scopes."}`)
+	assert.Equal(t, "The sender must have authorized the app with the user:write:chat and user:bot scopes.", sendErrorDetail(err))
+	assert.Empty(t, sendErrorDetail(classifyPlatformStatus("twitch", http.StatusBadGateway, "<html>")))
+}
+
 func TestHandleInternalBotSend_NoKickIdentitySkipsKick(t *testing.T) {
 	// A timer asks for twitch and kick; a streamer without Kick sending enabled
 	// must not get a failed Kick result every tick.

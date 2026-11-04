@@ -32,10 +32,11 @@ import { Switch } from '@/components/ui/switch'
 import { engagementApi } from '@/lib/api/engagement'
 import { authApi } from '@/lib/api/auth'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
-import { useTranslations } from '@/lib/i18n'
+import { formatTimestamp, useTranslations, type TFunction } from '@/lib/i18n'
 import { toastManager } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import type {
+  ChatCommandSendFailure,
   ChatBotSender,
   ChatBotStatus,
   ChatCommand,
@@ -131,6 +132,7 @@ function CommandsContent() {
   const searchParams = useSearchParams()
   const [commands, setCommands] = useState<ChatCommand[]>([])
   const [status, setStatus] = useState<ChatCommandStatus | null>(null)
+  const [sendFailures, setSendFailures] = useState<ChatCommandSendFailure[]>([])
   const [botStatus, setBotStatus] = useState<ChatBotStatus | null>(null)
   const [botSender, setBotSender] = useState<ChatBotSender>('bot')
   const [timers, setTimers] = useState<ChatTimer[]>([])
@@ -147,6 +149,7 @@ function CommandsContent() {
       const data = await engagementApi.listChatCommands()
       setCommands(data.commands)
       setStatus(data.status)
+      setSendFailures(data.send_failures ?? [])
       setLoadFailed(false)
     } catch {
       setLoadFailed(true)
@@ -246,6 +249,8 @@ function CommandsContent() {
         </header>
 
         {status && <StatusPanel status={status} />}
+
+        {sendFailures.length > 0 && <SendFailuresPanel failures={sendFailures} />}
 
         {loading && (
           <p role="status" className="py-8 text-center text-text-sub">
@@ -507,6 +512,70 @@ function StatusPanel({ status }: { status: ChatCommandStatus }) {
       <p className="text-xs text-text-dim">{t('commands.status.others')}</p>
     </Card>
   )
+}
+
+const SEND_PLATFORMS = ['twitch', 'youtube', 'kick'] as const
+
+/** Why each platform's last bot message did not arrive, and what fixes it. */
+function SendFailuresPanel({ failures }: { failures: ChatCommandSendFailure[] }) {
+  const t = useTranslations()
+  return (
+    <section aria-labelledby="send-failures-heading">
+      <Card className="space-y-3 border-warning p-4">
+        <h2
+          id="send-failures-heading"
+          className="flex items-center gap-2 text-sm font-semibold text-text"
+        >
+          <CircleAlert className="size-4 text-warning" aria-hidden="true" />
+          {t('commands.sendFailures.heading')}
+        </h2>
+        <ul className="space-y-2 text-sm">
+          {failures.map((f) => {
+            const known = SEND_PLATFORMS.find((p) => p === f.platform)
+            const platform = known ? t(`common.platforms.${known}`) : f.platform
+            return (
+              <li key={f.platform} className="space-y-1">
+                <p className="text-text">
+                  {t('commands.sendFailures.item', {
+                    platform,
+                    time: formatTimestamp(new Date(f.at)),
+                  })}{' '}
+                  {failureReason(t, f, platform)}
+                </p>
+                {f.detail && (
+                  <p className="wrap-break-word text-text-sub">
+                    {t('commands.sendFailures.platformSays', { platform, detail: f.detail })}
+                  </p>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+        <p className="text-xs text-text-dim">{t('commands.sendFailures.clears')}</p>
+      </Card>
+    </section>
+  )
+}
+
+function failureReason(t: TFunction, f: ChatCommandSendFailure, platform: string): string {
+  switch (f.error_kind) {
+    case 'message_dropped':
+      return t('commands.sendFailures.dropped', { platform })
+    case 'reauth_required':
+      if (f.sender === 'allchat_bot') return t('commands.sendFailures.reauthBot')
+      if (f.sender === 'custom_bot') return t('commands.sendFailures.reauthCustom')
+      return t('commands.sendFailures.reauthSelf')
+    case 'missing_scope':
+      return t('commands.sendFailures.missingScope')
+    case 'not_connected':
+      return t('commands.sendFailures.notConnected')
+    case 'stream_offline':
+      return t('commands.sendFailures.offline')
+    case 'quota_exhausted':
+      return t('commands.sendFailures.quota')
+    default:
+      return t('commands.sendFailures.failed')
+  }
 }
 
 function Grant({ label, ok }: { label: string; ok: boolean }) {

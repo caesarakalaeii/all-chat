@@ -231,6 +231,42 @@ describe('Chat commands page', () => {
     expect(await screen.findByText('Alert')).toBeInTheDocument()
   })
 
+  it("says why the last bot reply did not arrive, in the platform's words", async () => {
+    api.listChatCommands.mockResolvedValue({
+      commands: [command()],
+      status: readyStatus,
+      send_failures: [
+        {
+          platform: 'twitch',
+          sender: 'allchat_bot',
+          error_kind: 'message_dropped',
+          detail: 'A verified phone number is required to chat in this channel.',
+          at: '2026-11-04T19:47:47Z',
+        },
+        {
+          platform: 'kick',
+          sender: 'allchat_bot',
+          error_kind: 'reauth_required',
+          at: '2026-11-04T19:50:00Z',
+        },
+      ],
+    })
+    render(<CommandsPage />)
+
+    const panel = await screen.findByRole('region', { name: 'Bot messages that did not arrive' })
+    expect(within(panel).getByText(/Twitch refused it/)).toBeInTheDocument()
+    expect(
+      within(panel).getByText(/A verified phone number is required to chat in this channel\./)
+    ).toBeInTheDocument()
+    expect(within(panel).getByText(/The All-Chat Bot lost its authorization/)).toBeInTheDocument()
+  })
+
+  it('shows no failure panel while every bot message arrives', async () => {
+    render(<CommandsPage />)
+    expect(await screen.findByText('!discord')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Bot messages that did not arrive' })).toBeNull()
+  })
+
   it('inserts a variable at the cursor', async () => {
     render(<CommandsPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'New command' }))

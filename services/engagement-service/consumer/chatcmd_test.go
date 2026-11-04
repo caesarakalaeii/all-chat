@@ -71,13 +71,14 @@ type fakeOutput struct {
 	sent    []sent
 	clips   int
 	clipErr error
+	sendErr error
 }
 
 func (f *fakeOutput) BotSend(_ context.Context, userID, message, platform string, purpose announcer.SendPurpose) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, sent{userID, message, platform, purpose})
-	return nil
+	return f.sendErr
 }
 
 func (f *fakeOutput) Clip(_ context.Context, _ string) (string, error) {

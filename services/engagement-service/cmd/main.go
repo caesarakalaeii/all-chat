@@ -160,11 +160,14 @@ func main() {
 	// message-processor forwards to chatcmd:jobs; chatCmdConsumer runs the commands and
 	// replies/clips through auth-service via the announcer's service-JWT client.
 	channelSync := consumer.NewChannelSync(redisClient, repo, log)
-	chatCmdConsumer := consumer.NewChatCommandConsumer(redisClient, repo, announce, consumerName, log)
+	// Replies and timer posts both go through sendStatus, which remembers the last
+	// undelivered post per platform for the commands editor.
+	sendStatus := consumer.NewSendStatus(redisClient, announce, log)
+	chatCmdConsumer := consumer.NewChatCommandConsumer(redisClient, repo, sendStatus, consumerName, log)
 	// Streamer-defined chat timers (ADR-0081): every replica ticks and fires due timers
 	// (the claim is a conditional DB UPDATE, so replicas race harmlessly); the posts
 	// take the same bot-send path replies take.
-	timerScheduler := consumer.NewTimerScheduler(redisClient, repo, announce, chatCmdConsumer, log, 15*time.Second)
+	timerScheduler := consumer.NewTimerScheduler(redisClient, repo, sendStatus, chatCmdConsumer, log, 15*time.Second)
 	// Track the background workers so shutdown can wait for them (and their PEL drains) to
 	// stop before the deferred dbPool/redisClient closes run — otherwise SIGTERM closes the
 	// pool out from under an in-flight consumer, logging spurious "closed pool" errors (P3-13).
@@ -274,7 +277,7 @@ func main() {
 	// Writes are gated by GateChatCommands on both dimensions: early access (seeded on, so
 	// beta testers and ambassadors only until it graduates) and premium (seeded off);
 	// delete never is.
-	cmdH := handler.NewChatCommands(repo, channelSync.Trigger, log)
+	cmdH := handler.NewChatCommands(repo, sendStatus, channelSync.Trigger, log)
 	requireChatCommandsEarlyAccess := middleware.RequireEarlyAccess(dbPool, gateCache, featuregates.GateChatCommands, log)
 	requireChatCommands := middleware.RequirePremium(dbPool, gateCache, featuregates.GateChatCommands, log)
 	auth.GET("/chat-commands", requireDeviceOverlay, cmdH.List)

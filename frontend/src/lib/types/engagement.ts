@@ -165,9 +165,21 @@ export interface ChatCommandStatus {
   consent_overlay_id: string | null
 }
 
+/** The last bot message on one platform that did not arrive; the next one that does clears it. */
+export interface ChatCommandSendFailure {
+  platform: string
+  /** Who posted it: the All-Chat Bot, the streamer's custom bot, or the streamer. */
+  sender?: 'allchat_bot' | 'custom_bot' | 'self'
+  error_kind: string
+  /** The platform's own explanation, when it gave one. */
+  detail?: string
+  at: string
+}
+
 export interface ChatCommandList {
   commands: ChatCommand[]
   status: ChatCommandStatus
+  send_failures?: ChatCommandSendFailure[]
 }
 
 export interface ChatCommandPreview {

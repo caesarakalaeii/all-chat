@@ -233,11 +233,7 @@ func (a *Announcer) BotSend(ctx context.Context, userID, message, platform strin
 		return fmt.Errorf("decode bot-send response: %w", err)
 	}
 	if !out.Success {
-		detail := failedResults(out.Results)
-		if detail == "" {
-			detail = "no sendable platform connected"
-		}
-		return fmt.Errorf("bot-send not delivered (%s)", detail)
+		return &BotSendError{Results: out.Results}
 	}
 	if partial := failedResults(out.Results); partial != "" {
 		a.log.Warn("engagement bot-send partially delivered",
@@ -355,23 +351,40 @@ type announceRequest struct {
 	Platforms []string `json:"platforms"`
 }
 
-// announceResult mirrors one platform's outcome in the auth-service response.
-type announceResult struct {
+// SendResult mirrors one platform's outcome in the auth-service response. Sender
+// and Detail (the platform's own explanation) come only from bot-send.
+type SendResult struct {
 	Platform  string `json:"platform"`
 	Success   bool   `json:"success"`
+	Sender    string `json:"sender,omitempty"`
 	ErrorKind string `json:"error_kind"`
+	Detail    string `json:"detail,omitempty"`
+}
+
+// BotSendError is a bot send that posted nothing. Results holds each platform's
+// outcome; it is empty when the streamer has no sendable identity there.
+type BotSendError struct {
+	Results []SendResult
+}
+
+func (e *BotSendError) Error() string {
+	detail := failedResults(e.Results)
+	if detail == "" {
+		detail = "no sendable platform connected"
+	}
+	return "bot-send not delivered (" + detail + ")"
 }
 
 // announceResponse is the body auth-service returns from /internal/chat/announce.
 // success is false when no platform was actually posted to (even on HTTP 200).
 type announceResponse struct {
-	Success bool             `json:"success"`
-	Results []announceResult `json:"results"`
+	Success bool         `json:"success"`
+	Results []SendResult `json:"results"`
 }
 
 // failedResults summarizes the non-successful platforms as "platform:error_kind"
 // for logs/errors; empty string when every result succeeded.
-func failedResults(results []announceResult) string {
+func failedResults(results []SendResult) string {
 	var parts []string
 	for _, r := range results {
 		if r.Success {

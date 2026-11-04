@@ -57,6 +57,23 @@ export const commands: LocaleNamespace<'commands'> = {
     moderator: 'Moderatoren und du',
     broadcaster: 'Nur du',
   },
+  sendFailures: {
+    heading: 'Bot-Nachrichten, die nicht angekommen sind',
+    item: 'Letzte Nachricht im {platform}-Chat, {time}:',
+    dropped: '{platform} hat sie abgelehnt.',
+    platformSays: '{platform} sagt: „{detail}“',
+    reauthBot:
+      'Der All-Chat-Bot hat dort seine Berechtigung verloren. Sag uns auf Discord Bescheid, damit wir ihn neu verbinden, oder stell unter Bot und Absender deinen eigenen Account als Absender ein.',
+    reauthCustom:
+      'Dein Bot-Account hat seine Berechtigung verloren. Verbinde ihn unter Bot und Absender neu.',
+    reauthSelf: 'Dein Account hat seine Berechtigung verloren. Melde dich ab und wieder an.',
+    missingScope: 'Es fehlt eine Berechtigung. Erteile sie oben.',
+    notConnected: 'Es ist kein Account verbunden, der dort posten kann.',
+    offline: 'Dein Stream war nicht live.',
+    quota: 'Das YouTube-Kontingent für heute ist aufgebraucht.',
+    failed: 'Sie konnte nicht gesendet werden. Versuch es später noch einmal.',
+    clears: 'Das verschwindet, sobald eine Nachricht durchkommt.',
+  },
   status: {
     heading: 'Wo Befehle antworten können',
     twitchNoLogin: 'Für Antworten und Clips auf Twitch musst du dich mit Twitch anmelden.',

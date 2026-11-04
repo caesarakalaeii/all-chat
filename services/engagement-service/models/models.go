@@ -199,6 +199,17 @@ type ChatCommand struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
+// SendFailure is the last bot post (command reply or timer) on one platform that
+// was not delivered, kept until the next delivered post there (ADR-0081). The
+// commands editor shows it, so a refused reply is not silent.
+type SendFailure struct {
+	Platform  string    `json:"platform"`
+	Sender    string    `json:"sender,omitempty"` // allchat_bot | custom_bot | self
+	ErrorKind string    `json:"error_kind"`
+	Detail    string    `json:"detail,omitempty"` // the platform's own explanation
+	At        time.Time `json:"at"`
+}
+
 // ChatTimer is one streamer-defined recurring chat message (ADR-0081). It fires on
 // the owner's own channels when its trigger is due: an interval elapsed since it
 // last fired, and/or at least MinMessages chat lines since then (both set = every
