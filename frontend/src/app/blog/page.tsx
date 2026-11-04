@@ -45,7 +45,7 @@ export default function BlogIndexPage() {
         </h2>
         <ul className="space-y-8">
           {POSTS.map(({ meta }) => (
-            <li key={meta.slug} className="space-y-2 border-t border-white/20 pt-6">
+            <li key={meta.slug} className="space-y-2 border-t border-lanes-fg-strong/20 pt-6">
               <p className="text-dim text-xs">
                 <time dateTime={meta.date}>{formatPostDate(meta.date)}</time>
               </p>

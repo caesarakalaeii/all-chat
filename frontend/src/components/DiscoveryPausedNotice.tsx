@@ -60,14 +60,14 @@ export function DiscoveryPausedNotice({
       role="status"
       className="mb-3 flex items-start gap-2 rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 text-xs"
     >
-      <PauseCircle className="mt-0.5 size-3.5 shrink-0 text-indigo-400" aria-hidden="true" />
+      <PauseCircle className="mt-0.5 size-3.5 shrink-0 text-info" aria-hidden="true" />
       <div className="min-w-0">
         <p className="font-medium text-text">{t('dashboard.discoveryPaused.title')}</p>
         <p className="mt-0.5 text-text-sub">{t('dashboard.discoveryPaused.body')}</p>
         <Link
           href={`/overlay/${overlayId}/view`}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
-          className="mt-1 inline-block font-medium text-indigo-400 underline hover:text-indigo-300 focus-visible:ring-2 focus-visible:ring-current focus-visible:outline-none"
+          className="mt-1 inline-block font-medium text-info underline hover:text-info/80 focus-visible:ring-2 focus-visible:ring-current focus-visible:outline-none"
         >
           {t('dashboard.discoveryPaused.action')}
         </Link>

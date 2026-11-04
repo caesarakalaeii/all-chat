@@ -1,7 +1,8 @@
 # ADR-0073: The KLIPY App Key Is Delivered at Runtime from the Cluster Secret
 
 **Date**: 2026-10-17
-**Status**: Accepted; who receives the key is restricted by ADR-0074 (2026-10-17)
+**Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
@@ -27,8 +28,9 @@ the browser get the key?
 
 1. **A server route returns the key; the browser keeps calling KLIPY
    (chosen).** `GET /klipy-config` reads `process.env.KLIPY_API_KEY` per
-   request (`force-dynamic`, `Cache-Control: no-store`) and answers
-   `{apiKey}` (empty when unset).
+   request (`force-dynamic`, `Cache-Control: private, no-store`) and answers
+   `{apiKey}` (empty when unset). Since ADR-0074 it answers only signed-in
+   users with premium or beta access (401/403 otherwise).
 2. A server-side search proxy that keeps the key off the browser. Forbidden by
    KLIPY without written approval.
 3. Pass the key as a prop from a server component. The editor page is a client
@@ -39,9 +41,11 @@ the browser get the key?
 Option 1. `frontend/src/lib/klipy.ts` fetches `/klipy-config` once per page
 load (a failed fetch is retried on the next search) and calls
 `api.klipy.com` directly as before. The route lives outside `/api/` because
-the ingress sends `/api/*` to the api-gateway. The deployment sets
-`KLIPY_API_KEY` from `secretKeyRef allchat-secrets/klipy-api-key`; beta first,
-production when the alerts overlays are released there. No CSP change:
+the ingress sends `/api/*` to the api-gateway. The frontend deployment sets
+`KLIPY_API_KEY` from `secretKeyRef allchat-secrets/klipy-api-key`. Today only
+the beta frontend carries it; the production frontend has no `KLIPY_API_KEY`,
+so search there reports "unavailable" although alerts overlays are offered on
+every host. No CSP change:
 `/klipy-config` is same-origin (`connect-src 'self'`).
 
 The same change applies KLIPY's one REQUIRED attribution item
@@ -53,11 +57,12 @@ The same change applies KLIPY's one REQUIRED attribution item
 - Key rotation is a secret change plus a pod restart, no rebuild.
 - The build arg, the CI repository variable and `NEXT_PUBLIC_KLIPY_API_KEY`
   are gone.
-- Anyone can read the key from `/klipy-config`, exactly as anyone could read
-  it from the search URLs or the old bundle. KLIPY's partner panel, not
-  secrecy, limits its use.
+- The key is readable only by entitled sessions (ADR-0074). An entitled user
+  can still see it in the search URLs their browser sends; KLIPY's partner
+  panel, not secrecy, limits its use.
 
 ## Related Decisions
 
 - ADR-0071: the alerts editor and browser-side KLIPY search; this record
   replaces only its key delivery.
+- ADR-0074: restricts `/klipy-config` to entitled sessions.

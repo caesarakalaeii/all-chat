@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-17
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -27,8 +28,11 @@ as if they were engagement numbers — they are not, they are throttle bookkeepi
 
 ## Decision Drivers
 
-- Operate on the unit that admin actions actually act on. Ban and premium act on a `viewer_sessions`
-  row (a `(platform, platform_user_id)` identity), so the admin view must too.
+- Operate on the unit that admin actions actually act on. Ban acts on a `viewer_sessions` row
+  (a `(platform, platform_user_id)` identity, setting `viewer_sessions.is_banned`), and viewer
+  premium acts through a session row to its linked `viewers` row
+  (`SetViewerPremium` resolves `viewer_id` from `viewer_sessions`), so the admin view must be
+  session-keyed too.
 - Give the view real context — which streamers/overlays a viewer participates in, and whether the
   viewer is also a streamer — without a schema-heavy identity project.
 - Keep it cheap: reads must ride existing indexes, not new scans.
@@ -40,7 +44,8 @@ as if they were engagement numbers — they are not, they are throttle bookkeepi
 
 1. **Operate on raw `viewer_sessions`, surface the linked streamer `user_id`, and add a read-only
    per-session activity aggregate over `viewer_message_history`; explicitly defer durable identity.**
-   - ✅ Matches the ban/premium unit; adds streamer/overlay context and real usage counts using the
+   - ✅ Matches the unit admin actions act on (ban on the session row, premium through it); adds
+     streamer/overlay context and real usage counts using the
      existing `idx_viewer_message_history_viewer_session_id`; no new PII; no new tables; a durable
      identity can be built later on top.
    - ❌ A human with several sessions still shows as several rows (no dedup yet).
@@ -60,15 +65,17 @@ as if they were engagement numbers — they are not, they are throttle bookkeepi
 **Chosen**: Option 1.
 
 - **The admin viewer view operates on raw `viewer_sessions` rows** — the same `(platform,
-  platform_user_id)` unit that ban and premium act on, so what an admin sees is what an admin acts on.
+  platform_user_id)` unit that ban acts on (and that premium resolves through to the linked
+  `viewers` row), so what an admin sees is what an admin acts on.
 - **Surface the linked streamer `user_id` when present.** If `viewer_sessions.user_id` is set
   (migration 040), the view shows that this viewer is also a streamer and links to the streamer's admin
   record (via the URL-addressable pattern of ADR-0036).
 - **Add a READ-ONLY per-session activity aggregate over `viewer_message_history`.** Grouped by
-  `viewer_session_id` (using the existing index, so it is cheap), joined to `overlays` /
-  `users.username` via `streamer_user_id`, to answer *"whose chats does this viewer participate in,
-  and how much."* This makes `viewer_message_history` an admin-queryable **read surface** for the first
-  time. It stays strictly read-only from the admin view.
+  `viewer_session_id` (using the existing index, so it is cheap), grouped and joined to
+  `users.username` via `streamer_user_id`, carrying `overlay_id` for deep links into the overlay
+  list (ADR-0036), to answer *"whose chats does this viewer participate in, and how much."* This
+  makes `viewer_message_history` an admin-queryable **read surface** for the first time. It stays
+  strictly read-only from the admin view.
 - **Stop presenting `message_count_1min` / `message_count_1hour` as engagement.** They are rate-limit
   bookkeeping; the real per-streamer usage now comes from the `viewer_message_history` aggregate.
 - **Do NOT introduce a durable cross-session viewer-identity table.** Session dedup — collapsing a
@@ -106,7 +113,8 @@ as if they were engagement numbers — they are not, they are throttle bookkeepi
 
 - [ADR-0036](./0036-admin-url-addressable-selection.md) — the URL-addressable master-detail pattern
   this view links into (viewer → streamer account, viewer → overlays).
-- [ADR-0019](./0019-split-streamer-viewer-premium.md) — viewer premium keys on the linked `viewer_id`;
-  this view acts on the same session unit.
+- [ADR-0019](./0019-split-streamer-viewer-premium.md) — viewer premium keys on the linked
+  `viewer_id` (the `viewers` row the session's `viewer_id` points at); this view is the
+  session-keyed surface reached through to it.
 - [ADR-0035](./0035-admin-global-entity-search.md) — global search resolves viewers by
   username/`platform_user_id` into this view.

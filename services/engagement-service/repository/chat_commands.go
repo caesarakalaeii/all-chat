@@ -32,14 +32,15 @@ import (
 // the same trigger (case-insensitive).
 var ErrDuplicateTrigger = errors.New("a chat command with this trigger already exists")
 
-const chatCommandCols = `id, user_id, kind, trigger, response, create_clip, image_url, min_role,
-	cooldown_seconds, enabled, use_count, created_at, updated_at`
+const chatCommandCols = `id, user_id, kind, trigger, response, create_clip, image_url, sound_url,
+	alert_text, min_role, cooldown_seconds, enabled, use_count, created_at, updated_at`
 
 // scanChatCommand scans chatCommandCols, after any leading columns into lead.
 func scanChatCommand(row pgx.Row, lead ...any) (models.ChatCommand, error) {
 	var c models.ChatCommand
 	err := row.Scan(append(lead, &c.ID, &c.UserID, &c.Kind, &c.Trigger, &c.Response, &c.CreateClip,
-		&c.ImageURL, &c.MinRole, &c.CooldownSeconds, &c.Enabled, &c.UseCount, &c.CreatedAt, &c.UpdatedAt)...)
+		&c.ImageURL, &c.SoundURL, &c.AlertText, &c.MinRole, &c.CooldownSeconds, &c.Enabled, &c.UseCount,
+		&c.CreatedAt, &c.UpdatedAt)...)
 	return c, err
 }
 
@@ -77,9 +78,11 @@ func (r *Repository) CountChatCommands(ctx context.Context, userID uuid.UUID) (i
 // CreateChatCommand inserts c for c.UserID.
 func (r *Repository) CreateChatCommand(ctx context.Context, c models.ChatCommand) (models.ChatCommand, error) {
 	out, err := scanChatCommand(r.db.QueryRow(ctx, `INSERT INTO chat_commands
-		(user_id, kind, trigger, response, create_clip, image_url, min_role, cooldown_seconds, enabled)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING `+chatCommandCols,
-		c.UserID, c.Kind, c.Trigger, c.Response, c.CreateClip, c.ImageURL, c.MinRole, c.CooldownSeconds, c.Enabled))
+		(user_id, kind, trigger, response, create_clip, image_url, sound_url, alert_text, min_role,
+		 cooldown_seconds, enabled)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING `+chatCommandCols,
+		c.UserID, c.Kind, c.Trigger, c.Response, c.CreateClip, c.ImageURL, c.SoundURL, c.AlertText, c.MinRole,
+		c.CooldownSeconds, c.Enabled))
 	return out, mapChatCommandErr(err)
 }
 
@@ -87,10 +90,11 @@ func (r *Repository) CreateChatCommand(ctx context.Context, c models.ChatCommand
 // ErrNotFound when the id does not exist or belongs to someone else.
 func (r *Repository) UpdateChatCommand(ctx context.Context, c models.ChatCommand) (models.ChatCommand, error) {
 	out, err := scanChatCommand(r.db.QueryRow(ctx, `UPDATE chat_commands SET
-		kind = $3, trigger = $4, response = $5, create_clip = $6, image_url = $7, min_role = $8,
-		cooldown_seconds = $9, enabled = $10, updated_at = now()
+		kind = $3, trigger = $4, response = $5, create_clip = $6, image_url = $7, sound_url = $8,
+		alert_text = $9, min_role = $10, cooldown_seconds = $11, enabled = $12, updated_at = now()
 		WHERE id = $1 AND user_id = $2 RETURNING `+chatCommandCols,
-		c.ID, c.UserID, c.Kind, c.Trigger, c.Response, c.CreateClip, c.ImageURL, c.MinRole, c.CooldownSeconds, c.Enabled))
+		c.ID, c.UserID, c.Kind, c.Trigger, c.Response, c.CreateClip, c.ImageURL, c.SoundURL, c.AlertText,
+		c.MinRole, c.CooldownSeconds, c.Enabled))
 	return out, mapChatCommandErr(err)
 }
 

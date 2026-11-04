@@ -368,6 +368,20 @@ func (h *SourcesHandler) copyAdminToken(ctx context.Context, platform, adminUser
 	return nil
 }
 
+// keepRelayWebhook makes config.relay_webhook_url server-owned (ADR-0091): a client value is
+// dropped, since discord-listener posts chat to whatever URL is stored, and the stored webhook
+// is carried over while the relay still targets the same channel. A new relay channel leaves it
+// unset, so discord-listener provisions a webhook in that channel. stored is nil on create.
+func keepRelayWebhook(stored, requested map[string]interface{}) {
+	delete(requested, models.RelayWebhookURLKey)
+	webhook, ok := stored[models.RelayWebhookURLKey]
+	storedChannel, _ := stored["relay_channel_id"].(string)
+	requestedChannel, _ := requested["relay_channel_id"].(string)
+	if ok && storedChannel == requestedChannel {
+		requested[models.RelayWebhookURLKey] = webhook
+	}
+}
+
 // discordConfigChannelKeys are the config fields that name a Discord channel All-Chat will
 // act on. Each is attacker-controlled and each is exercised by the SHARED bot, so Discord
 // authorizes the bot and never the caller:
@@ -1032,6 +1046,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	if req.Config != nil {
 		sourceConfig = req.Config
 	}
+	keepRelayWebhook(nil, sourceConfig)
 
 	source := &models.ChatSource{
 		OverlayID:     overlayID,
@@ -1226,6 +1241,8 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 			return
 		}
 	}
+
+	keepRelayWebhook(source.Config, req.Config)
 
 	if err := h.sourceRepo.UpdateConfig(c.Request.Context(), sourceID, req.Config); err != nil {
 		h.logger.Error("Failed to update source config",

@@ -101,8 +101,8 @@ function OverlayGridSkeleton() {
     <div role="status" className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       <VisuallyHidden>{t('dashboard.overlays.loading')}</VisuallyHidden>
       {Array.from({ length: 3 }).map((_, i) => (
-        <div key={i} className="overflow-hidden border-2 border-white bg-black">
-          <div className="h-[3px] w-full bg-white/20" />
+        <div key={i} className="overflow-hidden border-2 border-lanes-fg-strong bg-lanes-panel">
+          <div className="h-[3px] w-full bg-lanes-fg-strong/20" />
           <div className="space-y-3 p-6">
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-3 w-3/4" />
@@ -172,7 +172,7 @@ function DeleteOverlayDialog({
       <Dialog.Trigger render={children as React.ReactElement} />
       <Dialog.Content
         showCloseButton={false}
-        className="lanes-app rounded-none border-white bg-black"
+        className="lanes-app rounded-none border-lanes-fg-strong bg-lanes-panel"
       >
         <Dialog.Title className="text-lg">
           {t('dashboard.deleteOverlay.title', { name: overlayName })}

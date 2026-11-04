@@ -210,7 +210,7 @@ export default function AdminFeaturesPage() {
                         'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold',
                         gate.is_premium
                           ? 'border-premium/20 bg-premium/10 text-premium'
-                          : 'border-green-500/20 bg-green-500/10 text-green-400'
+                          : 'border-green-500/20 bg-green-500/10 text-success'
                       )}
                     >
                       {gate.is_premium
@@ -248,7 +248,7 @@ export default function AdminFeaturesPage() {
                       className={cn(
                         'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-bold',
                         gate.early_access
-                          ? 'border-violet-500/20 bg-violet-500/10 text-violet-400'
+                          ? 'border-violet-500/20 bg-violet-500/10 text-twitch'
                           : 'border-border bg-badge-bg text-text-sub'
                       )}
                     >

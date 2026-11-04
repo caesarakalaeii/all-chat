@@ -65,7 +65,7 @@ const MonacoCSSEditor = dynamic(() => import('@/components/MonacoCSSEditor'), {
     <div
       className={cn(
         // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- px is intentional here: this is a fixed-size loading placeholder, matched to the Monaco editor it is replaced by, sized to the layout it sits in rather than to the reading text, so it must not grow with the root font size the way the suggested rem-relative utility would
-        'flex h-[400px] items-center justify-center border border-white/50'
+        'flex h-[400px] items-center justify-center border border-lanes-fg-strong/50'
       )}
     >
       <div className="text-dim text-sm">{EDITOR_LOADING_LABEL}</div>
@@ -231,7 +231,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
       <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
         <AppNav />
         <div className="flex items-center justify-center pt-32">
-          <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-white"></div>
+          <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-lanes-fg-strong"></div>
         </div>
       </div>
     )
@@ -262,7 +262,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
         <div className="animate-slide-in fixed top-4 right-4 z-50">
           <div
             className={cn(
-              'border-3 border-white bg-black p-4 shadow-[8px_8px_0_0_rgba(255,255,255,0.15)]',
+              'border-3 border-lanes-fg-strong bg-lanes-panel p-4 shadow-[8px_8px_0_0_rgba(255,255,255,0.15)]',
               notification.type === 'success' ? 'border-kick' : 'border-youtube'
             )}
           >
@@ -377,7 +377,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                 checked={config.enabled}
                 onCheckedChange={(enabled) => setConfig({ ...config, enabled })}
                 aria-label={t('overlayEditor.credits.enableHeading')}
-                className="border-2 border-white bg-black data-checked:border-kick data-checked:bg-kick"
+                className="border-2 border-lanes-fg-strong bg-lanes-panel data-checked:border-kick data-checked:bg-kick"
               >
                 <Switch.Thumb />
               </Switch.Root>
@@ -396,7 +396,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                   {CREDIT_EVENT_TYPES.map(({ key, messageStem, icon }) => (
                     <label
                       key={key}
-                      className="flex cursor-pointer items-center gap-3 border border-white/40 p-3 transition-colors hover:border-white"
+                      className="flex cursor-pointer items-center gap-3 border border-lanes-fg-strong/40 p-3 transition-colors hover:border-lanes-fg-strong"
                     >
                       <input
                         type="checkbox"
@@ -584,7 +584,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     checked={config.clips_enabled}
                     onCheckedChange={(clips_enabled) => setConfig({ ...config, clips_enabled })}
                     aria-label={t('overlayEditor.credits.clipsHeading')}
-                    className="border-2 border-white bg-black data-checked:border-kick data-checked:bg-kick"
+                    className="border-2 border-lanes-fg-strong bg-lanes-panel data-checked:border-kick data-checked:bg-kick"
                   >
                     <Switch.Thumb />
                   </Switch.Root>
@@ -633,7 +633,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                       </p>
                     </div>
                     <div>
-                      <label className="flex cursor-pointer items-center gap-3 border border-white/40 p-3 transition-colors hover:border-white">
+                      <label className="flex cursor-pointer items-center gap-3 border border-lanes-fg-strong/40 p-3 transition-colors hover:border-lanes-fg-strong">
                         <input
                           type="checkbox"
                           checked={config.clips_muted ?? true}

@@ -2,6 +2,7 @@
 
 **Date**: 2026-06-13
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation; linked platform ids now persisted)
 **Deciders**: All-Chat Platform Team
 
 ---
@@ -10,7 +11,8 @@
 
 The IRC↔EventSub partition (ADR-0015) decides that a Twitch channel is read via EventSub when its
 owner granted the chat scopes (`user:read:chat` + `user:bot` + `channel:bot`) and holds a valid
-token. That grant was stored exclusively on the **users row**:
+token on the Twitch-login users row, or when linked credentials exist in `twitch_oauth_tokens`. There
+was no linked-token path before this ADR: the grant was stored exclusively on the **users row**:
 
 ```sql
 EXISTS (SELECT 1 FROM users u
@@ -28,7 +30,7 @@ in `linkPlatformToUser`, which had nowhere to persist the grant:
 
 - there is one `granted_scopes` column and one access/refresh-token slot per user, both
   semantically owned by the auth_provider (overwriting them was the clobber bug fixed in
-  `140f1338`);
+  `d1a5efce`);
 - `UserRepository.Update` never persisted the platform-ID columns, so even the link itself
   (`google_id`/`kick_id`/`twitch_id`) was silently dropped.
 
@@ -60,8 +62,12 @@ Consumers extend their lookups to both credential sources:
   (`GetExpiringTwitchLinkTokens` / `UpdateTwitchLinkTokens` /
   `MarkTwitchLinkTokenPermanentlyFailed`, same bounded 48-hour recovery window and 30-day
   permanent-fail suppression).
-- **DSGVO cleanup** (047's `cleanup_expired_oauth_tokens()`): rows expired 7+ days are deleted;
-  the channel then simply falls back to the IRC listener (ADR-0015 guarantees no message loss).
+- **DSGVO cleanup**: `cleanup_expired_oauth_tokens()` was extended by migration 063 to cover the
+  linked tables; it was later removed by migration 118 together with the other pg_cron-scheduled
+  cleanups, so no automatic expired-token deletion runs for `twitch_oauth_tokens` today. The
+  `retention-sweeper` CronJob ([ADR-0089](./0089-retention-sweeper-cronjob.md)) deliberately leaves
+  these rows in place, because expiry alone does not prove the credential is dead and a live row
+  still anchors the channel's EventSub eligibility; they cascade from `users` on account deletion.
 
 ## Considered Alternatives
 
@@ -78,14 +84,29 @@ Consumers extend their lookups to both credential sources:
 ## Consequences
 
 - The "Connect Twitch" add-source button now works identically for every account type; the
-  outreach instruction "re-add your Twitch source" is truthful for all users.
+  outreach instruction "re-add your Twitch source" is truthful for all users. (The add-source flow
+  now lands these accounts on the EventSub listener, which is what ADR-0026's enforce phase left as
+  the only Twitch chat path.)
 - A channel can be EventSub-eligible through either credential source; the LATERAL preference
   order makes the choice deterministic (valid+scoped first, users row over linked).
-- Linked credentials die independently of the account: if their refresh token is revoked, the row
-  is suppressed/cleaned and the channel falls back to IRC — same failure semantics as ADR-0015.
-- `linkPlatformToUser` still does not persist `google_id`/`kick_id`/`twitch_id` on users (known
-  gap, unchanged by this ADR): account *linking* as an identity feature remains unimplemented;
-  this ADR only fixes credential storage for chat reading.
+- Linked credentials die independently of the account: if their refresh token is revoked,
+  token-refresh-service records the rejection by pushing the expiry 30 days ahead, the listener's
+  `has_chat_scope`/`token_expires_at` checks stop selecting the row, and the channel leaves the
+  EventSub partition. Under ADR-0015 that was a fallback to IRC; since ADR-0026's enforce phase
+  dropped IRC, the channel's chat goes quiet until the credential is repaired (re-add with
+  `force_verify`).
+- Linking now also records the platform id on the account. `linkPlatformToUser` calls
+  `UserRepository.SetPlatformID`, which fills `twitch_id`/`google_id`/`kick_id` only when the
+  column is empty and leaves it alone when another account already owns the id. Migration 121
+  backfills `twitch_id` and `kick_id` from `twitch_oauth_tokens` / `kick_oauth_tokens` for links
+  made before, skipping ids that another account owns or that more than one account linked
+  (YouTube is not backfilled: `youtube_oauth_tokens` stores channel ids, not the Google id).
+  A login with a linked platform therefore lands on the linking account; before, it missed the
+  account, tried to create a second one and failed on the username index ("Failed to process
+  user", 2026-11-03). That login authenticates only: profile fields, tokens and `granted_scopes`
+  on the users row stay the login provider's (`linkMayReplacePrimaryCredentials`). Streamer sends
+  as themselves to Twitch still require a Twitch-login account, because only that account holds
+  a Twitch token on its users row.
 
 ## Verification
 

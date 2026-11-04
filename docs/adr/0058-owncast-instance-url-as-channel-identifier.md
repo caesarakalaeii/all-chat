@@ -1,6 +1,7 @@
 # ADR-0058: An Owncast source is the instance URL, not a channel name
 
 **Date**: 2026-09-08
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Status**: Accepted
 **Deciders**: caesarakalaeii
 
@@ -67,13 +68,17 @@ rather than invented into a CSS color.
 
 ## Consequences
 
-- The source picker for Owncast is a URL input, not a name lookup — the only
-  platform where "add source" asks for a URL. Frontend handled separately.
+- The source picker for Owncast is a URL input, not a name lookup: the only
+  platform where "add source" asks for a URL. The frontend builds it separately
+  from the name-entry platforms.
 - No OAuth, no `NAMEABLE_PLATFORMS` entry, no auth-service change: chat is
   read-only and unauthenticated by design.
 - Deployment adds `owncast-listener` (port 8095) and migration 091
   (`supported_platforms` row + `platform_owncast` premium feature gate seed,
-  ADR-0008). No Owncast-specific env vars are required anywhere.
+  ADR-0008). The frontend still hides the platform outside beta.allch.at
+  (`BETA_ONLY_PLATFORMS` in `frontend/src/lib/platform-availability.ts`);
+  release to production means removing it there and flipping the gate in
+  `/admin/features`. No Owncast-specific env vars are required anywhere.
 - The per-connection manager diverges structurally from kick-listener's
   one-socket-many-subscriptions model. That is the honest shape for platforms
   where the unit of connection is the customer's own server, and the backoff

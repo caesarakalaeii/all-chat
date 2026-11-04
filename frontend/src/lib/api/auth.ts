@@ -94,6 +94,14 @@ export const authApi = {
     return apiClient.patch('/api/v1/auth/me/onboarding', { completed })
   },
 
+  /**
+   * Record acceptance of the current Terms of Service and Privacy Policy.
+   * Rejected with 403 while impersonating.
+   */
+  async acceptTos(): Promise<{ tos_accepted: boolean }> {
+    return apiClient.post('/api/v1/auth/me/tos-acceptance', {})
+  },
+
   // --- Chat bots (ADR-0081) ---
 
   /** Who responds for a streamer's chat commands, and which bot slots are filled. */

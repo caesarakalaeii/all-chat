@@ -35,6 +35,7 @@ import Link from 'next/link'
 import { renderFeedMessage } from '@/components/home/ConvergenceSection'
 import { LaneText, MARQUEE_ROWS } from '@/components/home/LanesHero'
 import { LanguageToggle } from '@/components/home/LanguageToggle'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { useReveal } from '@/hooks/useReveal'
 import { trackEvent } from '@/lib/analytics'
@@ -190,10 +191,12 @@ export function BrowserExtensionClient() {
         <Link href="/docs">{t('marketing.lanes.navDocs')}</Link>
         <a href={DISCORD_INVITE_URL}>{t('marketing.lanes.navDiscord')}</a>
         <LanguageToggle />
+        <ThemeToggle />
       </nav>
 
       <main id="main-content" tabIndex={-1} className="min-h-screen">
-        <header className="lanes-stage ext-stage">
+        {/* theme-dark: the marquee lanes keep the dark palette, as on the homepage. */}
+        <header className="lanes-stage ext-stage theme-dark">
           <div className="lanes-track">
             {MARQUEE_ROWS.map(({ platform, rows }) => (
               <div key={platform} className="lane" data-p={platform}>
@@ -234,7 +237,8 @@ export function BrowserExtensionClient() {
           <p>{t('marketing.extensionPage.demoBody')}</p>
 
           <div
-            className="ext-window panel-fill"
+            // theme-dark: a mock of a stream page, dark in either site theme.
+            className="ext-window panel-fill theme-dark"
             role="img"
             aria-label={t('marketing.extensionPage.demoAlt')}
           >

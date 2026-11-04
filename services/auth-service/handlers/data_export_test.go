@@ -74,6 +74,8 @@ VALUES (:me, '1001', 'streamer_x', 'Streamer X', 'twitch', 'SECRET-login-access'
 
 INSERT INTO overlays (id, user_id, name) VALUES (:mine, :me, 'My Overlay'), (:theirs, :other, 'Their Overlay');
 INSERT INTO overlay_chat_sources (overlay_id, platform, channel_id, channel_name) VALUES (:mine, 'twitch', '1001', 'streamer_x');
+INSERT INTO overlay_chat_sources (overlay_id, platform, channel_id, channel_name, config)
+VALUES (:mine, 'discord', '2001', 'general', '{"relay_enabled": true, "relay_channel_id": "2002", "relay_webhook_url": "SECRET-relay-webhook"}');
 UPDATE overlay_configs SET custom_css = '.my-css {}' WHERE overlay_id = :mine;
 UPDATE overlay_event_settings SET twitch_channel_points_name = 'Bananas' WHERE overlay_id = :mine;
 UPDATE credit_roll_configs SET custom_css = '.my-roll {}' WHERE overlay_id = :mine;
@@ -104,8 +106,8 @@ INSERT INTO device_tokens (user_id, overlay_id, name, token_hash, scopes)
 VALUES (:me, :mine, 'StreamController', 'SECRET-device-hash'::bytea, '{chat:write}');
 INSERT INTO localization_locales (code, english_name, native_name, requested_by) VALUES ('tlh', 'Klingon', 'tlhIngan Hol', :me);
 INSERT INTO localization_translations (locale, key, value, submitted_by) VALUES ('tlh', 'nav.home', 'juH', :me);
-INSERT INTO premium_subscriptions (user_id, provider, provider_user_id, status, tier_id, cents, raw, product)
-VALUES (:me, 'patreon', 'p-1', 'active', 't-1', 500, '{"email": "SECRET-raw-email@example.com"}', 'streamer');
+INSERT INTO premium_subscriptions (user_id, provider, provider_user_id, status, tier_id, cents, product)
+VALUES (:me, 'patreon', 'p-1', 'active', 't-1', 500, 'streamer');
 INSERT INTO ambassador_showcase (user_id, tagline, featured_consent) VALUES (:me, 'Multistreams to 3 platforms', TRUE);
 INSERT INTO moderation_actions (overlay_id, actor_user_id, platform, channel_id, action, outcome, reason)
 VALUES (:mine, :mod, 'twitch', '1001', 'timeout', 'success', 'on my overlay'),
@@ -219,6 +221,11 @@ func TestHandleDataExport_CoversEverythingStoredAboutTheStreamer(t *testing.T) {
 	}
 	if !hasRow(asRows(overlay["sources"]), "channel_name", "streamer_x") {
 		t.Errorf("overlays[0].sources missing the twitch source: %v", overlay["sources"])
+	}
+	// The Discord source is exported with its relay settings, but not the relay webhook URL,
+	// a credential (ADR-0091); the SECRET check above would catch it.
+	if !hasRow(asRows(overlay["sources"]), "channel_name", "general") {
+		t.Errorf("overlays[0].sources missing the discord source: %v", overlay["sources"])
 	}
 
 	for _, want := range []struct {

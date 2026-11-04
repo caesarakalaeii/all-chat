@@ -25,6 +25,8 @@ Euler; the walk `shadow` (measure) → `self` (cutover, Euler fallback on) →
 `TIKTOK_SELF_SIGN_FALLBACK=false` (retire) in the listener README still
 applies to such a deployment.
 
+**Revised**: 2026-11-03 (brought in line with the current implementation)
+
 > **Update 2026-09-15** (incident follow-up): the ceiling bit us in production
 > before the signing work landed. On 2026-09-14 one tiktok-listener pod held 43
 > of ~48 leases and overran the free tier's concurrent *WebSocket proxy* cap
@@ -214,7 +216,7 @@ signing work is never finished.
 
 ### Lever 2 — sign it ourselves (`TIKTOK_SIGNER_MODE`, default **`euler`**)
 
-Three modes, intended to be walked in order:
+Four modes, intended to be walked in order:
 
 - **`euler`** — unchanged behaviour, and the baseline. Our code is not on the
   connect path at all.
@@ -224,6 +226,10 @@ Three modes, intended to be walked in order:
 - **`self`** — we sign. With `TIKTOK_SELF_SIGN_FALLBACK` on (the default), Euler
   still catches our failures; turning it off is what finally retires the
   dependency.
+- **`pure-node`** — no signing request of any kind: the listener leases the
+  signer's shared WebSocket session (`GET /v1/session`) and attaches the room
+  cross-room, so Euler never sees a connection. The final step of the walk.
+  See `services/tiktok-signer/README.md`.
 
 Gift enrichment (`TIKTOK_EXTENDED_GIFT_INFO`) defaults on **only** under `self`,
 because the direct `gift/list/` route must itself be signed — enabling it any
@@ -313,9 +319,11 @@ licence of the version in the lockfile at that time.
 
 ## Alternatives considered
 
-**Fork or vendor the connector.** Rejected: unnecessary. The three mutable
-globals cover every call site, and a fork would mean carrying upstream's
-churn — on a library whose whole value is tracking a moving target.
+**Fork or vendor the connector.** Rejected: unnecessary.
+`RouteConfig`, `RoomIdRouteConfig` / `IsLiveRouteConfig` and `SignConfig` are
+module-level mutable objects that between them cover every call site, and a
+fork would mean carrying upstream's churn — on a library whose whole value is
+tracking a moving target.
 
 **Pay for a Business plan.** The pricing is what prompted this issue. It also
 leaves costs 1 and 3 only partly addressed: a higher ceiling is still a ceiling,

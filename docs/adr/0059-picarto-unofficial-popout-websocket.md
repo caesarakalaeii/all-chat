@@ -1,12 +1,14 @@
 # ADR-0059: Picarto chat via the unofficial pop-out WebSocket feed
 
 **Date**: 2026-09-08
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Status**: Accepted
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
 
-Picarto support (plan Phase 3) shipped without an official chat API. Picarto
+Picarto support (Phase 3 of the platform expansion plan) shipped without an
+official chat API. Picarto
 publishes a REST API for channel metadata (https://api.picarto.tv) but no
 public way to follow chat. What exists is the pop-out chat page
 (https://picarto.tv/chatpopout/<channel>) which, like every Picarto client,
@@ -76,11 +78,14 @@ above, with four load-bearing constraints:
    Picarto's emoji CDN contract — a second undocumented surface — for casing
    value.
 4. **The risk is accepted knowingly, and priced into the feature gate.**
-   `platform_picarto` seeds `is_premium = TRUE` (migration 093): uptake is
-   held back until the feed has been observed stable in production, because a
-   silent Picarto change degrades a * paying * overlay's chat silently. The
-   gate flips via the admin endpoint without redeploy when confidence is
-   earned.
+   `platform_picarto` seeded `is_premium = TRUE` (migration 093): uptake was
+   held back until the feed had been observed stable in production, because a
+   silent Picarto change degrades a *paying* overlay's chat silently. The gate
+   flips via the admin endpoint without redeploy when confidence is earned.
+   The frontend still hides Picarto outside beta.allch.at
+   (`BETA_ONLY_PLATFORMS` in `frontend/src/lib/platform-availability.ts`);
+   release means removing it there and turning the gate's `is_premium` off in
+   `/admin/features`.
 
 ## Consequences
 

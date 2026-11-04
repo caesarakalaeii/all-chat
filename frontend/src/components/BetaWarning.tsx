@@ -68,7 +68,7 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
         <div className="mb-4 flex items-start gap-4">
           <div className="mt-0.5 shrink-0">
             <svg
-              className="h-6 w-6 text-yellow-400"
+              className="h-6 w-6 text-warning"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -82,7 +82,7 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
               />
             </svg>
           </div>
-          <Dialog.Title className="text-yellow-400">{title}</Dialog.Title>
+          <Dialog.Title className="text-warning">{title}</Dialog.Title>
         </div>
 
         <Dialog.Description>{message}</Dialog.Description>
@@ -97,7 +97,7 @@ export function BetaWarning({ platform, onCancel, onContinue }: BetaWarningProps
           href={DISCORD_INVITE_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-2 inline-flex items-center gap-2 text-sm text-blue-400 underline underline-offset-4 hover:text-blue-300"
+          className="mt-2 inline-flex items-center gap-2 text-sm text-info underline underline-offset-4 hover:text-info/80"
         >
           <DiscordIcon className="h-4 w-4 shrink-0" />
           {t('common.betaWarning.discordLink')}

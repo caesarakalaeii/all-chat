@@ -322,7 +322,7 @@ export default function OverlaysPage() {
       </div>
 
       {connectionStatusUnavailable && (
-        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-400">
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-warning">
           {t('admin.overlays.statusUnavailable')}
         </div>
       )}
@@ -447,7 +447,7 @@ export default function OverlaysPage() {
                                 <span
                                   className={clsx(
                                     'font-medium',
-                                    isLongOpen ? 'text-amber-400' : 'text-kick'
+                                    isLongOpen ? 'text-warning' : 'text-kick'
                                   )}
                                 >
                                   {connectedFor
@@ -579,7 +579,7 @@ export default function OverlaysPage() {
                             <span
                               className={clsx(
                                 'font-medium',
-                                selectedLongOpen ? 'text-amber-400' : 'text-kick'
+                                selectedLongOpen ? 'text-warning' : 'text-kick'
                               )}
                             >
                               {selectedConnectedFor

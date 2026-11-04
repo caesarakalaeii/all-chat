@@ -1,7 +1,8 @@
 # ADR-0079: Streamer Chat Commands in engagement-service, With a Sandboxed JS Template Engine
 
 **Date**: 2026-10-21
-**Status**: Accepted; `{urlfetch}` and command images added by [ADR-0080](./0080-chat-command-urlfetch-and-images.md); bot sender, custom bots and timers added by [ADR-0081](./0081-chat-command-bot-sender-custom-bots-and-timers.md)
+**Status**: Accepted
+**Revised**: 2026-11-04 (editor offered to early-access users on every host)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -16,8 +17,10 @@ across every chat All-Chat merges:
 - **Role limits**: a command may be limited to subscribers, VIPs, moderators or
   the broadcaster.
 
-A reply is posted from the streamer's own account, not from a bot account.
-Anything that spends YouTube Data API quota must be premium.
+A reply is posted into the streamer's chat. ADR-0079 first sent it from the
+streamer's own account; ADR-0081 later made a branded All-Chat Bot the default
+sender, with the streamer's own account as the opt-out. Anything that spends
+YouTube Data API quota must be premium.
 
 The questions are where commands live, how a chat message reaches them without
 taxing the message-processor hot path, how replies avoid answering themselves,
@@ -34,7 +37,8 @@ and how to run streamer-written JavaScript on a shared service.
   memory and I/O must be bounded. Without a memory cap, `'x'.repeat(2**30)`
   takes the pod down.
 - **No self-triggering.** A reply arrives back in chat as a message from the
-  broadcaster. A keyword its reply contains would fire again forever.
+  streamer (or, since ADR-0081, her bot). A keyword its reply contains would
+  fire again forever.
 
 ## Considered Options
 
@@ -66,10 +70,12 @@ and how to run streamer-written JavaScript on a shared service.
 ### Transport
 
 engagement-service keeps the Redis SET `chatcmd:channels`. It holds
-`platform:channel`, lowercased, for every active chat source on an overlay whose
-owner has an enabled command. Kick sources also add their slug, which is what
-the Kick listener stamps. The set is rebuilt atomically (SADD to a temp key,
-then RENAME) every 30s and right after any command write.
+`platform:channel`, lowercased, for every active chat source on an overlay
+whose owner has an enabled command (or, since ADR-0081, a message-counting
+timer; the set is what carries those channels to the forwarder too). Kick
+sources also add their slug, which is what the Kick listener stamps. The set is
+rebuilt atomically (SADD to a temp key, then RENAME) every 30s and right after
+any command or timer write.
 
 message-processor holds an in-process copy of the set, refreshed every 10s.
 For a chat message on a listed channel it XADDs a `CommandJob` to
@@ -107,24 +113,41 @@ keys decide, the same way on every replica, whether the match may run:
 - `chatcmd:cd:{command}`: the command is in its cooldown.
 
 If the match passes, the command bumps `use_count`, optionally clips, renders
-its reply and posts it.
+its reply and posts it through `/internal/chat/bot-send` (ADR-0081), which
+resolves the sender: the All-Chat Bot by default, else the streamer's own
+account.
 
 ### Replies and clips
 
-- **Replies** go through `/internal/chat/announce` to the platform the message
-  came from, and only when the channel is the streamer's own. A reply to a
-  co-streamer's chat would otherwise land in the streamer's chat.
-- **TikTok, Discord and the beta platforms** have no send path. Commands there
-  can still clip.
-- **YouTube replies require the owner's `users.is_premium`**, checked per send,
-  because a send spends 5 quota units. This is independent of the feature gate.
-- **Clips** use a new `/internal/twitch/clip` in auth-service (Helix Create
+- **Replies** go to the platform the message came from, and only when the
+  channel is the streamer's own. A reply to a co-streamer's chat would
+  otherwise land in the streamer's chat (Twitch, Kick and YouTube only have a
+  send path; TikTok and Discord have none).
+- **YouTube replies require the owner's `users.is_premium`**, checked per send
+  (`engagement-service/consumer/chatcmd.go:289`), because a send spends 5 quota
+  units. This is independent of the feature gate.
+- **Clips** use `/internal/twitch/clip` in auth-service (Helix Create
   Clip, `clips:edit`). A clip trigger fires from any chat in the streamer's
   overlays, which is the "clip when it is said in any chat" case.
-- **The `clips:edit` grant** is a new `clip` action in the opt-in Twitch
+- **The `clips:edit` grant** is the `clip` action in the opt-in Twitch
   re-consent (ADR-0017). It folds in `user:write:chat` and is preserved against
   downgrades. A `return=commands` parameter (allowlisted `ReturnPath`) brings
-  the user back to `/commands`.
+  the user back to `/commands`
+  (`services/auth-service/handlers/platform_auth_v2.go:482-484`).
+
+### What later ADRs added
+
+- **Bot sender, custom bots and timers**
+  ([ADR-0081](./0081-chat-command-bot-sender-custom-bots-and-timers.md)):
+  `chat_bot_accounts` and `chat_bot_settings` (migration 115), `chat_timers`
+  (migration 116) and the `custom_chat_bot` gate; today the default reply
+  sender is the All-Chat Bot account, not the streamer, and message-count
+  timers fire through the same sender.
+- **`{urlfetch}` and command images**
+  ([ADR-0080](./0080-chat-command-urlfetch-and-images.md)):
+  `chat_commands.image_url` (migration 114) puts an image on the streamer's
+  alerts overlays, and `{urlfetch}` is the guarded server-side fetch ADR-0079
+  originally left out on SSRF grounds.
 
 ### Template language
 
@@ -151,11 +174,14 @@ message text so streamers can debug without firing in chat.
 
 ### Gating and release
 
-- **Feature gate.** `chat_commands` (ADR-0008) gates create/update, seeded
-  **open** (migration 113): the one paid part is the YouTube send check above.
-  Delete is never gated.
-- **Editor.** The editor is `/commands`. It is hidden outside beta.allch.at via
-  `BETA_ONLY_FEATURES` in `platform-availability.ts`.
+- **Feature gate.** `chat_commands` (ADR-0008) gates create and update: it was
+  seeded `early_access=TRUE`, `is_premium=FALSE` (migration 113), so it serves
+  beta testers and ambassadors first and opens to every account when an admin
+  turns `early_access` off. Delete is never gated.
+  (`services/engagement-service/cmd/main.go:277-283`)
+- **Editor.** The editor is `/commands`. Outside beta.allch.at it is offered
+  only to early-access users, via `EARLY_ACCESS_FEATURES` in
+  `platform-availability.ts`, matching the gate.
 
 ### Compared with the bots
 
@@ -175,13 +201,15 @@ levels and cooldowns to `min_role` and `cooldown_seconds`.
 
 These are deliberately left out:
 
-- `$(urlfetch)` / `$(customapi)`: server-side fetches of user-chosen URLs are an
-  SSRF and latency surface.
+- `$(urlfetch)` / `$(customapi)`: ADR-0080 later added `{urlfetch}` behind the
+  `shared/safehttp` guard. `$(customapi)`'s arbitrary-HTTP form (any port,
+  custom headers) still has no equivalent.
 - `$(userlevel)` and `$(userid)`: the `role` is available to `{js}`.
 - Countdowns.
 - Platform lookups (uptime, game, followage): one of these on YouTube would
   spend quota per use.
-- Timers (scheduled messages).
+- Timers (scheduled messages): ADR-0081 later added them (15 s tick, message
+  counting and both combined).
 - Per-platform reply targeting.
 
 ## Consequences
@@ -198,9 +226,10 @@ These are deliberately left out:
   Kick and YouTube. TikTok and Discord chatters count as everyone, so a
   role-limited command never fires there.
 - **Twitch login only.** auth-service sends and clips with the users-row Twitch
-  token, so Twitch replies and clips need a Twitch login. A Twitch channel only
-  linked via `twitch_oauth_tokens` is not served yet. That is the same limit as
-  the existing streamer send.
+  token. A Twitch channel only linked via `twitch_oauth_tokens` is not served.
+  That is the same limit as the existing streamer send (ownership uses the
+  same predicate the send path uses:
+  `services/engagement-service/repository/chat_commands.go:148-161`).
 - **Staging.** Only the frontend and api-gateway have a beta deployment.
   engagement-service, message-processor and auth-service run from `:main`, so
   the feature works on beta once its backend reaches main.

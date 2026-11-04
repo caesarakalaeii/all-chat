@@ -290,16 +290,17 @@ func (c *ChatCommandConsumer) run(ctx context.Context, o repository.ChannelComma
 		st, err := c.store.OwnerStatus(ctx, o.UserID)
 		sendable = err == nil && st.IsPremium
 	}
+	hasAlert := cmd.ImageURL != "" || cmd.SoundURL != "" || cmd.AlertText != ""
 	var reply string
-	if cmd.Response != "" && (sendable || cmd.ImageURL != "") {
+	if cmd.Response != "" && (sendable || hasAlert) {
 		text, _ := chatcmd.Render(cmd.Response, vars)
 		reply = chatcmd.Line(text)
 	}
 	if sendable && reply != "" {
 		c.send(ctx, o.UserID, reply, job.Platform)
 	}
-	if cmd.ImageURL != "" {
-		c.showImage(ctx, o.UserID, cmd, job, vars, reply)
+	if hasAlert {
+		c.showAlert(ctx, o.UserID, cmd, job, vars, reply)
 	}
 }
 
@@ -315,10 +316,10 @@ func (c *ChatCommandConsumer) send(ctx context.Context, ownerID uuid.UUID, text,
 	}
 }
 
-// showImage puts the command's image on every alerts overlay of the streamer as a
-// chat_command alert (ADR-0080). Like a clip it fires from any chat in the
-// streamer's overlays: it shows on their own stream, not in someone else's chat.
-func (c *ChatCommandConsumer) showImage(ctx context.Context, ownerID uuid.UUID, cmd models.ChatCommand, job mpmodels.CommandJob, vars chatcmd.Vars, reply string) {
+// showAlert puts the command's alert (image, sound, text) on every alerts overlay of
+// the streamer as a chat_command alert (ADR-0080). Like a clip it fires from any chat
+// in the streamer's overlays: it shows on their own stream, not in someone else's chat.
+func (c *ChatCommandConsumer) showAlert(ctx context.Context, ownerID uuid.UUID, cmd models.ChatCommand, job mpmodels.CommandJob, vars chatcmd.Vars, reply string) {
 	overlays, err := c.store.AlertsOverlays(ctx, ownerID)
 	if err != nil {
 		c.log.Warn("chat command alerts overlays", zap.String("user", ownerID.String()), zap.Error(err))
@@ -328,8 +329,13 @@ func (c *ChatCommandConsumer) showImage(ctx context.Context, ownerID uuid.UUID, 
 		return // no overlay to show it on: skip the render and its fetches
 	}
 	img, _ := chatcmd.ImageURL(cmd.ImageURL, vars)
-	if img == "" {
-		return
+	var text string
+	if cmd.AlertText != "" {
+		rendered, _ := chatcmd.Render(cmd.AlertText, vars)
+		text = chatcmd.Line(rendered)
+	}
+	if img == "" && cmd.SoundURL == "" && text == "" {
+		return // nothing left to show, e.g. an image that did not render to https
 	}
 	msg := reply
 	if msg == "" {
@@ -338,7 +344,8 @@ func (c *ChatCommandConsumer) showImage(ctx context.Context, ownerID uuid.UUID, 
 	a := alerts.Alert{AlertID: uuid.NewString(), Platform: job.Platform, EventType: alerts.ChatCommandEvent,
 		EventData: &alerts.EventData{Type: alerts.ChatCommandEvent,
 			Value: &alerts.Value{Amount: float64(vars.Count), Currency: "uses", DisplayText: cmd.Trigger}},
-		User: alerts.User{ID: job.UserID, Name: vars.User}, Message: msg, ImageURL: img, OccurredAt: time.Now().UTC()}
+		User: alerts.User{ID: job.UserID, Name: vars.User}, Message: msg, ImageURL: img, SoundURL: cmd.SoundURL,
+		Text: text, OccurredAt: time.Now().UTC()}
 	for _, id := range overlays {
 		a.OverlayID = id.String()
 		payload, _ := json.Marshal(a)
