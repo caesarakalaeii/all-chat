@@ -42,7 +42,7 @@ import { PATREON_JOIN_URL } from '@/lib/constants'
 import { getTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import type { OverlayType } from '@/lib/types/overlay'
-import type { BetaFeature } from '@/lib/platform-availability'
+import type { EarlyAccessFeature } from '@/lib/platform-availability'
 
 const t = getTranslations()
 
@@ -58,8 +58,8 @@ interface PremiumFeature {
   messageStem: string
   /** Set on a row that advertises an overlay kind; hidden where that kind is beta-only. */
   overlayKind?: OverlayType
-  /** Set on a row that advertises an app feature; hidden where that feature is beta-only. */
-  feature?: BetaFeature
+  /** Set on a row that advertises an app feature; hidden where that feature is not offered. */
+  feature?: EarlyAccessFeature
 }
 
 // Keep in sync with the onboarding extras tour in

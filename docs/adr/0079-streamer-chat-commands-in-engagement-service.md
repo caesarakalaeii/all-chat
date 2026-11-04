@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-21
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-04 (editor offered to early-access users on every host)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -179,8 +179,9 @@ message text so streamers can debug without firing in chat.
   beta testers and ambassadors first and opens to every account when an admin
   turns `early_access` off. Delete is never gated.
   (`services/engagement-service/cmd/main.go:277-283`)
-- **Editor.** The editor is `/commands`. It is hidden outside beta.allch.at via
-  `BETA_ONLY_FEATURES` in `platform-availability.ts`.
+- **Editor.** The editor is `/commands`. Outside beta.allch.at it is offered
+  only to early-access users, via `EARLY_ACCESS_FEATURES` in
+  `platform-availability.ts`, matching the gate.
 
 ### Compared with the bots
 
