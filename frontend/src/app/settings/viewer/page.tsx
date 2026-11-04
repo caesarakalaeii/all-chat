@@ -903,7 +903,7 @@ function DeleteViewerDataCard({ onDeleted }: { onDeleted: () => void }) {
         <AlertDialog.Trigger
           render={<button className="lanes-btn danger">{t('settings.viewer.deleteButton')}</button>}
         />
-        <AlertDialog.Content className="rounded-none border-white bg-black text-[#f4f3ef]">
+        <AlertDialog.Content className="rounded-none border-lanes-fg-strong bg-lanes-panel text-lanes-fg">
           <AlertDialog.Title>{t('settings.viewer.deleteConfirmTitle')}</AlertDialog.Title>
           <AlertDialog.Description>
             {t('settings.viewer.deleteConfirmBody')}
