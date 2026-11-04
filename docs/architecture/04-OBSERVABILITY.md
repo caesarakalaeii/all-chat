@@ -669,9 +669,12 @@ Nothing is excluded by hand, maintenance included.
 |-----|--------------------|--------|
 | **Website / sign-in** | `GET https://allch.at/` returns 200; `/api/v1/auth/{twitch,youtube,kick}/login` returns the provider's authorize URL | Public request through Cloudflare + Envoy |
 | **Overlay connection** | `wss://allch.at/ws/overlay/<test-stream overlay>?passive=true` returns the `connected` frame | Public request |
+| **Overlay page** | `GET https://allch.at/overlay/<test-stream overlay>` returns 200 | Public request |
+| **Alerts overlays** | alert-processor has a ready replica | Prometheus |
 | **End-to-end chat delivery** | `status-prober` starts a 5 s test-stream run and must receive a `chat_message` frame within 15 s | Pushed to Gatus; 3 min without a push counts as down |
 | **Chat processing** | `max(processor_stream_lag_seconds{stream="chat:raw"}) < 60` and a ready message-processor | Prometheus |
 | **Platform ingestion** | Listener has a ready replica and none of the platform's critical outage alerts is firing (`ALERTS`) | Prometheus + alert rules (ADR-0022) |
+| **Metrics backend** | Prometheus `/-/ready` returns 200, so a red Prometheus-backed row can be told apart from a Prometheus outage | Prometheus |
 
 Not measured: requests that never reach the cluster are only seen by the
 public checks, and while the cluster itself is down the status page is down
