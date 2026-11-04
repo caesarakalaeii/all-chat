@@ -213,9 +213,19 @@ func (r *SourceRepository) ListByOverlayIDForUser(ctx context.Context, overlayID
 		           )
 		       )) AS is_own_channel
 		FROM overlay_chat_sources ocs
-		LEFT JOIN share_requests sr
-		    ON ocs.platform = 'shared_overlay'
-		    AND sr.id::text = ocs.channel_id
+		LEFT JOIN LATERAL (
+		    -- channel_id is the sender overlay id; the share is the one to this overlay's
+		    -- owner, an accepted one if any, else the latest that ended.
+		    SELECT s.status
+		    FROM share_requests s
+		    JOIN overlays o ON o.id = ocs.overlay_id
+		    WHERE ocs.platform = 'shared_overlay'
+		      AND s.sender_overlay_id::text = ocs.channel_id
+		      AND s.recipient_user_id = o.user_id
+		      AND s.status IN ('accepted', 'revoked', 'expired')
+		    ORDER BY s.status = 'accepted' DESC, s.responded_at DESC NULLS LAST
+		    LIMIT 1
+		) sr ON true
 		WHERE ocs.overlay_id = $1
 		ORDER BY ocs.created_at DESC
 	`

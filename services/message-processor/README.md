@@ -369,7 +369,10 @@ normalizers := map[string]normalizer.Normalizer{
 - API Gateway subscribes to these channels
 - Fan-out to all overlays displaying this chat source: the chat overlays only
   (`overlay_type = 'chat'`, `router/overlay_router.go`). Alerts/goal/list overlays
-  carry the same sources but are fed by the alert-processor (ADR-0070)
+  carry the same sources but are fed by the alert-processor (ADR-0070). A shared
+  overlay reaches a recipient overlay only while a share of the sender overlay to
+  that overlay's owner is `accepted`; revoking or expiring it stops the route at
+  once, even if other people still hold a share of the same overlay
 
 ```go
 // publisher/pubsub.go
