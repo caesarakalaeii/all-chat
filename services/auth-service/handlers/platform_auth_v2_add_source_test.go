@@ -199,6 +199,8 @@ func setupAddSourceDB(t *testing.T) *pgxpool.Pool {
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW(),
 			onboarding_completed_at TIMESTAMP NULL,
+			tos_accepted BOOLEAN NOT NULL DEFAULT FALSE,
+			tos_accepted_at TIMESTAMP NULL,
 			CONSTRAINT check_auth_ids CHECK (
 				(auth_provider = 'twitch' AND twitch_id IS NOT NULL) OR
 				(auth_provider = 'youtube' AND google_id IS NOT NULL) OR

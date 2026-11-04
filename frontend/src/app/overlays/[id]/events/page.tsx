@@ -83,7 +83,7 @@ const TAB_IDS: readonly Tab[] = ['global', 'twitch', 'youtube', 'kick', 'tiktok'
 // (ADR-0056). `after:bg-current` makes the line-variant underline follow
 // whatever colour won, so the two can never drift apart.
 const TAB_ACTIVE_COLOR: Record<Tab, string> = {
-  global: 'data-active:text-white data-active:after:bg-current',
+  global: 'data-active:text-lanes-fg-strong data-active:after:bg-current',
   twitch: 'data-active:text-twitch data-active:after:bg-current',
   youtube: 'data-active:text-youtube data-active:after:bg-current',
   kick: 'data-active:text-kick data-active:after:bg-current',
@@ -165,7 +165,7 @@ function EventToggle({
 }) {
   const descriptionId = useId()
   return (
-    <div className="flex items-center justify-between border-b border-white/20 py-3.5 last:border-0">
+    <div className="flex items-center justify-between border-b border-lanes-fg-strong/20 py-3.5 last:border-0">
       <div className="flex-1 pr-4">
         <p className="text-sm font-medium">{label}</p>
         <p id={descriptionId} className="text-sub mt-0.5 text-xs">
@@ -181,7 +181,7 @@ function EventToggle({
           aria-describedby={descriptionId}
           className="peer sr-only"
         />
-        <div className="peer h-5 w-10 border-2 border-white bg-black peer-checked:border-kick peer-checked:bg-kick peer-focus-visible:ring-2 peer-focus-visible:ring-kick after:absolute after:top-[3px] after:left-[3px] after:h-3 after:w-3 after:bg-white after:transition-transform after:content-[''] peer-checked:after:translate-x-4" />
+        <div className="peer h-5 w-10 border-2 border-lanes-fg-strong bg-lanes-panel peer-checked:border-kick peer-checked:bg-kick peer-focus-visible:ring-2 peer-focus-visible:ring-kick after:absolute after:top-[3px] after:left-[3px] after:h-3 after:w-3 after:bg-lanes-fg-strong after:transition-transform after:content-[''] peer-checked:after:translate-x-4" />
       </label>
     </div>
   )
@@ -205,7 +205,7 @@ function NumberInput({
   onChange: (value: number) => void
 }) {
   return (
-    <div className="border-b border-white/20 py-3 last:border-0">
+    <div className="border-b border-lanes-fg-strong/20 py-3 last:border-0">
       <label className="mb-0.5 block text-sm font-medium">{label}</label>
       <p className="text-sub mb-2 text-xs">{description}</p>
       <Input
@@ -241,7 +241,7 @@ function TextInput({
   const inputId = useId()
   const descriptionId = useId()
   return (
-    <div className="border-b border-white/20 py-3 last:border-0">
+    <div className="border-b border-lanes-fg-strong/20 py-3 last:border-0">
       <label htmlFor={inputId} className="mb-0.5 block text-sm font-medium">
         {label}
       </label>
@@ -330,9 +330,9 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
 
         {loading ? (
           <div className="lanes-panel space-y-4 p-6">
-            <Skeleton className="h-5 w-40 bg-white/20" />
+            <Skeleton className="h-5 w-40 bg-lanes-fg-strong/20" />
             {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-14 w-full bg-white/20" />
+              <Skeleton key={i} className="h-14 w-full bg-lanes-fg-strong/20" />
             ))}
           </div>
         ) : !settings ? (
@@ -348,7 +348,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
             <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as Tab)}>
               <TabsList
                 variant="line"
-                className="h-auto w-full justify-start overflow-x-auto border-b border-white/20"
+                className="h-auto w-full justify-start overflow-x-auto border-b border-lanes-fg-strong/20"
               >
                 {TAB_IDS.map((tab) => (
                   <TabsTrigger
@@ -389,7 +389,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                     step={0.1}
                     onChange={(v) => update('event_display_duration_multiplier', v)}
                   />
-                  <div className="text-sub mt-6 space-y-1.5 border border-white/20 p-4 text-xs">
+                  <div className="text-sub mt-6 space-y-1.5 border border-lanes-fg-strong/20 p-4 text-xs">
                     <p className="mb-2 font-semibold">
                       {t('overlayEditor.eventSettings.tiersHeading')}
                     </p>
@@ -410,8 +410,10 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                     </p>
                     <p>
                       {interpolateElements(t('overlayEditor.eventSettings.tierStyling'), {
-                        tierClass: <code className="bg-white/20 px-1">{TIER_CLASS}</code>,
-                        typeClass: <code className="bg-white/20 px-1">{EVENT_TYPE_CLASS}</code>,
+                        tierClass: <code className="bg-lanes-fg-strong/20 px-1">{TIER_CLASS}</code>,
+                        typeClass: (
+                          <code className="bg-lanes-fg-strong/20 px-1">{EVENT_TYPE_CLASS}</code>
+                        ),
                       })}
                     </p>
                   </div>
@@ -472,7 +474,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                       onChange={(v) => update(key, v)}
                     />
                   ))}
-                  <p className="text-sub mt-4 border-t border-white/20 pt-4 text-xs">
+                  <p className="text-sub mt-4 border-t border-lanes-fg-strong/20 pt-4 text-xs">
                     {t('overlayEditor.eventSettings.kickCaveat')}
                   </p>
                 </div>
@@ -504,7 +506,7 @@ export default function EventSettingsPage({ params }: { params: Promise<{ id: st
                 </div>
               )}
 
-              <div className="mt-6 flex gap-3 border-t border-white/20 pt-6">
+              <div className="mt-6 flex gap-3 border-t border-lanes-fg-strong/20 pt-6">
                 <button className="lanes-btn" onClick={handleSave} disabled={saving}>
                   {saving
                     ? t('overlayEditor.eventSettings.saving')

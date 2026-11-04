@@ -139,6 +139,10 @@ export interface ChatCommandInput {
   create_clip: boolean
   /** Template rendering to an https image shown on the alerts overlays (ADR-0080). */
   image_url: string
+  /** https sound played with the command's alert; overrides the alert profile's. */
+  sound_url: string
+  /** Template for the alert's text; overrides the alert profile's text template. */
+  alert_text: string
   min_role: ChatCommandRole
   cooldown_seconds: number
   enabled: boolean

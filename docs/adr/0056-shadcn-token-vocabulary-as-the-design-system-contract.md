@@ -1,6 +1,7 @@
 # ADR-0056: The shadcn token vocabulary is the design-system contract
 
 **Date**: 2026-08-31
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Status**: Accepted
 **Deciders**: caesarakalaeii
 
@@ -39,15 +40,15 @@ review saw class names that read exactly like working ones. Compiling
 | `bg-surface-alt`, `bg-subtle`     | Tokens that never existed in any vocabulary. Every hover state using them was inert.                                                            |
 
 **So nobody used the primitives.** With a `<Button>` that looked broken, the
-codebase grew its own: **146 raw `<button>` elements against 33 files importing
-`Button`**, and **79 raw `<input>` elements against 10 importing `Input`**.
-Counted by hand-written class string, that was **66 distinct button styles for
-66 buttons** and **24 distinct input styles**, spread across four background
-tokens, five different focus treatments and four padding scales. Components grew
-private mini design systems — `EngagementControls.tsx` declared its own
-`primaryButtonClass` / `secondaryButtonClass` / `inputClass` constants. With no
-status tokens defined, **329 raw Tailwind palette classes** (`text-red-400`,
-`text-amber-300`, …) stood in across 14 different hues, none contrast-checked.
+codebase grew its own: at audit time, **146 raw `<button>` elements against 33
+files importing `Button`**, and **79 raw `<input>` elements against 10
+importing `Input`**, 66 distinct hand-written button styles and 24 input
+styles, four background tokens, five focus treatments, four padding scales.
+Components grew private mini design systems: `EngagementControls.tsx` declared
+its own `primaryButtonClass` / `secondaryButtonClass` / `inputClass` constants.
+With no status tokens defined, **329 raw Tailwind palette classes**
+(`text-red-400`, `text-amber-300`, …) stood in across 14 different hues, none
+contrast-checked.
 
 **And the documentation pointed the wrong way.** `DESIGN_SYSTEM.md` described a
 slate-based palette on `#0f172a` from an abandoned direction; `globals.css` had
@@ -138,12 +139,13 @@ either side fails there rather than compiling to an empty rule.
 
 > **Amendment, 2026-08-31.** This section originally excluded all of
 > `src/app/overlay/**`. That was wrong, and the error was in the rule rather
-> than the reasoning: only four of the six routes under that directory render
-> into a browser source. `/overlay/[id]/view` is the streamer's **monitor
-> page** (chat plus moderation controls) and `/overlay/[id]/participate` is a
-> **viewer-facing web page** — ordinary app chrome that an over-broad glob was
-> letting out of the design system. The exclusion now lists the OBS routes
-> individually. Add one only if it genuinely renders transparent into OBS.
+> than the reasoning: `/overlay/[id]/view` is the streamer's **monitor page**
+> (chat plus moderation controls), `/overlay/[id]/participate` is a
+> **viewer-facing web page**, and `/overlay/[id]/poll` and
+> `/overlay/[id]/prediction` render viewer widgets: ordinary app chrome that an
+> over-broad glob was letting out of the design system. The exclusion lists the
+> OBS render routes individually; add one only if it genuinely renders
+> transparent into OBS.
 >
 > A second bug surfaced while fixing the first: written as
 > `src/app/overlay/[id]/page.tsx`, the pattern excludes nothing at all —
@@ -188,23 +190,13 @@ surfaces had never been seen correct. The alias block is also indirection — a
 reader chasing `bg-primary` must follow `--color-primary` → `--color-twitch`
 before reaching a colour, which is the price of not forking the palette.
 
-**Deferred, deliberately: the call-site migration.** This ADR lands the
-foundation only — tokens, gates, primitives, docs. The ~146 raw `<button>`s and
-~79 raw `<input>`s stay as they are for now.
-
-That is a sequencing decision, not an oversight. The i18n migration
-(issue #799) is in flight on `agent/GH-caesarakalaeii-all-chat-799` — 91
-commits over 119 files — and it rewrites the _text and aria-labels_ of exactly
-the elements a control migration rewrites the _tags_ of. Measured by trial
-merge, migrating call sites here costs **96 conflict hunks across 26 files**,
-concentrated in the five largest frontend files; the foundation alone costs
-**10 hunks across 8 files**, all of the "take their `t()`, take our class
-order" shape.
-
-Migrating after #799 lands is strictly cheaper and strictly safer, and it comes
-with a bonus: the dead-token gate is in CI _first_, so it guards #799's own
-work while that work is still being written. The migration is preserved on
-`design/shadcn-call-site-migration` rather than rewritten from scratch.
+**Deferred, deliberately: the call-site migration.** This ADR landed the
+foundation only (tokens, gates, primitives, docs). That was a sequencing
+decision, not an oversight: the i18n migration (issue #801) was in flight and
+rewrote the text and aria-labels of exactly the elements a control migration
+rewrites the tags of, so migrating call sites here first would have collided
+with it on every hunk. #801 has since landed on `main`; the call-site migration
+of the remaining raw controls remains open work.
 
 **Deferred.** The raw palette classes are being migrated in semantic passes
 rather than mechanically, because each needs a judgement a rewrite gets wrong.
@@ -212,10 +204,12 @@ The **premium** pass is done: amber meaning "paid feature" was the largest
 cluster and now has its own `--color-premium` token, deliberately warmer than
 `--color-warning` (hue 65 vs 80) because written as `amber-400` the two were
 nearly the same paint — a "costs money" marker and a "something may go wrong"
-marker were indistinguishable side by side. The **warning** cluster (~25 sites:
-maintenance, beta, theme-import errors) is the obvious next one. The palette rule currently bans only `gray-*`/`slate-*`,
-which is at zero; widening it to the full palette should follow the ratchet
-pattern the a11y gate already uses.
+marker were indistinguishable side by side. The **warning** cluster (maintenance,
+beta, theme-import errors; raw `amber-*`/`yellow-*` usage remains in admin,
+dashboard and overlay-editor surfaces) and the full raw-palette rewrite are
+still open. The palette rule currently bans only `gray-*`/`slate-*`, which is
+at zero in app chrome; widening it to the full palette should follow the
+ratchet pattern the a11y gate already uses.
 
 ## Links
 

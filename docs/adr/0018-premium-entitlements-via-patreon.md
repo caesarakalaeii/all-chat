@@ -2,6 +2,7 @@
 
 **Date**: 2026-06-20
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation; Future Work items were since built, see ADR-0019/0020/0027; a membership is linked to an account only while the Patreon account is connected, and disconnecting deletes it)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -30,13 +31,13 @@ We want users to **unlock premium themselves by backing All-Chat's own Patreon c
    - ✅ No schema change beyond the subscription table.
    - ❌ Cannot express an admin *deny*; admin-write vs webhook-write is a last-writer race; a comped user who once had a (now-lapsed) Patreon row would be wrongly demoted.
 4. **Ko-fi instead of / alongside Patreon.**
-   - ❌ Ko-fi is webhook-only with **no cancellation webhooks** and email-only identity matching — unfit as the primary "subscription = premium" source. Deferred (see Future Work).
+   - ❌ Ko-fi is webhook-only with **no cancellation webhooks** and email-only identity matching — unfit as the primary "subscription = premium" source. Deferred; Ko-fi support was never built.
 
 ## Decision Outcome
 
 **Chosen**: Option 1 — a new `payment-service`, with `users.is_premium` derived from two independent inputs, **Patreon only**, against **All-Chat's own single campaign**.
 
-Effective entitlement (materialized into `users.is_premium` by `shared/premium.RecomputePremium`):
+Effective entitlement (materialized into `users.is_premium` by `shared/premium.RecomputePremium`; since ADR-0020 the derivation also ORs in `users.is_beta_tester`, and since ADR-0027 an override past its expiry counts as absent):
 
 ```
 is_premium = (users.premium_admin_override IS TRUE)
@@ -48,7 +49,8 @@ Key sub-decisions:
 - **One campaign (model A).** Users back All-Chat's own Patreon; active patrons at/above `PATREON_MIN_TIER_CENTS` get premium. (Not a multi-tenant "each streamer's own campaign" model.)
 - **Tri-state admin override.** `users.premium_admin_override`: `NULL` = follow subscription, `TRUE` = force-grant (comp), `FALSE` = force-deny (reserved). The existing admin endpoint maps **grant → TRUE** and **revoke → NULL** (clears the comp so premium then follows any subscription); `FALSE` is reserved for a future explicit "premium ban" action. This is the mechanism that lets comps survive lapses and keeps the read path unchanged.
 - **Convergent write path.** `RecomputePremium(userID)` (in `shared/premium`, callable in-process by both share-service and payment-service) reads the override + an `EXISTS(active subscription)` under `SELECT … FOR UPDATE` and writes the boolean in one transaction. It is a pure function of current rows, so webhook / reconcile / OAuth-callback converge regardless of order or concurrency.
-- **Identity via Patreon OAuth**, not email. The user connects Patreon (`identity`, `identity[email]` scopes); we read their membership to our campaign from the `/identity` endpoint (filtered by campaign id) and store the link in `patreon_oauth_tokens` (encrypted with the shared `MultiKeyEncryptor`). Webhooks then resolve the all-chat user by Patreon user id.
+- **Identity via Patreon OAuth**, not email. The user connects Patreon (`identity` scope only, no `identity[email]` — the Patreon user id is enough); we read their membership to our campaign from the `/identity` endpoint (filtered by campaign id) and store the link in `patreon_oauth_tokens` (encrypted with the shared `MultiKeyEncryptor`). Webhooks then resolve the all-chat user by Patreon user id.
+- **The membership link follows the connection.** A `premium_subscriptions` row is linked to an account only while that account has the Patreon account connected in `patreon_oauth_tokens`. The upsert reads the subject from the connection, not from its caller, so a webhook for a patron with no connection, or a reconcile pass applying a token that was disconnected after the pass read it, stores the row unlinked; only connecting through OAuth links it again. Disconnecting deletes the connection and the account's membership rows, then recomputes premium, so premium ends at once and a later webhook cannot bring it back. Each reconcile pass first deletes any row still linked without its connection (left by a disconnect from before this rule, or by switching to another Patreon account) and recomputes that account. The data export and account deletion therefore only ever see memberships of a connected Patreon account.
 - **Webhooks: HMAC-MD5.** Patreon signs `members:create/update/delete` with **HMAC-MD5 of the raw body** (hex) in `X-Patreon-Signature` — deliberately NOT the Twitch EventSub HMAC-SHA256+timestamp scheme. Verified constant-time over the raw body; deduplicated in Redis after successful processing.
 - **Status from Patreon's own signal.** A subscription is `active` iff `patron_status == active_patron` AND `currently_entitled_amount_cents >= PATREON_MIN_TIER_CENTS`. Patreon keeps a patron `active_patron` (with entitled cents) through its own payment-retry/grace window, so we honor its grace and keep **no separate grace timer**. `RecomputePremium` therefore stays time-free.
 - **Reconcile backstop (single replica).** A periodic job re-queries every connected user's membership (refreshing tokens near expiry), catching missed webhooks (e.g. a cancellation Patreon never delivered) and revoking premium for lapsed patrons. Single replica so the loop never runs concurrently.
@@ -71,20 +73,14 @@ Key sub-decisions:
 
 ## Implementation
 
-- **Migration**: `migrations/063_payment_subscriptions.sql` — `users.premium_admin_override` (tri-state), `patreon_oauth_tokens` (encrypted), `premium_subscriptions` (source of truth, `UNIQUE(provider, provider_user_id)`); extends the DSGVO `cleanup_expired_oauth_tokens()` to Patreon tokens. Idempotent (writes no entitlement *values*, so re-runs can't clobber a live grant).
-- **Shared**: `shared/premium/recompute.go` — `Effective(override, hasActiveSub)` (the rule, exhaustively unit-tested) + `Recomputer.Recompute` (the transactional write).
+- **Migration**: `migrations/063_payment_subscriptions.sql` — `users.premium_admin_override` (tri-state), `patreon_oauth_tokens` (encrypted), `premium_subscriptions` (source of truth, `UNIQUE(provider, provider_user_id)`); it also extended the DSGVO `cleanup_expired_oauth_tokens()` to Patreon tokens, a function migration 118 later dropped (retention moved to the `retention-sweeper` CronJob, ADR-0089, which keeps Patreon tokens). Idempotent (writes no entitlement *values*, so re-runs can't clobber a live grant).
+- **Shared**: `shared/premium/recompute.go` — `Effective(override, hasActiveSub)` (the rule, exhaustively unit-tested) + `Recomputer.Recompute` (the transactional write). Later extended by ADR-0019 (`RecomputeViewer`), ADR-0020 (beta-tester OR) and ADR-0027 (override expiry).
 - **Service**: `services/payment-service/` — `patreon/` (OAuth client, `/identity` membership read, HMAC-MD5 verify + payload parse, status mapping), `repository/` (token + subscription), `entitlement/` (apply snapshot → upsert → recompute), `handlers/` (connect/callback/status/disconnect/webhook), `reconcile/` (periodic backstop), `cmd/main.go`. Port 8091.
 - **share-service**: `repository/premium_repo.go` now writes the override + recomputes (mapping grant→TRUE / revoke→NULL); `cmd/main.go` constructs the `Recomputer`. The admin endpoint, route, and `{is_premium:bool}` contract are unchanged.
 - **Gateway**: registry entries + routes in `services/api-gateway/models/service_config.go` and `cmd/main.go` — public `POST /api/v1/webhooks/patreon` (HMAC) and `GET /api/v1/payment/patreon/callback` (one-time Redis state); JWT-protected `GET /payment/patreon/connect`, `GET /payment/status`, `DELETE /payment/patreon/connection`.
 - **Frontend**: `frontend/src/app/settings/premium/page.tsx` (Connect / status / Disconnect) + `lib/api/payment.ts`, linked from `settings/page.tsx`.
 - **CI/Deploy**: payment-service added to `.github/workflows/build-and-push.yml` (detect-changes, filters, build + test matrices); deploy repo gets `payment-service-deployment.yaml` (replicas:1, no HPA), kustomization + configmap entries. **Manual step**: add `patreon-client-id`, `patreon-client-secret`, `patreon-webhook-secret` to the sealed `allchat-secrets` (ksops reseal), and register the Patreon OAuth client + webhook in the Patreon portal.
-- **Tests**: unit (status mapping, HMAC-MD5 verify, payload parsers, `Effective` truth table); integration/E2E with testcontainers (entitlement apply grant/revoke, recompute truth table incl. admin-override-survives-lapse, and a signed synthetic webhook flipping a premium-gated endpoint 403→200→403). Live Patreon E2E is intentionally out of scope (interactive OAuth, real charges, no sandbox).
-
-## Future Work (roadmap)
-
-- **Split streamer vs viewer premium** (`.planning/ROADMAP.md` Phase 16): today `users.is_premium` (streamer features) and `viewers.is_premium` (viewer cosmetic) are one conceptual "premium". A cheaper viewer subscription would add a product/scope dimension to `premium_subscriptions` and extend `RecomputePremium` to also derive `viewers.is_premium`, reusing this override + active-subscription model.
-- **"Beta-Testers" role** (Phase 17): a role granting all premium + early-access features. The ~5 pre-monetization premium users are migrated **manually**, with a **"Grant Beta Tester" admin-dashboard button** as the ongoing mechanism — an admin action, not a re-running data migration (avoids the 009-incident class of re-applied `UPDATE`).
-- **Ko-fi** as a secondary "lite" provider (email-match, expiry-based revocation given no cancellation webhooks).
+- **Tests**: unit (status mapping, HMAC-MD5 verify, payload parsers, `Effective` truth table); integration/E2E with testcontainers (entitlement apply grant/revoke, recompute truth table incl. admin-override-survives-lapse, and a signed synthetic webhook flipping a premium-gated endpoint 403→200→403; disconnect followed by a webhook for the same patron leaves the account unlinked and not premium, `integrationtest/disconnect_test.go`). Live Patreon E2E is intentionally out of scope (interactive OAuth, real charges, no sandbox).
 
 ## Related Decisions
 

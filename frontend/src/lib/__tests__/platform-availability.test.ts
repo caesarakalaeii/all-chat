@@ -20,7 +20,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
 
-import { usePlatformAvailable } from '@/lib/platform-availability'
+import { useFeatureAvailable, usePlatformAvailable } from '@/lib/platform-availability'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import type { User } from '@/lib/types/auth'
 
@@ -60,5 +60,29 @@ describe('usePlatformAvailable', () => {
     })
     const { result } = renderHook(() => usePlatformAvailable())
     expect(result.current('altstream')).toBe(true)
+  })
+})
+
+describe('useFeatureAvailable', () => {
+  it('hides chat commands on allch.at from users without early access', () => {
+    signIn({})
+    const { result } = renderHook(() => useFeatureAvailable())
+    expect(result.current('chatCommands')).toBe(false)
+    expect(result.current('customChatBot')).toBe(false)
+  })
+
+  it('offers chat commands to beta testers and ambassadors on any host', () => {
+    signIn({ is_beta_tester: true })
+    expect(renderHook(() => useFeatureAvailable()).result.current('chatCommands')).toBe(true)
+    signIn({ is_ambassador: true })
+    expect(renderHook(() => useFeatureAvailable()).result.current('customChatBot')).toBe(true)
+  })
+
+  it('offers chat commands to everyone on beta.allch.at', () => {
+    vi.spyOn(window, 'location', 'get').mockReturnValue({
+      ...window.location,
+      hostname: 'beta.allch.at',
+    })
+    expect(renderHook(() => useFeatureAvailable()).result.current('chatCommands')).toBe(true)
   })
 })

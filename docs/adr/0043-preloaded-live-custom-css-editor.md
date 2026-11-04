@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-24
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -68,8 +69,9 @@ bundled theme fixes keep reaching every rule the user did not touch.**
 
 The diff/merge logic lives in `frontend/src/lib/utils/theme-css-diff.ts`
 (`computeThemeCssDiff`, `reconstructEditorCss`) and the "is it customised?" pill
-check in `custom-css.ts` (`isCustomCssForked`, `markerSeverityToLevel`), so the
-decisions are pure and unit-tested rather than buried in the 3.6k-line editor page.
+check in `frontend/src/lib/utils/custom-css.ts` (`isCustomCssForked`,
+`markerSeverityToLevel`), so the decisions are pure and unit-tested rather than
+buried in the editor page.
 
 ## Considered Alternatives
 
@@ -102,7 +104,7 @@ decisions are pure and unit-tested rather than buried in the 3.6k-line editor pa
 - `postcss` (already a dependency) is used to parse/diff/merge; it is imported only by
   the editor route, never by the public overlay render (which still injects strings).
 - Custom CSS remains owner-authored CSS injected on a public overlay; the existing
-  CSP `style-src` + preview `scopeCustomCss` constraints (ADR-0040, M10/M11) are
-  unchanged and still the blast-radius control.
+  CSP `style-src` constraint (`frontend/next.config.js`) and the preview's
+  `scopeCustomCss` selector scoping are unchanged and still the blast-radius control.
 - The Advanced editor is an existing, non-gated tool; this ADR enhances it and adds
   no new premium gate.

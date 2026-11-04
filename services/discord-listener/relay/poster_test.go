@@ -75,8 +75,6 @@ func TestWebhookPoster_PostsToCorrectURL(t *testing.T) {
 	defer server.Close()
 
 	poster := NewWebhookPoster(server.Client(), nil)
-	// Override baseURL for test
-	poster.(*webhookPoster).baseURL = server.URL
 
 	payload := RelayPayload{
 		Content:   "hello world",
@@ -104,7 +102,6 @@ func TestWebhookPoster_OmitsEmptyAvatarURL(t *testing.T) {
 	defer server.Close()
 
 	poster := NewWebhookPoster(server.Client(), nil)
-	poster.(*webhookPoster).baseURL = server.URL
 
 	payload := RelayPayload{
 		Content:  "hello",
@@ -126,7 +123,6 @@ func TestWebhookPoster_204Success(t *testing.T) {
 	defer server.Close()
 
 	poster := NewWebhookPoster(server.Client(), nil)
-	poster.(*webhookPoster).baseURL = server.URL
 
 	err := poster.Post(context.Background(), server.URL+"/webhook", RelayPayload{Content: "test", Username: "u"})
 	assert.NoError(t, err)
@@ -139,7 +135,6 @@ func TestWebhookPoster_200Success(t *testing.T) {
 	defer server.Close()
 
 	poster := NewWebhookPoster(server.Client(), nil)
-	poster.(*webhookPoster).baseURL = server.URL
 
 	err := poster.Post(context.Background(), server.URL+"/webhook", RelayPayload{Content: "test", Username: "u"})
 	assert.NoError(t, err)
@@ -160,7 +155,6 @@ func TestWebhookPoster_429RetriesOnce(t *testing.T) {
 	defer server.Close()
 
 	poster := NewWebhookPoster(server.Client(), nil)
-	poster.(*webhookPoster).baseURL = server.URL
 
 	err := poster.Post(context.Background(), server.URL+"/webhook", RelayPayload{Content: "test", Username: "u"})
 	require.NoError(t, err)
@@ -175,7 +169,6 @@ func TestWebhookPoster_429LongRetryAfter_ReturnsRateLimited(t *testing.T) {
 	defer server.Close()
 
 	poster := NewWebhookPoster(server.Client(), nil)
-	poster.(*webhookPoster).baseURL = server.URL
 
 	err := poster.Post(context.Background(), server.URL+"/webhook", RelayPayload{Content: "test", Username: "u"})
 	assert.ErrorIs(t, err, ErrRateLimited, "long retry-after should return ErrRateLimited immediately")
@@ -188,7 +181,6 @@ func TestWebhookPoster_403SilentDrop(t *testing.T) {
 	defer server.Close()
 
 	poster := NewWebhookPoster(server.Client(), nil)
-	poster.(*webhookPoster).baseURL = server.URL
 
 	err := poster.Post(context.Background(), server.URL+"/webhook", RelayPayload{Content: "test", Username: "u"})
 	assert.NoError(t, err, "403 should return nil error (silent drop)")
@@ -201,8 +193,30 @@ func TestWebhookPoster_404SilentDrop(t *testing.T) {
 	defer server.Close()
 
 	poster := NewWebhookPoster(server.Client(), nil)
-	poster.(*webhookPoster).baseURL = server.URL
 
 	err := poster.Post(context.Background(), server.URL+"/webhook", RelayPayload{Content: "test", Username: "u"})
 	assert.NoError(t, err, "404 should return nil error (silent drop)")
+}
+
+// Post errors are logged by the manager, so they must never carry the webhook token.
+func TestWebhookPoster_ErrorsNeverCarryTheToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	poster := NewWebhookPoster(server.Client(), nil)
+	webhookURL := server.URL + "/api/webhooks/123/SECRET-webhook-token"
+	msg := RelayPayload{Content: "test", Username: "u"}
+
+	err := poster.Post(context.Background(), webhookURL, msg)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "SECRET-webhook-token", "unexpected-status error")
+
+	server.Close() // the transport now fails, and *url.Error quotes the request URL
+	err = poster.Post(context.Background(), webhookURL, msg)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "SECRET-webhook-token", "transport error")
+
+	err = poster.Post(context.Background(), "https://discord.com/api/webhooks/1/SECRET-webhook-token\x7f", msg)
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "SECRET-webhook-token", "request-build error")
 }

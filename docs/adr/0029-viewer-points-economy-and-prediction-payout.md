@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-01
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -33,7 +34,7 @@ State machine `CREATED → ACTIVE → LOCKED → (RESOLVED | CANCELED)`, all tra
 Winners receive their stake plus `floor(losersPool * stake / winnersPool)`; the integer remainder goes to the largest-stake winner (tie-break: lowest viewer UUID). This conserves points exactly (`sum(credits) == sum(stakes)`), is deterministic, and is computed with `math/big` so a large pool can't overflow. Edge cases: **no winners** ⇒ refund every stake; **one-sided** ⇒ each winner just gets their stake back. Resolve is idempotent via the guarded transition + per-viewer `payout:` dedup keys. (Unit-tested in `engine/payout_test.go`.)
 
 ### Twitch-native predictions mirror state only — they do NOT use All-Chat points
-A `source = 'twitch_native'` prediction (mirrored from EventSub, ADR-0028 companion work) uses **Twitch Channel Points**, which All-Chat cannot debit or credit. engagement-service therefore records its state/tallies for unified display but **never** touches `viewer_points` for it. All-Chat points wagering applies only to `source = 'allchat'` predictions. Twitch-native *polls* may still award All-Chat participation points (no wager is involved). This is the only coherent semantic — anything else would either double-charge viewers or claim to move a currency we don't control.
+A `source = 'twitch_native'` prediction (mirrored from EventSub, ADR-0028 companion work) uses **Twitch Channel Points**, which All-Chat cannot debit or credit. engagement-service therefore records its state/tallies for unified display but **never** touches `viewer_points` for it. All-Chat points wagering applies only to `source = 'allchat'` predictions. Poll votes — All-Chat's and native ones alike — carry no stake, so no points ever move on a poll; that is also why mirrored Twitch polls may share the overlay display freely. This is the only coherent semantic — anything else would either double-charge viewers or claim to move a currency we don't control.
 
 ## Considered Alternatives
 
@@ -47,4 +48,12 @@ A `source = 'twitch_native'` prediction (mirrored from EventSub, ADR-0028 compan
 - New tables (migrations 068–070): `viewer_points`, `points_transactions`, `points_earn_config`, `polls`/`poll_options`/`poll_votes`, `predictions`/`prediction_outcomes`/`prediction_entries`.
 - The economy is safe under retries, concurrency, and multi-replica fan-out by construction (dedup keys + guarded transitions + conditional debits).
 - Points name is streamer-configurable (`points_earn_config.points_name`); no brand currency name is hard-coded.
-- Chat/watch passive earning is partial in v1 (watch via authenticated heartbeat; event-driven earning for Twitch/YouTube; Kick/TikTok event earning is limited by their listeners' current event support).
+- Watch earning flows through the two viewer-heartbeat endpoints (`POST /viewers/me/heartbeat`
+  and its `POST /streamers/:username/heartbeat` sibling, ADR-0031) and is bounded by a daily
+  cap (`maxWatchCreditsPerDay`). Event-driven earning is best-effort Pub/Sub on
+  `engagement:events` (republished by the message-processor off the consume goroutine) and is
+  limited to the platforms that emit normalized engagement events there: Twitch, YouTube and
+  TikTok. Kick's event types are known to the event filter but its listener publishes only chat
+  and deletions, so no Kick event earn flows yet; chat-participation earning exists end-to-end
+  (`engagement:chat`, deduped per minute-bucket) but nothing publishes it in this deployment —
+  the UI flags `chat_per_minute` as "coming soon".

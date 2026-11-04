@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-17
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -53,12 +54,16 @@ deep-link on a single page, not a convention the other pages followed.
 **Chosen**: Option 1 — URL query parameters as the single source of truth for admin selection and
 filters.
 
-- **Selection is URL-addressable.** Every list+detail admin page reads its selection from the query
-  string on load (`?user=<id>`, `?overlay=<id>`, and the like) and writes the current selection back
-  into the URL when the admin picks a row. Reloading or sharing the URL reopens the same entity.
-- **Filters are URL-addressable too.** List filters live in the query string alongside selection —
-  `?filter=`, `?connected=`, `?platform=`, `?q=` — so a filtered view is itself linkable and restored
-  on reload.
+- **Selection is URL-addressable.** Admin list+detail pages read selection from the query string
+  on load (`?user=<id>`, `?overlay=<id>`, and the like) and auto-select the referenced entity.
+  Cross-links are plain `href`s carrying the owning page's params, so reloading or sharing a URL
+  reopens the same entity. Note: pages only *read* params on mount; in-page selection changes are
+  not written back into the address bar — the URL stays the entry-point mechanism, not a live
+  mirror of current selection. Write-back was in the decision's scope but never shipped; the
+  deep-link + cross-link pattern covers the original complaint.
+- **Filters are URL-addressable too.** List filters are also read from the query string on load —
+  `?filter=`, `?connected=`, `?platform=`, `?q=` — so a pre-filtered view is itself a link; the
+  same write-back caveat as selection applies.
 - **Master-detail is the standard layout.** Each page is a scrollable list next to a sticky side
   detail panel; the URL selects which entity the panel shows. This is the layout the Overlays page
   already used, promoted to the convention for all of them.
@@ -74,21 +79,24 @@ filters.
   the "overlays are not linked to their users" complaint is resolved with plain links.
 - Every admin view is deep-linkable and shareable; a support hand-off is a URL.
 - The pattern is uniform, so future admin pages get deep-linking by following the same convention.
-- Zero routing/infra migration; changes are localized to each page's mount-time param read and its
-  selection/filter handlers.
+- Zero routing/infra migration; changes are localized to each page's mount-time param read and
+  its selection/filter handlers.
 
 ### Negative
 - Query strings are a flatter address space than nested routes; if the admin later needs canonical
   per-entity URLs, breadcrumbs, or per-entity server rendering, the nested-route migration (Option 2)
   remains the documented next step.
-- Each page carries a small amount of param-sync boilerplate (read on mount, write on change).
+- Pages read params only on mount; in-page selection changes are not written back into the
+  address bar, so a shared URL reflects the view at the time the link was copied, not any later
+  navigation. Deep links in and cross-links out remain accurate.
+- Each page carries a small amount of param-read boilerplate.
 
 ## Implementation
 
 - **Frontend**: `frontend/src/app/admin/{users,overlays,sources,viewers,...}/page.tsx` — read
-  selection/filter query params on mount and reflect changes back into the URL; render the
+  selection/filter query params on mount and auto-select the referenced entity; render the
   scrollable-list + sticky-panel master-detail layout. Cross-links are `href`s into the sibling
-  admin pages' query params.
+  admin pages' query params. (No page writes selection back into the URL; see the Negative note.)
 - **Prior art**: `frontend/src/app/admin/overlays/page.tsx` already read `?overlay=<id>`;
   `frontend/src/app/admin/sources/page.tsx` already linked into it. This ADR generalizes that.
 - **Routing**: unchanged — no new dynamic segments are added.

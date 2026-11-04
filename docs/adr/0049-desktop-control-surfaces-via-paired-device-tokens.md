@@ -2,6 +2,7 @@
 
 **Date**: 2026-08-14
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -120,7 +121,7 @@ Because a Python plugin is loaded into a GPL-3.0 process (both StreamController 
 A device token is not a session. It:
 
 - is bound to one user and, at pairing time, to one overlay;
-- carries an explicit action scope, initially `engagement:write` and `chat:send`, and is rejected on any route outside it;
+- carries an explicit action scope, initially `engagement:write` and `chat:write`, and is rejected on any route outside it;
 - does **not** satisfy the advanced-controls consent grant or the premium gate on its own. Both are still evaluated against the owning streamer at call time, so a device cannot be used to route around `requireEngagementPremium`, and chat send still requires that the streamer completed the moderation re-consent that issues `user:write:chat`, which is why the dashboard's "Reconnect" must use that flow rather than a plain login;
 - is independently revocable, and revoking one device affects nothing else;
 - is long-lived but not eternal, with a sliding expiry refreshed by use, so an abandoned pairing lapses on its own.
@@ -175,7 +176,7 @@ Step 1's "hand-issued token" shipped as **ADR-0051, personal access tokens** (`A
 - **The paste objection stands.** It is bounded, not answered: a PAT is scoped (`chat:write`, `engagement:write`), listed with `last_used_at`, and revocable in one click. What this ADR rejected was pasting as the *only* mechanism for a mass-market published plugin, and that is unchanged.
 - **The resolver seam is shared.** Device-token recognition (step 2's "token type in the auth middleware") is already built as `middleware.SetAPITokenResolver` + `APITokenResolver`, wired in auth-service, api-gateway **and** engagement-service — gateway-only wiring is inert, because `copyHeaders` forwards `Authorization` verbatim and every backend re-validates independently. A device token becomes another row shape behind that interface rather than a second auth path.
 
-The scope clause above ("does not satisfy the premium gate on its own") is implemented literally and tested: `RequireAPITokenScope` sits beside `RequirePremium` on the round-start routes, never in place of it, so a correctly scoped token belonging to a non-premium owner is still 403'd by `requireEngagementPremium`.
+The scope clause above ("does not satisfy the premium gate on its own") is implemented literally and tested: `RequireAPITokenScope` sits beside `RequirePremium` on the round-start routes, never in place of it, so a correctly scoped token belonging to a non-premium owner is still 403'd by `requireEngagementPremium`. `POST /api/v1/auth/chat/send` has no overlay dimension, so `RequireDeviceTokenOverlay` is deliberately mounted only on the overlay-keyed engagement routes; there the scope set is what limits a device (see the amendment below).
 
 #### Steps 2, 3, 5-linking and 6-linking, as built (amendment, 2026-08-20)
 

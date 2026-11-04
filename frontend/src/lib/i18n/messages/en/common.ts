@@ -48,6 +48,11 @@ export const common = {
     logOut: 'Log out',
     signIn: 'Sign in',
   },
+  // The site light/dark switch (ADR-0087), in every site nav. One label with
+  // aria-pressed rather than a label that flips: it names the state it turns on.
+  theme: {
+    lightMode: 'Light mode',
+  },
   // The soundPlayer presets. Read by the overlay editor's on-stream notification
   // sounds and by the monitor view's private activity sound. Casing rules are
   // language-specific, so the display name cannot be derived by capitalising the

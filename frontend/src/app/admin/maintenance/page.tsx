@@ -189,8 +189,8 @@ export default function AdminMaintenancePage() {
                         className={cn(
                           'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold',
                           active
-                            ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
-                            : 'border-blue-500/20 bg-blue-500/10 text-blue-400'
+                            ? 'border-amber-500/20 bg-amber-500/10 text-warning'
+                            : 'border-blue-500/20 bg-blue-500/10 text-info'
                         )}
                       >
                         {active

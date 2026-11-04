@@ -2,6 +2,7 @@
 
 **Date**: 2026-04-29
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 
 ---
 
@@ -36,19 +37,40 @@ Drop every OAuth scope that has no remaining call site in current backend code, 
 | YouTube | viewer | `youtube.readonly`, `userinfo.profile` | `youtube.force-ssl` (replaced with `youtube.readonly` for `GetChannelID`) |
 | YouTube | streamer | `youtube.readonly`, `userinfo.profile` | `youtube.force-ssl` |
 | Kick | viewer | `user:read` | `chat:read`, `chat:write`, `channel:read` |
-| Kick | streamer | `user:read` | `chat:read`, `channel:read` |
+| Kick | streamer | `user:read` | `chat:read`, `chat:write`, `channel:read` (though the add-source flow later re-requests `channel:read`, see the addendum below) |
 | Discord | bot | `bot` + permissions `1024,2048,65536` | (no change — bot capability flags, not user OAuth) |
 
 **Verification basis for each removal:**
-
-- `user:write:chat` (Twitch viewer): only consumer was `helix/chat/messages POST` in auth-service `chat_send` handler, called only from extension's pre-1.6.0 send path. No other caller in repo.
+- `user:write:chat` (Twitch viewer): only consumer was `helix/chat/messages POST` in auth-service `chat_send` handler. No other caller requested it in the viewer or login flows at the time. (It later returned via explicit opt-in: the moderation re-consent flow adds it as the send scope, `TwitchSendScope`; the login and viewer flows stay empty.)
 - `youtube.force-ssl` (YouTube viewer): only consumer was `liveChat/messages POST` in viewer-side `sendYouTubeMessage`. `GetChannelID` does `channels?part=id&mine=true` which is satisfied by `youtube.readonly`.
-- `youtube.force-ssl` (YouTube streamer): only consumer was `sendStreamerYouTubeMessage`. No production caller of that path remains; streamer-side YouTube sending happens via the streamer's own browser session.
-- `chat:write` (Kick viewer): only consumer was `api.kick.com/public/v1/chat POST` in `sendKickMessage`. Same dead-path situation.
-- `chat:read` (Kick, both flows): no consumer found anywhere — kick-listener uses Kick's authenticated WebSocket which doesn't gate on this OAuth scope.
-- `channel:read` (Kick, both flows): no consumer found — channel info fetched via unauthenticated public Kick API in kick-listener.
+- `youtube.force-ssl` (YouTube streamer): only consumer was `sendStreamerYouTubeMessage`. No production caller of that path remains; streamer-side YouTube sending happens via the streamer's own browser session. (Like the Twitch send scope, YouTube's `force-ssl` later returned via the moderation re-consent flow: the `timeout` and `ban` actions request it (`youtubeModerationScopeByAction` in `services/auth-service/handlers/chat_bot_send.go`), which is the ADR-0017 addendum below.)
+- `channel:read` (Kick, both flows): no consumer found at the time — channel info was fetched via the unauthenticated public Kick API in kick-listener. *(Restored 2026-09-26 for the add-source flow only; see the addendum below.)*
+- `chat:read` (Kick, both flows): no consumer found anywhere — kick-listener consumes chat over Kick's websocket, which does not gate on this OAuth scope.
+- `chat:write` (Kick viewer): only consumer was `api.kick.com/public/v1/chat POST` in `sendKickMessage`, the dead pre-1.6.0 send path. It later returned as an explicit grant through the moderation re-consent (ADR-0017 addendum below); the login and viewer flows stay minimal.
 
-Backend-side handler functions (`sendKickMessage`, `sendYouTubeMessage`, etc.) are intentionally left in place but unreachable. They will be removed in a follow-up refactor; keeping them here lets us re-enable temporarily if any of the v1.6.0 native send paths regress.
+### Addendum (2026-09-26): Kick streamer `channel:read` restored in the add-source flow only
+
+The verification above that `channel:read` (Kick) had "no consumer" no longer holds in
+full: the add-source flow must resolve the streamer's *actual channel slug* via Kick's
+authenticated `GET /public/v1/channels` (no parameters = the consenting user's channel),
+because the `/public/v1/users` `name` field is the account **display name, not the slug**
+(Kick's own OpenAPI spec models it as "John Doe"). The kick-listener looks channels up
+by slug (`GET /api/v2/channels/{channel_id}`); for any streamer whose display name
+differs from their slug, storing the name made every sync 404 and auto-deactivate the
+source — permanently silent "Kick nothing" with no error shown to the streamer (prod
+incident, overlay `36847b00`).
+
+Scope: the streamer **add-source** consent requests `user:read channel:read`
+(`KickOAuth.GetAuthURLWithChannelScopePKCE`); login and the viewer flow stay at
+`user:read` as decided above. This is a genuine caller, not scope creep: the
+resolution call is required to store a working channel identifier at all.
+
+### Addendum (2026-06-19, ADR-0017): `youtube.force-ssl` re-added for opt-in YouTube moderation only
+
+[ADR-0017](./0017-chat-moderation-write-path.md) re-adds `youtube.force-ssl` — not on
+login and never for viewers, but only via the explicit moderation re-consent flow for
+streamers who enable YouTube moderation (ban/timeout on live chat). The streamer and
+viewer scope tables above remain true for those flows.
 
 ## Cutover: hard, not soft
 
@@ -88,7 +110,7 @@ docs/adr/0012-oauth-scope-minimisation.md       — this file
 ### Negative
 
 - v1.5.x extension users who re-authenticate during the cutover window will see send failures and need to upgrade. We judge this acceptable per the cutover analysis above.
-- Backend's `sendKickMessage` / `sendYouTubeMessage` / Twitch viewer-side helix call become dead code. They stay in the repo for a release as a safety hatch but should be removed in a follow-up.
+- Backend's `sendKickMessage` / `sendYouTubeMessage` / Twitch viewer-side helix call become dead code: they were kept as a safety hatch and are still in the repo (still reachable via `/chat/send` and `/viewer/chat/send`, and `sendStreamerYouTubeMessage` via the chat-announce, chat bot-send and streamer chat-send paths), and remain a candidate for removal in a follow-up.
 
 ### Reversibility
 
@@ -99,22 +121,3 @@ Trivial — re-add a string to the appropriate `Scopes` slice and redeploy. Exis
 - Extension v1.6.0 release (commits `b76b1c3` CSP fix for emote APIs, `b98d309` popout SW relay, tag `v1.6.0`)
 - Future ADR (TBD): removal of dead viewer-side send handlers from `auth-service`
 
----
-
-**2026-09-26 amendment (Kick streamer `channel:read` restored in the add-source flow only).**
-
-ADR-0012's verification for `channel:read` (Kick) said "no consumer found — channel info
-fetched via unauthenticated public Kick API in kick-listener". That consumer now exists:
-the add-source flow must resolve the streamer's *actual channel slug* via Kick's
-authenticated `GET /public/v1/channels` (no parameters = the consenting user's channel),
-because the `/public/v1/users` `name` field is the account **display name, not the slug**
-(Kick's own OpenAPI spec models it as "John Doe"). The kick-listener looks channels up
-by slug (`GET /api/v2/channels/{channel_id}`); for any streamer whose display name
-differs from their slug, storing the name made every sync 404 and auto-deactivate the
-source — permanently silent "Kick nothing" with no error shown to the streamer (prod
-incident, overlay `36847b00`).
-
-Scope: the streamer **add-source** consent requests `user:read channel:read`
-(`KickOAuth.GetAuthURLWithChannelScopePKCE`); login and the viewer flow stay at
-`user:read` as ADR-0012 decided. This is a genuine caller, not scope creep: the
-resolution call is required to store a working channel identifier at all.

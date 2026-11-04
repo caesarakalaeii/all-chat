@@ -454,7 +454,7 @@ function SourceCard({
                   className={cn(
                     'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
                     source.is_active
-                      ? 'border-green-500/20 bg-green-500/10 text-green-400'
+                      ? 'border-green-500/20 bg-green-500/10 text-success'
                       : 'border-border bg-surface-2/40 text-text-sub'
                   )}
                 >
@@ -472,7 +472,7 @@ function SourceCard({
                     className={cn(
                       'inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium',
                       discordConfig.relay_enabled
-                        ? 'border-green-600/30 bg-green-600/20 text-green-300'
+                        ? 'border-green-600/30 bg-green-600/20 text-success'
                         : 'border-border bg-surface-2 text-text-sub'
                     )}
                   >
@@ -488,7 +488,7 @@ function SourceCard({
                 CTA on the owner's own channel when it is not yet enabled. */}
             {isTwitch && source.chat_via_eventsub && (
               <div className="mt-1">
-                <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-400">
+                <span className="inline-flex items-center gap-1 rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs font-medium text-success">
                   <span className="size-1.5 rounded-full bg-green-400" />
                   {t('overlayEditor.sources.chatViaEventsub')}
                 </span>
@@ -718,7 +718,7 @@ function StreamSelectionPanel({
         )}
 
         {locked && (
-          <p className="text-xs text-yellow-400/80">{t('overlayEditor.streamSelection.locked')}</p>
+          <p className="text-xs text-warning">{t('overlayEditor.streamSelection.locked')}</p>
         )}
 
         <Button
@@ -1934,7 +1934,7 @@ function AddSourceForm({
               </div>
             )}
             {adminPlatform === 'youtube' && youtubeResolveError && (
-              <p className="text-xs text-red-500">{youtubeResolveError}</p>
+              <p className="text-xs text-destructive">{youtubeResolveError}</p>
             )}
             <Button
               type="submit"
@@ -4128,7 +4128,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                className="shrink-0 text-[11px] text-red-500 hover:text-red-400"
+                                className="shrink-0 text-[11px] text-destructive hover:text-destructive/80"
                                 disabled={seventvRemoving || isSavingConfig}
                                 onClick={async () => {
                                   setSeventvRemoving(true)
@@ -4217,12 +4217,12 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           </div>
                           {seventvResolveState.status === 'resolved' &&
                             seventvResolveState.setID !== seventvOverrideSavedID && (
-                              <p className="mt-1 text-[11px] text-green-500">
+                              <p className="mt-1 text-[11px] text-success">
                                 {resolvedSevenTvNotice(t, seventvResolveState)}
                               </p>
                             )}
                           {seventvResolveState.status === 'error' && (
-                            <p className="mt-1 text-[11px] text-red-500">
+                            <p className="mt-1 text-[11px] text-destructive">
                               {seventvResolveState.message}
                             </p>
                           )}
@@ -4246,7 +4246,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           const customized = isCustomCssForked(customCss, pristineThemeCss)
                           if (!customized) {
                             return themeId ? (
-                              <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
+                              <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-success">
                                 {t('overlayEditor.customCss.usingTheme', {
                                   theme: getBundledTheme(themeId)?.name ?? themeId,
                                 })}
@@ -4265,11 +4265,11 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                             )
                           }
                           return customCssMode === 'fork' ? (
-                            <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400">
+                            <span className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-warning">
                               {t('overlayEditor.customCss.forkedPill')}
                             </span>
                           ) : (
-                            <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-400">
+                            <span className="inline-flex items-center rounded-full border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-success">
                               {t('overlayEditor.customCss.layeredPill')}
                             </span>
                           )
@@ -4305,7 +4305,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         const warnings = cssIssues.filter((i) => i.severity === 'warning')
                         if (errors.length === 0 && warnings.length === 0) {
                           return (
-                            <p className="text-xs text-green-400">
+                            <p className="text-xs text-success">
                               {t('overlayEditor.customCss.noProblems')}
                             </p>
                           )
@@ -4317,7 +4317,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           parts.push(cssProblemCount(t, 'warning', warnings.length))
                         return (
                           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
-                            <p className="text-xs font-medium text-amber-300">
+                            <p className="text-xs font-medium text-warning">
                               {t('overlayEditor.customCss.problemsAdvice', {
                                 counts: parts.join(t('overlayEditor.customCss.problemsSeparator')),
                               })}
@@ -4491,7 +4491,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="flex-1 border-yellow-600/40 text-xs text-yellow-400 hover:bg-yellow-900/20"
+                          className="flex-1 border-yellow-600/40 text-xs text-warning hover:bg-yellow-900/20"
                           data-setting-anchor="sampleEvents"
                           onClick={() => void handleAddSampleEvents()}
                         >
@@ -4545,7 +4545,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                         className={cn(
                           'text-center text-sm',
                           configAlert && 'mt-2',
-                          configAlert?.type === 'success' ? 'text-green-400' : 'text-destructive'
+                          configAlert?.type === 'success' ? 'text-success' : 'text-destructive'
                         )}
                       >
                         {configAlert?.message}

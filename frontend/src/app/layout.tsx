@@ -36,8 +36,11 @@ import Analytics from '@/components/Analytics'
 import { JsonLd } from '@/components/JsonLd'
 import CookieBanner from '@/components/CookieBanner'
 import ImpersonationBanner from '@/components/ImpersonationBanner'
+import TosAcceptanceDialog from '@/components/TosAcceptanceDialog'
 import { SiteFooter } from '@/components/SiteFooter'
 import { LocaleSync } from '@/components/LocaleSync'
+import { ThemeSync } from '@/components/ThemeSync'
+import { THEME_INIT_SCRIPT } from '@/lib/theme'
 import { ToastProvider } from '@/components/ui/toast'
 import { DEFAULT_LOCALE, getTranslations } from '@/lib/i18n'
 
@@ -150,9 +153,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     // The server always renders DEFAULT_LOCALE; LocaleSync moves `lang` to the
     // stored UI language after hydration (ADR-0066).
-    <html lang={DEFAULT_LOCALE} className={cn(barlow.variable, dmMono.variable)}>
+    // suppressHydrationWarning: the theme script below sets data-theme before
+    // React hydrates, so <html> differs from the server HTML by design.
+    <html
+      lang={DEFAULT_LOCALE}
+      className={cn(barlow.variable, dmMono.variable)}
+      suppressHydrationWarning
+    >
+      <head>
+        {/* Applies a stored light theme before the first paint (ADR-0087). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body>
         <LocaleSync />
+        <ThemeSync />
         {/* Skip link (WCAG 2.4.1): first focusable element on every page;
             visually hidden until keyboard-focused. Pages opt in by giving
             their <main> id="main-content" tabIndex={-1}. */}
@@ -170,6 +184,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           <SiteFooter />
           <CookieBanner />
+          <TosAcceptanceDialog />
         </ToastProvider>
       </body>
     </html>

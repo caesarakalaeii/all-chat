@@ -52,6 +52,7 @@ import { usePrideMonth } from '@/hooks/usePrideMonth'
 import { LANE_COUNT, laneBaseWeights, useLaneWaves } from '@/hooks/useLaneWaves'
 import { EMOTE_SRC, type EmoteToken } from '@/components/home/emotes'
 import { LanguageToggle } from '@/components/home/LanguageToggle'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 // Static self-hosted artwork, not next/image: the hero renders at 17px where
 // optimization buys nothing (next.config disables it globally anyway) and
@@ -431,7 +432,9 @@ export function LanesHero({
           {t('marketing.lanes.navThemes')}
         </a>
         <a href="/docs">{t('marketing.lanes.navDocs')}</a>
-        <a href={DISCORD_INVITE_URL}>{t('marketing.lanes.navDiscord')}</a>
+        <a className="nav-discord" href={DISCORD_INVITE_URL}>
+          {t('marketing.lanes.navDiscord')}
+        </a>
         {isLoggedIn ? (
           <a className="dash-chip" href="/dashboard">
             {t('marketing.lanes.navDashboardChip')}
@@ -440,10 +443,13 @@ export function LanesHero({
           <a href="#get-started">{t('marketing.lanes.navDashboard')}</a>
         )}
         <LanguageToggle />
+        <ThemeToggle />
       </nav>
 
       <header
-        className="lanes-stage"
+        // theme-dark: the WebGL bands are drawn from fixed lanePalette colors,
+        // so the ink and plates over them keep the dark palette in either theme.
+        className="lanes-stage theme-dark"
         ref={stageRef}
         data-pride={pride ? '' : undefined}
         style={

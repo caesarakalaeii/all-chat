@@ -35,6 +35,7 @@ import (
 	"github.com/caesar/all-chat/services/discord-listener/publisher"
 	"github.com/caesar/all-chat/services/discord-listener/relay"
 	"github.com/caesar/all-chat/services/discord-listener/status"
+	"github.com/caesar/all-chat/shared/encryption"
 	"github.com/caesar/all-chat/shared/listener"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -229,7 +230,18 @@ func main() {
 	}
 	defer dbPool.Close()
 
-	relayRepo := relay.NewRepository(dbPool)
+	// Relay webhook URLs are credentials, encrypted with the shared token key (ADR-0091).
+	// Optional like the other listeners' ciphers: without it the relay keeps working, but new
+	// webhook URLs are stored in plaintext and encrypted ones cannot be read.
+	var webhookCipher *encryption.MultiKeyEncryptor
+	if cipher, cipherErr := encryption.NewMultiKeyEncryptorFromEnvWithLogger(log); cipherErr == nil {
+		webhookCipher = cipher
+		log.Info("relay webhook cipher initialized", zap.Uint8("current_kid", cipher.CurrentKid()))
+	} else {
+		log.Warn("relay webhook cipher not configured (set TOKEN_ENCRYPTION_KEY_V1): webhook URLs stay in plaintext",
+			zap.Error(cipherErr))
+	}
+	relayRepo := relay.NewRepository(dbPool, webhookCipher, log)
 	relayPoster := relay.NewWebhookPoster(&http.Client{Timeout: 10 * time.Second}, log)
 	relayProvisioner := relay.NewWebhookProvisioner(botToken, &http.Client{Timeout: 10 * time.Second}, relayRepo, log)
 	relayMgr := relay.NewManager(relayRepo, relayPoster, rdb, dbPool, log, relayProvisioner)

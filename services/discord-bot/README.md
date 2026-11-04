@@ -209,6 +209,7 @@ Severity: CRITICAL
 | `REDIS_PORT` | `6379` | Redis server port |
 | `YOUTUBE_LISTENER_URL` | `http://localhost:8086` | YouTube Listener API base URL |
 | `STATUS_UPDATE_INTERVAL` | `3600000` | Interval between status posts (milliseconds) |
+| `HEALTH_PORT` | `8080` | Port for `GET /health/live`: 200 normally, 503 once the Redis subscriber has been not-ready for 2 minutes, so the kubelet restarts a bot whose subscriber stopped reconnecting |
 
 ## Troubleshooting
 
@@ -221,6 +222,7 @@ Severity: CRITICAL
 - Verify Redis connection is working
 - Check that YouTube Listener has quota notifications enabled
 - Ensure bot is subscribed to `quota:alerts` channel (check logs)
+- `wget -qO- localhost:8080/health/live` inside the pod: a growing `redis_unready_ms` means the subscriber is not connected
 
 **Periodic updates not working:**
 - Verify YouTube Listener API is accessible at `YOUTUBE_LISTENER_URL`

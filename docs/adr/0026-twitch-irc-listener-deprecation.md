@@ -2,13 +2,21 @@
 
 **Date**: 2026-06-20
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: Engineering team
 
 ---
 
 ## Context and Problem Statement
 
-The Twitch IRC listener (`services/twitch-listener`) is being retired in favour of the EventSub listener (`services/twitch-eventsub-listener`). ADR-0015 already makes EventSub the primary chat path and IRC the universal fallback via per-channel ownership claims. The remaining problem is the *cutover*: a streamer's source only moves from IRC to EventSub when they (re-)complete the Twitch add-source consent. We cannot silently kill IRC — channels still served only by IRC would lose chat with no warning and no obvious fix. We need a controlled, reversible rollout that informs affected users in-product before chat stops, and a hard switch to actually stop serving once the grace period ends.
+The Twitch IRC listener (`services/twitch-listener`) is being retired in favour of the EventSub listener
+(`services/twitch-eventsub-listener`). ADR-0015 makes EventSub the primary chat path (and production now
+has IRC in `enforce`, so it is the only Twitch chat path in practice); the remaining
+problem at decision time was the *cutover*: a streamer's source only moves from IRC to EventSub when
+they (re-)complete the Twitch add-source consent. IRC could not be silently killed — channels still
+served only by IRC would lose chat with no warning and no obvious fix. That needed a controlled,
+reversible rollout that informed affected users in-product before chat stops, and a hard switch to
+stop serving once the grace period ends.
 
 ## Decision Drivers
 
@@ -43,6 +51,10 @@ The Twitch IRC listener (`services/twitch-listener`) is being retired in favour 
 - `warn`: the listener still joins channels and serves chat, **and** the channel manager runs a notice loop that, every `TWITCH_IRC_DEPRECATION_NOTICE_INTERVAL` (default 5m), emits one `listener_deprecation_notice` system event per `(overlay, connected channel)` onto the `chat:raw` Redis Stream. The message-processor `SystemNormalizer` normalizes it and the overlay renders it in the activity feed with a re-add call-to-action.
 - `enforce`: `SyncChannels` empties the desired-channel set, so the normal PART path disconnects everything and no JOINs are issued. Chat via IRC stops; users restore it by re-adding their Twitch source, which routes them to EventSub (ADR-0015 / ADR-0016 semantics).
 
+Production now runs `enforce`: the listener joins no channels, so the EventSub listener is
+the only Twitch chat path (`../caesar-deployment/apps/workloads/all-chat/twitch-listener-deployment.yaml:61-63`,
+`services/twitch-listener/channels/deprecation.go`).
+
 Notices are scoped to **connected** channels (the pod's `activeChans`), not the full desired set. Because a channel only appears in a pod's `activeChans` after that pod won its leadership lease and joined it (ADR-0007), this naturally sends exactly one notice per connected source across the whole replica set — no cross-replica coordination needed.
 
 Unknown/empty `TWITCH_IRC_DEPRECATION_MODE` values resolve to `off` (fail-safe): a typo can never stop the listener from serving chat.
@@ -68,7 +80,7 @@ Unknown/empty `TWITCH_IRC_DEPRECATION_MODE` values resolve to `off` (fail-safe):
 - **Manager**: `services/twitch-listener/channels/manager.go` — `SetDeprecationConfig`; enforce gating in `SyncChannels`; `deprecationNoticeLoop` + `publishDeprecationNotices` started from `Start()` during `warn`.
 - **Wiring**: `services/twitch-listener/cmd/main.go` — parses `TWITCH_IRC_DEPRECATION_MODE` and `TWITCH_IRC_DEPRECATION_NOTICE_INTERVAL`.
 - **Pipeline**: `services/message-processor/normalizer/system_normalizer.go` + `classifier/tier.go` — `listener_deprecation_notice` (high tier, 60s).
-- **Frontend**: `frontend/src/lib/types/message.ts`, `components/overlay/CompactEvent.tsx`, `lib/utils/overlayViewModel.ts` (system bucket), `app/overlay/[id]/page.tsx`, `styles/events.css`.
+- **Frontend**: `frontend/src/lib/types/message.ts`, `components/overlay/CompactEvent.tsx` (monitor-view activity panel), `lib/utils/overlayViewModel.ts` (system bucket), `components/overlay/EventContent.tsx` (the OBS overlay's event/system-notice renderer, shared with the editor preview), `app/overlay/[id]/page.tsx`, `app/overlays/[id]/preview/embed/page.tsx`, `styles/events.css`.
 
 ## Related Decisions
 

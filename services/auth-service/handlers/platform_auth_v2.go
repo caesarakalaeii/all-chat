@@ -1375,20 +1375,27 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			return nil, fmt.Errorf("user account is banned")
 		}
 
-		// Update existing user profile fields.
-		user.DisplayName = platformUser.GetDisplayName()
-		user.ProfileImageURL = platformUser.GetProfileImageURL()
+		// The users row carries the login provider's profile and credentials. A login
+		// through a linked platform (a Kick account signing in with its linked Twitch)
+		// authenticates the account but must not overwrite either: a Twitch token on a
+		// Kick account's row breaks every Kick call that reads it.
+		//
+		// For the login provider itself, decide whether this login would downgrade the
+		// stored OAuth scopes. A plain Twitch login only requests the login scopes
+		// (withChatScopes=false); if the streamer previously granted the EventSub chat
+		// scopes via add-source, replacing their token here would knock their channel off
+		// EventSub on every login. So when the stored credentials already carry
+		// user:read:chat and this token does not, keep the existing token +
+		// granted_scopes and refresh only the profile fields.
+		samePlatform := string(platform) == user.AuthProvider
+		if samePlatform {
+			user.DisplayName = platformUser.GetDisplayName()
+			user.ProfileImageURL = platformUser.GetProfileImageURL()
+		}
 
-		// Decide whether this login would downgrade the stored OAuth scopes. A plain
-		// Twitch login only requests the login scopes (withChatScopes=false); if the
-		// streamer previously granted the EventSub chat scopes via add-source, replacing
-		// their token here would knock their channel back to the IRC listener on every
-		// login. So when the stored credentials already carry user:read:chat and this
-		// token does not, keep the existing token + granted_scopes and refresh only the
-		// profile fields. The user is still authenticated and issued a JWT.
 		newScopes := oauth.ExtractGrantedScopes(token)
 		existingScopes, _ := h.userRepo.GetGrantedScopes(ctx, user.ID)
-		preserveScopes := wouldDowngradeScopes(existingScopes, newScopes)
+		preserveScopes := !linkMayReplacePrimaryCredentials(user.AuthProvider, platform, existingScopes, newScopes)
 
 		if !preserveScopes {
 			user.AccessToken = token.AccessToken
@@ -1578,19 +1585,29 @@ func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 		return nil, fmt.Errorf("user account is banned")
 	}
 
+	// Record the linked identity so a later login with this platform lands on this account
+	// instead of trying to create a second one (which failed on the username index and
+	// surfaced as "Failed to process user"). Update never writes the id columns, so this
+	// has to happen here and not only in memory. A failure keeps the link itself working:
+	// the source and credentials below do not depend on it.
 	platformID := platformUser.GetID()
-
-	// Set the user's new platform ID where a column exists. Facebook and
-	// Instagram logins have none (see getOrCreateUser): the link updates the
-	// profile/token fields below and the granted-scopes guard, both of which
-	// already behave correctly for these platforms.
-	switch platform {
-	case oauth.PlatformTwitch:
-		user.TwitchID = &platformID
-	case oauth.PlatformYouTube:
-		user.GoogleID = &platformID
-	case oauth.PlatformKick:
-		user.KickID = &platformID
+	recorded, err := h.userRepo.SetPlatformID(ctx, user.ID, string(platform), platformID)
+	switch {
+	case errors.Is(err, repository.ErrPlatformIDTaken):
+		h.logger.Warn("Linked platform identity already belongs to another account; not recorded",
+			zap.String("user_id", user.ID), zap.String("platform", string(platform)))
+	case err != nil:
+		h.logger.Warn("Failed to record linked platform identity",
+			zap.String("user_id", user.ID), zap.String("platform", string(platform)), zap.Error(err))
+	case recorded:
+		switch platform {
+		case oauth.PlatformTwitch:
+			user.TwitchID = &platformID
+		case oauth.PlatformYouTube:
+			user.GoogleID = &platformID
+		case oauth.PlatformKick:
+			user.KickID = &platformID
+		}
 	}
 
 	newScopes := oauth.ExtractGrantedScopes(token)

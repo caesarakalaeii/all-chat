@@ -65,7 +65,7 @@ kubectl logs -n allchat deployment/twitch-listener | grep -i redis
 redis-cli XINFO STREAM chat:raw
 
 # Check consumer group lag
-redis-cli XPENDING chat:raw message-processors
+redis-cli XPENDING chat:raw message-processor
 # Should show lag=0 or low numbers
 
 # Check Pub/Sub channels active

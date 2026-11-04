@@ -93,7 +93,7 @@ export const onboarding: LocaleNamespace<'onboarding'> = {
       'Zeig deine Top-Cheerer, -Verschenker oder -Super-Chatter der letzten 30 Tage auf dem Stream, aktualisiert bei jedem neuen.',
     chatCommandsTitle: 'Chat-Befehle',
     chatCommandsBody:
-      'Eigene !Befehle und Stichwörter für jeden Chat: antworte als du selbst, clippe deinen Twitch-Stream auf Zuruf, zeige ein Bild auf deinem Alert-Overlay und nutze Variablen, Web-Abfragen oder JavaScript in Antworten. Antworten im YouTube-Chat sind Premium.',
+      'Eigene !Befehle und Stichwörter für jeden Chat: antworte als du selbst, clippe deinen Twitch-Stream auf Zuruf, zeige einen eigenen Alert (Bild, Sound, Text) auf deinem Alert-Overlay und nutze Variablen, Web-Abfragen oder JavaScript in Antworten. Antworten im YouTube-Chat sind Premium.',
     customChatBotTitle: 'Dein eigener Chat-Bot',
     customChatBotBody:
       'Premium: verbinde dein eigenes Bot-Konto auf Twitch, Kick oder YouTube, und Befehlsantworten und Timer gehen unter dem Namen deines Bots raus.',

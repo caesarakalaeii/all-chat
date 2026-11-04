@@ -68,8 +68,8 @@ export function MaintenanceBanner() {
             className={cn(
               'flex items-center gap-3 border-2 px-4 py-3 text-sm',
               active
-                ? 'border-amber-400 bg-black text-amber-300'
-                : 'border-white/40 bg-black text-white'
+                ? 'border-amber-400 bg-lanes-panel text-warning'
+                : 'border-lanes-fg-strong/40 bg-lanes-panel text-lanes-fg-strong'
             )}
           >
             <Wrench className="size-4 shrink-0" aria-hidden="true" />

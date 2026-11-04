@@ -2,6 +2,7 @@
 
 **Date**: 2026-11-02
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation; backups keep deleted rows for up to about 60 days)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -82,7 +83,8 @@ deleted row count is logged. The sweeper opens a single connection
 The CronJob (caesar-deployment `retention-sweeper-cronjob.yaml`) runs every 15
 minutes with `concurrencyPolicy: Forbid` and an `activeDeadlineSeconds` below
 the interval, so a slow run never makes the next one skip. A run cut short
-keeps every batch it committed.
+keeps every batch it committed. Its `backoffLimit` is 0, so a failed run is
+not retried inside its own slot; the next scheduled run is the retry.
 
 ### Retention rules
 
@@ -93,8 +95,8 @@ decision sets 30 and 90 days.
 |---|---|
 | `viewer_message_history` | `created_at` more than 1 hour ago |
 | `youtube_quota_audit_log` | `timestamp` more than 30 days ago |
-| `alert_events` | `created_at` more than 30 days ago (write-only log; list overlays rank from Redis) |
-| `moderation_actions` | `created_at` more than 90 days ago (audit log, not read by product code) |
+| `alert_events` | `created_at` more than 30 days ago (event log; list overlays rank from Redis and the data export caps what it returns) |
+| `moderation_actions` | `created_at` more than 90 days ago (audit log; no product flow reads it back, the data export caps what it returns) |
 | `device_link_requests` | expired more than 1 hour ago and never minted a device token (a request that did is that token's audit trail) |
 
 ### OAuth credentials: "dead" per table
@@ -145,8 +147,8 @@ decision.
 Drops the three pg_cron-only functions (and unschedules their jobs if pg_cron
 is ever installed) and adds the `created_at` indexes the batched deletes need on
 `alert_events` and `moderation_actions`. It corrects forward instead of editing
-016/046/047/056/063: the runner replays every migration on every pod start, so
-those files recreate the functions and 118 drops them again on each run.
+016/046/047/056/063: migrations are replayed on every pod start, so those
+files recreate the functions and 118 drops them again on each run.
 
 ## Consequences
 
@@ -171,6 +173,12 @@ those files recreate the functions and 118 drops them again on each run.
   all tokens.
 - The 1-hour message promise holds to within one interval: a message is deleted
   between 60 and about 75 minutes after it was sent.
+- The sweeper deletes rows from the live database only. The Postgres backups
+  (ADR-0003 → Backups) keep WAL and base backups for a 30-day recovery window
+  on Hetzner Object Storage and Backblaze B2, and both buckets keep what Barman
+  expires for another 30 days as noncurrent versions, so a deleted row survives
+  in the backups for up to about 60 days. The privacy policy says so in its
+  retention section (Backups row) and names both providers in Section 5.7.
 
 ## Implementation
 
@@ -187,7 +195,7 @@ those files recreate the functions and 118 drops them again on each run.
 ## Related Decisions
 
 - [ADR-0039](./0039-database-connection-budget.md): connection budget.
-- [ADR-0016](./0016-linked-twitch-credentials.md),
+- [ADR-0016](./0016-linked-twitch-credentials.md) and migration 056,
   [ADR-0018](./0018-premium-entitlements-via-patreon.md): extended the 047
   function, which never ran.
 - [ADR-0034](./0034-admin-viewer-identity-model.md): the activity aggregate

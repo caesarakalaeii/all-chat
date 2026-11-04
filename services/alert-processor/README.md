@@ -22,10 +22,19 @@ the message-processor's pending entries (ADR-0002 consumer-group pattern).
   `alert-processors` (distinct from the message-processor's group)
 - **At-least-once delivery**: entries are ACKed only after persist + publish
   succeed; failed alerts are redelivered via a periodic pending-entry reclaim
-- **Pure chat never enters the alert path**: `event_type` empty or `"chat"` (and
-  moderation `message_deletion` events) are ACKed and dropped
+- **Only alert event types enter the alert path**: an allowlist
+  (`isAlertEvent` in `consumer/consumer.go`) passes the event types that have an
+  alert profile (`shared/alerts`) plus a short list of public events alert
+  overlays render without one (Twitch chat notices like `watch_streak`, YouTube
+  `member_joined`, TikTok `like_aggregate`/`treasure_chest`/...). Everything
+  else is ACKed and dropped: pure chat, `message_deletion`, the owner-only
+  moderation log (`mod_action`, including AutoMod-held text), system warnings,
+  and any event type nobody has declared. Whatever passes is published to every
+  alerts/goal/list socket, anonymous OBS sources and shared-overlay recipients
+  included, so a new event type stays off alert overlays until it is added
+  there or given a profile
 - **Normalization reuse**: imports the message-processor's platform normalizers
-  (Twitch, YouTube, TikTok, system) instead of duplicating EventData parsing
+  (Twitch, YouTube, TikTok) instead of duplicating EventData parsing
 - **Alert routing**: direct `overlay_chat_sources` UNION `share_requests`
   fan-out (an accepted share to the recipient overlay's owner), filtered to
   alert-capable overlay types
@@ -47,7 +56,7 @@ the message-processor's pending entries (ADR-0002 consumer-group pattern).
 Redis Streams (chat:raw)
   ↓ XREADGROUP (consumer group: alert-processors)
 Consumer
-  ↓ skip: event_type empty | "chat" | "message_deletion"
+  ↓ pass only alert event types (isAlertEvent); ACK the rest
 Message-processor normalizers (shared import, one direction only)
   ↓ EventInfo + user
 Routing (overlay_type IN ('alerts','goal','list'))
@@ -224,7 +233,7 @@ YOUTUBE_QUOTA_LIMIT_DAILY= # default shared/quota.DefaultDailyLimit
 ## Metrics
 
 The event counters are labelled by `platform` and `event_type` (`event_type` is `chat` for chat
-lines, so the consumed/routed delta is the chat volume the alert path skips):
+lines, so the consumed/routed delta is the volume the alert path skips):
 
 | Metric                                       | Meaning                                  |
 |----------------------------------------------|------------------------------------------|

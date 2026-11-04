@@ -2,6 +2,7 @@
 
 **Date**: 2026-03-28
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 
 ---
 
@@ -26,15 +27,27 @@ This affects twitch-listener, kick-listener, and youtube-listener-innertube.
 > leases than it can connect, because a leased-but-unconnectable stream is
 > deaf everywhere — no other pod may claim it.
 
+> **Addendum**: the shared Go coordinator later gained a peer-count
+> stabilization gate (`shared/sourcemanager/coordinator.go`,
+> `DefaultRebalanceStabilizationPeriod` = 30s): `Rebalance` registers the peer
+> and returns without releasing anything until the peer count has been stable
+> for one period, preventing oscillation while pods scale. The TS port in
+> tiktok-listener ports this same gate.
+
 ## Decision
 
 Implement peer-aware rebalancing in the shared `LeadershipCoordinator`:
 
-1. **Peer Registry**: Each pod registers itself in Redis (`peer:{platform}:{callerID}` with 30s TTL) via a new source-manager endpoint. Registration returns the current peer count.
-
-2. **Rebalance Method**: `Rebalance(ctx, totalStreams)` computes `maxPerPod = ceil(total/peers)` and releases excess leases alphabetically by stream ID.
-
-3. **Integration**: Each service calls `Rebalance` at the top of its sync loop (every ~30s), before `EnsureLeadership` calls. Released streams become immediately claimable by other pods.
+1. **Peer Registry**: Each pod registers itself in Redis via the source-manager
+   `POST /leadership/peers/register` endpoint (`services/source-manager/cmd/main.go`,
+   handler in `services/source-manager/election/leader.go::RegisterPeer`). A platform
+   key (`peers:{platform}`) holds a Redis sorted set with one member per pod, scored
+   by its expiry timestamp; registration refreshes the caller's expiry and returns
+   the current active peer count (O(1) via ZCARD after pruning expired members).
+   Stabilized `Rebalance` releases a pod's excess leases only after the peer count
+   has been stable for `DefaultRebalanceStabilizationPeriod` (30s). Go callers keep
+   a rebalanced-out exclusion for one demand cycle so a pod does not immediately
+   re-claim the streams it released (`services/twitch-listener/channels/manager.go:598`).
 
 ## Alternatives Considered
 
