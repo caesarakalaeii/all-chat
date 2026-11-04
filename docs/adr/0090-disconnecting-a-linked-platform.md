@@ -97,6 +97,9 @@ api-gateway, session-only, refused while impersonating) and
   records the id again. A login with the disconnected platform is then a login with an
   unknown account; it creates a new one, or fails on the username index when the name
   is taken (as before linked ids were recorded).
+- Account deletion (ADR-0088) erases the viewer identity of every platform account the
+  account is linked to when it is deleted. A platform disconnected before that is no
+  longer one of them; its viewer data is erased from the viewer settings instead.
 - A Twitch EventSub subscription created by a pod that restarted before the
   disconnect is not tracked by the new leader and is not deleted by this sync
   (pre-existing; the listener has no orphan sweep).
