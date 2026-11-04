@@ -2,6 +2,7 @@
 
 **Date**: 2026-06-20
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -22,7 +23,7 @@ Two things are missing today:
 
 ## Considered Options
 
-1. **`users.is_beta_tester` boolean, folded into the `is_premium` derivation, + a DB-backed early-access gate.** Beta-tester is an independent admin-granted flag; `shared/premium.Recompute` ORs it into the premium-granting input (so a beta-tester *is* premium); a new `feature_gates.early_access` dimension is enforced by `RequireEarlyAccess`, which reads `is_beta_tester` from the DB exactly as `RequirePremium` reads `is_premium`.
+1. **`users.is_beta_tester` boolean, folded into the `is_premium` derivation, + a DB-backed early-access gate.** Beta-tester is an independent admin-granted flag; `shared/premium.Recompute` ORs it into the premium-granting input (so a beta-tester *is* premium); a new `feature_gates.early_access` dimension is enforced by `RequireEarlyAccess`, which reads `is_beta_tester OR is_ambassador` from the DB (ADR-0041) exactly as `RequirePremium` reads `is_premium`.
    - ✅ Reuses both proven patterns; beta-testers transparently pass every existing `RequirePremium` gate; enforcement is fresh on grant (DB read, no token round-trip); symmetric with premium; tiny surface.
    - ❌ Two reads per gated early-access request (same cost model as `RequirePremium`).
 
@@ -49,12 +50,12 @@ Two things are missing today:
   ```
   users.is_premium = Effective(
       users.premium_admin_override,                 -- tri-state, unchanged (ADR-0018)
-      hasActiveSubscription OR users.is_beta_tester
+      hasActiveSubscription OR users.is_beta_tester OR users.is_ambassador
   )
   ```
   `Effective` is unchanged (its second argument is "any non-override premium reason"). So granting beta-tester force-grants premium the same clobber-free way a comp does; an admin **force-deny** (`premium_admin_override = FALSE`) still beats it. Every existing `RequirePremium` gate therefore admits beta-testers with no gate change.
-- **`early_access` is a new, orthogonal `feature_gates` dimension.** `feature_gates` gains `early_access BOOLEAN NOT NULL DEFAULT FALSE`. A gate may require premium, early-access, both, or neither. `RequireEarlyAccess(db, gates, key)` mirrors `RequirePremium`: auth → if `!gates.IsEarlyAccess(key)` allow (deferring to any premium gate) → else require `users.is_beta_tester`, 403 otherwise. The `FeatureGateCache` (ADR-0008) caches both flags; unknown keys fail **closed** (early-access-required), mirroring `IsPremium`. An admin "graduates" an early-access feature by flipping `early_access` off, exactly like graduating a premium gate to free.
-- **Enforcement reads the DB, not the JWT.** `is_beta_tester` is read at gate time (and folded into the materialized `is_premium`), so an admin grant takes effect immediately. `beta_tester` is deliberately **not** added to `claims.Roles`; the frontend learns the status from the `users` API object (`is_beta_tester`, like `is_admin`/`is_premium`), not by decoding the token. (If a future need arises for a stateless cross-service role check, surfacing it into the JWT can be added then.)
+- **`early_access` is a new, orthogonal `feature_gates` dimension.** `feature_gates` gains `early_access BOOLEAN NOT NULL DEFAULT FALSE`. A gate may require premium, early-access, both, or neither. `RequireEarlyAccess(db, gates, key)` mirrors `RequirePremium`: auth → if `!gates.IsEarlyAccess(key)` allow (deferring to any premium gate) → else require the user to hold early-access eligibility, 403 otherwise. Since [ADR-0041](./0041-ambassador-role.md) that eligibility is `is_beta_tester OR is_ambassador` (an ambassador holds the beta-tester capability). The `FeatureGateCache` (ADR-0008) caches both flags; unknown keys fail **closed** (early-access-required), mirroring `IsPremium`. An admin "graduates" an early-access feature by flipping `early_access` off, exactly like graduating a premium gate to free.
+- **Enforcement reads the DB, not the JWT.** Early-access eligibility is read at gate time (`is_beta_tester OR is_ambassador`), while `is_beta_tester` is also folded into the materialized `is_premium`, so an admin grant takes effect immediately. `beta_tester` is deliberately **not** added to `claims.Roles`; the frontend learns the status from the `users` API object (`is_beta_tester`, like `is_admin`/`is_premium`), not by decoding the token. (If a future need arises for a stateless cross-service role check, surfacing it into the JWT can be added then.)
 - **The admin button is the only grandfathering mechanism.** `share-service` gains `POST /api/v1/admin/beta-tester/users/:id` → `PremiumRepository.SetUserBetaTester` (writes `is_beta_tester`, then `Recompute`), mirroring `UpdateUserPremium`/`SetUserPremium`. The frontend admin users page gains a "Grant/Revoke Beta Tester" control mirroring the premium toggle. The ~5 users are moved by hand; **no data migration writes `is_beta_tester` values**.
 - **Migration 065 (new; edits no prior migration).** Idempotent ALTERs that write **no** entitlement values: `users.is_beta_tester BOOLEAN NOT NULL DEFAULT FALSE` (+ partial index) and `feature_gates.early_access BOOLEAN NOT NULL DEFAULT FALSE`. A re-run can never clobber a live grant, per the runner's re-run-everything contract.
 

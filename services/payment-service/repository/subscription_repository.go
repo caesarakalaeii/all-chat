@@ -35,10 +35,11 @@ const (
 
 // Subscription is a row of premium_subscriptions — the source of truth for the
 // subscription half of users.is_premium (product='streamer') or viewers.is_premium
-// (product='viewer'). At most one of UserID / ViewerID is set (ADR-0019).
+// (product='viewer'). At most one of UserID / ViewerID is set (ADR-0019); both are
+// read-only here, because Upsert takes the subject from the Patreon connection.
 type Subscription struct {
-	UserID           *string // streamer subject; nullable (webhook may precede the link)
-	ViewerID         *string // viewer subject; nullable
+	UserID           *string // streamer subject; nil while the patron is not connected
+	ViewerID         *string // viewer subject; nil while the patron is not connected
 	Product          string  // "streamer" | "viewer" (defaults to streamer when empty)
 	Provider         string
 	ProviderUserID   string
@@ -46,7 +47,6 @@ type Subscription struct {
 	TierID           string
 	Cents            int
 	CurrentPeriodEnd *time.Time
-	Raw              []byte // original payload as JSON (audit/debug); nil to leave unset
 }
 
 // SubscriptionRepository persists Patreon subscription state.
@@ -62,9 +62,14 @@ func NewSubscriptionRepository(db *pgxpool.Pool, logger *zap.Logger) *Subscripti
 
 // Upsert writes a subscription keyed on (provider, provider_user_id). It is the
 // single idempotent write path shared by the webhook, the reconcile job, and the
-// OAuth callback. A nil incoming UserID/ViewerID never clears a previously-resolved
-// subject (COALESCE), so a webhook for an as-yet-unlinked patron is preserved until
-// linked.
+// OAuth callback.
+//
+// The row's subject (user_id / viewer_id) is not taken from s: the statement reads
+// it from the Patreon connection (patreon_oauth_tokens), so a membership is linked
+// to an all-chat account exactly while that account has the Patreon account
+// connected. A webhook for a patron with no connection, or a reconcile pass applying
+// a token that was disconnected after the pass read it, stores the row unlinked;
+// only connecting via OAuth links it again.
 func (r *SubscriptionRepository) Upsert(ctx context.Context, s Subscription) error {
 	provider := s.Provider
 	if provider == "" {
@@ -75,26 +80,23 @@ func (r *SubscriptionRepository) Upsert(ctx context.Context, s Subscription) err
 		product = ProductStreamer
 	}
 
-	var rawArg any
-	if len(s.Raw) > 0 {
-		rawArg = string(s.Raw)
-	}
-
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO premium_subscriptions
-		    (user_id, viewer_id, product, provider, provider_user_id, status, tier_id, cents, current_period_end, raw, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+		    (user_id, viewer_id, product, provider, provider_user_id, status, tier_id, cents, current_period_end, updated_at)
+		VALUES (
+		    (SELECT user_id FROM patreon_oauth_tokens WHERE patreon_user_id = $3),
+		    (SELECT viewer_id FROM patreon_oauth_tokens WHERE patreon_user_id = $3),
+		    $1, $2, $3, $4, $5, $6, $7, NOW())
 		ON CONFLICT (provider, provider_user_id) DO UPDATE SET
-		    user_id            = COALESCE(EXCLUDED.user_id, premium_subscriptions.user_id),
-		    viewer_id          = COALESCE(EXCLUDED.viewer_id, premium_subscriptions.viewer_id),
+		    user_id            = EXCLUDED.user_id,
+		    viewer_id          = EXCLUDED.viewer_id,
 		    product            = EXCLUDED.product,
 		    status             = EXCLUDED.status,
 		    tier_id            = EXCLUDED.tier_id,
 		    cents              = EXCLUDED.cents,
 		    current_period_end = EXCLUDED.current_period_end,
-		    raw                = COALESCE(EXCLUDED.raw, premium_subscriptions.raw),
 		    updated_at         = NOW()`,
-		s.UserID, s.ViewerID, product, provider, s.ProviderUserID, s.Status, nullIfEmpty(s.TierID), s.Cents, s.CurrentPeriodEnd, rawArg)
+		product, provider, s.ProviderUserID, s.Status, nullIfEmpty(s.TierID), s.Cents, s.CurrentPeriodEnd)
 	if err != nil {
 		return fmt.Errorf("upsert subscription: %w", err)
 	}
@@ -132,24 +134,50 @@ func (r *SubscriptionRepository) getLatest(ctx context.Context, where, arg strin
 	return &s, true, nil
 }
 
-// MarkFormerByUserID flags all of a user's subscriptions as former (on disconnect).
-func (r *SubscriptionRepository) MarkFormerByUserID(ctx context.Context, userID string) error {
-	_, err := r.db.Exec(ctx,
-		"UPDATE premium_subscriptions SET status = 'former', updated_at = NOW() WHERE user_id = $1", userID)
-	if err != nil {
-		return fmt.Errorf("mark subscriptions former: %w", err)
+// DeleteByUserID deletes a user's subscriptions (on disconnect), so the membership
+// is no longer tied to the account.
+func (r *SubscriptionRepository) DeleteByUserID(ctx context.Context, userID string) error {
+	if _, err := r.db.Exec(ctx, "DELETE FROM premium_subscriptions WHERE user_id = $1", userID); err != nil {
+		return fmt.Errorf("delete subscriptions: %w", err)
 	}
 	return nil
 }
 
-// MarkFormerByViewerID flags all of a viewer's subscriptions as former (on disconnect).
-func (r *SubscriptionRepository) MarkFormerByViewerID(ctx context.Context, viewerID string) error {
-	_, err := r.db.Exec(ctx,
-		"UPDATE premium_subscriptions SET status = 'former', updated_at = NOW() WHERE viewer_id = $1", viewerID)
-	if err != nil {
-		return fmt.Errorf("mark viewer subscriptions former: %w", err)
+// DeleteByViewerID deletes a viewer's subscriptions (on disconnect).
+func (r *SubscriptionRepository) DeleteByViewerID(ctx context.Context, viewerID string) error {
+	if _, err := r.db.Exec(ctx, "DELETE FROM premium_subscriptions WHERE viewer_id = $1", viewerID); err != nil {
+		return fmt.Errorf("delete viewer subscriptions: %w", err)
 	}
 	return nil
+}
+
+// DeleteDisconnected deletes every subscription linked to a subject that no longer
+// has that Patreon account connected, and returns those rows' subjects so their
+// premium can be recomputed. Such rows were left by disconnects from before
+// disconnecting deleted them, and by switching a subject to another Patreon
+// account. Unlinked rows are left alone.
+func (r *SubscriptionRepository) DeleteDisconnected(ctx context.Context) ([]Subscription, error) {
+	rows, err := r.db.Query(ctx, `
+		DELETE FROM premium_subscriptions s
+		WHERE (s.user_id IS NOT NULL OR s.viewer_id IS NOT NULL)
+		  AND NOT EXISTS (
+		      SELECT 1 FROM patreon_oauth_tokens t
+		      WHERE t.patreon_user_id = s.provider_user_id
+		        AND t.user_id IS NOT DISTINCT FROM s.user_id
+		        AND t.viewer_id IS NOT DISTINCT FROM s.viewer_id)
+		RETURNING s.user_id, s.viewer_id`)
+	if err != nil {
+		return nil, fmt.Errorf("delete disconnected subscriptions: %w", err)
+	}
+	subs, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (Subscription, error) {
+		var s Subscription
+		err := row.Scan(&s.UserID, &s.ViewerID)
+		return s, err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("delete disconnected subscriptions: %w", err)
+	}
+	return subs, nil
 }
 
 func nullIfEmpty(s string) any {

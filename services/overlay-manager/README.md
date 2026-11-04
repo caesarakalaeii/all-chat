@@ -214,6 +214,12 @@ Body: { "config": { ... } }
 #   official_api — true hands the channel to youtube-listener (premium gate
 #                  youtube_official_api): 403 when not premium, 409 when the caller has no
 #                  YouTube connection for the channel. Turning it off is never checked.
+# Discord keys (ADR-0048, ADR-0091):
+#   relay_enabled / relay_channel_id — the relay target, validated like the source's channel.
+#   relay_webhook_url — server-owned: discord-listener provisions it and stores it encrypted.
+#                  It is never returned by any source response and is ignored on create and
+#                  PATCH; PATCH keeps the stored one while relay_channel_id is unchanged and
+#                  drops it otherwise, so a webhook is provisioned in the new channel.
 
 # Delete source
 DELETE /api/v1/overlays/:overlay_id/sources/:source_id

@@ -2,6 +2,7 @@
 
 **Date**: 2026-06-20
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation; the subscription's subject now comes from the connection, see ADR-0018)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -49,7 +50,7 @@ We want a **cheaper, separately-priced viewer subscription** that grants only vi
 
 - **One Patreon account ↔ one all-chat identity.** A connection is anchored to *exactly one* subject (`user` XOR `viewer`). The existing `UNIQUE(patreon_user_id)` (token) and `UNIQUE(provider, provider_user_id)` (subscription) are kept and now mean "one connection per Patreon account". A single human who is *both* a streamer and a distinct viewer can link Patreon to only one; the other side is covered by the existing inheritance term where applicable. (Documented limitation.)
 - **Product = connection subject, gated by a per-product cents threshold.** A viewer connection ⇒ `product='viewer'`, active iff `patron_status=active_patron AND cents >= PATREON_VIEWER_MIN_TIER_CENTS` (cheaper). A user connection ⇒ `product='streamer'`, active iff `cents >= PATREON_MIN_TIER_CENTS` (unchanged). This realizes ROADMAP's "cheaper tier → viewer" as two config thresholds, reusing `SubscriptionStatusFor(snap, threshold)` unchanged. (An explicit tier-id→product map is deferred — cents thresholds are simpler and Patreon already returns entitled cents.)
-- **Viewer "Connect Patreon" lives in `payment-service`, authenticated by a viewer JWT.** Reuses `shared/auth.ValidateViewerJWTWithKeyChain` (same signing keychain, `ViewerClaims.ViewerID`). Keeps the inbound payment surface isolated per ADR-0018 rather than bolting Patreon OAuth onto auth-service. New routes: `GET /api/v1/payment/viewer/patreon/connect`, `GET /api/v1/payment/viewer/status`, `DELETE /api/v1/payment/viewer/patreon/connection`. The OAuth **callback** and the **webhook** stay single endpoints; the callback's Redis state carries the subject, the webhook resolves the subject from the polymorphic token row.
+- **Viewer "Connect Patreon" lives in `payment-service`, authenticated by a viewer JWT.** Reuses `shared/auth.ValidateViewerJWTWithKeyChain` (same signing keychain, `ViewerClaims.ViewerID`). Keeps the inbound payment surface isolated per ADR-0018 rather than bolting Patreon OAuth onto auth-service. New routes: `GET /api/v1/payment/viewer/patreon/connect`, `GET /api/v1/payment/viewer/status`, `DELETE /api/v1/payment/viewer/patreon/connection`. The OAuth **callback** and the **webhook** stay single endpoints; the callback's Redis state carries the subject, the webhook resolves the subject from the polymorphic token row. The subscription row's subject (`user_id` or `viewer_id`) is likewise read from the token row on every write, and a viewer disconnect deletes the viewer's membership rows (ADR-0018, "The membership link follows the connection").
 - **`viewers.is_premium` becomes a single-writer derived column via `RecomputeViewer`:**
   ```
   viewers.is_premium = Effective(
@@ -74,7 +75,7 @@ We want a **cheaper, separately-priced viewer subscription** that grants only vi
 
 ### Negative
 - One Patreon account grants premium to a single all-chat identity (documented limitation).
-- Modifies the just-built, not-yet-deployed ADR-0018 tables via migration 064 (acceptable: 063 is not in production, and a forward migration is the auditable path — 063 is not edited).
+- Adds the viewer product via a forward migration (064) beside ADR-0018's tables rather than editing 063, keeping the auditable migration history.
 - A new viewer-JWT-authenticated inbound surface inside payment-service (small; reuses existing verify + isolation).
 - Streamer→viewer inheritance revocation is *eventually* convergent (on next viewer activity / reconcile), not instant, unless a cascade from the user recompute is added (deferred; no worse than today).
 
@@ -83,10 +84,10 @@ We want a **cheaper, separately-priced viewer subscription** that grants only vi
 - **Migration**: `migrations/064_viewer_premium_product.sql` (+ `_down`).
 - **Shared**: `shared/premium/recompute.go` — add `RecomputeViewer(viewerID)` (reuses `Effective`); keep `Recompute` for users.
 - **payment-service**: subject-aware `entitlement.Apply` (`Subject{UserID, ViewerID, Product}`, per-product threshold); `repository` token+subscription carry `viewer_id`/`product`, `GetByPatreonUserID` returns the subject, `ListAll` returns subjects; viewer connect/status/disconnect handlers; subject in OAuth-state; reconcile iterates both subjects; `cmd/main.go` adds `PATREON_VIEWER_MIN_TIER_CENTS` + viewer routes + viewer-JWT middleware.
-- **auth-service**: `LinkViewerToUser` and `SetViewerPremium` route through `RecomputeViewer`; admin writes `viewers.premium_admin_override` (tri-state), mirroring share-service's `UpdateUserPremium`.
+- **auth-service**: `LinkViewerToUser` and `SetViewerPremium` route through `RecomputeViewer`; admin writes `viewers.premium_admin_override` (tri-state, with the ADR-0027 optional expiry), mirroring share-service's `UpdateUserPremium`.
 - **Gateway**: `service_config.go` already routes `/api/v1/payment/*`; add the viewer connect routes (public callback already covered).
-- **Frontend**: a viewer-facing subscribe/pricing page (viewer-authenticated) mirroring `settings/premium`, + `lib/api/payment.ts` viewer methods; clarify per-product entitlements.
-- **Config**: `PATREON_VIEWER_MIN_TIER_CENTS` (configmap + `.env.example`).
+- **Frontend**: `frontend/src/app/settings/viewer/premium/page.tsx` (viewer-facing connect/status page, mirroring `settings/premium`) served by `lib/api/viewer.ts` viewer-premium methods (`getPremiumStatus` / `startPatreonConnect` / `disconnectPatreon`).
+- **Config**: `PATREON_VIEWER_MIN_TIER_CENTS` (`deployments/k8s/base/configmap.yaml` + `.env.example`).
 - **Tests**: unit (`Effective` reused; product/threshold mapping; subject resolution); testcontainers E2E mirroring ADR-0018 (viewer webhook flips `viewers.is_premium`; admin-override survives lapse; inheritance preserved; one-subject CHECK); migration 064 re-run idempotency.
 
 ## Related Decisions

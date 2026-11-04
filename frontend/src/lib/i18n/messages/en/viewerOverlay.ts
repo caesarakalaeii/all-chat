@@ -406,6 +406,7 @@ export const viewerOverlay = {
     reasonStreamOffline: 'offline',
     reasonQuotaExhausted: 'quota',
     reasonSendFailed: 'failed',
+    reasonMessageDropped: 'blocked by chat settings',
   },
 
   moderationControls: {

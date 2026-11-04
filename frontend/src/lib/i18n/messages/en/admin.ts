@@ -347,12 +347,12 @@ export const admin = {
     nextPage: 'Next',
     activityTitle: 'Activity for “{username}”',
     activityDescription:
-      'Messages this viewer has sent through All-Chat, and whose chats they appear in.',
-    activityTotalMessages: 'Total messages',
+      'Messages this viewer sent through All-Chat in the last hour, and whose chats they appear in. Older messages are deleted.',
+    activityTotalMessages: 'Messages in the last hour',
     activityLastMessage: 'Last message',
     activityStreamerFallback: 'View streamer',
     activityOverlayLink: 'overlay',
-    activityEmpty: 'No message activity recorded for this viewer.',
+    activityEmpty: 'No messages from this viewer in the last hour.',
     activityClose: 'Close',
     // Two whole titles rather than a 'Revoke'/'Grant' word in front of the rest.
     revokePremiumTitle: 'Revoke premium for “{username}”?',
@@ -533,6 +533,14 @@ export const admin = {
     // One string: the en dash came from an &ndash; entity, and a language that
     // words a range differently cannot reorder JSX siblings.
     customRange: 'days (1–{max})',
+  },
+  // Endless scrolling on the paged admin lists (users, overlays, sources). The
+  // button doubles as the scroll sentinel, so keyboard and screen-reader users
+  // can load the next page without scrolling.
+  list: {
+    loadMore: 'Load more',
+    loadingMore: 'Loading...',
+    loadMoreError: "Couldn't load more. Try again",
   },
 
   // Localization review (ADR-0063): /admin/localization. The admin half of

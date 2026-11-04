@@ -10,6 +10,11 @@
   <a href="https://allch.at"><strong>Try it free at allch.at</strong></a> · <a href="https://discord.gg/xCGBSuz39P">Discord</a> · <a href="https://github.com/caesarakalaeii/all-chat/issues/new/choose">Report a Bug</a>
 </p>
 
+<p align="center">
+  <b>Just watching? See every chat yourself.</b><br />
+  Get the <a href="https://allch.at/browser-extension">All-Chat browser extension</a> for <a href="https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm">Chrome</a> or <a href="https://addons.mozilla.org/en-US/firefox/addon/all-chat-extension/">Firefox</a>.
+</p>
+
 ---
 
 ## What is All-Chat?
@@ -28,7 +33,8 @@ No bots. No IRC tokens. No complicated setup.
 - **Multiple Overlays**: one account runs several overlays, each with its own mix of chat sources and its own theme
 - **Real-Time Delivery** — Messages arrive via WebSocket — no 5-second delay
 - **Smart Polling** — Listeners only run when your overlay is actually visible (see [How it works](#demand-driven-listeners))
-- **Browser Extension** — Replace native site chat with All-Chat on Twitch, YouTube, and Kick
+- **[Browser Extension](#browser-extension)** — Replace native site chat with All-Chat on Twitch, YouTube, and Kick
+- **Light or Dark** — the site has a light theme, one click from the nav and remembered per browser; your overlay in OBS keeps its own look
 - **Open Source** — AGPL 3.0 licensed, fully self-hostable
 
 ---
@@ -78,7 +84,7 @@ In OBS, open **View > Docks > Custom Browser Docks**, give the dock a name, past
 
 **Goal and list overlays (Premium, beta).** Offered on beta.allch.at only for now. A **Goal** overlay is a progress bar toward a Twitch follower, YouTube subscriber, Twitch bits or YouTube Super Chat goal: follower and subscriber counts are read from the platform about once a minute while the overlay is open in OBS (YouTube polls spend the shared, accounted Data API quota), bits and Super Chats are counted from events on top of a starting value you can set and reset. A **List** overlay ranks your top cheerers, gifters or Super Chatters of the last 30 days and re-ranks live. Both are configured in their own editor section and use the overlay's chat sources.
 
-**Chat commands (beta).** Offered on beta.allch.at only for now, under **Commands** in the top bar. Define `!commands` and keyword triggers once and they work in every chat your overlays carry: replies go to the chat the message came from, sent by the All-Chat Bot or, if you prefer, your own account, and a trigger can clip your live Twitch stream (say "clip that" in any chat). With premium you can connect your own bot account on Twitch, Kick or YouTube so replies carry its name. Replies are templates: `{user}`, `{touser}`, `{query}`, `{1}`…`{9}`, `{count}`, `{random 1 6}`, `{pick a | b}`, `{time Europe/Berlin}`, `{clip}`, `{urlfetch https://…}` to insert what a web address answers (public https only), plus `{js …}` for JavaScript (sandboxed, 100 ms; it can parse a urlfetch result). A command can also show an image (a GIF, or one fetched from an API) on your alerts overlays, triggered from any chat. Each command can be limited to subscribers, VIPs, moderators or yourself and has a cooldown. **Timers** post a message every X minutes, after every X chat messages, or every X minutes once at least Y messages came in. Replies and timers in Twitch and Kick chat are free; in YouTube chat they are premium because each one spends YouTube API quota. TikTok and Discord chats can trigger clips but cannot be replied to. See [ADR-0079](./docs/adr/0079-streamer-chat-commands-in-engagement-service.md), [ADR-0080](./docs/adr/0080-chat-command-urlfetch-and-images.md) and [ADR-0081](./docs/adr/0081-chat-command-bot-sender-custom-bots-and-timers.md).
+**Chat commands (early access).** Offered to beta testers and ambassadors for now (and to everyone on beta.allch.at), under **Commands** in the top bar. Define `!commands` and keyword triggers once and they work in every chat your overlays carry: replies go to the chat the message came from, sent by the All-Chat Bot or, if you prefer, your own account, and a trigger can clip your live Twitch stream (say "clip that" in any chat). With premium you can connect your own bot account on Twitch, Kick or YouTube so replies carry its name. Replies are templates: `{user}`, `{touser}`, `{query}`, `{1}`…`{9}`, `{count}`, `{random 1 6}`, `{pick a | b}`, `{time Europe/Berlin}`, `{clip}`, `{urlfetch https://…}` to insert what a web address answers (public https only), plus `{js …}` for JavaScript (sandboxed, 100 ms; it can parse a urlfetch result). Each command can also be its own alert on your alerts overlays, triggered from any chat: an image (a GIF, or one fetched from an API), a sound you upload and its own alert text, in any combination. Each command can be limited to subscribers, VIPs, moderators or yourself and has a cooldown. **Timers** post a message every X minutes, after every X chat messages, or every X minutes once at least Y messages came in. Replies and timers in Twitch and Kick chat are free; in YouTube chat they are premium because each one spends YouTube API quota. TikTok and Discord chats can trigger clips but cannot be replied to. See [ADR-0079](./docs/adr/0079-streamer-chat-commands-in-engagement-service.md), [ADR-0080](./docs/adr/0080-chat-command-urlfetch-and-images.md) and [ADR-0081](./docs/adr/0081-chat-command-bot-sender-custom-bots-and-timers.md).
 
 **Your moderators can use it too.** Under **Moderators** in the overlay editor you can invite the
 people who already moderate for you (Premium). You get a private link to send them; they accept it
@@ -131,9 +137,9 @@ scratch? See the **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** or t
 
 ## Browser Extension
 
-Don't just watch chat in OBS — **give your viewers unified chat too.**
+**Just watching? See every chat yourself.** On streams that use All-Chat, the [All-Chat Browser Extension](https://allch.at/browser-extension) swaps native chat on Twitch, YouTube, and Kick for one combined feed. Read and send messages across platforms without leaving the page you're watching. On a channel that doesn't use All-Chat, native chat stays as it is.
 
-The [All-Chat Browser Extension](https://github.com/caesarakalaeii/all-chat-extension) replaces native site chat on Twitch, YouTube, and Kick with your All-Chat feed. Your community can read and send messages across platforms without leaving the page they're watching.
+**Streaming yourself?** In the dashboard, click **Set as Extension Overlay** on the overlay your viewers should see. Source code: [all-chat-extension](https://github.com/caesarakalaeii/all-chat-extension).
 
 **Install:**
 - [Chrome / Edge / Brave](https://chromewebstore.google.com/detail/all-chat-extension/ioneembbnocfljgbhgfknbbnpfeadacm)
@@ -218,7 +224,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Centrifugo/Pusher, TikTok WS, 
 | Service | Role |
 |---------|------|
 | `api-gateway` | WebSocket server for overlays, HTTP routing, OAuth callbacks |
-| `auth-service` | Authentication, sessions, OAuth flows (Twitch, YouTube, Kick, Discord) |
+| `auth-service` | Authentication, sessions, OAuth flows (Twitch, YouTube, Kick, Discord); its image also ships the `retention-sweeper` CronJob that deletes data past the privacy-policy retention periods (ADR-0089) |
 | `emote-service` | 7TV, BTTV, FFZ, and native emote resolution |
 | `twitch-listener` | Twitch IRC chat ingestion (⚠️ deprecated, ADR-0026 — migrating to `twitch-eventsub-listener`) |
 | `twitch-eventsub-listener` | Twitch EventSub webhooks (channel points, moderation, raids) |

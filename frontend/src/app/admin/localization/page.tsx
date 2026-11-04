@@ -40,6 +40,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { DialogRoot, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { toastManager } from '@/lib/toast'
+import { downloadJson } from '@/lib/utils/download'
 import { useTranslations } from '@/lib/i18n'
 import { enMessages } from '@/lib/i18n/messages/en'
 import {
@@ -157,15 +158,7 @@ export default function AdminLocalizationPage() {
     setExporting(code)
     localizationAdminApi
       .exportLocale(code)
-      .then((data) => {
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `localization-export-${code}.json`
-        a.click()
-        URL.revokeObjectURL(url)
-      })
+      .then((data) => downloadJson(`localization-export-${code}.json`, data))
       .catch(() =>
         toastManager.add({ title: t('admin.localization.exportFailedToast'), type: 'error' })
       )
@@ -231,7 +224,7 @@ export default function AdminLocalizationPage() {
             {queue.map((tr) => (
               <div key={`${tr.locale}:${tr.key}`} className="px-4 py-3">
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-bold text-violet-400">
+                  <span className="rounded-full border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-bold text-twitch">
                     {tr.locale}
                   </span>
                   <span className="font-mono text-xs text-text-sub">{tr.key}</span>

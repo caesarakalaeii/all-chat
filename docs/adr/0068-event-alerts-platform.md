@@ -2,12 +2,14 @@
 
 **Date**: 2026-10-01
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation; alert media now backed up off-cluster; the consumer passes only alert event types, so the owner-only moderation log never reaches alert overlays)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
 
 All-Chat's overlays are chat renderers: the message-processor normalizes `chat:raw` stream
-entries and delivers chat lines to `overlay:{id}:poll`. Streamers also want to *celebrate*
+entries and delivers them to `overlay:{id}` (with `overlay:{id}:updates` for TikTok like
+aggregates). Streamers also want to *celebrate*
 platform events — a Twitch sub or cheer, a YouTube Super Chat, a TikTok gift — as on-screen
 alerts, goal bars, and top-supporter lists, optionally with their own attached media (sounds,
 images, GIFs, short clips).
@@ -75,12 +77,17 @@ not a chat overlay, nothing keeps event history, and no service can hold uploade
    (e.g. recent followers, top supporters).
 2. **The alert-processor** (`services/alert-processor/`, issue #951): consumes `chat:raw`
    with consumer group `alert-processors` (distinct from the message-processor's group),
-   skips pure chat, normalizes via the message-processor's own normalizer dispatch
+   passes only alert event types (an allowlist: every type with an alert profile plus
+   the public events alert overlays render without one) and ACKs the rest, so pure chat,
+   deletions, the owner-only moderation log (`mod_action`, which carries AutoMod-held
+   text) and system warnings never reach an alert overlay, then
+   normalizes via the message-processor's own normalizer dispatch
    (one-directional import; the message-processor never imports alert-processor), routes
    through a UNION of `overlay_chat_sources` and accepted `share_requests` filtered to
    `overlay_type IN ('alerts','goal','list')`, and per overlay: persists to `alert_events`,
-   publishes the alert envelope to Pub/Sub `overlay:{id}:alerts` (the `:poll`/`:prediction`
-   convention extended), and scores amount-bearing events on `list` leaderboards
+   publishes the alert envelope to Pub/Sub `overlay:{id}:alerts` (the sibling of the
+   gateway's `:poll`/`:prediction` engagement channels, ADR-0070), and scores
+   amount-bearing events on `list` leaderboards
    (`overlay:{id}:leaderboard:{bits|gifts|super_chat}`, 30-day rolling TTL).
 3. **Idempotency as a first-class contract.** ACK only after persist + publish succeed;
    the alert id is a deterministic UUIDv5 of (platform, channel, message id, overlay id)
@@ -93,7 +100,11 @@ not a chat overlay, nothing keeps event history, and no service can hold uploade
    indexes issued keys in `media_objects` (migration 099). Object keys are
    `{user_id}/{uuid}/{filename}` — the random uuid segment makes public-read URLs
    unguessable, the `user_id` prefix scopes ownership checks on delete. Single-node MinIO
-   defers distribution, replication and lifecycle management; they are follow-ups.
+   (now the pgsty/silo fork) defers distribution, replication and lifecycle management;
+   they are follow-ups, as is moving the bucket off the hand-provisioned instance (issue
+   #948). The bucket is backed up: a nightly `mc mirror` CronJob in caesar-deployment
+   (`backup-offsite-mirror`) copies it to Hetzner Object Storage and Backblaze B2, with
+   versioned targets so a deletion stays recoverable for 30 days (see ADR-0003 → Backups).
 
 ## Consequences
 
@@ -111,8 +122,11 @@ not a chat overlay, nothing keeps event history, and no service can hold uploade
 
 ### Negative
 
-- `chat:raw` carries a second reader; pure-chat entries are read and skipped per delivery
-  (bounded work: parse, check `event_type`, ACK).
+- `chat:raw` carries a second reader; non-alert entries (mostly pure chat) are read and
+  skipped per delivery (bounded work: parse, check `event_type`, ACK).
+- A new event type stays off alert overlays until it gets an alert profile or is added to
+  the consumer's allowlist. That is deliberate: whatever passes is published to every
+  alerts/goal/list socket, including anonymous OBS sources and shared-overlay recipients.
 - At-least-once redelivery means subscribers may see the same alert twice in a crash
   window; accepted for live overlays (an alert animating twice is cosmetic) and prevented
   at the data layer (persist, history) and the leaderboard layer (per-alert claim).
@@ -123,10 +137,11 @@ not a chat overlay, nothing keeps event history, and no service can hold uploade
 
 ## Implementation
 
-- **Overlays kinds**: `migrations/100_overlay_type.sql`; overlay-manager models/CRUD/render
+- **Overlay kinds**: `migrations/100_overlay_type.sql`; overlay-manager models/CRUD/render
   routing (`services/overlay-manager/`), frontend kind routing.
 - **Alert-processor**: `services/alert-processor/` (consumer, normalizer bridge, routing
-  repository, publisher, leaderboard, health, Prometheus metrics; port 8095; Dockerfile;
+  repository, publisher, leaderboard, goal polls and debounced list pushes (ADR-0072),
+  health, Prometheus metrics; port 8098; Dockerfile;
   compose entry `deployments/docker-compose.yml`). Kubernetes manifests in the GitOps repo
   (`caesar-deployment/apps/workloads/all-chat/alert-processor-deployment.yaml`).
 - **History**: `migrations/106_alert_events.sql` (idempotent; index
@@ -143,3 +158,7 @@ not a chat overlay, nothing keeps event history, and no service can hold uploade
 - ADR-0009 (Ring Buffer Publisher) — the downstream reconnect tolerance the gateway's
   alerts subscription inherits.
 - ADR-0056 (shadcn token vocabulary) — the frontend surface the alert overlays render on.
+- ADR-0070 (alert overlays carry chat sources; the gateway resolves alert profiles and
+  forwards `overlay:{id}:alerts`), ADR-0072 (goal polls and debounced leaderboard pushes
+  owned by the alert-processor), ADR-0075 (an `all` profile is the base style under every
+  event type): the follow-up records for how the platform actually renders today.

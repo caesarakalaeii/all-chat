@@ -31,7 +31,11 @@ import { Input } from '@/components/ui/input'
 import { toastManager } from '@/lib/toast'
 import { useAuthStore } from '@/lib/stores/auth-store'
 import { PremiumDurationChooser } from '@/components/admin/PremiumDurationChooser'
+import { LoadMore } from '@/components/admin/LoadMore'
 import { UserAvatar } from '@/components/UserAvatar'
+import { usePagedList } from '@/hooks/usePagedList'
+import { useDebounce } from '@/hooks/useDebounce'
+import { readQueryParam } from '@/lib/utils'
 
 type UserFilter = 'all' | 'active' | 'banned' | 'premium' | 'beta' | 'unconfigured'
 
@@ -56,6 +60,18 @@ const USER_FILTERS: {
 ]
 import { formatDate, formatTimestamp, useTranslations } from '@/lib/i18n'
 import type { MessageKey } from '@/lib/i18n/translate'
+
+const isUserFilter = (f: string): f is UserFilter => USER_FILTERS.some((tab) => tab.value === f)
+
+// One user by id, in the listing's shape (the id search matches only them).
+async function fetchUser(id: string): Promise<User | null> {
+  const res = await fetch(`/api/v1/admin/users?q=${encodeURIComponent(id)}&limit=1`, {
+    credentials: 'same-origin',
+  })
+  if (!res.ok) return null
+  const body = (await res.json()) as { users?: User[] }
+  return body.users?.find((u) => u.id === id) ?? null
+}
 
 interface User {
   id: string
@@ -93,14 +109,18 @@ export default function UsersPage() {
   const router = useRouter()
   const { startImpersonation } = useAuthStore()
   const t = useTranslations()
-  const [users, setUsers] = useState<User[]>([])
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [userOverlays, setUserOverlays] = useState<UserOverlay[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [impersonating, setImpersonating] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filter, setFilter] = useState<UserFilter>('all')
+  // Deep links (ADR-0036): ?user=<id> searches by that id until the user
+  // resolves (from the Overlays/Sources owner links); ?filter=<tab> preselects
+  // a tab (from the dashboard stat cards).
+  const [deepLinkUserId] = useState(() => readQueryParam('user'))
+  const [searchTerm, setSearchTerm] = useState(deepLinkUserId)
+  const [filter, setFilter] = useState<UserFilter>(() => {
+    const f = readQueryParam('filter')
+    return isUserFilter(f) ? f : 'all'
+  })
   const [showBanModal, setShowBanModal] = useState(false)
   const [userToBan, setUserToBan] = useState<User | null>(null)
   const [banReason, setBanReason] = useState('')
@@ -132,57 +152,26 @@ export default function UsersPage() {
   }
   const banReasonId = useId()
 
-  // Fetch all users from the database
+  // Users are searched, filtered and paged server-side: the full list grew too
+  // large to load and render at once.
+  const search = useDebounce(searchTerm.trim(), 300)
+  const query = new URLSearchParams()
+  if (search) query.set('q', search)
+  if (filter !== 'all') query.set('filter', filter)
+  const list = usePagedList<User>(`/api/v1/admin/users?${query}`, 'users')
+
+  // Select the deep-linked user once it resolves, and show their name rather
+  // than the raw id in the search box.
   useEffect(() => {
-    async function fetchUsers() {
-      try {
-        // Auth is via the httpOnly session cookie (same-origin); the gateway
-        // CookieToBearer middleware copies the access cookie to Authorization
-        // before backend validation (no JS-readable token).
-        const response = await fetch('/api/v1/admin/users', {
-          credentials: 'same-origin',
-        })
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-        }
-
-        const data = await response.json()
-        setUsers(data)
-        setLoading(false)
-
-        // Deep-links (read post-await so they're client-only, not a synchronous
-        // setState in the effect body). ?user=<id> auto-selects a user (from the
-        // Overlays/Sources owner links); ?filter=<tab> pre-selects a filter tab
-        // (from the dashboard stat cards).
-        const params = new URLSearchParams(window.location.search)
-        const targetId = params.get('user')
-        if (targetId) {
-          const match = (data as User[]).find((u) => u.id === targetId)
-          if (match) {
-            setSelectedUser(match)
-            setSearchTerm(match.username)
-          }
-        }
-        const f = params.get('filter')
-        if (
-          f === 'active' ||
-          f === 'banned' ||
-          f === 'premium' ||
-          f === 'beta' ||
-          f === 'unconfigured'
-        ) {
-          setFilter(f)
-        }
-      } catch (err) {
-        console.error('Failed to load users:', err)
-        setError(t('admin.users.loadError'))
-        setLoading(false)
-      }
-    }
-
-    fetchUsers()
-  }, [t])
+    if (!deepLinkUserId) return
+    fetchUser(deepLinkUserId)
+      .then((match) => {
+        if (!match) return
+        setSelectedUser(match)
+        setSearchTerm(match.username)
+      })
+      .catch((err) => console.error('Failed to load deep-linked user:', err))
+  }, [deepLinkUserId])
 
   // Fetch overlays for selected user
   useEffect(() => {
@@ -208,24 +197,6 @@ export default function UsersPage() {
 
     fetchUserOverlays()
   }, [selectedUser])
-
-  // Refetch users helper. Returns the fresh list so callers can re-sync a selected
-  // user from backend truth (e.g. after a role change that recomputed is_premium).
-  const refetchUsers = async (): Promise<User[]> => {
-    try {
-      const response = await fetch('/api/v1/admin/users', {
-        credentials: 'same-origin',
-      })
-      if (response.ok) {
-        const data = (await response.json()) as User[]
-        setUsers(data)
-        return data
-      }
-    } catch (err) {
-      console.error('Failed to refetch users:', err)
-    }
-    return []
-  }
 
   // Handle impersonation (called from Dialog confirm). H3 cookie auth: the
   // server sets an impersonated-user access cookie; no token is swapped in JS.
@@ -271,7 +242,9 @@ export default function UsersPage() {
       setShowBanModal(false)
       setUserToBan(null)
       setBanReason('')
-      await refetchUsers()
+      // A changed role or ban can move the user out of the current tab and
+      // changes the tab counts, so refetch rather than patch the row.
+      list.reload()
 
       // Clear selected user if it was the banned one
       if (selectedUser?.id === userToBan.id) {
@@ -302,7 +275,7 @@ export default function UsersPage() {
         type: 'success',
       })
       setUnbanDialogUser(null)
-      await refetchUsers()
+      list.reload()
     } catch (err: any) {
       toastManager.add({ title: err.message || t('admin.users.unbanError'), type: 'error' })
     }
@@ -343,11 +316,11 @@ export default function UsersPage() {
         type: 'success',
       })
       setPremiumDialogUser(null)
-      await refetchUsers()
+      list.reload()
 
       // Update selectedUser in place so the panel reflects the change immediately.
       // The server computes the exact deadline from its own clock; this local
-      // estimate (accurate to a few seconds) is refreshed by refetchUsers() on the
+      // estimate (accurate to a few seconds) is refreshed by the list reload on the
       // next selection.
       if (selectedUser?.id === userId) {
         const expiresAt =
@@ -392,7 +365,7 @@ export default function UsersPage() {
         type: 'success',
       })
       setBetaDialogUser(null)
-      await refetchUsers()
+      list.reload()
 
       // Update selectedUser in place. Beta testers are premium (the backend recompute
       // folds is_beta_tester into is_premium), so reflect that here too.
@@ -451,14 +424,14 @@ export default function UsersPage() {
         type: 'success',
       })
       setAmbassadorDialogUser(null)
-      const fresh = await refetchUsers()
+      list.reload()
 
       // Re-sync the detail panel from backend truth. A role change recomputes
       // is_premium server-side (ambassador is folded in, and a revoke may drop it if
       // no subscription/override remains), so patching locally would go stale —
       // adopt the freshly-listed row instead of guessing.
       if (selectedUser?.id === userId) {
-        setSelectedUser(fresh.find((u) => u.id === userId) ?? null)
+        setSelectedUser(await fetchUser(userId))
       }
     } catch (err: any) {
       toastManager.add({
@@ -470,51 +443,24 @@ export default function UsersPage() {
     }
   }
 
-  // Filter and search users
-  const displayUsers = users.filter((u) => {
-    // Filter by status
-    if (filter === 'banned' && !u.is_banned) return false
-    if (filter === 'active' && u.is_banned) return false
-    if (filter === 'premium' && !u.is_premium) return false
-    if (filter === 'beta' && !u.is_beta_tester) return false
-    // "Never set up an overlay": no configured chat source anywhere, which
-    // covers both users with zero overlays and users with an empty overlay.
-    if (filter === 'unconfigured' && u.sources_count > 0) return false
-
-    // Search filter (id lets an owner deep-link land even before it's typed)
-    if (searchTerm) {
-      const term = searchTerm.toLowerCase()
-      return (
-        u.username.toLowerCase().includes(term) ||
-        u.display_name.toLowerCase().includes(term) ||
-        u.id.toLowerCase().includes(term) ||
-        u.twitch_id?.toLowerCase().includes(term) ||
-        u.youtube_id?.toLowerCase().includes(term) ||
-        u.kick_id?.toLowerCase().includes(term)
-      )
-    }
-
-    return true
-  })
-
-  if (error) {
+  // Only the very first load failing takes over the page; a later failure
+  // (a new search, a next page) leaves the list and its controls usable.
+  if (list.error && list.response === undefined) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8">
         <Card className="border-destructive p-4">
-          <p className="text-destructive">{error}</p>
+          <p className="text-destructive">{t('admin.users.loadError')}</p>
         </Card>
       </div>
     )
   }
 
-  const counts: Record<UserFilter, number> = {
-    all: users.length,
-    active: users.filter((u) => !u.is_banned).length,
-    banned: users.filter((u) => u.is_banned).length,
-    premium: users.filter((u) => u.is_premium).length,
-    beta: users.filter((u) => u.is_beta_tester).length,
-    unconfigured: users.filter((u) => u.sources_count === 0).length,
-  }
+  // Tab counts follow the search, not the selected tab, so every tab says how
+  // many matches it holds.
+  const counts = (list.response?.counts ?? {}) as Partial<Record<UserFilter, number>>
+  // The current search's first page failed: its rows are not on screen.
+  const searchFailed = list.error && !list.hasMore
+  const displayUsers = searchFailed ? [] : list.items
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
@@ -526,7 +472,7 @@ export default function UsersPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Users List */}
         <div className="lg:col-span-2">
-          {loading ? (
+          {list.response === undefined ? (
             <Card className="space-y-3 p-6">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-14 w-full rounded-lg" />
@@ -536,7 +482,7 @@ export default function UsersPage() {
             <Card className="overflow-hidden">
               <div className="border-b border-border px-4 py-5">
                 <h3 className="text-base font-medium text-text">
-                  {t('admin.users.listHeading', { count: users.length })}
+                  {t('admin.users.listHeading', { count: list.total })}
                 </h3>
 
                 {/* Search Input */}
@@ -562,13 +508,21 @@ export default function UsersPage() {
                         value={tab.value}
                         title={tab.titleKey ? t(tab.titleKey) : undefined}
                       >
-                        {t(tab.labelKey, { count: counts[tab.value] })}
+                        {t(tab.labelKey, { count: counts[tab.value] ?? 0 })}
                       </TabsTrigger>
                     ))}
                   </TabsList>
                 </Tabs>
               </div>
-              <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
+              <ul
+                className="max-h-[70vh] divide-y divide-border overflow-y-auto"
+                aria-busy={list.loading}
+              >
+                {searchFailed && (
+                  <li className="px-4 py-10 text-center text-sm text-destructive">
+                    {t('admin.users.loadError')}
+                  </li>
+                )}
                 {displayUsers.map((user) => (
                   <li key={user.id}>
                     <button
@@ -592,12 +546,12 @@ export default function UsersPage() {
                               <p className="text-sm font-medium text-text">{user.display_name}</p>
                               <div className="ml-2 flex space-x-1">
                                 {user.is_ambassador && (
-                                  <span className="inline-flex items-center rounded border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-400">
+                                  <span className="inline-flex items-center rounded border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-info">
                                     {t('admin.users.badgeAmbassador')}
                                   </span>
                                 )}
                                 {user.is_beta_tester && !user.is_ambassador && (
-                                  <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-400">
+                                  <span className="inline-flex items-center rounded border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-twitch">
                                     {t('admin.users.badgeBeta')}
                                   </span>
                                 )}
@@ -666,11 +620,12 @@ export default function UsersPage() {
                     </button>
                   </li>
                 ))}
-                {displayUsers.length === 0 && (
+                {!searchFailed && !list.loading && displayUsers.length === 0 && (
                   <li className="px-4 py-10 text-center text-sm text-text-dim">
                     {t('admin.users.empty')}
                   </li>
                 )}
+                <LoadMore list={list} as="li" />
               </ul>
             </Card>
           )}
@@ -975,10 +930,10 @@ export default function UsersPage() {
                   {selectedUser.is_beta_tester ? (
                     <>
                       <div className="mb-3 rounded-lg border border-violet-500/20 bg-violet-500/10 p-3">
-                        <p className="text-sm font-medium text-violet-400">
+                        <p className="text-sm font-medium text-twitch">
                           {t('admin.users.betaActiveTitle')}
                         </p>
-                        <p className="mt-1 text-xs text-violet-400/70">
+                        <p className="mt-1 text-xs text-twitch">
                           {t('admin.users.betaActiveBody')}
                         </p>
                       </div>
@@ -1047,7 +1002,7 @@ export default function UsersPage() {
                         render={
                           <Button
                             variant="outline"
-                            className="w-full border-violet-500/40 text-violet-400 hover:border-violet-500/60 hover:bg-violet-500/10"
+                            className="w-full border-violet-500/40 text-twitch hover:border-violet-500/60 hover:bg-violet-500/10"
                             aria-label={t('admin.users.grantBetaLabel', {
                               username: selectedUser.username,
                             })}
@@ -1092,10 +1047,10 @@ export default function UsersPage() {
                   {selectedUser.is_ambassador ? (
                     <>
                       <div className="mb-3 rounded-lg border border-sky-500/20 bg-sky-500/10 p-3">
-                        <p className="text-sm font-medium text-sky-400">
+                        <p className="text-sm font-medium text-info">
                           {t('admin.users.ambassadorActiveTitle')}
                         </p>
-                        <p className="mt-1 text-xs text-sky-400/70">
+                        <p className="mt-1 text-xs text-info">
                           {t('admin.users.ambassadorActiveBody')}
                         </p>
                       </div>
@@ -1215,7 +1170,7 @@ export default function UsersPage() {
                       </div>
                       <Button
                         variant="outline"
-                        className="w-full border-sky-500/40 text-sky-400 hover:border-sky-500/60 hover:bg-sky-500/10"
+                        className="w-full border-sky-500/40 text-info hover:border-sky-500/60 hover:bg-sky-500/10"
                         disabled={ambassadorLoading}
                         aria-label={t('admin.users.grantAmbassadorLabel', {
                           username: selectedUser.username,

@@ -124,7 +124,10 @@ function PremiumContent() {
       <AppNav />
       <main id="main-content" tabIndex={-1} className="mx-auto max-w-2xl space-y-6 px-4 py-12">
         <div className="space-y-1">
-          <Link href="/settings" className="text-sub text-sm transition-colors hover:text-white">
+          <Link
+            href="/settings"
+            className="text-sub text-sm transition-colors hover:text-lanes-fg-strong"
+          >
             {t('settings.premium.back')}
           </Link>
           <h1 className="text-2xl">{t('settings.premium.heading')}</h1>
@@ -190,7 +193,7 @@ function PremiumContent() {
                   />
                   <Dialog.Content
                     showCloseButton={false}
-                    className="rounded-none border-white bg-black text-[#f4f3ef]"
+                    className="rounded-none border-lanes-fg-strong bg-lanes-panel text-lanes-fg"
                   >
                     <Dialog.Title>{t('common.patreon.disconnectTitle')}</Dialog.Title>
                     <Dialog.Description>{t('settings.premium.disconnectBody')}</Dialog.Description>

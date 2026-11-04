@@ -512,6 +512,7 @@ func main() {
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
 		protected.PATCH("/me/onboarding", legacyAuthHandler.HandleUpdateOnboarding)
+		protected.POST("/me/tos-acceptance", legacyAuthHandler.HandleAcceptTos)
 
 		// Personal access tokens for non-browser clients. Session-only by design (the
 		// handler refuses a PAT-authenticated request): a leaked token must not be able
@@ -652,6 +653,7 @@ func main() {
 		viewerProtected.PATCH("/cosmetics", viewerCosmeticsHandler.HandlePatchCosmetics)
 		viewerProtected.GET("/linked-platforms", viewerAuthHandler.HandleGetLinkedPlatforms)
 		viewerProtected.DELETE("/linked-platforms/:platform", viewerAuthHandler.HandleUnlinkPlatform)
+		viewerProtected.GET("/data-export", viewerAuthHandler.HandleViewerDataExport) // DSGVO Art. 15/20 for viewers
 	}
 
 	// Admin routes (JWT + Admin role required)

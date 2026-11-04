@@ -16,9 +16,14 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
+import type { Metadata } from 'next'
 import { ReactNode } from 'react'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AdminSidebar } from '@/components/AdminSidebar'
+
+// Login-gated: no public content to index. robots.txt leaves this crawlable on
+// purpose, so Googlebot can read the noindex and drop the URL from the index.
+export const metadata: Metadata = { robots: { index: false, follow: false } }
 
 function AdminLayoutContent({ children }: { children: ReactNode }) {
   return (

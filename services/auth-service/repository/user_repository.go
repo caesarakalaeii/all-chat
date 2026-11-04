@@ -20,11 +20,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 )
@@ -100,7 +102,7 @@ func (r *UserRepository) GetByTwitchID(ctx context.Context, twitchID string) (*m
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE twitch_id = $1
 `
@@ -121,7 +123,7 @@ func (r *UserRepository) GetByGoogleID(ctx context.Context, googleID string) (*m
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE google_id = $1
 `
@@ -149,7 +151,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, 
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE id = $1
 `
@@ -170,7 +172,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*m
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE LOWER(username) = LOWER($1)
 `
@@ -219,6 +221,46 @@ WHERE id = $1
 	}
 
 	return nil
+}
+
+// ErrPlatformIDTaken means another account already owns the platform id, so it was not
+// recorded on this one.
+var ErrPlatformIDTaken = errors.New("platform id already belongs to another account")
+
+// platformIDColumns maps a platform to its users column. Facebook and Instagram have none.
+var platformIDColumns = map[string]string{
+	"twitch":  "twitch_id",
+	"youtube": "google_id",
+	"kick":    "kick_id",
+}
+
+// SetPlatformID records a linked platform identity on the user, so a later login with that
+// platform finds this account. It only fills an empty column: an id already recorded stays,
+// whichever value it holds. Reports whether the column now holds platformID.
+func (r *UserRepository) SetPlatformID(ctx context.Context, userID, platform, platformID string) (bool, error) {
+	column, ok := platformIDColumns[platform]
+	if !ok || platformID == "" {
+		return false, nil
+	}
+
+	var stored *string
+	err := r.db.QueryRow(ctx,
+		`UPDATE users SET `+column+` = COALESCE(`+column+`, $2), updated_at = NOW()
+		 WHERE id = $1
+		 RETURNING `+column,
+		userID, platformID,
+	).Scan(&stored)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return false, ErrPlatformIDTaken
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrUserNotFound
+		}
+		return false, fmt.Errorf("failed to set %s: %w", column, err)
+	}
+	return stored != nil && *stored == platformID, nil
 }
 
 // Delete removes a user by ID
@@ -310,7 +352,7 @@ func (r *UserRepository) GetByKickID(ctx context.Context, kickID string) (*model
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE kick_id = $1
 `
@@ -766,6 +808,26 @@ func (r *UserRepository) SetOnboardingCompleted(ctx context.Context, userID stri
 	return completedAt, nil
 }
 
+// AcceptTos records that the user accepted the current Terms of Service and
+// Privacy Policy. There is no way back to false through the API: the prompt is
+// re-armed only by resetting the column in the database when the terms change.
+func (r *UserRepository) AcceptTos(ctx context.Context, userID string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE users
+		SET tos_accepted = TRUE,
+		    tos_accepted_at = NOW(),
+		    updated_at = NOW()
+		WHERE id = $1
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("failed to record terms acceptance: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
 func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 	user := &models.User{}
 	var encryptedAccessToken, encryptedRefreshToken string
@@ -777,7 +839,7 @@ func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 		&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName,
 		&profileImageURL, &user.IsAdmin, &user.IsPremium, &user.IsBetaTester, &user.IsAmbassador, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
 		&encryptedAccessToken, &encryptedRefreshToken,
-		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt, &user.OnboardingCompletedAt,
+		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt, &user.OnboardingCompletedAt, &user.TosAccepted,
 	)
 	if err != nil {
 		return nil, err
@@ -813,14 +875,14 @@ func (r *UserRepository) decryptToken(token string) (string, error) {
 	return r.cipher.Decrypt(token)
 }
 
-// GetAllUsers retrieves all users (admin only).
-//
-// This is a metadata-only listing: it deliberately does NOT select or decrypt
-// the OAuth access/refresh tokens. The admin user list never uses them, and
-// coupling the listing to token decryption meant a single account with a
-// corrupt or legacy-plaintext token broke the entire endpoint with a 500.
-func (r *UserRepository) GetAllUsers(ctx context.Context) ([]*models.User, error) {
-	query := `
+// adminUserSelect is one admin-listing row per user. It is metadata only: it
+// deliberately does NOT select or decrypt the OAuth access/refresh tokens. The
+// admin user list never uses them, and coupling the listing to token
+// decryption meant a single account with a corrupt or legacy-plaintext token
+// broke the entire endpoint with a 500. is_banned folds in bans that exist only
+// as a banned platform id, and the overlay-setup counts back the "never set up
+// an overlay" filter.
+const adminUserSelect = `
 SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u.display_name, u.profile_image_url,
        u.is_admin, u.is_premium, u.is_beta_tester, u.is_ambassador, u.premium_admin_override_expires_at,
        amb.tagline AS ambassador_tagline, COALESCE(amb.sort_order, 0) AS ambassador_sort_order,
@@ -844,12 +906,68 @@ LEFT JOIN LATERAL (
   )
   LIMIT 1
 ) bpi ON true
-ORDER BY u.created_at DESC
 `
 
-	rows, err := r.db.Query(ctx, query)
+// userStatusFilters are the admin Users page tabs other than "all", each as a
+// condition over an adminUserSelect row aliased x. CountUsers counts every tab
+// from this one list, so a tab's count and its listing cannot disagree.
+var userStatusFilters = []struct{ name, cond string }{
+	{"active", "NOT x.is_banned"},
+	{"banned", "x.is_banned"},
+	{"premium", "x.is_premium"},
+	{"beta", "x.is_beta_tester"},
+	{"unconfigured", "x.sources_count = 0"},
+}
+
+// UserListFilter narrows the admin user listing. Query is a case-insensitive
+// literal substring match on username, display name, id and the platform ids;
+// Status is one of the userStatusFilters names ("" or unknown means all).
+type UserListFilter struct {
+	Query  string
+	Status string
+}
+
+// likeContains turns s into an ILIKE pattern that matches it as a literal
+// substring: usernames are full of underscores, which LIKE would otherwise read
+// as a single-character wildcard.
+func likeContains(s string) string {
+	return "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(s) + "%"
+}
+
+// userSearch returns the free-text search as a condition over $1 plus its
+// argument, or nothing when there is no search.
+func userSearch(query string) ([]string, []any) {
+	if query == "" {
+		return nil, nil
+	}
+	return []string{`(x.username ILIKE $1 OR x.display_name ILIKE $1 OR x.id::text ILIKE $1
+		OR x.twitch_id ILIKE $1 OR x.google_id ILIKE $1 OR x.kick_id ILIKE $1)`}, []any{likeContains(query)}
+}
+
+// sqlWhere ANDs conds into a WHERE clause, or returns "" when there are none.
+func sqlWhere(conds []string) string {
+	if len(conds) == 0 {
+		return ""
+	}
+	return "WHERE " + strings.Join(conds, " AND ")
+}
+
+// ListUsers returns one page of users matching filter, newest first (admin only).
+func (r *UserRepository) ListUsers(ctx context.Context, filter UserListFilter, limit, offset int) ([]*models.User, error) {
+	conds, args := userSearch(filter.Query)
+	for _, f := range userStatusFilters {
+		if f.name == filter.Status {
+			conds = append(conds, f.cond)
+		}
+	}
+	// id breaks created_at ties so consecutive pages neither repeat nor skip rows.
+	query := fmt.Sprintf(`SELECT * FROM (%s) x %s ORDER BY x.created_at DESC, x.id LIMIT $%d OFFSET $%d`,
+		adminUserSelect, sqlWhere(conds), len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
+
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get all users: %w", err)
+		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
 	defer rows.Close()
 
@@ -885,6 +1003,30 @@ ORDER BY u.created_at DESC
 	return users, nil
 }
 
+// CountUsers returns how many users match the free-text search in total
+// ("all") and in each userStatusFilters tab, in a single pass (admin only).
+func (r *UserRepository) CountUsers(ctx context.Context, query string) (map[string]int, error) {
+	conds, args := userSearch(query)
+	cols := "COUNT(*)"
+	for _, f := range userStatusFilters {
+		cols += ", COUNT(*) FILTER (WHERE " + f.cond + ")"
+	}
+	vals := make([]int, len(userStatusFilters)+1)
+	dest := make([]any, len(vals))
+	for i := range vals {
+		dest[i] = &vals[i]
+	}
+	sql := fmt.Sprintf(`SELECT %s FROM (%s) x %s`, cols, adminUserSelect, sqlWhere(conds))
+	if err := r.db.QueryRow(ctx, sql, args...).Scan(dest...); err != nil {
+		return nil, fmt.Errorf("failed to count users: %w", err)
+	}
+	counts := map[string]int{"all": vals[0]}
+	for i, f := range userStatusFilters {
+		counts[f.name] = vals[i+1]
+	}
+	return counts, nil
+}
+
 // GetUserByID retrieves a user by their ID (admin only)
 func (r *UserRepository) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	query := `
@@ -894,7 +1036,7 @@ SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u
        COALESCE(u.banned_at, bpi.banned_at) AS banned_at,
        COALESCE(u.banned_reason, bpi.reason) AS banned_reason,
        COALESCE(u.banned_by, bpi.banned_by) AS banned_by,
-       u.access_token, u.refresh_token, u.token_expires_at, u.created_at, u.updated_at, u.onboarding_completed_at
+       u.access_token, u.refresh_token, u.token_expires_at, u.created_at, u.updated_at, u.onboarding_completed_at, u.tos_accepted
 FROM users u
 LEFT JOIN LATERAL (
   SELECT bpi.platform_id, bpi.banned_at, bpi.reason, bpi.banned_by

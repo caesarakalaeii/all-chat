@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-23
 **Status**: Accepted
+**Revised**: 2026-11-04 (a Twitch send dropped with `is_sent=false` is a failure)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -52,7 +53,10 @@ across engagement-service replicas without a live/offline signal.
   account authorizes our app once with `user:bot` and `user:write:chat`, and the
   broadcaster grants `channel:bot`. Twitch then shows the message from the bot
   with the Chat Bot badge. The same holds for a custom bot, so a Twitch bot row
-  needs only the bot's user id at send time.
+  needs only the bot's user id at send time. A message Twitch will not deliver
+  (AutoMod, the channel's chat settings, an unverified bot account) still comes
+  back as 200 with `is_sent=false`; auth-service counts that as a failed send
+  (`message_dropped`) and logs Twitch's `drop_reason`.
 - **Kick.** `POST /public/v1/chat` with `type: "bot"` and the **streamer's**
   token posts as the bot configured on our Kick app. No second account and no
   database row. A custom Kick bot posts with its own token as `type: "user"`
@@ -149,6 +153,7 @@ an admin and exists for Twitch and YouTube only. The admin page is
   minimum message count avoids that, and the editor says so.
 - **Staging.** auth-service and engagement-service run from `:main` only, so the
   feature reaches beta.allch.at once its backend is on main. It stays behind the
-  `chat_commands` early-access gate and the beta-only `/commands` page.
+  `chat_commands` early-access gate; `/commands` is offered to early-access
+  users on every host.
 - **Supersedes in part.** ADR-0079's "a reply is posted from the streamer's own
-  account" and "timers are left out" no longer hold.
+  account" and "timers are left out" no longer hold; its body says so.

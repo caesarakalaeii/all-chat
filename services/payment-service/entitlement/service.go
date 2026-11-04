@@ -23,6 +23,7 @@ package entitlement
 
 import (
 	"context"
+	"errors"
 
 	"github.com/caesar/all-chat/services/payment-service/metrics"
 	"github.com/caesar/all-chat/services/payment-service/patreon"
@@ -50,13 +51,16 @@ func NewService(subs *repository.SubscriptionRepository, recomputer *premium.Rec
 // upserts the subscription row, and — when the subject is known — recomputes the
 // relevant is_premium column. The product is the viewer product iff viewerID is
 // set, otherwise the streamer product; the qualifying threshold follows the
-// product. raw is the original provider payload for audit (nil when not available,
-// e.g. reconcile / OAuth callback).
+// product. The row is linked to the subject only while the subject has this
+// Patreon account connected (see SubscriptionRepository.Upsert), so a stale
+// subject is recomputed without premium from this row. Only the snapshot's typed
+// fields are stored; the provider payload is
+// not, because a webhook body carries the patron's email, name and address.
 //
 // At most one of userID / viewerID should be set. It is idempotent and convergent:
 // repeated or out-of-order calls converge because the upsert is keyed and the
 // recompute is a pure function of current rows.
-func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, userID, viewerID *string, raw []byte) (status string, isPremium bool, err error) {
+func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, userID, viewerID *string) (status string, isPremium bool, err error) {
 	product := repository.ProductStreamer
 	threshold := s.minCents
 	if viewerID != nil && *viewerID != "" {
@@ -77,8 +81,6 @@ func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, u
 	}
 
 	if err = s.subs.Upsert(ctx, repository.Subscription{
-		UserID:           userID,
-		ViewerID:         viewerID,
 		Product:          product,
 		Provider:         "patreon",
 		ProviderUserID:   snap.PatreonUserID,
@@ -86,7 +88,6 @@ func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, u
 		TierID:           snap.TierID,
 		Cents:            snap.EntitledCents,
 		CurrentPeriodEnd: snap.NextChargeDate,
-		Raw:              raw,
 	}); err != nil {
 		return status, false, err
 	}
@@ -119,4 +120,30 @@ func (s *Service) Apply(ctx context.Context, snap *patreon.MembershipSnapshot, u
 	}
 
 	return status, isPremium, nil
+}
+
+// PruneDisconnected deletes the memberships still linked to a subject that no
+// longer has that Patreon account connected and recomputes each such subject, so
+// premium they kept is revoked. It returns how many rows it deleted. The reconcile
+// pass runs it; disconnect itself already deletes the subject's rows.
+func (s *Service) PruneDisconnected(ctx context.Context) (int, error) {
+	subs, err := s.subs.DeleteDisconnected(ctx)
+	if err != nil {
+		return 0, err
+	}
+	// The rows are gone once deleted, so a later pass cannot retry a failed
+	// recompute: keep going and report every failure rather than stopping early.
+	var errs []error
+	for _, sub := range subs {
+		if sub.UserID != nil {
+			_, err = s.recomputer.Recompute(ctx, *sub.UserID)
+		} else {
+			_, err = s.recomputer.RecomputeViewer(ctx, *sub.ViewerID)
+		}
+		errs = append(errs, err)
+	}
+	if len(subs) > 0 {
+		s.logger.Info("Deleted memberships of disconnected Patreon accounts", zap.Int("count", len(subs)))
+	}
+	return len(subs), errors.Join(errs...)
 }

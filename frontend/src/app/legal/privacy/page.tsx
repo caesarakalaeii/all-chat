@@ -80,7 +80,7 @@ export default function PrivacyPolicyPage() {
   return (
     <LegalLayout title={t('legal.privacy.title')} lastUpdated={t('legal.privacy.lastUpdated')}>
       <div className="space-y-4">
-        <div className="text-sub border-2 border-white/30 p-5">
+        <div className="text-sub border-2 border-lanes-fg-strong/30 p-5">
           {emphasise(
             t('legal.privacy.tldr', { label: t('legal.privacy.tldrLabel') }),
             t('legal.privacy.tldrLabel'),
@@ -137,6 +137,7 @@ export default function PrivacyPolicyPage() {
             <li>{t('legal.privacy.authProfileImages')}</li>
             <li>{t('legal.privacy.authTokens')}</li>
             <li>{t('legal.privacy.authScopes')}</li>
+            <li>{t('legal.privacy.authTermsAcceptance')}</li>
           </ul>
           <p className={noteClasses}>{t('legal.privacy.authLegalBasis')}</p>
         </div>
@@ -258,6 +259,7 @@ export default function PrivacyPolicyPage() {
               )
             )}
           </li>
+          <li>{t('legal.privacy.storageBackups')}</li>
         </ul>
         <h3 className="text-lg">{t('legal.privacy.safeguardsSubheading')}</h3>
         <ul className={listClasses}>
@@ -290,7 +292,7 @@ export default function PrivacyPolicyPage() {
           {interpolateElements(t('legal.privacy.fontsBody'), {
             selfHosted: <Emphasis>{t('legal.privacy.fontsSelfHostedEmphasis')}</Emphasis>,
             proxyPath: (
-              <code className="border border-white/50 bg-black px-1 py-0.5 text-xs">
+              <code className="border border-lanes-fg-strong/50 bg-lanes-panel px-1 py-0.5 text-xs">
                 {FONT_PROXY_PATH}
               </code>
             ),
@@ -367,6 +369,9 @@ export default function PrivacyPolicyPage() {
           })}
         </p>
         <p className={noteClasses}>{t('legal.privacy.analyticsConsentNote')}</p>
+
+        <h3 className="text-lg">{t('legal.privacy.backupsSubheading')}</h3>
+        <p>{t('legal.privacy.backupsBody')}</p>
       </section>
 
       {/* --- Data Retention --- */}
@@ -385,6 +390,7 @@ export default function PrivacyPolicyPage() {
           )}
           {labelledRow('legal.privacy.retentionLogs', 'legal.privacy.retentionLogsLabel')}
           {labelledRow('legal.privacy.retentionQuotaLogs', 'legal.privacy.retentionQuotaLogsLabel')}
+          {labelledRow('legal.privacy.retentionBackups', 'legal.privacy.retentionBackupsLabel')}
         </ul>
       </section>
 

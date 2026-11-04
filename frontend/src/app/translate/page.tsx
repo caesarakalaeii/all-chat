@@ -362,7 +362,7 @@ function TranslatePageInner() {
                         className={
                           'mb-3 text-xs ' +
                           (mineRow.status === 'approved'
-                            ? 'text-emerald-500'
+                            ? 'text-success'
                             : mineRow.status === 'rejected'
                               ? 'text-destructive'
                               : 'text-text-sub')

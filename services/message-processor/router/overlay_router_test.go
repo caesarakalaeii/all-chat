@@ -247,7 +247,7 @@ func TestFindOverlaysForMessage(t *testing.T) {
 		// At Wave 0, the query has no UNION → this assertion FAILS RED.
 		// At Wave 1, the query has UNION with WHERE sr.status = 'accepted' → passes GREEN.
 		repo := &Repository{db: nil} // nil db — we only inspect the query string, not execute it
-		_ = repo // repo used only to confirm the type exists and compiles
+		_ = repo                     // repo used only to confirm the type exists and compiles
 		// The production query must contain UNION to support the revoke-excluded scenario.
 		// Check the query by constructing a Repository and inspecting the hard-coded SQL constant.
 		// Since Go doesn't expose private fields, we assert via the test sentinel:

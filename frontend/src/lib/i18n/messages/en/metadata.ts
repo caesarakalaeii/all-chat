@@ -37,10 +37,11 @@ export const metadata = {
     titleTemplate: '%s | All-Chat',
     description:
       'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS chat overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.',
-    // openGraph and twitter carried identical strings, so one key each.
-    socialTitle: 'All-Chat — Every chat. One overlay.',
+    // openGraph and twitter carried identical strings, so one key each. The
+    // title matches the social card's headline ("EVERY CHAT. ONE URL.").
+    socialTitle: 'All-Chat — Every chat. One URL.',
     socialDescription:
-      'All your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS overlay. 7TV, BTTV, and FFZ emotes built in.',
+      'Free multistream chat overlay and OBS dock for Twitch, YouTube, Kick, TikTok and Discord. 7TV, BTTV and FFZ emotes built in.',
   },
   home: {
     title: 'Multi-Platform Chat Overlay for Twitch, YouTube, Kick & TikTok | All-Chat',

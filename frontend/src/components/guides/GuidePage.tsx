@@ -151,7 +151,7 @@ export function GuidePage({
 
       <section
         aria-labelledby="guide-cta-heading"
-        className="mt-12 space-y-3 border-t border-white/20 pt-6"
+        className="mt-12 space-y-3 border-t border-lanes-fg-strong/20 pt-6"
       >
         <h2 id="guide-cta-heading" className="text-lg">
           {t('guides.shared.ctaHeading')}

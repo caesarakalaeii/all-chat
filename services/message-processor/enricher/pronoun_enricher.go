@@ -155,7 +155,14 @@ func (e *PronounEnricher) fetchPronounsMap(ctx context.Context) map[string]alejo
 
 // Enrich looks up the Twitch user's pronouns from the Alejo API, caches the result,
 // and sets msg.User.Pronouns if found. Returns nil on all soft failures (D-05).
-func (e *PronounEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) error {
+//
+// overlayShowsPronouns is the target overlay's pronoun toggle. The lookup sends the
+// chatter's Twitch login to a third party, so when the overlay does not display
+// pronouns nothing is looked up, sent or cached (data minimisation).
+func (e *PronounEnricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage, overlayShowsPronouns bool) error {
+	if !overlayShowsPronouns {
+		return nil
+	}
 	// Twitch messages carry their own username; a non-Twitch message uses the
 	// linked TwitchUsername that ViewerBadgeEnricher populated upstream.
 	var twitchLogin string

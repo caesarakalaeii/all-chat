@@ -18,7 +18,6 @@
 
 import Link from 'next/link'
 import { AppNav } from '@/components/AppNav'
-import { LegalThemeToggle } from '@/components/legal/LegalThemeToggle'
 import { getTranslations } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
@@ -33,30 +32,24 @@ export default function LegalLayout({ title, lastUpdated, children }: LegalLayou
   // getTranslations, not the hook: the legal routes are Server Components.
   const t = getTranslations()
   return (
-    <div
-      id="legal-wrapper"
-      className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}
-    >
+    <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
       <AppNav />
       <div className="mx-auto max-w-4xl px-4 py-12">
         <div className="lanes-panel p-5 sm:p-8 md:p-12">
-          <div className="mb-8 flex items-start justify-between gap-4">
-            {/* min-w-0 + break-words: the German half of the title
-                ("(NUTZUNGSBEDINGUNGEN)") is one unbreakable uppercase word that
-                pushed the page ~280px past a 375px viewport. */}
-            <div className="min-w-0 space-y-2">
-              <span className="mono-label">{t('legal.layout.eyebrow')}</span>
-              <h1 className="text-2xl wrap-break-word sm:text-3xl">{title}</h1>
-              <p className="text-dim text-sm">
-                {t('legal.layout.lastUpdated', { date: lastUpdated })}
-              </p>
-            </div>
-            <LegalThemeToggle />
+          {/* break-words: the German half of the title ("(NUTZUNGSBEDINGUNGEN)")
+              is one unbreakable uppercase word that pushed the page ~280px past
+              a 375px viewport. */}
+          <div className="mb-8 space-y-2">
+            <span className="mono-label">{t('legal.layout.eyebrow')}</span>
+            <h1 className="text-2xl wrap-break-word sm:text-3xl">{title}</h1>
+            <p className="text-dim text-sm">
+              {t('legal.layout.lastUpdated', { date: lastUpdated })}
+            </p>
           </div>
 
           <div className="legal-prose text-sub space-y-10 leading-relaxed">{children}</div>
 
-          <div className="text-dim mt-12 flex flex-col gap-3 border-t border-white/20 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-dim mt-12 flex flex-col gap-3 border-t border-lanes-fg-strong/20 pt-6 text-sm sm:flex-row sm:items-center sm:justify-between">
             <span>{t('legal.layout.copyright', { year: new Date().getFullYear() })}</span>
             <div className="flex flex-wrap items-center gap-4">
               <Link href="/">{t('legal.layout.homeLink')}</Link>

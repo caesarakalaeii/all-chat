@@ -105,6 +105,11 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 		m.mu.Unlock()
 	}()
 
+	// A membership must not outlive its connection; this clears any that did.
+	if _, err := m.entitlement.PruneDisconnected(ctx); err != nil {
+		m.logger.Error("Failed to prune memberships of disconnected Patreon accounts", zap.Error(err))
+	}
+
 	tokens, err := m.tokenRepo.ListAll(ctx, m.batchSize)
 	if err != nil {
 		return err
@@ -139,7 +144,7 @@ func (m *Manager) ProcessBatch(ctx context.Context) error {
 			continue
 		}
 
-		status, _, applyErr := m.entitlement.Apply(ctx, snap, t.UserID, t.ViewerID, nil)
+		status, _, applyErr := m.entitlement.Apply(ctx, snap, t.UserID, t.ViewerID)
 		if applyErr != nil {
 			m.logger.Error("Failed to apply reconciled membership",
 				subjectLabel(t), zap.Error(applyErr))

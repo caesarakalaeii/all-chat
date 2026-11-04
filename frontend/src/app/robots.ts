@@ -36,20 +36,17 @@ export default async function robots(): Promise<MetadataRoute.Robots> {
         allow: ['/', '/legal/'],
         // No trailing slashes: Next serves /dashboard, not /dashboard/, so a
         // `/dashboard/` rule left the section roots crawlable and indexable.
+        // The login-gated pages (/dashboard, /settings, /admin, /overlays,
+        // /translate, /moderate, /link, /dev) are NOT disallowed: each sends
+        // `noindex`, and Google only honours a noindex it is allowed to crawl.
+        // Disallowing them got /dashboard "indexed, though blocked by robots.txt".
+        // What stays blocked has side effects when fetched: OAuth flows, OBS
+        // overlay websockets, the API.
         disallow: [
-          '/dashboard',
-          '/admin',
           '/auth',
-          '/settings',
-          '/overlays',
-          '/overlay',
+          '/overlay/',
           '/chat',
           '/api',
-          // Login-gated tools with no public content.
-          '/translate',
-          '/moderate',
-          '/link',
-          '/dev',
           // Build-hashed font/image assets. Their filenames change every deploy,
           // so Google keeps re-crawling stale URLs and reporting 404s. Blocking
           // only media/ (not the JS/CSS chunks Googlebot needs to render) stops

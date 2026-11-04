@@ -17,9 +17,14 @@
 package patreon
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/md5" //nolint:gosec // tests compute the provider-mandated HMAC-MD5 webhook signature
 	"encoding/hex"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -70,6 +75,39 @@ func TestIsMemberEvent(t *testing.T) {
 	assert.False(t, IsMemberEvent(""))
 }
 
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// Entitlement needs the patron's Patreon id and their membership to our
+// campaign, nothing personal: the identity[email] scope would hand us the
+// verified email, and fields[user]=email,full_name puts both in every identity
+// response on the connect flow and on every reconcile pass.
+func TestIdentityRequestAsksForNoPersonalData(t *testing.T) {
+	o := NewOAuth("client", "secret", "https://allch.at/api/v1/payment/patreon/callback")
+	assert.Equal(t, []string{"identity"}, o.Scopes())
+
+	authURL, err := url.Parse(o.GetAuthURL("state"))
+	require.NoError(t, err)
+	assert.Equal(t, "identity", authURL.Query().Get("scope"))
+
+	var query url.Values
+	o.client = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		query = r.URL.Query()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{},
+			Body:       io.NopCloser(strings.NewReader(`{"data":{"type":"user","id":"patreon-user-9"}}`)),
+		}, nil
+	})}
+	snap, err := o.GetIdentityWithMembership(context.Background(), "access-token", "campaign-allchat")
+	require.NoError(t, err)
+	assert.Equal(t, "patreon-user-9", snap.PatreonUserID)
+	assert.False(t, query.Has("fields[user]"), "identity request must not ask for user attributes, got %q", query.Get("fields[user]"))
+	assert.NotContains(t, query.Get("fields[member]"), "email")
+	assert.NotContains(t, query.Get("fields[member]"), "full_name")
+}
+
 func TestParseMemberEvent(t *testing.T) {
 	body := []byte(`{
 		"data": {
@@ -94,7 +132,6 @@ func TestParseMemberEvent(t *testing.T) {
 	snap, err := ParseMemberEvent(body)
 	require.NoError(t, err)
 	assert.Equal(t, "patreon-user-9", snap.PatreonUserID)
-	assert.Equal(t, "fan@example.com", snap.Email)
 	assert.Equal(t, patronActive, snap.PatronStatus)
 	assert.Equal(t, 500, snap.EntitledCents)
 	assert.Equal(t, "Paid", snap.LastChargeStatus)
@@ -138,7 +175,6 @@ func TestParseIdentity(t *testing.T) {
 	snap, err := parseIdentity(body, ourCampaign)
 	require.NoError(t, err)
 	assert.Equal(t, "patreon-user-9", snap.PatreonUserID)
-	assert.Equal(t, "fan@example.com", snap.Email)
 	assert.Equal(t, patronActive, snap.PatronStatus)
 	assert.Equal(t, 1000, snap.EntitledCents)
 	assert.Equal(t, "tier-7", snap.TierID)

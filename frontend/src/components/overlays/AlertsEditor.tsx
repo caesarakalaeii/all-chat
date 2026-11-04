@@ -472,8 +472,11 @@ function FieldError({ id, error, t }: { id: string; error?: string; t: TFunction
   )
 }
 
-/** URL input + upload (+ KLIPY search for images) for one profile media field. */
-function MediaField({
+/**
+ * URL input + upload (+ KLIPY search for images) for one media field: an alert
+ * profile's here, a chat command's alert sound in the commands editor.
+ */
+export function MediaField({
   id,
   kind,
   label,

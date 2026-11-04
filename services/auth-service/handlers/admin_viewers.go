@@ -51,21 +51,7 @@ type BanRequest struct {
 // username/display_name/platform_user_id), is_banned and is_premium (bool,
 // applied only when present), platform (exact match).
 func (h *AdminViewerHandler) HandleListViewers(c *gin.Context) {
-	// Parse pagination parameters
-	limit := 50
-	offset := 0
-
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
-			limit = l
-		}
-	}
-
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
-			offset = o
-		}
-	}
+	limit, offset := pageParams(c)
 
 	// Build the filter. Bool filters apply only when the param is present so the
 	// UI can distinguish "any" from "explicitly false".
