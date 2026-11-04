@@ -127,6 +127,7 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
     leaderboard_sort_by: 'value',
     scroll_speed: 50,
     display_duration_seconds: 60,
+    restart_delay_seconds: 0,
     background_opacity: 0.8,
     theme: 'cinematic',
     clips_enabled: false,
@@ -529,6 +530,31 @@ export default function CreditRollConfigPage({ params }: { params: Promise<{ id:
                     />
                     <p id={`${fieldId}-duration-hint`} className="text-dim mt-1 text-xs">
                       {t('overlayEditor.credits.durationHint')}
+                    </p>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`${fieldId}-restart-delay`}
+                      className="mb-2 block text-sm font-medium"
+                    >
+                      {t('overlayEditor.credits.restartDelayLabel')}
+                    </label>
+                    <Input
+                      id={`${fieldId}-restart-delay`}
+                      type="number"
+                      min="0"
+                      max="3600"
+                      value={config.restart_delay_seconds ?? 0}
+                      onChange={(e) =>
+                        setConfig({
+                          ...config,
+                          restart_delay_seconds: parseInt(e.target.value) || 0,
+                        })
+                      }
+                      aria-describedby={`${fieldId}-restart-delay-hint`}
+                    />
+                    <p id={`${fieldId}-restart-delay-hint`} className="text-dim mt-1 text-xs">
+                      {t('overlayEditor.credits.restartDelayHint')}
                     </p>
                   </div>
                   <div>

@@ -326,6 +326,7 @@ Body: {
   "enabled": true,
   "scroll_speed": 50,
   "display_duration_seconds": 60,
+  "restart_delay_seconds": 0,
   "clips_enabled": true,
   "clips_muted": true
 }
@@ -337,8 +338,11 @@ Authorization: Bearer <jwt-token>
 
 The OBS source (`/overlay/:id/credits`) scrolls the roll up at `scroll_speed`
 pixels per second, from just below the screen until its last line reaches the
-bottom edge. It holds there until `display_duration_seconds` is up and then
-starts over; a roll too long to fit scrolls to its end first. With
+bottom edge. It holds there for `restart_delay_seconds` (0-3600, default 0)
+and then starts over, or later if `display_duration_seconds` is not up yet:
+one cycle lasts `max(pass + restart_delay_seconds, display_duration_seconds)`,
+so a short roll still fills the display duration and a long one is never cut
+off. With
 `clips_enabled`, the session's Twitch clips play full-screen behind the roll,
 one after another. The browser looks up each clip's MP4 from Twitch's web GQL
 and plays it with sound in OBS unless `clips_muted` (ADR-0076); when that
@@ -446,6 +450,7 @@ credit_roll_configs (
     include_treasure_chests, include_shares, include_likes BOOLEAN,
     leaderboard_top_n INTEGER, leaderboard_sort_by VARCHAR(20), -- 'value' | 'count'
     scroll_speed INTEGER, display_duration_seconds INTEGER,
+    restart_delay_seconds INTEGER NOT NULL DEFAULT 0,          -- migration 124
     background_opacity DECIMAL(3,2), theme VARCHAR(50),       -- 'classic' | 'cinematic' | 'modern'
     clips_enabled BOOLEAN, clips_max_count INTEGER, clips_fallback_days INTEGER, clips_muted BOOLEAN,
     custom_css TEXT NOT NULL DEFAULT '',

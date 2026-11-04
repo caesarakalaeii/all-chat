@@ -34,14 +34,21 @@ const (
 	minFontScalePct = 50
 	maxFontScalePct = 300
 	defaultScalePct = 100
+
+	// An hour covers leaving the roll's last screen up between plays.
+	maxRestartDelaySeconds = 3600
 )
 
 var customizationKey = regexp.MustCompile(`^[A-Za-z]{1,40}$`)
 
-// normalizeCustomization bounds a config's custom texts and font scales, drops
-// entries that mean "use the default" (blank text, 100%), and replaces nil maps
-// with empty ones for the NOT NULL JSONB columns.
+// normalizeCustomization bounds a config's custom texts, font scales and
+// restart delay, drops entries that mean "use the default" (blank text, 100%),
+// and replaces nil maps with empty ones for the NOT NULL JSONB columns.
 func normalizeCustomization(cfg *models.CreditRollConfig) error {
+	if cfg.RestartDelaySeconds < 0 || cfg.RestartDelaySeconds > maxRestartDelaySeconds {
+		return fmt.Errorf("restart delay must be between 0 and %d seconds", maxRestartDelaySeconds)
+	}
+
 	texts := make(map[string]string, len(cfg.Texts))
 	for key, text := range cfg.Texts {
 		if !customizationKey.MatchString(key) {

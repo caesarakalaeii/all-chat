@@ -371,6 +371,8 @@ export interface CreditRollConfig {
   leaderboard_sort_by: 'value' | 'count'
   scroll_speed: number
   display_duration_seconds: number
+  /** How long the roll holds its end before it starts over (migration 124). */
+  restart_delay_seconds?: number
   background_opacity: number
   theme: 'classic' | 'cinematic' | 'modern'
   clips_enabled: boolean

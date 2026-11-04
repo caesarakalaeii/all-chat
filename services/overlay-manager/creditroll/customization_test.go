@@ -56,12 +56,14 @@ func TestNormalizeCustomization_RejectsOutOfBounds(t *testing.T) {
 		tooMany["k"+string(rune('a'+i/26))+string(rune('a'+i%26))] = "x"
 	}
 	cases := map[string]*models.CreditRollConfig{
-		"key with punctuation": {Texts: map[string]string{"head.ing": "x"}},
-		"text too long":        {Texts: map[string]string{"heading": strings.Repeat("é", maxTextRunes+1)}},
-		"too many texts":       {Texts: tooMany},
-		"scale too small":      {FontScales: map[string]int{"session": minFontScalePct - 1}},
-		"scale too large":      {FontScales: map[string]int{"session": maxFontScalePct + 1}},
-		"scale key invalid":    {FontScales: map[string]int{"<b>": 120}},
+		"key with punctuation":   {Texts: map[string]string{"head.ing": "x"}},
+		"text too long":          {Texts: map[string]string{"heading": strings.Repeat("é", maxTextRunes+1)}},
+		"too many texts":         {Texts: tooMany},
+		"scale too small":        {FontScales: map[string]int{"session": minFontScalePct - 1}},
+		"scale too large":        {FontScales: map[string]int{"session": maxFontScalePct + 1}},
+		"scale key invalid":      {FontScales: map[string]int{"<b>": 120}},
+		"negative restart delay": {RestartDelaySeconds: -1},
+		"restart delay too long": {RestartDelaySeconds: maxRestartDelaySeconds + 1},
 	}
 	for name, cfg := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -70,8 +72,9 @@ func TestNormalizeCustomization_RejectsOutOfBounds(t *testing.T) {
 	}
 
 	atLimit := &models.CreditRollConfig{
-		Texts:      map[string]string{"heading": strings.Repeat("é", maxTextRunes)},
-		FontScales: map[string]int{"a": minFontScalePct, "b": maxFontScalePct},
+		Texts:               map[string]string{"heading": strings.Repeat("é", maxTextRunes)},
+		FontScales:          map[string]int{"a": minFontScalePct, "b": maxFontScalePct},
+		RestartDelaySeconds: maxRestartDelaySeconds,
 	}
 	assert.NoError(t, normalizeCustomization(atLimit))
 }

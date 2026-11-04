@@ -893,7 +893,10 @@ export const overlayEditor = {
     currentValue: 'Current: {value}',
     durationLabel: 'Display Duration (seconds)',
     durationHint:
-      'How long the roll runs before it starts over (10-300 seconds). A roll too long to fit scrolls to its end first.',
+      'The shortest time the roll runs before it starts over (10-300 seconds). A roll too long to fit scrolls to its end and waits out the pause first.',
+    restartDelayLabel: 'Pause Before Restart (seconds)',
+    restartDelayHint:
+      'How long the end of the roll stays on screen before it starts over (0-3600 seconds).',
     opacityLabel: 'Background Opacity (0-1)',
     opacityHint:
       'With clips on, this only dims the clip behind the roll, to half brightness at most, so the clip always stays visible.',
