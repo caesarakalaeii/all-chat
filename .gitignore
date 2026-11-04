@@ -50,6 +50,7 @@ services/*/emote-service
 services/*/api-gateway
 services/*/twitch-listener
 services/*/youtube-listener
+services/*/youtube-listener-innertube
 services/*/message-processor
 services/*/main
 # Compiled command binaries (go build output in cmd/ subdirs)

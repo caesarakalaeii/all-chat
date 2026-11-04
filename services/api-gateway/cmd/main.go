@@ -549,8 +549,6 @@ func main() {
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Static pages (no auth required)
-	router.StaticFile("/legal/terms", "./static/legal/terms.html")
-	router.StaticFile("/legal/privacy", "./static/legal/privacy.html")
 	router.StaticFile("/obs-badge", "./static/obs-badge.html")
 
 	// WebSocket endpoint for overlay owners/OBS (triggers YouTube polling)

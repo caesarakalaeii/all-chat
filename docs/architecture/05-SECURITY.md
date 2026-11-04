@@ -440,17 +440,21 @@ spec:
 | Data Type | Retention Period | Deletion Method |
 |-----------|------------------|-----------------|
 | **User Accounts** | Until user deletion request | Hard delete (GDPR compliance) |
-| **OAuth Tokens** | Until account deletion; legacy TikTok tokens, legacy Kick rows without `kick_user_id` and expired Instagram tokens 7 days after expiry | Cascade delete; retention-sweeper (ADR-0089) |
+| **OAuth Tokens** | Until disconnect or account deletion; legacy TikTok tokens, legacy Kick rows without `kick_user_id` and expired Instagram tokens 7 days after expiry | Hard delete on disconnect; cascade delete; retention-sweeper (ADR-0089) |
 | **Messages sent through All-Chat** (`viewer_message_history`) | 1 hour | retention-sweeper, every 15 minutes |
 | **YouTube quota audit log, alert events** | 30 days | retention-sweeper |
 | **Moderation actions** | 90 days | retention-sweeper |
 | **Abandoned device-link requests** | 1 hour after expiry | retention-sweeper |
-| **Logs** | 7 days (Loki `retention_period: 168h` in caesar-deployment) | Automatic deletion (Loki compactor) |
+| **Logs / traces** | 7 days | Automatic deletion (Loki / Tempo retention) |
 | **Client IPs in service logs** | As logs; anonymised before logging (IPv4 last octet zeroed, IPv6 cut to /48) | Go services log only `shared/middleware.AnonymizeIP` output; gin services use `middleware.GinAccessLog()`, never `gin.Logger()`, which prints the full IP from the forwarded `X-Forwarded-For` |
 | **Client IPs in rate-limit keys** | Until the end of the one-minute window | Redis key expiry (`shared/ratelimit`, emote-service) |
 | **Client IPs in the edge access log** | Not recorded | The `public` EnvoyProxy in caesar-deployment (`apps/infrastructure/gateway/gateway.yaml`) sets an access-log format without `x-forwarded-for`, client addresses or query strings |
-| **Metrics** | 90 days | Automatic deletion (Prometheus retention) |
+| **Metrics** | 15 days | Automatic deletion (Prometheus retention) |
 | **Overlays** | Until user deletion | Cascade delete (FK constraint) |
+
+The user-facing statement of every retention period is section 6 of the
+privacy policy (`frontend/src/lib/i18n/messages/en/legal.ts`). Change both
+together.
 
 ---
 

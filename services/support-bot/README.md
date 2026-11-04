@@ -1,7 +1,8 @@
 # Support Bot
 
 A Discord support/admin agent for All-Chat. It answers codebase and operational
-questions over a **locally hosted, OpenAI-compatible LLM** and executes tools through a
+questions over an **OpenAI-compatible LLM endpoint** (`LOCAL_LLM_BASE_URL`; in production an
+external inference gateway, disclosed in the privacy policy as an AI inference provider) and executes tools through a
 code-enforced access model. It replaces the previous TypeScript bot that shelled out to
 the `claude` CLI (`CLAUDE_CODE_OAUTH_TOKEN`) — the "Claude workaround" — with a native Go
 agentic loop.
