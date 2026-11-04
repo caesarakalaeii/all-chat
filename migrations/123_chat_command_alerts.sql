@@ -4,6 +4,10 @@
 --   engagement-service renders), so each command is its own alert and a sound
 --   or a text alone is enough for a command to do something.
 --   Re-runnable: the migration runner applies every file on each pod start.
+--   This is the only place chat_commands_does_something is redefined. A later
+--   migration that widens it must move the definition there and delete it here:
+--   the runner replays every file, so an older, narrower copy is re-checked
+--   against current rows on each pod start and fails the init container.
 
 BEGIN;
 
