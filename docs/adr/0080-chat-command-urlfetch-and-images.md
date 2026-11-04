@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-22
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-04 (each command carries its own alert sound and text, migration 123)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -72,6 +72,23 @@ code that dials it.
 3. **A link in the chat reply.** This already works with `{urlfetch}` and
    needs no feature, but it puts nothing on stream.
 
+### How one command's alert differs from another's (added 2026-11-04)
+
+Streamers want each command to be its own alert (`!dog` barks, `!hype` plays
+an air horn), and a sound alone to be enough. One `chat_command` profile per
+overlay cannot do that.
+
+1. **The command carries its alert** (chosen). Next to its image, a command
+   stores a sound and an alert text, and the alert envelope overrides the
+   profile's, exactly as the image already did. The `chat_command` profile
+   stays the shared style: duration, volume, custom code, and the text when a
+   command has none. One migration, no change to the profile table, the
+   gateway or the overlay.
+2. **Named `chat_command` profiles in the alerts editor**, picked per command.
+   Rejected: profiles are per overlay while a command fires on every alerts
+   overlay of the streamer, so the link would have to span overlays, and the
+   profile table's `(overlay_id, event_type)` key would change.
+
 ## Decision Outcome
 
 ### `shared/safehttp`
@@ -113,29 +130,39 @@ code that dials it.
 - **Preview.** The editor preview really fetches, bounded the same way and by
   the authenticated route's per-user rate limit (`ENGAGEMENT_RATE_PER_MIN`).
 
-### Images
+### Images, sounds and alert text
 
 - **Storage.** `chat_commands.image_url` (migration 114) is a template of at
-  most 1000 characters. An image alone is enough for a command to be valid.
+  most 1000 characters. `sound_url` (migration 123) is a plain absolute https
+  URL of at most 1000 characters (usually an upload to `media.allch.at`), and
+  `alert_text` (migration 123) is a template of at most 500 characters. Any one
+  of the three alone is enough for a command to be valid.
 - **Rendering.** It is rendered with the chatter's input withheld: `{user}`,
   `{query}` and the `{1}`…`{9}`/`{touser}` arguments and their JS globals are
   empty (`chatcmd.ImageURL` in
   `services/engagement-service/chatcmd/fetch.go`). It must come out as an
   absolute https URL or nothing is shown. `{urlfetch}` and
-  `{js}` work, so `!dog` can show an image from an API.
-- **Delivery.** When a command with an image fires, engagement-service
+  `{js}` work, so `!dog` can show an image from an API. The alert text is
+  rendered like the reply, with the chatter's input, and sent final. A sound
+  is not a template.
+- **Delivery.** When a command with an image, a sound or an alert text fires,
+  engagement-service
   publishes a `chat_command` alert (`shared/alerts`) on `overlay:{id}:alerts`
   for each of the owner's alerts overlays. Like a clip, it fires from any chat
   in the streamer's overlays, including TikTok and Discord, because it shows on
   the streamer's own stream.
-- **The alert.** `Alert.image_url` overrides the profile's image in
-  `alerts.Resolve`. The profile still sets duration, sound, text and custom
-  code. The default text is `{username} used {amount}`:
+  An image that does not render to https drops only the image; the alert
+  still fires when it has a sound or a text.
+- **The alert.** `Alert.image_url`, `Alert.sound_url` and `Alert.text`
+  override the profile's image, sound and rendered text in `alerts.Resolve`.
+  The profile still sets duration, volume and custom code, and the text when
+  the command has none. The default text is `{username} used {amount}`:
   - `{amount}` is the trigger.
   - `{count}` is the use count.
   - `{message}` is the reply, or what the chatter typed when there is no reply.
 - **Visibility.** The alerts editor offers the `chat_command` event type only
-  where the chat commands feature is available (beta.allch.at today).
+  where the chat commands feature is available: every host for early-access
+  users, and beta.allch.at for everyone (`EARLY_ACCESS_FEATURES`).
 
 ## Consequences
 

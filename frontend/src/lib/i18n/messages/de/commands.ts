@@ -39,7 +39,7 @@ export const commands: LocaleNamespace<'commands'> = {
     kindCommand: 'Befehl',
     kindKeyword: 'Stichwort',
     clips: 'Clippt',
-    image: 'Bild',
+    alert: 'Alert',
     cooldown: '{seconds} s Abklingzeit',
     uses: '{count}× benutzt',
     noReply: 'Keine Antwort im Chat',
@@ -90,11 +90,18 @@ export const commands: LocaleNamespace<'commands'> = {
       'Ein Wort oder eine Phrase, zum Beispiel clip das. Wird überall in einer Nachricht erkannt.',
     responseLabel: 'Antwort',
     responseHint:
-      'Leer lassen, um nur zu clippen oder ein Bild zu zeigen. Klicke auf eine Variable, um sie einzufügen.',
+      'Leer lassen, um nur zu clippen oder einen Alert zu zeigen. Klicke auf eine Variable, um sie einzufügen.',
     insertVariable: '{token} einfügen',
+    alertHeading: 'Alert im Stream',
+    alertHint:
+      'Erscheint auf deinen Alert-Overlays, sobald der Befehl auslöst, egal aus welchem Chat. Füll aus, was du brauchst. Der Stil „Chat-Befehl“ im Alerts-Editor legt Dauer, Lautstärke und den Text fest, wenn du deinen leer lässt.',
     imageLabel: 'Bild im Stream',
     imageHint:
-      'Ein https-Link zu einem Bild oder GIF. Es erscheint auf deinen Alert-Overlays, sobald der Befehl auslöst, egal aus welchem Chat. Vorlagen funktionieren hier, aber was Zuschauer tippen, erreicht das Bild nie.',
+      'Ein https-Link zu einem Bild oder GIF. Vorlagen funktionieren hier, aber was Zuschauer tippen, erreicht das Bild nie.',
+    soundLabel: 'Alert-Sound',
+    alertTextLabel: 'Alert-Text',
+    alertTextHint:
+      'Ersetzt im Stream den Standardtext des Alerts. Nutzt dieselben Variablen wie die Antwort.',
     imagePreviewAlt: 'Bildvorschau',
     clipLabel: 'Twitch-Clip erstellen',
     clipHint:

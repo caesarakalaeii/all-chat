@@ -287,6 +287,52 @@ func TestChatCommand_ImageFromAnyChat(t *testing.T) {
 	assert.Equal(t, "tiktok", a.Platform)
 }
 
+// A command's alert can be a sound alone (ADR-0080): it fires without an image or
+// a reply, carrying the sound and the chatter's text.
+func TestChatCommand_SoundOnlyAlert(t *testing.T) {
+	c, store, out := newCmdTest(t, true, models.ChatCommand{Kind: models.TriggerCommand, Trigger: "!bark",
+		SoundURL: "https://media.example.com/bark.mp3"})
+	overlay := uuid.New()
+	store.alertsOverlays = []uuid.UUID{overlay}
+	ch := subscribeAlerts(t, c, overlay)
+
+	c.handle(context.Background(), job("1", "twitch", "!bark"))
+	assert.Empty(t, out.sent)
+	_, a := nextAlert(t, ch)
+	assert.Equal(t, "https://media.example.com/bark.mp3", a.SoundURL)
+	assert.Empty(t, a.ImageURL)
+	assert.Empty(t, a.Text)
+	assert.Equal(t, "!bark", a.Message)
+}
+
+// The alert text is a command template, rendered like the reply, and sent final.
+func TestChatCommand_AlertTextIsRendered(t *testing.T) {
+	c, store, _ := newCmdTest(t, true, models.ChatCommand{Kind: models.TriggerCommand, Trigger: "!dog",
+		Response: "A dog for {user}!", AlertText: "{user} called the dog ({count})"})
+	overlay := uuid.New()
+	store.alertsOverlays = []uuid.UUID{overlay}
+	ch := subscribeAlerts(t, c, overlay)
+
+	c.handle(context.Background(), job("1", "twitch", "!dog"))
+	_, a := nextAlert(t, ch)
+	assert.Equal(t, "Bob called the dog (1)", a.Text)
+	assert.Equal(t, "A dog for Bob!", a.Message)
+}
+
+// An image that does not render to https drops only the image: the sound still plays.
+func TestChatCommand_InvalidImageKeepsTheSound(t *testing.T) {
+	c, store, _ := newCmdTest(t, true, models.ChatCommand{Kind: models.TriggerCommand, Trigger: "!img",
+		ImageURL: "http://img.example.com/plain-http.gif", SoundURL: "https://media.example.com/bark.mp3"})
+	overlay := uuid.New()
+	store.alertsOverlays = []uuid.UUID{overlay}
+	ch := subscribeAlerts(t, c, overlay)
+
+	c.handle(context.Background(), job("1", "twitch", "!img"))
+	_, a := nextAlert(t, ch)
+	assert.Empty(t, a.ImageURL)
+	assert.Equal(t, "https://media.example.com/bark.mp3", a.SoundURL)
+}
+
 func TestChatCommand_InvalidImageShowsNothing(t *testing.T) {
 	c, store, _ := newCmdTest(t, true, models.ChatCommand{Kind: models.TriggerCommand, Trigger: "!img",
 		ImageURL: "http://img.example.com/plain-http.gif"})
