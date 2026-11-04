@@ -111,7 +111,7 @@ func (m *Manager) GetToken(ctx context.Context, userID, channelID string) (*oaut
 		}
 
 		// Save refreshed token
-		if err := m.store.SaveToken(ctx, userID, channelID, newToken); err != nil {
+		if err := m.store.UpdateToken(ctx, userID, channelID, newToken); err != nil {
 			m.logger.Error("Failed to save refreshed token",
 				zap.String("channel_id", channelID),
 				zap.Error(err),
@@ -204,9 +204,4 @@ func (m *Manager) CreateYouTubeService(ctx context.Context, userID, channelID st
 	}
 
 	return service, client, nil
-}
-
-// SaveToken saves an OAuth token to the store
-func (m *Manager) SaveToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error {
-	return m.store.SaveToken(ctx, userID, channelID, token)
 }

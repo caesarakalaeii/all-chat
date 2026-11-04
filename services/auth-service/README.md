@@ -303,6 +303,38 @@ Authorization: Bearer <viewer-jwt>
 → 200 { "message": "Viewer data deleted" }
 ```
 
+### Connected platforms (ADR-0090)
+
+Backs the "Connected platforms" card on `/settings`. Both routes are session-only
+(a personal access token gets 403); disconnecting is also refused while impersonating.
+
+```bash
+# Every platform whose OAuth tokens the account holds: the sign-in platform (users row)
+# and each linked one (its token table or mod_oauth_credentials).
+GET /api/v1/auth/me/connections
+→ Returns: { "connections": [ { "platform": "youtube", "accounts": ["UC…"], "is_login": false } ] }
+
+# Disconnect a linked platform: twitch | youtube | kick | facebook | instagram.
+# 409 { "error": "login_platform" } for the platform the account signs in with.
+DELETE /api/v1/auth/me/connections/:platform
+```
+
+A disconnect deletes, in one transaction, every row the user holds in that platform's
+token table and (Twitch, YouTube, Kick) their delegated-moderator credential, and
+clears the platform's id on the `users` row (`twitch_id`, `google_id`, `kick_id`) that
+linking records, so that platform no longer signs in to the account. It then
+revokes the deleted tokens at Twitch, Google or Kick (`oauth/revoke.go`). Revocation is
+best effort and never fails the request; Meta has no revoke for the stored Page token.
+Facebook and Instagram sources are removed from the user's overlays in the same
+transaction, because they cannot run without the token. Twitch, YouTube and Kick
+sources stay: Twitch stops receiving chat on the EventSub listener's next sync,
+YouTube falls back to InnerTube, Kick subscribes without auth. The sign-in platform's
+tokens are deleted only with the account (`DELETE /me`).
+
+Viewer unlink (`DELETE /viewer/linked-platforms/:platform`) also deletes the unlinked
+platform's `viewer_sessions` rows, as signing out does, and revokes their tokens with the
+viewer OAuth client.
+
 ### Data export (DSGVO Art. 15/20)
 
 ```bash

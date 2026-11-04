@@ -42,6 +42,38 @@ export const settings = {
     betaNote: 'More languages are in beta testing. Beta testers and ambassadors can pick them now.',
     checkFailed: 'Could not check which languages you can use. English is always available.',
   },
+  // The connected platforms card on /settings: every platform whose OAuth tokens
+  // the account holds, each with a disconnect that deletes them. The effect* keys
+  // are the confirmation copy per platform and must match what
+  // DisconnectPlatform in auth-service actually does to tokens and sources.
+  connections: {
+    heading: 'Connected platforms',
+    body: 'All-Chat keeps an OAuth token for each platform you connected. Disconnecting a platform deletes its tokens.',
+    loading: 'Loading connected platforms',
+    loadFailed: 'Could not load your connected platforms.',
+    empty: 'No platforms connected.',
+    signInBadge: 'Sign-in',
+    signInNote:
+      'You sign in with {platform}, so it cannot be disconnected here. Its tokens are deleted when you delete your account.',
+    disconnect: 'Disconnect',
+    disconnectLabel: 'Disconnect {platform}',
+    disconnecting: 'Disconnecting…',
+    disconnectTitle: 'Disconnect {platform}?',
+    effectTwitch:
+      'This deletes your Twitch tokens and asks Twitch to revoke them. Your Twitch sources stay on your overlays but stop receiving chat, and sending and moderation on Twitch stop, until you connect Twitch again. Until then, you also cannot sign in to this account with Twitch.',
+    effectYoutube:
+      'This deletes your YouTube tokens and asks Google to revoke them. Your YouTube sources keep reading public streams, which needs no token. Unlisted and members-only streams, subscriber alerts, sending and moderation on YouTube stop until you connect YouTube again. Until then, you also cannot sign in to this account with YouTube.',
+    effectKick:
+      'This deletes your Kick tokens and asks Kick to revoke them. Your Kick sources keep receiving chat. Sending and moderation on Kick stop until you connect Kick again. Until then, you also cannot sign in to this account with Kick.',
+    effectFacebook:
+      'This deletes your Facebook Page tokens and removes your Facebook sources from your overlays. Meta offers no way for us to revoke the token, so also remove All-Chat from the apps connected to your Facebook account.',
+    effectInstagram:
+      'This deletes your Instagram tokens and removes your Instagram sources from your overlays. Meta offers no way for us to revoke the token, so also remove All-Chat from the apps connected to your Facebook account.',
+    disconnectCancel: 'Cancel',
+    disconnectConfirm: 'Yes, disconnect',
+    disconnectedToast: '{platform} disconnected',
+    disconnectFailedToast: 'Could not disconnect {platform}',
+  },
   // "Download my data" (DSGVO Art. 15/20), on /settings and /settings/viewer.
   dataExport: {
     download: 'Download my data',
