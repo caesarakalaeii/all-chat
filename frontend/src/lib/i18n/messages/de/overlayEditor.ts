@@ -800,7 +800,10 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     currentValue: 'Aktuell: {value}',
     durationLabel: 'Anzeigedauer (Sekunden)',
     durationHint:
-      'Wie lange der Abspann läuft, bevor er von vorn beginnt (10-300 Sekunden). Ein längerer Abspann scrollt erst bis zum Ende.',
+      'Wie lange der Abspann mindestens läuft, bevor er von vorn beginnt (10-300 Sekunden). Ein längerer Abspann scrollt erst bis zum Ende und wartet dann die Pause ab.',
+    restartDelayLabel: 'Pause vor dem Neustart (Sekunden)',
+    restartDelayHint:
+      'Wie lange das Ende des Abspanns stehen bleibt, bevor er von vorn beginnt (0-3600 Sekunden).',
     opacityLabel: 'Hintergrund-Deckkraft (0-1)',
     opacityHint:
       'Mit Clips dunkelt dies nur den Clip hinter dem Abspann ab, höchstens auf halbe Helligkeit, damit der Clip immer sichtbar bleibt.',

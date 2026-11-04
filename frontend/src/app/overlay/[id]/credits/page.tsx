@@ -23,8 +23,9 @@
  * Shows leaderboards for subs, bits, raids, donations, follows, etc.
  *
  * Features:
- * - Credits that scroll up at the configured speed and start over once the
- *   configured display duration is up
+ * - Credits that scroll up at the configured speed, hold their end for the
+ *   configured restart delay and start over, never before the configured
+ *   display duration is up
  * - Leaderboard categories
  * - User avatars and platform badges
  * - Configurable styling
@@ -242,6 +243,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   const scrollSpeed = config?.scroll_speed || 50
   const displaySeconds = config?.display_duration_seconds || 60
+  const restartDelaySeconds = config?.restart_delay_seconds ?? 0
   const ct = withCreditTexts(t, config?.texts)
   const fontSize = (element: Parameters<typeof creditFontSize>[1], ratio?: number) =>
     creditFontSize(config?.font_scales, element, ratio)
@@ -249,15 +251,16 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
 
   // One pass carries the roll from just below the screen until its last line
   // reaches the bottom edge, at scroll_speed pixels per second. The roll then
-  // holds until display_duration_seconds is up and starts over, so a short roll
-  // still fills the configured time and a long one is never cut off. A layout
-  // effect, so the roll never paints unmoved at the top first. The preview holds
-  // still, so the text being edited stays readable.
+  // holds its end for restart_delay_seconds and starts over, or later if
+  // display_duration_seconds is not up yet, so a short roll still fills the
+  // configured time and a long one is never cut off. A layout effect, so the
+  // roll never paints unmoved at the top first. The preview holds still, so the
+  // text being edited stays readable.
   useLayoutEffect(() => {
     const roll = rollRef.current
     if (!roll || preview) return
     const passMs = (roll.offsetHeight / scrollSpeed) * 1000
-    const cycleMs = Math.max(passMs, displaySeconds * 1000)
+    const cycleMs = Math.max(passMs + restartDelaySeconds * 1000, displaySeconds * 1000)
     const end = 'translateY(calc(100vh - 100%))'
     const animation = roll.animate(
       [
@@ -268,7 +271,7 @@ export default function CreditRollPage({ params }: { params: Promise<{ id: strin
       { duration: cycleMs, iterations: Infinity }
     )
     return () => animation.cancel()
-  }, [creditData, scrollSpeed, displaySeconds, preview])
+  }, [creditData, scrollSpeed, displaySeconds, restartDelaySeconds, preview])
 
   const renderLeaderboard = (
     title: string,
