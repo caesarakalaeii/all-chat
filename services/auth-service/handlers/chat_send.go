@@ -92,6 +92,7 @@ const (
 	sendErrReauth       sendErrKind = "reauth_required" // platform 401 → 401, prompt re-login
 	sendErrOffline      sendErrKind = "stream_offline"  // not live → 422
 	sendErrQuota        sendErrKind = "quota_exhausted" // YouTube send quota depleted → 422
+	sendErrDropped      sendErrKind = "message_dropped" // platform accepted but did not deliver → 422
 )
 
 // streamerSendError carries a classified streamer-send failure.
@@ -117,6 +118,33 @@ func classifyPlatformStatus(platform string, status int, body string) *streamerS
 	}
 }
 
+// twitchSendError checks a Helix chat/messages response. Twitch answers a message
+// it will not deliver (AutoMod, the channel's chat settings, an unverified sender)
+// with 200 and is_sent=false, so a 2xx alone does not mean the message reached chat.
+func twitchSendError(resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return classifyPlatformStatus("twitch", resp.StatusCode, string(body))
+	}
+	var out struct {
+		Data []struct {
+			IsSent     bool `json:"is_sent"`
+			DropReason *struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"drop_reason"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(body, &out) != nil || len(out.Data) == 0 || out.Data[0].IsSent {
+		return nil
+	}
+	reason := "no reason given"
+	if d := out.Data[0].DropReason; d != nil {
+		reason = d.Code + ": " + d.Message
+	}
+	return &streamerSendError{kind: sendErrDropped, msg: "twitch dropped the message (" + reason + ")"}
+}
+
 // streamerSendHTTPResponse maps a send error to (HTTP status, JSON body) for the
 // streamer endpoint. Typed errors map directly; an untyped error falls back to the
 // text-based classifier (e.g. "not currently live" → 422).
@@ -132,6 +160,8 @@ func streamerSendHTTPResponse(platform string, err error) (int, gin.H) {
 			return http.StatusUnprocessableEntity, gin.H{"error": string(sendErrOffline), "platform": platform, "details": "The streamer is not currently live."}
 		case sendErrQuota:
 			return http.StatusUnprocessableEntity, gin.H{"error": string(sendErrQuota), "platform": platform, "details": "YouTube send quota is exhausted. Please try again later."}
+		case sendErrDropped:
+			return http.StatusUnprocessableEntity, gin.H{"error": string(sendErrDropped), "platform": platform, "details": se.msg}
 		}
 	}
 	status, desc := classifySendError(err.Error())
@@ -158,6 +188,9 @@ func classifySendError(errMsg string) (int, string) {
 		if strings.Contains(errMsg, s) {
 			return http.StatusUnprocessableEntity, "The streamer is not currently live. Messages can only be sent during an active live stream."
 		}
+	}
+	if strings.Contains(errMsg, "twitch dropped the message") {
+		return http.StatusUnprocessableEntity, "Twitch did not deliver the message: the channel's chat settings or AutoMod blocked it."
 	}
 	// Missing account/config — user needs to link their account
 	for _, s := range []string{
@@ -685,13 +718,7 @@ func (h *ChatSendHandler) sendStreamerTwitchMessage(ctx context.Context, user *m
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return classifyPlatformStatus("twitch", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return twitchSendError(resp)
 }
 
 // sendStreamerYouTubeMessage sends a message to YouTube live chat as the streamer
@@ -1421,13 +1448,7 @@ func (h *ChatSendHandler) sendTwitchMessage(ctx context.Context, session *models
 	}
 	defer resp.Body.Close()
 
-	// Check response
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("twitch API error: status=%d body=%s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return twitchSendError(resp)
 }
 
 // sendYouTubeMessage sends a message to YouTube live chat using the Live Chat API.

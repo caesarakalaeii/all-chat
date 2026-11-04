@@ -377,6 +377,7 @@ export const viewerOverlay: LocaleNamespace<'viewerOverlay'> = {
     reasonStreamOffline: 'offline',
     reasonQuotaExhausted: 'Kontingent',
     reasonSendFailed: 'fehlgeschlagen',
+    reasonMessageDropped: 'von Chat-Einstellungen blockiert',
   },
 
   moderationControls: {
