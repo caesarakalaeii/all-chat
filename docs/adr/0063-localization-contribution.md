@@ -2,12 +2,15 @@
 
 **Date**: 2026-09-15
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
 
-All-Chat's UI strings live in a typed catalog (ADR-0055): English only, one
-file per namespace under `frontend/src/lib/i18n/messages/en/`, dotted keys
+All-Chat's UI strings live in a typed catalog (ADR-0055): at this ADR's
+writing English was its only locale, one file per namespace under
+`frontend/src/lib/i18n/messages/en/` (German now lives beside it,
+`messages/de/`), dotted keys
 checked at compile time. Community members repeatedly offer to translate the
 interface, and the beta-tester cohort (ADR-0020) is the natural first group:
 already granted early access, already invested in the product's direction.
@@ -44,8 +47,8 @@ Four pieces:
    Pick a language, pick an area of the app (namespace, with per-area
    progress), then translate string by string: the English source rendered
    from the local `enMessages` catalog, one input per string, placeholder
-   hints inline, previous submission status (pending / approved / changes
-   requested with reviewer note) visible. The key list is derived from the
+   hints inline, previous submission status (pending / approved / rejected,
+   with reviewer note) visible. The key list is derived from the
    catalog in the frontend, never sent by the backend — a key the repo no
    longer has cannot appear in the tool. Submissions batch per area on
    explicit submit; approved rows are read-only.
@@ -131,9 +134,9 @@ hands mid-session.
 - Beta testers gain `/translate` in the app nav and an onboarding-tour
   entry; admins gain `/admin/localization` (review queue, locale requests,
   export) in the admin sidebar.
-- The first export for a locale produces catalog files plus a small
-  checklist (barrel, `SUPPORTING_LOCALES`, index mapping) — the wiring that
-  ADR-0055's "Adding locale #2" section already documents.
+- The first export for a locale produces catalog files plus a printed TODO;
+  `docs/frontend/I18N.md` ("Adding another locale") now carries the full
+  wiring checklist.
 - The feature ships behind a beta gate, not a premium gate: contribution is
   a role behavior, not a paid feature, so `/upgrade` does not list it.
 - Out of scope, explicitly: locale selection at request time (ADR-0055
@@ -145,7 +148,7 @@ hands mid-session.
 - ADR-0055 (the typed catalog this tool feeds), ADR-0020 (beta-tester role
   and early-access gates), ADR-0041 (ambassadors hold beta capability),
   ADR-0008 (feature gates seeded by migration 097)
-- docs/frontend/I18N.md (the "Adding locale #2" checklist the generator's
-  TODO mirrors)
+- docs/frontend/I18N.md (the "Adding another locale" checklist the
+  generator's TODO mirrors)
 - migration 097 (tables + gate), scripts/generate-locale-catalog.mjs
   (export → catalog files)

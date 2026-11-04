@@ -2,15 +2,17 @@
 
 **Date**: 2026-09-11
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
 
 All-Chat aggregates live chat from Twitch, YouTube, Kick, TikTok, Discord,
-Owncast, GoodGame, Picarto, Rumble and (Phase 4, ADR-0060) Facebook. Instagram
-Live is the last surface in the platform expansion plan (Phase 6): the sister
-surface to Facebook — same Meta app, same polling architecture — but a separate
-listener, not a config flip on facebook-listener.
+Owncast, GoodGame, Picarto, Altstream (ADR-0082) and (Phase 4, ADR-0060)
+Facebook. Instagram Live is the last phase of that plan (Phase 6): the
+sister surface to Facebook — same Meta app, same polling architecture — but
+a separate listener, not a config flip on facebook-listener.
+facebook-listener.
 
 Facts about Instagram's platform that shape the design:
 

@@ -1,6 +1,7 @@
 # ADR-0053: Consolidate the Minimal Clean theme; retire theme ids by alias, not deletion
 
 **Date**: 2026-08-18
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Status**: Accepted
 **Deciders**: caesarakalaeii
 
@@ -84,7 +85,7 @@ Fixed in `events.css` by driving the strut from the same variable, in both the
 
 ```css
 .overlay-live-body .min-w-0.flex-1 {
-  line-height: var(--chat-line-height, 1.5) !important;
+  line-height: var(--chat-line-height, 1.5);
 }
 ```
 
@@ -141,12 +142,12 @@ property means adding its `--theme-*` step too.
 ## Consequences
 
 - Line Height is symmetric for every theme; overlays can be made denser.
-- One Minimal Clean theme to maintain. The picker loses an entry (16 themes).
-- The 115 overlays on `minimal-theme-fixed` keep rendering, and gain inline
+- One Minimal Clean theme to maintain.
+- Overlays previously on `minimal-theme-fixed` keep rendering, and gain inline
   events + the correct outline. Two visible changes for them: events render
   inline instead of as gold cards (the theme's actual premise), and platform
-  status indicators are hidden by default — now overridable, since the theme
+  status indicators are hidden by default, now overridable, since the theme
   reads `--chat-show-platform-indicators` instead of hard-coding `none`.
-- The 107 overlays on `minimal-theme` get their "Shared Chat" indicator back.
+- Overlays on `minimal-theme` get their "Shared Chat" indicator back.
 - **Retiring any bundled theme id from now on requires an alias entry**; deleting
   a theme file on its own is a data-integrity bug, not a cleanup.

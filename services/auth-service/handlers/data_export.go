@@ -75,8 +75,6 @@ type exportSection struct {
 	one bool
 }
 
-// premiumSubscriptionColumns leaves out raw, the provider's webhook payload: it describes the
-// campaign and its creator as well as the member, and its member-relevant facts are the columns.
 const premiumSubscriptionColumns = `provider, provider_user_id, product, status, tier_id, cents,
 	current_period_end, created_at, updated_at`
 
@@ -88,7 +86,7 @@ var streamerExportSections = []exportSection{
 		SELECT id, username, display_name, profile_image_url, auth_provider, twitch_id, google_id, kick_id,
 		       is_premium, premium_admin_override, premium_admin_override_expires_at,
 		       is_beta_tester, is_ambassador, is_admin, is_banned, banned_at, banned_reason,
-		       onboarding_completed_at, created_at, updated_at
+		       onboarding_completed_at, tos_accepted, tos_accepted_at, created_at, updated_at
 		FROM users WHERE id = $1`},
 
 	// Which platform accounts are connected and what they may do; never the tokens themselves.
@@ -116,12 +114,14 @@ var streamerExportSections = []exportSection{
 		ORDER BY 1, 2`},
 
 	// Each overlay with its sources and every per-overlay setting. The TTS config is listed
-	// column by column: the row also holds the ElevenLabs API key and the signing secret.
+	// column by column: the row also holds the ElevenLabs API key and the signing secret. A
+	// source's config holds the Discord relay webhook URL, a credential (ADR-0091).
 	{key: "overlays", query: `
 		SELECT o.id, o.name, o.description, o.overlay_type, o.is_active, o.is_public_for_viewers,
 		       o.created_at, o.updated_at, o.last_connected_at,
 		       (SELECT COALESCE(json_agg(s ORDER BY s.platform, s.channel_name), '[]'::json) FROM (
-		            SELECT platform, channel_id, channel_name, channel_handle, is_active, config, created_at
+		            SELECT platform, channel_id, channel_name, channel_handle, is_active,
+		                   config - 'relay_webhook_url' AS config, created_at
 		            FROM overlay_chat_sources WHERE overlay_id = o.id) s) AS sources,
 		       (SELECT to_json(x) FROM overlay_configs x WHERE x.overlay_id = o.id) AS config,
 		       (SELECT to_json(x) FROM overlay_event_settings x WHERE x.overlay_id = o.id) AS event_settings,

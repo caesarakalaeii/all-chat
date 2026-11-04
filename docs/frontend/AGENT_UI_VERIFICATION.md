@@ -29,7 +29,9 @@ green. Two additions close that:
    `skills/ui-review`'s `shoot.py` when available, Playwright MCP
    (`browser_take_screenshot`) when wired (see AGENT_MCP_PLAN.md), or a
    throwaway Playwright script. Mobile width is not optional: the overflow
-   nobody scrolled to see lives there.
+   nobody scrolled to see lives there. Shoot the light theme too (set
+   `localStorage.allchat_theme = 'light'` before load, ADR-0087): a literal
+   `#fff` or `text-white` that reads fine in dark vanishes on a light page.
 4. **READ the screenshots.** A screenshot not read is a screenshot not
    taken. Judge against the checklist, not against "looks fine":
    - renders as what it claims to be, not an unstyled wall (broken bundle)?

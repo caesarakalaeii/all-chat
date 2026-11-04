@@ -143,6 +143,7 @@ curl http://localhost:8083/emotes/ffz/lirik
   - If the `X-API-Key` header is provided, the limiter buckets requests by that token.
   - Otherwise, the caller's IP address is used.
 - **Redis-backed limiter**: The throttling state lives in Redis so multiple pods share the same counters and can scale horizontally without double-counting requests.
+  - Fixed window: each bucket is one counter key (`rate:ip:<ip>` or `rate:api:<key>`). `INCR` and `EXPIRE NX` run in one `MULTI`/`EXEC`, so the key always carries the window as its TTL and Redis deletes it when the window ends. This is what keeps the privacy policy's promise that the full IP lives only as a short counter key. `EXPIRE NX` needs Redis 7.0 or newer.
 - **HTTP 429**: Clients receive `Retry-After` metadata when throttled.
 - **API keys**: When `EMOTE_SERVICE_API_KEY` is set, every request must include `X-API-Key: <value>`.
   - Keys are validated before the handlers run, and unauthorized requests receive `401` responses.

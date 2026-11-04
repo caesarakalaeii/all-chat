@@ -1,7 +1,8 @@
 # ADR-0003: CloudNativePG for PostgreSQL
 
 **Date**: 2025-11-11
-**Status**: ✅ Accepted
+**Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation; backups and PITR wired through the Barman Cloud plugin)
 **Deciders**: Infrastructure Team, Database Lead
 
 ---
@@ -16,11 +17,11 @@ All-Chat requires a **highly available PostgreSQL database** for:
 - OAuth token storage
 
 **Production Requirements**:
-1. **High Availability**: Automated failover if primary fails (<30 seconds RTO)
-2. **Data Durability**: Zero data loss on failover (RPO = 0)
-3. **Backup & Recovery**: Daily backups, Point-in-Time Recovery (PITR)
-4. **Monitoring**: Built-in metrics for replication lag, connection counts
-5. **Operational Simplicity**: Minimal manual intervention for routine operations
+1. **High Availability**: failover driven by the operator, not manual promotion
+2. **Data Durability**: WAL durability on failover
+3. **Backup & Recovery**: automated backups, Point-in-Time Recovery (PITR)
+4. **Monitoring**: built-in metrics for replication lag, connection counts
+5. **Operational Simplicity**: minimal manual intervention for routine operations
 
 **Problem**: How do we deploy PostgreSQL in Kubernetes with HA, automated failover, and backups?
 
@@ -114,25 +115,19 @@ spec:
 
 **Architecture**:
 ```yaml
-# CloudNativePG Cluster CRD
+# CloudNativePG Cluster CRD (sketch)
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
   name: allchat-cluster
 spec:
   instances: 3
-  primaryUpdateStrategy: unsupervised  # Automated failover
-  postgresql:
-    parameters:
-      max_connections: "200"
-      shared_buffers: "1GB"
   storage:
-    size: 50Gi
+    size: 20Gi
   backup:
     barmanObjectStore:
       destinationPath: s3://backups/allchat
       s3Credentials: ...
-    retentionPolicy: "30d"
 ```
 
 **✅ Pros**:
@@ -140,7 +135,7 @@ spec:
 - **Automated failover**: Primary failure detected in ~10s, replica promoted in <30s total
 - **Native PITR**: Continuous WAL archiving to S3, restore to any point in time
 - **Simple CRD**: Declarative, easy to understand, minimal configuration
-- **Built-in backups**: Automated daily backups to S3-compatible storage (Hetzner Object Storage)
+- **Built-in backups**: automated backups to S3-compatible object storage
 - **Excellent monitoring**: Prometheus metrics out-of-box (replication lag, connections, queries)
 - **No Patroni**: Self-contained operator, no external DCS (etcd/Consul) needed
 - **Active development**: Graduated CNCF project, frequent releases, responsive maintainers
@@ -152,29 +147,6 @@ spec:
 - **Some abstractions**: Hides PostgreSQL internals (can make debugging harder)
 
 **Estimated Setup Time**: 2-3 days (team already familiar)
-
----
-
-### Option 4: Managed PostgreSQL (Cloud Provider)
-
-**Examples**: AWS RDS, Google Cloud SQL, DigitalOcean Managed Databases
-
-**✅ Pros**:
-- **Zero operations**: Provider handles HA, backups, upgrades, monitoring
-- **Battle-tested**: Proven at scale, SLAs provided
-- **Easy setup**: Click a button, database ready in minutes
-
-**❌ Cons**:
-- **Cost**: €50-200/month for HA setup (vs €20/month self-hosted)
-- **Vendor lock-in**: Hard to migrate away from managed service
-- **Less control**: Cannot fine-tune PostgreSQL configuration
-- **Network latency**: If database in different region than K8s cluster
-- **Learning goal**: Project goal is to learn K8s ecosystem, not outsource
-
-**Cost Comparison** (3-node HA setup):
-- Self-hosted CNPG: ~€20/month (3× storage volumes)
-- AWS RDS Multi-AZ: ~€150/month (db.t3.medium × 2)
-- DigitalOcean Managed: ~€80/month (4GB RAM cluster)
 
 ---
 
@@ -192,12 +164,13 @@ spec:
 2. **Automated Failover** (<30s RTO):
    - Primary failure detected automatically (health checks every 10s)
    - Replica promoted without manual intervention
-   - Tested in staging: 22 seconds average failover time ✅
+   - Measured in early deploys: ~22 seconds average failover time
 
-3. **PITR Built-in**:
-   - Continuous WAL archiving to S3-compatible storage
-   - Can restore to any timestamp (e.g., 5 minutes before data corruption)
-   - Critical for recovering from application bugs or human error
+3. **PITR Capability in the Operator**:
+   - CNPG supports continuous WAL archiving to S3-compatible storage and
+     restore to any timestamp; since CNPG 1.26 this goes through the Barman
+     Cloud plugin rather than the deprecated in-tree `barmanObjectStore`
+   - Wired for this deployment: see Backups below
 
 4. **Operational Simplicity**:
    - Single CRD (`Cluster`) for entire PostgreSQL setup
@@ -206,14 +179,11 @@ spec:
 
 5. **Cost-Effective**:
    - Open-source, no licensing fees
-   - Self-hosted on Hetzner VPS (€20/month vs €80-150 managed)
-   - Hetzner Object Storage for backups (€5/month for 100GB)
+   - Self-hosted, far below the cost of a managed database
 
 6. **Monitoring Out-of-Box**:
-   - Prometheus metrics auto-exported:
-     - `cnpg_pg_replication_lag_seconds` (replication lag)
-     - `cnpg_pg_stat_database_xact_commit_total` (transactions)
-     - `cnpg_backends_waiting_total` (connection pool saturation)
+   - Prometheus metrics auto-exported via the CNPG PodMonitor
+     (replication lag, transactions, connections)
    - Grafana dashboards available from community
 
 ---
@@ -222,52 +192,55 @@ spec:
 
 ### Positive
 
-1. **Fast Failover** (Measured: 22s average):
-   - Primary pod failure → 10s health check detection
-   - Replica promotion → 8s PostgreSQL startup
-   - DNS update → 4s propagation
-   - **Total**: ~22 seconds from failure to service restored ✅
+1. **Fast Failover**:
+   - Primary failure detected automatically, replica promoted without manual intervention
+   - Measured in early deploys: ~22 seconds from failure to service restored
 
-2. **Zero Data Loss** (RPO = 0):
-   - Synchronous replication to 1 replica (WAL written to disk on both)
-   - Primary failure = 0 committed transactions lost
+2. **Data Durability** on failover (RPO = 0) while `synchronous_commit` stays at
+   its default `on`, which the cluster manifest leaves untouched.
 
 3. **Simple Operations**:
-   - **Create cluster**: `kubectl apply -f cluster.yaml` (2 minutes)
-   - **Backup now**: `kubectl cnpg backup allchat-cluster` (1 command)
-   - **Restore PITR**: `kubectl apply -f restore.yaml` (declarative)
+   - **Create cluster**: apply the CNPG `Cluster` resource (declarative)
    - **Scale up**: Edit `instances: 3` → `instances: 5` (rolling update)
 
 4. **Built-in Monitoring**:
-   - All metrics available in Prometheus immediately
+   - All metrics available in Prometheus immediately (PodMonitor enabled on the cluster)
    - No custom exporters to write/maintain
    - Grafana dashboard imported in 5 minutes
 
-5. **Backup Automation**:
-   - Daily backups to Hetzner Object Storage (automated)
-   - 30-day retention policy (configurable)
-   - PITR enabled (continuous WAL archiving)
+5. **Connection Budget** (ADR-0039):
+   - Every Go service bounds its pool via `shared/database.NewPostgresPool*`
+     (`DATABASE_MAX_CONNS`/`DATABASE_MIN_CONNS`, defaults 10/1), so
+     `Σ(instances × MaxConns)` stays under the cluster's `max_connections`
 
 ### Negative
 
 1. **Operator Dependency**:
-   - Must keep CNPG operator updated (upgrade every 6-12 months)
-   - Operator bugs can affect entire database cluster
+   - Must keep the CNPG operator updated
+   - Operator bugs can affect the entire database cluster
    - **Mitigation**: Pin operator version, test upgrades in staging first
 
 2. **Abstraction Layer**:
-   - Some PostgreSQL internals hidden behind CRD
-   - Debugging harder (must understand operator behavior)
-   - **Mitigation**: Team experience offsets this, know how to check operator logs
+   - PostgreSQL internals hidden behind the CRD; debugging takes operator knowledge
+   - **Mitigation**: Team experience, know how to check operator logs
 
 3. **Smaller Community**:
-   - Fewer Stack Overflow answers than Zalando operator
-   - Less third-party tooling (must rely on official tools)
-   - **Mitigation**: Excellent official docs, responsive Slack channel
+   - Fewer Stack Overflow answers than the Zalando operator
+   - **Mitigation**: Excellent official docs
 
-4. **Learning Curve for New Team Members**:
-   - Must learn both PostgreSQL AND CNPG operator concepts
-   - **Mitigation**: Document common operations in runbooks
+4. **Backups Depend on Two External Stores**:
+   - WAL and base backups go to Hetzner Object Storage, and a nightly copy to
+     Backblaze B2 (see Backups below). A wrong key or a missing bucket stops
+     WAL archiving, and Postgres then keeps every unarchived segment until the
+     20Gi volume fills
+   - **Mitigation**: `AllChatPostgresWALArchivingFailing` pages on failing or
+     stalled archiving long before the disk fills; `AllChatPostgresBackupStale`
+     warns when the newest base backup is older than 30h
+
+5. **Connection Ceiling**:
+   - At `max_connections = 200` the per-service pools pinned Postgres at its
+     ceiling and crashlooped newly-starting pods (SQLSTATE 53300); ADR-0039
+     shrank the per-service pools and the manifest raises the cap to 300
 
 ---
 
@@ -275,19 +248,28 @@ spec:
 
 ### Files and Configuration
 
-**Kubernetes Manifests**:
-- `deployments/k8s/base/postgres/cluster.yaml` - Main Cluster CRD
-- `deployments/k8s/base/postgres/backup.yaml` - Scheduled Backup CRD
-- `deployments/k8s/base/postgres/pooler.yaml` - PgBouncer connection pooler
+The CNPG `Cluster` resource is owned and applied by the deployment pipeline
+(caesar-deployment), not from this repository. What lives in this repo:
 
-**Secrets**:
-- `allchat-postgres-app` - Application database credentials
-- `allchat-postgres-superuser` - Superuser credentials
-- `backup-s3-credentials` - S3 access keys for backups
+**Kubernetes manifests** (this repo, dev/local):
+- `deployments/k8s/base/postgres/deployment.yaml` - plain single-replica `postgres:16-alpine` Deployment + Service + PVC (local k3d dev; NOT the CNPG cluster)
+- `deployments/k8s/base/postgres/configmap.yaml` - migration ConfigMap stub
+- `deployments/docker-compose.yml` - dev compose, `postgres:16-alpine`
+
+**Connection config** (this repo):
+- `deployments/k8s/base/configmap.yaml` sets `DATABASE_HOST: allchat-cluster-rw.allchat.svc.cluster.local`
+  and `DATABASE_USER: allchat_user`; each service reads `DATABASE_PASSWORD` from the
+  `allchat-secrets` Secret. Services build their pools via `shared/database.NewPostgresPool*`
+  (connection budget per ADR-0039).
+
+**Secrets** (service-affecting names only):
+- `allchat-cluster-secret` - the cluster's app-user secret (referenced by the Cluster spec)
+- `allchat-secrets` - per-service `DATABASE_PASSWORD`, JWT_SECRET and friends
 
 ### Cluster Configuration
 
-**Production Setup** (3 nodes):
+The CNPG `Cluster` manifest is owned by the deployment pipeline
+(caesar-deployment, `allchat-cluster.yaml`); it is the deployed spec:
 ```yaml
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -295,149 +277,84 @@ metadata:
   name: allchat-cluster
   namespace: allchat
 spec:
-  instances: 3  # 1 primary + 2 replicas
-
-  primaryUpdateStrategy: unsupervised  # Automated failover
-
+  instances: 3
+  monitoring:
+    enablePodMonitor: true              # Prometheus auto-discovery
+  plugins:                              # WAL archiving + base backups (see Backups)
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: allchat-hetzner
+  affinity:
+    podAntiAffinityType: required       # one instance per node
+    topologyKey: kubernetes.io/hostname
+  storage:
+    size: 20Gi
   postgresql:
     parameters:
-      max_connections: "200"           # 20 per service × 10 services
-      shared_buffers: "1GB"            # 25% of RAM (4GB total)
-      effective_cache_size: "3GB"      # 75% of RAM
-      work_mem: "16MB"                 # Per query operation
-      maintenance_work_mem: "256MB"    # For VACUUM, CREATE INDEX
-      wal_level: "replica"             # For streaming replication
-      max_wal_senders: "10"            # Replication connections
-      synchronous_commit: "on"         # Zero data loss (RPO=0)
-      log_statement: "none"            # No query logging (use pgBadger)
-      log_duration: "off"
-      log_line_prefix: "%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h "
-
+      max_connections: "300"           # headroom for the ADR-0039 connection budget
+      shared_buffers: "256MB"
+      work_mem: "2MB"                  # low work_mem under the connection budget
   bootstrap:
     initdb:
       database: allchat
-      owner: allchat
-      encoding: UTF8
-      localeCollate: en_US.UTF-8
-      localeCType: en_US.UTF-8
-
-  storage:
-    size: 50Gi                         # Per instance
-    storageClass: hcloud-volumes       # Hetzner Cloud Volumes
-
+      owner: allchat_user
+      secret:
+        name: allchat-cluster-secret
+      postInitSQL:
+      - CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+      - CREATE EXTENSION IF NOT EXISTS "pg_trgm";
   resources:
     requests:
-      memory: "1Gi"
+      memory: "512Mi"
       cpu: "500m"
     limits:
-      memory: "4Gi"
-      cpu: "2000m"
-
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://allchat-backups/postgres
-      endpointURL: https://fsn1.your-objectstorage.com  # Hetzner
-      s3Credentials:
-        accessKeyId:
-          name: backup-s3-credentials
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: backup-s3-credentials
-          key: SECRET_ACCESS_KEY
-      wal:
-        compression: gzip               # Compress WAL before upload
-        maxParallel: 2                  # Parallel WAL uploads
-    retentionPolicy: "30d"              # Keep 30 days of backups
-
-  monitoring:
-    enablePodMonitor: true              # Prometheus auto-discovery
+      memory: "2Gi"
+      cpu: "2"
 ```
+The manifest sets no `primaryUpdateStrategy` override (CNPG's default
+applies); `synchronous_commit` stays at its default `on`.
 
-### Scheduled Backup
+### Backups
 
-```yaml
-apiVersion: postgresql.cnpg.io/v1
-kind: ScheduledBackup
-metadata:
-  name: allchat-daily-backup
-  namespace: allchat
-spec:
-  schedule: "0 2 * * *"  # Daily at 2 AM UTC
-  backupOwnerReference: self
-  cluster:
-    name: allchat-cluster
-```
+Owned by the deployment pipeline (caesar-deployment), like the Cluster:
 
-### Connection Pooler (PgBouncer)
+- **Postgres**: the Barman Cloud plugin (`argocd/apps/plugin-barman-cloud.yaml`)
+  archives WAL continuously and takes a base backup every night at 23:00 UTC
+  (`ScheduledBackup` `allchat-cluster-daily`) to the `allchat-hetzner`
+  `ObjectStore` on Hetzner Object Storage (`apps/workloads/all-chat/backup-objectstore.yaml`).
+  The recovery window is 30 days (`retentionPolicy`), to within CNPG's 5-minute
+  `archive_timeout`.
+- **Second copy**: the `backup-offsite-mirror` CronJob copies the Barman
+  archive to Backblaze B2 every night, so Hetzner does not hold the only copy.
+- **Restore**: a new `Cluster` with `bootstrap.recovery` from that
+  `ObjectStore` (`externalClusters[].plugin`, `serverName: allchat-cluster`),
+  never the live cluster itself. The header of `backup-objectstore.yaml` has
+  the details.
 
-```yaml
-apiVersion: postgresql.cnpg.io/v1
-kind: Pooler
-metadata:
-  name: allchat-pooler
-  namespace: allchat
-spec:
-  cluster:
-    name: allchat-cluster
-  instances: 3  # PgBouncer replicas
-  type: rw      # Read-write connections (primary only)
-  pgbouncer:
-    poolMode: transaction  # Most efficient for microservices
-    parameters:
-      max_client_conn: "1000"      # Total client connections
-      default_pool_size: "25"      # Connections per database
-      reserve_pool_size: "5"       # Reserved connections
-      reserve_pool_timeout: "5"    # Seconds
-```
+### PgBouncer Pooler (not deployed)
+
+A Pooler is unnecessary: services connect to `allchat-cluster-rw`
+directly (the manifest disables the `ro`/`r` services; there are no read
+replicas to load-balance) and cap their own pools via the connection budget
+(ADR-0039).
 
 ### Accessing Database
 
 **From application pods**:
 ```go
-// Connect via read-write service (primary)
-connString := "postgresql://allchat:password@allchat-cluster-rw:5432/allchat"
-
-// Connect via read-only service (replicas)
-connString := "postgresql://allchat:password@allchat-cluster-ro:5432/allchat"
-
-// Connect via pooler (recommended for microservices)
-connString := "postgresql://allchat:password@allchat-pooler-rw:5432/allchat"
+// DATABASE_HOST is allchat-cluster-rw.allchat.svc.cluster.local (primary)
+// DATABASE_USER is allchat_user; DATABASE_PASSWORD comes from the allchat-secrets Secret
+// Pools are built via shared/database.NewPostgresPool (bounded, see ADR-0039)
 ```
 
 **From kubectl (debugging)**:
 ```bash
-# Access primary
+# Access primary (verify the current primary with `kubectl get cluster allchat-cluster -n allchat`)
 kubectl exec -n allchat allchat-cluster-1 -- psql -U postgres allchat
-
-# Check replication status
-kubectl exec -n allchat allchat-cluster-1 -- psql -U postgres -c "SELECT * FROM pg_stat_replication;"
 
 # Get connection count
 kubectl exec -n allchat allchat-cluster-1 -- psql -U postgres -c "SELECT count(*) FROM pg_stat_activity;"
-```
-
-### PITR (Point-in-Time Recovery)
-
-**Restore to 5 minutes before data corruption**:
-```yaml
-apiVersion: postgresql.cnpg.io/v1
-kind: Cluster
-metadata:
-  name: allchat-cluster-restored
-spec:
-  instances: 3
-
-  bootstrap:
-    recovery:
-      source: allchat-cluster
-      recoveryTarget:
-        targetTime: "2026-01-28 10:00:00"  # Restore to this timestamp
-
-  externalClusters:
-  - name: allchat-cluster
-    barmanObjectStore:
-      destinationPath: s3://allchat-backups/postgres
-      # ... S3 credentials
 ```
 
 ---
@@ -445,83 +362,18 @@ spec:
 ## Related Decisions
 
 - **ADR-0001**: [Standard Go Layout](./0001-standard-go-layout.md) - Service database access patterns
+- **ADR-0039**: [Database Connection Budget](./0039-database-connection-budget.md) - bounded per-service pools against this cluster's max_connections
 - **Architecture**: [02-DEPLOYMENT.md](../architecture/02-DEPLOYMENT.md) - Kubernetes deployment
-- **Operations**: [Runbooks](../operations/runbooks/) - PostgreSQL operational procedures
+- **ADR-0089**: [Enforce data retention with a sweeper CronJob](./0089-retention-sweeper-cronjob.md) - data retention enforcement against this database
 
 ---
 
 ## Validation
 
-### Failover Testing (2025-11-12)
-
-**Test 1: Kill Primary Pod**
-```bash
-# Before: primary = allchat-cluster-1
-kubectl delete pod allchat-cluster-1 -n allchat
-
-# Timeline:
-# T+0s:  Pod deleted
-# T+10s: CNPG detects primary unhealthy
-# T+15s: Replica allchat-cluster-2 promoted to primary
-# T+22s: New primary accepting connections
-# T+25s: Old primary restarted as replica
-
-# Result: 22 seconds downtime ✅
-```
-
-**Test 2: Network Partition**
-```bash
-# Simulate network partition to primary
-kubectl exec -n allchat allchat-cluster-1 -- iptables -A INPUT -j DROP
-
-# Timeline:
-# T+0s:  Network partition
-# T+10s: Health checks fail (cannot reach primary)
-# T+12s: Replica promoted
-# T+20s: New primary ready
-# T+60s: Old primary fenced (cannot accept writes)
-
-# Result: 20 seconds downtime, no split-brain ✅
-```
-
-**Test 3: Disk Failure**
-```bash
-# Simulate disk full on primary
-kubectl exec -n allchat allchat-cluster-1 -- dd if=/dev/zero of=/var/lib/postgresql/data/diskfill bs=1M count=40000
-
-# Timeline:
-# T+0s:  Disk full
-# T+5s:  PostgreSQL cannot write WAL
-# T+8s:  CNPG detects failure
-# T+18s: Replica promoted
-# T+25s: New primary ready
-
-# Result: 25 seconds downtime ✅
-```
-
-### Backup & Restore Testing (2025-11-13)
-
-**Full Backup**:
-```bash
-kubectl cnpg backup allchat-cluster -n allchat
-
-# Backup completed: 3.2GB → 1.1GB compressed
-# Upload time: 42 seconds (Hetzner Object Storage)
-```
-
-**PITR Restore**:
-```bash
-# Corrupt data at 10:30 AM
-# Restore to 10:25 AM (5 minutes before)
-
-# Restoration time: 8 minutes
-# - Download base backup: 2 minutes
-# - Extract backup: 1 minute
-# - Replay WAL: 4 minutes
-# - Start PostgreSQL: 1 minute
-
-# Result: Data restored successfully ✅
-```
+Failover was exercised directly against the operator during the early deployment
+phase and measured at roughly 20-25 seconds per scenario (pod deletion, network
+partition, WAL disk full). A restore from the Barman archive into a scratch
+cluster has not been exercised yet; until it has, the backups are unproven.
 
 ---
 
@@ -538,8 +390,10 @@ kubectl cnpg backup allchat-cluster -n allchat
 
 **Decision**: Use CloudNativePG operator for PostgreSQL high availability.
 
-**Reason**: Team experience, automated failover (<30s), built-in PITR, operational simplicity, cost-effective.
+**Reason**: Team experience, automated failover (<30s), operational simplicity, cost-effectiveness.
 
-**Trade-off**: Operator dependency, smaller community (but excellent docs).
+**Trade-off**: Operator dependency, smaller community (but excellent docs); backups depend on Hetzner Object Storage and Backblaze B2.
 
-**Status**: ✅ Deployed in production, handling 3-node cluster with automated backups and <30s failover.
+**Status**: Deployed in production: 3-instance CNPG cluster with automated failover,
+continuous WAL archiving and nightly base backups (30-day PITR window).
+

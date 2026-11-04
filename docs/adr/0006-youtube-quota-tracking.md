@@ -2,16 +2,27 @@
 
 **Date**: 2025-11-15
 **Status**: ✅ Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: YouTube Listener Team, Infrastructure Lead
 
 ---
 
 ## Context and Problem Statement
 
-YouTube Live Chat API has a **10,000 units/day quota limit** (default). All-Chat polls YouTube API for live chat messages, consuming:
-- `search.list` (find live streams): **100 units** per call
-- `videos.list` (stream details): **1 unit** per call
-- `liveChatMessages.list` (fetch messages): **5 units** per call (every 2-5 seconds)
+YouTube Live Chat API earns its quota from a Google Cloud project: the project's
+default 10,000 units/day was raised to **1,009,000 units/day** (migration 066,
+`migrations/066_youtube_quota_real_limit.sql`, and `shared/quota.DefaultDailyQuota`), and
+the limit is mostly unused today because the default chat path runs on InnerTube with no
+official quota cost (ADR-0065). Quota is still spent by the premium official-API listener
+(`youtube-listener`, opt-in per source), `moderation-service` bans (50 units) and
+`auth-service` streamer sends (5 units). Quota-consuming calls made by the listener:
+- `liveChatMessages` (gRPC `streamList`, fetch messages): **5 units** per call
+- `videos.list` (stream details/check): **1 unit** per call (charged as a plain increment, no reservation)
+- `liveBroadcasts.list` (stream discovery, official-API mode): **1 unit** per call (estimate)
+- `channels.list(mine=true)` (ownership proof): **1 unit** per call
+
+The one usage-based alert path described here now lives in the dedicated
+`youtube-quota-monitor` service (ADR-0023), which reads the same shared table.
 
 **Initial Implementation** (Simple Counter):
 ```go
@@ -27,7 +38,8 @@ func (t *Tracker) RecordUsage(units int) {
 - **Drift**: ±514 units (6.4% error)
 - **Impact**: Risk hitting quota limit unexpectedly, stopping all YouTube polling
 
-**Root Cause**: Race conditions in concurrent quota updates (5 YouTube Listener replicas × 10 API calls/second = 50 concurrent updates).
+**Root Cause**: Race conditions in concurrent quota updates across multiple
+listener replicas issuing overlapping API calls.
 
 **Problem**: How do we track quota usage with 99.95%+ accuracy?
 
@@ -50,7 +62,7 @@ func (t *Tracker) RecordUsage(units int) {
 ```go
 // Record usage AFTER API call
 func RecordUsage(units int) {
-    db.Exec("UPDATE quota SET used = used + $1", units)
+    db.Exec("UPDATE youtube_quota_usage SET units_used = units_used + $1", units)
 }
 ```
 
@@ -71,8 +83,8 @@ func RecordUsage(units int) {
 // Lock row before recording
 func RecordUsage(units int) {
     tx.Begin()
-    tx.Exec("SELECT * FROM quota WHERE date = $1 FOR UPDATE", today)
-    tx.Exec("UPDATE quota SET used = used + $1", units)
+    tx.Exec("SELECT * FROM youtube_quota_usage WHERE date = $1 FOR UPDATE", today)
+    tx.Exec("UPDATE youtube_quota_usage SET units_used = units_used + $1", units)
     tx.Commit()
 }
 ```
@@ -82,7 +94,7 @@ func RecordUsage(units int) {
 **❌ Cons**:
 - **Still charges after call**: Service crashes after API call but before recording = lost tracking
 - **Always charges**: Records units even for 4xx errors
-- **Slower**: Locks row for every update (contention with 50 concurrent calls)
+- **Slower**: Locks row for every update (contention across concurrent callers)
 
 **Estimated Drift**: ±50 units/day (0.5% error) - Better but not good enough
 
@@ -91,48 +103,29 @@ func RecordUsage(units int) {
 ### Option 3: Reserve-Confirm-Rollback Pattern (CHOSEN)
 
 ```go
-// RESERVE quota BEFORE API call
-func ReserveQuota(units int) (reservationID string, err error) {
-    tx.Begin()
-    // Check if enough quota available
-    row := tx.QueryRow("SELECT units_used + units_reserved + $1 <= units_limit FROM quota", units)
-    if !hasQuota {
-        return "", ErrQuotaExhausted
-    }
-
-    // Reserve units atomically
-    reservationID := uuid.New()
-    tx.Exec("INSERT INTO quota_reservations (id, units, created_at) VALUES ($1, $2, NOW())", reservationID, units)
-    tx.Exec("UPDATE quota SET units_reserved = units_reserved + $1", units)
-    tx.Commit()
-    return reservationID, nil
+// RESERVE quota BEFORE API call (tracker calls the SQL function)
+canReserve := tx.QueryRow("SELECT reserve_youtube_quota($1, $2, $3)", today, units, dailyLimit)
+if !canReserve {
+    return "", fmt.Errorf("insufficient quota available")
 }
+// inverse for release: SELECT rollback_youtube_quota($1, $2), today, units
+// inverse for charge: SELECT confirm_youtube_quota($1, $2), today, units
+```
 
-// CONFIRM reservation (API call succeeded)
-func ConfirmQuota(reservationID string) error {
-    tx.Begin()
-    units := tx.QueryRow("SELECT units FROM quota_reservations WHERE id = $1", reservationID)
-    tx.Exec("DELETE FROM quota_reservations WHERE id = $1", reservationID)
-    tx.Exec("UPDATE quota SET units_used = units_used + $1, units_reserved = units_reserved - $1", units, units)
-    tx.Commit()
-}
+The SQL functions (defined in migration 008) lock the `youtube_quota_usage` row
+for the date with `FOR UPDATE`, create the row if it is missing, and return
+whether the reservation succeeded. There is no separate reservations table:
+only the `units_reserved` counter on the day's row tracks in-flight calls, and
+the listener's own reservation ids are local bookkeeping.
 
-// ROLLBACK reservation (API call failed with 4xx)
-func RollbackQuota(reservationID string) error {
-    tx.Begin()
-    units := tx.QueryRow("SELECT units FROM quota_reservations WHERE id = $1", reservationID)
-    tx.Exec("DELETE FROM quota_reservations WHERE id = $1", reservationID)
-    tx.Exec("UPDATE quota SET units_reserved = units_reserved - $1", units)
-    tx.Commit()
-}
-
+```go
 // Usage:
 reservationID, _ := tracker.ReserveQuota(5)  // BEFORE API call
 resp, err := youtube.FetchMessages(...)
-if err != nil && resp.StatusCode >= 400 && resp.StatusCode < 500 {
-    tracker.RollbackQuota(reservationID)  // 4xx = don't charge
+if !shouldChargeQuota(err) {
+    tracker.RollbackReservation(reservationID, 5)  // 4xx = don't charge
 } else {
-    tracker.ConfirmQuota(reservationID)  // Success or 5xx = charge
+    tracker.ConfirmReservation(reservationID, 5)  // Success or 5xx = charge
 }
 ```
 
@@ -141,14 +134,13 @@ if err != nil && resp.StatusCode >= 400 && resp.StatusCode < 500 {
 - **Crash recovery**: Stale reservations cleaned up automatically (>5 min old)
 - **Smart charging**: 4xx errors rolled back (YouTube doesn't charge)
 - **Atomic**: Row-level locking prevents race conditions
-- **Auditable**: Reservations table shows in-flight API calls
+- **Auditable**: settled API calls write a `youtube_quota_audit_log` row via
+  `LogAPICall` (migration 016)
 
 **❌ Cons**:
-- **Complexity**: 3 functions instead of 1
-- **Extra table**: Requires `quota_reservations` table
-- **Cleanup needed**: Stale reservations must be cleaned up (background job)
-
-**Measured Drift**: ±2 units/day (0.02% error, 99.98% accuracy) ✅
+- **Complexity**: reserve + confirm/rollback instead of one increment
+- **Additional state**: `units_reserved` column on the day's quota row
+- **Cleanup needed**: stale reserved units must be recovered (background job)
 
 ---
 
@@ -163,22 +155,22 @@ if err != nil && resp.StatusCode >= 400 && resp.StatusCode < 500 {
    - After: ±2 units/day (0.02% error)
    - **Improvement**: 250x more accurate
 
-2. **Quota Waste Elimination** (~9,000 units/day saved):
-   - **Stop on exhaustion**: No retry loops when quota exhausted (saves 1,440 units/day)
-   - **Immediate cache clearing**: Stop polling offline streams immediately (saves 200+ units/event)
-   - **Smart disconnect**: Stop polling when last overlay disconnects (saves 75-90 units/event)
-   - **Connection batching**: 5-second debounce for rapid overlay connects (saves 400+ units/burst)
-   - **Total**: ~9,000 units/day waste eliminated (90% reduction)
+2. **Quota Waste Elimination** (polling overheads measured against the 10,000-unit
+   quota of the time):
+   - **Stop on exhaustion**: no retry loops when quota is exhausted
+   - **Immediate cache clearing**: stop polling offline streams immediately
+   - **Smart disconnect**: stop polling when the last overlay disconnects
+   - **Connection batching**: 5-second debounce for rapid overlay connects
 
 3. **Crash Recovery**:
    - Service crashes after RESERVE but before CONFIRM = reservation stays in database
-   - Cleanup job runs every 60 seconds, rolls back reservations >5 min old
+   - Cleanup job runs every 60 seconds, recovers reserved units stale >5 min old
    - No lost tracking even with crashes
 
 4. **Smart Charging**:
    - 4xx errors (invalid video ID, OAuth expired) = rollback reservation
    - 5xx errors (YouTube down, network timeout) = confirm (YouTube charges anyway)
-   - **Accuracy**: Only charge for quota YouTube actually consumes
+   - **Accuracy**: charge only for calls `shouldChargeQuota` classifies as having reached YouTube
 
 ---
 
@@ -186,19 +178,20 @@ if err != nil && resp.StatusCode >= 400 && resp.StatusCode < 500 {
 
 ### Positive
 
-1. **99.98% Accuracy** (±2 units/day drift):
+1. **99.98% Accuracy** (±2 units/day drift, measured at decision time):
    - Database: 8,542 units
    - Expected: 8,540 units
    - Drift: 2 units (0.02% error) ✅
 
-2. **9,000+ Units/Day Saved**:
-   - Expected usage: 2,000-3,000 units/day (vs 10,000 limit)
-   - Can support **3-5× more concurrent streams** with same quota
+2. **Waste Elimination**:
+   - At the 10,000-unit quota of the time, the eliminated polling overhead was worth
+     ~9,000 units/day; relative to today's 1,009,000-unit quota the same mechanisms
+     mainly keep the shared table honest across multiple consumers.
 
 3. **Predictable Quota Consumption**:
-   - `/quota/status` endpoint shows real-time accurate usage
-   - Alerts fire at correct thresholds (80%, 90%)
-   - No surprise quota exhaustion
+   - `/quota/status` (served by `youtube-quota-monitor` since ADR-0023) shows real-time usage
+   - Alerts fire on the deployed Prometheus rules `YouTubeQuotaHigh` (>80%),
+     `YouTubeQuotaCritical` (>95%) and `YouTubeQuotaExhausted` (>=100%) (ADR-0023)
 
 4. **Crash Resilient**:
    - Tested: Kill service during API call → reservation cleaned up after 5 min
@@ -209,16 +202,16 @@ if err != nil && resp.StatusCode >= 400 && resp.StatusCode < 500 {
 1. **Increased Complexity**:
    - 3 functions (Reserve, Confirm, Rollback) vs 1 (RecordUsage)
    - Must remember to call Confirm/Rollback after EVERY API call
-   - **Mitigation**: Wrapper function handles pattern automatically
+   - **Mitigation**: every API call method in `api/client.go` inlines reserve, then confirm-or-rollback in one block
 
-2. **Extra Database Table**:
-   - `quota_reservations` table stores in-flight reservations
+2. **Extra State on the Quota Row**:
+   - `units_reserved` column on `youtube_quota_usage` tracks in-flight calls
    - Cleanup job must run every 60 seconds
-   - **Impact**: Minimal (table has <100 rows typically, ~1KB)
+   - **Impact**: Minimal (counter on one row per day)
 
 3. **Stale Reservation Cleanup**:
    - Background job runs every 60 seconds
-   - Rolls back reservations >5 min old
+   - Recovers (zeroes) reserved units >5 min old on past-date rows
    - **Impact**: Minimal CPU/memory overhead
 
 ---
@@ -227,148 +220,99 @@ if err != nil && resp.StatusCode >= 400 && resp.StatusCode < 500 {
 
 ### Database Schema
 
-**Migration** `008_quota_reservations.sql`:
+**Migrations** (real definitions in the tree):
+- `003_youtube_support.sql`: creates `youtube_quota_usage` (date,
+  `units_used`, `units_limit`).
+- `008_quota_reservations.sql`: adds the `units_reserved INT NOT NULL DEFAULT 0`
+  column and defines five SQL functions:
+  `reserve_youtube_quota(date, units, limit)` (row lock via `FOR UPDATE`,
+  creates the day's row on first use, returns FALSE when
+  `used + reserved + requested > limit`), `confirm_youtube_quota(date, units)`
+  (reserved -> used), `rollback_youtube_quota(date, units)` (release), and
+  `cleanup_stale_quota_reservations()` (zeroes `units_reserved` on rows whose
+  `updated_at` is older than 5 minutes from a past date and returns the
+  recovered unit count). `get_youtube_quota_with_reserved(date)` returns the
+  status envelope `youtube-quota-monitor` serves on `/quota/status` (migration
+  066 corrects its no-row fallback to the 1,009,000 limit).
+- `014_quota_events_tracking.sql`: `youtube_quota_events` audit table for
+  state-transition events; `016_youtube_quota_audit_log.sql`: per-call audit
+  log (`youtube_quota_audit_log`); `026_backfill_missing_youtube_quota_records.sql`.
+
+Sketch (not verbatim):
 ```sql
--- Reservation tracking table
-CREATE TABLE youtube_quota_reservations (
-    id UUID PRIMARY KEY,
-    date DATE NOT NULL DEFAULT CURRENT_DATE,
-    units INTEGER NOT NULL,
-    operation_type VARCHAR(50) NOT NULL,  -- 'search', 'videos', 'chat'
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    INDEX idx_date (date),
-    INDEX idx_created_at (created_at)
-);
+ALTER TABLE youtube_quota_usage ADD COLUMN units_reserved INT NOT NULL DEFAULT 0;
 
--- Update quota table to track reserved units
-ALTER TABLE youtube_quota_usage ADD COLUMN units_reserved INTEGER DEFAULT 0;
-
--- Cleanup function
 CREATE OR REPLACE FUNCTION cleanup_stale_quota_reservations()
-RETURNS INTEGER AS $$
+RETURNS INT AS $$
 DECLARE
-    cleaned_count INTEGER;
+    v_reserved INT;
 BEGIN
-    -- Roll back reservations older than 5 minutes
-    WITH deleted AS (
-        DELETE FROM youtube_quota_reservations
-        WHERE created_at < NOW() - INTERVAL '5 minutes'
-        RETURNING units
-    )
-    SELECT COUNT(*), SUM(units) INTO cleaned_count, total_units FROM deleted;
+    SELECT COALESCE(SUM(units_reserved), 0) INTO v_reserved
+    FROM youtube_quota_usage
+    WHERE units_reserved > 0
+      AND updated_at < NOW() - INTERVAL '5 minutes'
+      AND date < CURRENT_DATE;
 
-    -- Decrease reserved units
-    UPDATE youtube_quota_usage
-    SET units_reserved = units_reserved - total_units
-    WHERE date = CURRENT_DATE;
-
-    RETURN cleaned_count;
+    IF v_reserved > 0 THEN
+        UPDATE youtube_quota_usage
+        SET units_reserved = 0, updated_at = NOW()
+        WHERE units_reserved > 0
+          AND updated_at < NOW() - INTERVAL '5 minutes'
+          AND date < CURRENT_DATE;
+    END IF;
+    RETURN v_reserved;
 END;
 $$ LANGUAGE plpgsql;
 ```
 
 ### Code Implementation
 
-**File**: `services/youtube-listener/quota/tracker.go`
+**File**: `services/youtube-listener/quota/tracker.go` (type `Tracker`, with
+`Coordinator` and `PerChannelTracker` alongside). Key methods (real signatures):
 
 ```go
-type QuotaTracker struct {
-    db     *pgxpool.Pool
-    mu     sync.RWMutex
-    logger *zap.Logger
-}
-
-func (t *QuotaTracker) ReserveQuota(ctx context.Context, units int, operation string) (string, error) {
-    tx, _ := t.db.Begin(ctx)
-    defer tx.Rollback(ctx)
-
-    // Check quota available (atomic)
-    var available bool
-    tx.QueryRow(ctx, `
-        SELECT (units_limit - units_used - units_reserved) >= $1
-        FROM youtube_quota_usage WHERE date = CURRENT_DATE
-    `, units).Scan(&available)
-
-    if !available {
-        return "", ErrQuotaExhausted
-    }
-
-    // Reserve units
-    reservationID := uuid.New().String()
-    tx.Exec(ctx, `
-        INSERT INTO youtube_quota_reservations (id, units, operation_type)
-        VALUES ($1, $2, $3)
-    `, reservationID, units, operation)
-
-    tx.Exec(ctx, `
-        UPDATE youtube_quota_usage
-        SET units_reserved = units_reserved + $1
-        WHERE date = CURRENT_DATE
-    `, units)
-
-    tx.Commit(ctx)
-    return reservationID, nil
-}
-
-func (t *QuotaTracker) ConfirmQuota(ctx context.Context, reservationID string) error {
-    // Move reserved → used (atomic)
-    tx, _ := t.db.Begin(ctx)
-    defer tx.Rollback(ctx)
-
-    var units int
-    tx.QueryRow(ctx, "SELECT units FROM youtube_quota_reservations WHERE id = $1", reservationID).Scan(&units)
-    tx.Exec(ctx, "DELETE FROM youtube_quota_reservations WHERE id = $1", reservationID)
-    tx.Exec(ctx, `
-        UPDATE youtube_quota_usage
-        SET units_used = units_used + $1, units_reserved = units_reserved - $1
-        WHERE date = CURRENT_DATE
-    `, units, units)
-
-    tx.Commit(ctx)
-    return nil
-}
-
-func (t *QuotaTracker) RollbackQuota(ctx context.Context, reservationID string) error {
-    // Release reservation without charging
-    tx, _ := t.db.Begin(ctx)
-    defer tx.Rollback(ctx)
-
-    var units int
-    tx.QueryRow(ctx, "SELECT units FROM youtube_quota_reservations WHERE id = $1", reservationID).Scan(&units)
-    tx.Exec(ctx, "DELETE FROM youtube_quota_reservations WHERE id = $1", reservationID)
-    tx.Exec(ctx, `
-        UPDATE youtube_quota_usage
-        SET units_reserved = units_reserved - $1
-        WHERE date = CURRENT_DATE
-    `, units)
-
-    tx.Commit(ctx)
-    return nil
-}
-
-// Cleanup stale reservations (runs every 60 seconds)
-func (t *QuotaTracker) StartCleanupJob(ctx context.Context) {
-    ticker := time.NewTicker(60 * time.Second)
-    defer ticker.Stop()
-
-    for {
-        select {
-        case <-ticker.C:
-            count, _ := t.db.Exec(ctx, "SELECT cleanup_stale_quota_reservations()")
-            if count > 0 {
-                t.logger.Info("Cleaned up stale quota reservations", zap.Int("count", count))
-            }
-        case <-ctx.Done():
-            return
-        }
-    }
-}
+func (t *Tracker) Start(ctx context.Context) error   // date check, DB sync, reservation cleanup loops
+func (t *Tracker) ReserveQuota(ctx context.Context, units int) (string, error)
+func (t *Tracker) ReserveQuotaWithPriority(ctx context.Context, units int, allowCritical bool) (string, error)
+func (t *Tracker) ConfirmReservation(ctx context.Context, reservationID string, units int) error
+func (t *Tracker) RollbackReservation(ctx context.Context, reservationID string, units int) error
+func (t *Tracker) RecordUsage(ctx context.Context, units int) error // plain increment, used when no reservation was taken
+func (t *Tracker) GetUsageToday() int
 ```
+
+Notes:
+
+- The reserve/confirm/rollback methods delegate to the migration-008 SQL
+  functions (`reserve_youtube_quota`, `confirm_youtube_quota`,
+  `rollback_youtube_quota`); the reservation id is local bookkeeping, e.g.
+  `date-UnixNano-units`.
+- `ReserveQuotaWithPriority` adds an emergency shutoff: at or above the
+  emergency threshold (default 90% of the daily limit) reservations are blocked
+  unless the caller passes `allowCritical=true` for a critical operation
+  (OAuth, login).
+- Callers in `services/youtube-listener/api/client.go` and `grpc_client.go`
+  reserve before each official-API call and settle afterwards with
+  `ConfirmReservation` or `RollbackReservation`, rolling back when
+  `shouldChargeQuota` classifies the failure as not having reached YouTube
+  (4xx that did not reach YouTube is its only no-charge case).
+- The listener additionally exposes HTTP endpoints (`/v1/quota/check`,
+  `/v1/quota/reserve`, `/v1/quota/confirm` in `cmd/main.go`) for other services
+  to coordinate quota over HTTP; `auth-service` and `moderation-service` have
+  since moved to direct SQL via `shared/quota` (ADR-0023).
+- The `cleanup_stale_quota_reservations()` sweep also runs in
+  `services/youtube-quota-monitor/cmd/main.go` (ADR-0023), so stale reserved
+  units are recovered even when the listener is not deployed.
 
 ---
 
 ## Related Decisions
 
+- **ADR-0023**: [Decoupled YouTube Quota Monitor](./0023-decoupled-youtube-quota-monitor.md) -
+  the shared-table metrics/alerting owner; canonical `shared/quota` package used by
+  auth-service and moderation-service
+- **ADR-0065**: [Pinned stream links and premium official-API listener](./0065-premium-official-youtube-api-listener.md) -
+  revived `youtube-listener` as the opt-in, premium official-API path (the only
+  listener-side quota consumer today)
 - **ADR-0002**: [Redis Streams + Pub/Sub](./0002-redis-streams-pubsub.md) - Message transport
 - **Architecture**: [01-DATA-FLOW.md](../architecture/01-DATA-FLOW.md) - YouTube integration
 - **Guide**: [QUICK-REF-DEBUG-QUOTA.md](../llm-guides/QUICK-REF-DEBUG-QUOTA.md) - Quota troubleshooting
@@ -400,6 +344,10 @@ func (t *QuotaTracker) StartCleanupJob(ctx context.Context) {
 
 **Reason**: Eliminates drift (±500 → ±2 units/day), 99.95%+ accuracy, crash-resilient, smart charging for 4xx errors.
 
-**Impact**: 9,000+ units/day waste eliminated (90% reduction), can support 3-5× more concurrent streams.
+**Impact**: At the 10,000-unit quota of the time: ~9,000 units/day waste eliminated (90% reduction),
+3-5x more concurrent streams on the same quota. Today the shared `youtube_quota_usage` table and
+the migration-008 SQL functions keep accounting honest across the official-API listener,
+moderation-service bans and auth-service sends (ADR-0023), with metrics and alerting owned by
+`youtube-quota-monitor`.
 
 **Status**: ✅ Implemented and validated in production with 99.95% accuracy over 7-day test.

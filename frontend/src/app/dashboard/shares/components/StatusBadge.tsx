@@ -40,7 +40,7 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
     {
       pending: {
         messageStem: 'statusPending',
-        className: 'text-amber-300',
+        className: 'text-warning',
         icon: '⏳',
       },
       accepted: {

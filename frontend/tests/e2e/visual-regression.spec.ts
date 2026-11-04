@@ -27,7 +27,8 @@
  * compares pixels against committed baselines, so a layout regression fails
  * the PR instead of the beta.
  *
- * Scope: chrome routes only (landing, dashboard, settings, upgrade, docs).
+ * Scope: chrome routes only (landing, dashboard, settings, upgrade, docs),
+ * plus landing, dashboard and settings again in the light theme (ADR-0087).
  * Overlay surfaces (src/app/overlay/**, embed, ThemePreview) are
  * user-themable broadcast art with their own contrast floor
  * (theme-contrast.spec.ts) and are deliberately NOT baselined here — they
@@ -189,20 +190,26 @@ async function expectBaseline(
   }
 }
 
+/** Shared by both themes: everything that makes a shot deterministic. */
+async function prepare(page: Page, theme: 'dark' | 'light') {
+  // Must be set BEFORE navigation: the landing theme carousel reads
+  // prefers-reduced-motion at mount and otherwise keeps auto-advancing,
+  // changing the DOM between shots (same reason as a11y.spec.ts).
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  // Monaco loads its CSS from cdn.jsdelivr.net, which the dev CSP rejects;
+  // the async failure flakes the shot. Block it outright.
+  await page.route('https://cdn.jsdelivr.net/**', (route) => route.abort())
+  // The cookie banner mounts 1s after load. Whether the shot lands before
+  // or after that depends on runner speed, so mark it acknowledged before
+  // the app boots. The site theme (ADR-0087) is a stored choice the same way.
+  await page.addInitScript((light) => {
+    localStorage.setItem('cookieBannerAcknowledged', 'true')
+    if (light) localStorage.setItem('allchat_theme', 'light')
+  }, theme === 'light')
+}
+
 test.describe('visual baselines (chrome)', () => {
-  test.beforeEach(async ({ page }) => {
-    // Must be set BEFORE navigation: the landing theme carousel reads
-    // prefers-reduced-motion at mount and otherwise keeps auto-advancing,
-    // changing the DOM between shots (same reason as a11y.spec.ts).
-    await page.emulateMedia({ reducedMotion: 'reduce' })
-    // Monaco loads its CSS from cdn.jsdelivr.net, which the dev CSP rejects;
-    // the async failure flakes the shot. Block it outright.
-    await page.route('https://cdn.jsdelivr.net/**', (route) => route.abort())
-    // The cookie banner mounts 1s after load. Whether the shot lands before
-    // or after that depends on runner speed, so mark it acknowledged before
-    // the app boots.
-    await page.addInitScript(() => localStorage.setItem('cookieBannerAcknowledged', 'true'))
-  })
+  test.beforeEach(async ({ page }) => prepare(page, 'dark'))
 
   test('landing', async ({ page }) => {
     // The hero marquee emotes include ANIMATED webps (catjam, clap, ...) that
@@ -280,6 +287,46 @@ test.describe('visual baselines (chrome)', () => {
       'upgrade',
       async () => {
         await expect(page.getByRole('main')).toBeVisible({ timeout: 20_000 })
+      },
+      { fullPage: true }
+    )
+  })
+})
+
+// The light theme (ADR-0087) on the routes that cover its three surfaces: the
+// lanes marketing page, a lanes product page and a token-styled page.
+test.describe('visual baselines (light theme)', () => {
+  test.beforeEach(async ({ page }) => prepare(page, 'light'))
+
+  test('landing', async ({ page }) => {
+    await stubEmotes(page)
+    await page.goto('/')
+    await expectBaseline(
+      page,
+      'light-landing',
+      async () => {
+        await expect(page.getByRole('main')).toBeVisible({ timeout: 20_000 })
+      },
+      { fullPage: true }
+    )
+  })
+
+  test('dashboard empty state', async ({ page }) => {
+    await mockAuthedApi(page, { '**/api/v1/overlays': [] })
+    await page.goto('/dashboard')
+    await expectBaseline(page, 'light-dashboard-empty', async () => {
+      await expect(page.getByText('No overlays yet')).toBeVisible({ timeout: 20_000 })
+    })
+  })
+
+  test('settings', async ({ page }) => {
+    await mockAuthedApi(page, { '**/api/v1/ui-languages': { enabled: true } })
+    await page.goto('/settings')
+    await expectBaseline(
+      page,
+      'light-settings',
+      async () => {
+        await expect(page.getByText(USER.username)).toBeVisible({ timeout: 20_000 })
       },
       { fullPage: true }
     )

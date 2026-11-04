@@ -46,6 +46,8 @@ export interface User {
   updated_at: string
   // null = user has not finished/dismissed the first-run setup guide.
   onboarding_completed_at?: string | null
+  // false = the post-login Terms of Service acceptance prompt is shown.
+  tos_accepted?: boolean
 }
 
 export interface LoginResponse {

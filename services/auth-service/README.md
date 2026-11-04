@@ -240,7 +240,8 @@ Authorization: Bearer <jwt-token>
 ### User Profile
 
 ```bash
-# Current user (includes onboarding_completed_at; null = first-run setup guide is shown)
+# Current user (includes onboarding_completed_at; null = first-run setup guide is shown,
+# and tos_accepted; false = the post-login Terms of Service prompt is shown)
 GET /api/v1/auth/me
 Authorization: Bearer <jwt-token>
 
@@ -250,6 +251,16 @@ PATCH /api/v1/auth/me/onboarding
 Authorization: Bearer <jwt-token>
 Body: { "completed": true }
 → Returns: { "onboarding_completed_at": "2026-07-17T12:00:00Z" }
+
+# Accept the current Terms of Service and Privacy Policy (sets users.tos_accepted = TRUE
+# and stamps tos_accepted_at). Rejected with 403 during admin impersonation and for
+# personal access tokens. There is no API to un-accept. Migration 122 marked every
+# existing account as accepted and makes new accounts accept on their first login;
+# when the terms change, re-arm the prompt for everyone in the database with
+# `UPDATE users SET tos_accepted = FALSE;`.
+POST /api/v1/auth/me/tos-acceptance
+Authorization: Bearer <jwt-token>
+→ Returns: { "tos_accepted": true }
 
 # Delete the account (ADR-0088). Session only: a personal access token is refused (403).
 DELETE /api/v1/auth/me
@@ -341,8 +352,7 @@ Deliberate rules:
   never selected; tables that hold one are listed column by column. Settings tables
   without one are exported whole-row so new settings appear automatically;
   `TestWholeRowExportTablesHoldNoCredentials` fails if one of them gains a
-  credential column. `premium_subscriptions.raw` (the provider's webhook payload,
-  which also describes the campaign) is left out.
+  credential column.
 - **All or nothing.** The export is read in one read-only snapshot with timestamps in
   UTC. A failing section fails the request (500) rather than returning a file that
   silently omits it.
@@ -485,7 +495,10 @@ sendable streamer identity are skipped, like `/internal/chat/announce`.
 
 Platform mechanics: a Twitch bot send goes through Helix `chat/messages` with our
 **app access token** (client-credentials, cached pre-expiry) and `sender_id` set to
-the bot's platform user id. Kick: All-Chat Bot posts with the streamer's own Kick
+the bot's platform user id. Twitch answers a message it will not deliver (AutoMod,
+the channel's chat settings, an unverified sender) with 200 and `is_sent=false`; every
+Helix send treats that as a failure with `error_kind` `message_dropped` and logs the
+`drop_reason`. Kick: All-Chat Bot posts with the streamer's own Kick
 token and `type=bot`; a custom bot posts with the bot account's own token and
 `type=user` addressed to the streamer's Kick id. The streamer's Kick token and id
 come from the users row for a Kick-login account and from the linked
@@ -722,8 +735,10 @@ in caesar-deployment (`apps/workloads/all-chat/`):
 - **`/app/retention-sweeper`** (`cmd/retention-sweeper`, `retention-sweeper-cronjob.yaml`,
   every 15 minutes, ADR-0089): deletes rows past the retention periods the privacy policy
   promises. It is the only thing that enforces them. Needs only `DATABASE_URL`; opens one
-  connection; deletes in batches (`--batch-size`, default 1000, `--batch-delay-ms`, default
-  100) with `FOR UPDATE SKIP LOCKED`, so it is safe to re-run and to overlap; logs
+  connection, retrying a failed connect for up to a minute (a fresh pod's IP is not yet in
+  the Postgres NetworkPolicy allow-set when it starts); deletes in batches (`--batch-size`,
+  default 1000, `--batch-delay-ms`, default 100) with `FOR UPDATE SKIP LOCKED`, so it is
+  safe to re-run and to overlap; logs
   `rows_deleted` per table and exits non-zero if any table failed.
 
   | Table | Deleted when |

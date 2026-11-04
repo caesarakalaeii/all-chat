@@ -26,6 +26,7 @@ import (
 	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
 )
@@ -101,7 +102,7 @@ func (r *UserRepository) GetByTwitchID(ctx context.Context, twitchID string) (*m
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE twitch_id = $1
 `
@@ -122,7 +123,7 @@ func (r *UserRepository) GetByGoogleID(ctx context.Context, googleID string) (*m
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE google_id = $1
 `
@@ -150,7 +151,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*models.User, 
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE id = $1
 `
@@ -171,7 +172,7 @@ func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*m
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE LOWER(username) = LOWER($1)
 `
@@ -220,6 +221,46 @@ WHERE id = $1
 	}
 
 	return nil
+}
+
+// ErrPlatformIDTaken means another account already owns the platform id, so it was not
+// recorded on this one.
+var ErrPlatformIDTaken = errors.New("platform id already belongs to another account")
+
+// platformIDColumns maps a platform to its users column. Facebook and Instagram have none.
+var platformIDColumns = map[string]string{
+	"twitch":  "twitch_id",
+	"youtube": "google_id",
+	"kick":    "kick_id",
+}
+
+// SetPlatformID records a linked platform identity on the user, so a later login with that
+// platform finds this account. It only fills an empty column: an id already recorded stays,
+// whichever value it holds. Reports whether the column now holds platformID.
+func (r *UserRepository) SetPlatformID(ctx context.Context, userID, platform, platformID string) (bool, error) {
+	column, ok := platformIDColumns[platform]
+	if !ok || platformID == "" {
+		return false, nil
+	}
+
+	var stored *string
+	err := r.db.QueryRow(ctx,
+		`UPDATE users SET `+column+` = COALESCE(`+column+`, $2), updated_at = NOW()
+		 WHERE id = $1
+		 RETURNING `+column,
+		userID, platformID,
+	).Scan(&stored)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return false, ErrPlatformIDTaken
+		}
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, ErrUserNotFound
+		}
+		return false, fmt.Errorf("failed to set %s: %w", column, err)
+	}
+	return stored != nil && *stored == platformID, nil
 }
 
 // UpdateTokens updates only the OAuth tokens for a user
@@ -293,7 +334,7 @@ func (r *UserRepository) GetByKickID(ctx context.Context, kickID string) (*model
 	query := `
 SELECT id, twitch_id, google_id, kick_id, auth_provider, username, display_name, profile_image_url,
            is_admin, is_premium, is_beta_tester, is_ambassador, is_banned, banned_at, banned_reason, banned_by,
-           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at
+           access_token, refresh_token, token_expires_at, created_at, updated_at, onboarding_completed_at, tos_accepted
 FROM users
 WHERE kick_id = $1
 `
@@ -749,6 +790,26 @@ func (r *UserRepository) SetOnboardingCompleted(ctx context.Context, userID stri
 	return completedAt, nil
 }
 
+// AcceptTos records that the user accepted the current Terms of Service and
+// Privacy Policy. There is no way back to false through the API: the prompt is
+// re-armed only by resetting the column in the database when the terms change.
+func (r *UserRepository) AcceptTos(ctx context.Context, userID string) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE users
+		SET tos_accepted = TRUE,
+		    tos_accepted_at = NOW(),
+		    updated_at = NOW()
+		WHERE id = $1
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("failed to record terms acceptance: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
 func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 	user := &models.User{}
 	var encryptedAccessToken, encryptedRefreshToken string
@@ -760,7 +821,7 @@ func (r *UserRepository) scanUser(row pgx.Row) (*models.User, error) {
 		&user.ID, &user.TwitchID, &user.GoogleID, &user.KickID, &user.AuthProvider, &user.Username, &user.DisplayName,
 		&profileImageURL, &user.IsAdmin, &user.IsPremium, &user.IsBetaTester, &user.IsAmbassador, &user.IsBanned, &user.BannedAt, &user.BannedReason, &user.BannedBy,
 		&encryptedAccessToken, &encryptedRefreshToken,
-		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt, &user.OnboardingCompletedAt,
+		&user.TokenExpiresAt, &user.CreatedAt, &user.UpdatedAt, &user.OnboardingCompletedAt, &user.TosAccepted,
 	)
 	if err != nil {
 		return nil, err
@@ -957,7 +1018,7 @@ SELECT u.id, u.twitch_id, u.google_id, u.kick_id, u.auth_provider, u.username, u
        COALESCE(u.banned_at, bpi.banned_at) AS banned_at,
        COALESCE(u.banned_reason, bpi.reason) AS banned_reason,
        COALESCE(u.banned_by, bpi.banned_by) AS banned_by,
-       u.access_token, u.refresh_token, u.token_expires_at, u.created_at, u.updated_at, u.onboarding_completed_at
+       u.access_token, u.refresh_token, u.token_expires_at, u.created_at, u.updated_at, u.onboarding_completed_at, u.tos_accepted
 FROM users u
 LEFT JOIN LATERAL (
   SELECT bpi.platform_id, bpi.banned_at, bpi.reason, bpi.banned_by

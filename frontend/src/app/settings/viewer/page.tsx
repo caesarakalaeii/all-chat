@@ -281,7 +281,10 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
         onValueChange={(value) => setActiveTab(value as 'solid' | 'gradient')}
         className="mb-4"
       >
-        <TabsList variant="line" className="w-full justify-start border-b border-white/20">
+        <TabsList
+          variant="line"
+          className="w-full justify-start border-b border-lanes-fg-strong/20"
+        >
           <TabsTrigger value="solid">{t('settings.viewer.solidTab')}</TabsTrigger>
           {/* Gating stays on `disabled` rather than on an onClick guard: the
               trigger then reports aria-disabled and drops out of the tab list's
@@ -315,7 +318,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
               type="color"
               value={nameColor}
               onChange={(e) => saveColor(e.target.value)}
-              className="h-10 w-10 cursor-pointer rounded-none border border-white/50 bg-transparent"
+              className="h-10 w-10 cursor-pointer rounded-none border border-lanes-fg-strong/50 bg-transparent"
               aria-label={t('settings.viewer.colorPickerLabel')}
             />
             <Input
@@ -327,7 +330,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
               maxLength={7}
             />
             {savedFeedback && (
-              <span className="ml-2 text-xs text-green-400">
+              <span className="ml-2 text-xs text-success">
                 {t('settings.viewer.savedFeedback')}
               </span>
             )}
@@ -335,10 +338,10 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
           <p className="text-sub mt-2 text-xs">{t('settings.viewer.autoSaveNote')}</p>
 
           {/* Live preview */}
-          <div className="mt-4 border-t border-white/20 pt-4">
+          <div className="mt-4 border-t border-lanes-fg-strong/20 pt-4">
             <p className="text-sub mb-2 text-xs">{t('settings.viewer.previewLabel')}</p>
             <div className="flex items-center gap-2">
-              <div className="text-sub flex h-6 w-6 items-center justify-center rounded-full border border-white/30 text-xs font-medium">
+              <div className="text-sub flex h-6 w-6 items-center justify-center rounded-full border border-lanes-fg-strong/30 text-xs font-medium">
                 {(claims.display_name ?? claims.username ?? 'V').charAt(0).toUpperCase()}
               </div>
               <span className="text-sm font-semibold" style={{ color: nameColor }}>
@@ -365,7 +368,7 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
                     s[i] = e.target.value
                     setGradientStops(s)
                   }}
-                  className="h-8 w-8 cursor-pointer rounded-none border border-white/50"
+                  className="h-8 w-8 cursor-pointer rounded-none border border-lanes-fg-strong/50"
                 />
                 <Input
                   type="text"
@@ -434,14 +437,14 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
                 ? t('settings.viewer.savingGradient')
                 : t('settings.viewer.saveGradient')}
             </button>
-            {gradientError && <span className="text-xs text-red-400">{gradientError}</span>}
+            {gradientError && <span className="text-xs text-destructive">{gradientError}</span>}
           </div>
 
           {/* Live preview */}
-          <div className="mt-4 border-t border-white/20 pt-4">
+          <div className="mt-4 border-t border-lanes-fg-strong/20 pt-4">
             <p className="text-sub mb-2 text-xs">{t('settings.viewer.previewLabel')}</p>
             <div className="flex items-center gap-2">
-              <div className="text-sub flex h-6 w-6 items-center justify-center rounded-full border border-white/30 text-xs font-medium">
+              <div className="text-sub flex h-6 w-6 items-center justify-center rounded-full border border-lanes-fg-strong/30 text-xs font-medium">
                 {(claims.display_name ?? 'V').charAt(0).toUpperCase()}
               </div>
               <span
@@ -639,8 +642,8 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
                 'relative rounded-none border-2 p-1 transition-colors',
                 'focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
                 selectedFrameId === item.id
-                  ? 'border-twitch bg-black'
-                  : 'border-white/30 hover:border-white/70',
+                  ? 'border-twitch bg-lanes-panel'
+                  : 'border-lanes-fg-strong/30 hover:border-lanes-fg-strong/70',
                 item.is_premium && !isPremium && 'cursor-not-allowed opacity-50'
               )}
             >
@@ -652,7 +655,7 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
                   className="h-16 w-16 rounded-none object-contain"
                 />
               ) : (
-                <div className="text-sub flex h-16 w-16 items-center justify-center rounded-none border border-white/30 text-xs">
+                <div className="text-sub flex h-16 w-16 items-center justify-center rounded-none border border-lanes-fg-strong/30 text-xs">
                   {t('settings.viewer.noneItem')}
                 </div>
               )}
@@ -680,8 +683,8 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
                 'relative rounded-none border-2 p-1 transition-colors',
                 'focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
                 selectedFlairId === item.id
-                  ? 'border-twitch bg-black'
-                  : 'border-white/30 hover:border-white/70',
+                  ? 'border-twitch bg-lanes-panel'
+                  : 'border-lanes-fg-strong/30 hover:border-lanes-fg-strong/70',
                 item.is_premium && !isPremium && 'cursor-not-allowed opacity-50'
               )}
             >
@@ -693,7 +696,7 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
                   className="h-16 w-16 rounded-none object-contain"
                 />
               ) : (
-                <div className="text-sub flex h-16 w-16 items-center justify-center rounded-none border border-white/30 text-xs">
+                <div className="text-sub flex h-16 w-16 items-center justify-center rounded-none border border-lanes-fg-strong/30 text-xs">
                   {t('settings.viewer.noneItem')}
                 </div>
               )}
@@ -722,9 +725,9 @@ function AvatarCosmeticsCard({ claims }: { claims: ViewerJWTClaims }) {
           {saving ? t('settings.viewer.saving') : t('settings.viewer.save')}
         </button>
         {savedFeedback && (
-          <span className="text-xs text-green-400">{t('settings.viewer.savedFeedback')}</span>
+          <span className="text-xs text-success">{t('settings.viewer.savedFeedback')}</span>
         )}
-        {saveError && <span className="text-xs text-red-400">{saveError}</span>}
+        {saveError && <span className="text-xs text-destructive">{saveError}</span>}
       </div>
     </div>
   )
@@ -809,7 +812,7 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
     <div className="lanes-panel p-6">
       <h2 className="mb-1 text-lg">{t('settings.viewer.linkedHeading')}</h2>
       <p className="text-sub mb-4 text-sm">{t('settings.viewer.linkedBody')}</p>
-      {fetchError && <p className="mb-3 text-xs text-red-400">{fetchError}</p>}
+      {fetchError && <p className="mb-3 text-xs text-destructive">{fetchError}</p>}
       <div className="flex flex-col gap-3">
         {PLATFORMS.map(({ key, color }) => {
           const isConnected = effectiveLinked.has(key)
@@ -817,7 +820,7 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
           return (
             <div
               key={key}
-              className="flex items-center justify-between rounded-none border border-white/40 px-4 py-3"
+              className="flex items-center justify-between rounded-none border border-lanes-fg-strong/40 px-4 py-3"
             >
               <div className="flex items-center gap-3">
                 <span className={cn('h-3 w-3 rounded-full', color)} aria-hidden="true" />
@@ -825,7 +828,7 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
               </div>
               {isConnected ? (
                 <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-400">
+                  <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-success">
                     {t('settings.viewer.connected')}
                   </span>
                   {/* Cannot disconnect the platform the viewer is currently signed in with */}

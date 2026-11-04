@@ -30,7 +30,9 @@ import (
 // Normalize converts a raw event-typed message into the normalized event
 // payload and sender. The dispatch mirrors the message-processor's
 // cmd/main.go event path: platforms whose normalizer has no event branch
-// (Kick, Discord) return an error rather than an invented EventInfo.
+// (Kick, Discord) return an error rather than an invented EventInfo. System
+// warnings are streamer-only and never pass the consumer, so they have no
+// branch here either.
 //
 // Errors are deterministic for a given message (pure functions of its fields),
 // so callers must treat them as permanent — retrying cannot fix them.
@@ -45,8 +47,6 @@ func Normalize(raw *mpmodels.RawChatMessage) (*mpmodels.EventInfo, mpmodels.User
 		unified, err = mpnormalizer.NewYouTubeNormalizer().NormalizeEvent(raw, raw.OverlayID)
 	case "tiktok":
 		unified, err = mpnormalizer.NewTikTokNormalizer().NormalizeEvent(raw, raw.OverlayID)
-	case "system":
-		unified, err = mpnormalizer.NewSystemNormalizer().NormalizeEvent(raw, raw.OverlayID)
 	default:
 		return nil, mpmodels.UserInfo{}, fmt.Errorf("platform %q has no event normalizer", raw.Platform)
 	}

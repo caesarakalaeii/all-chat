@@ -42,7 +42,7 @@ import { PATREON_JOIN_URL } from '@/lib/constants'
 import { getTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 import type { OverlayType } from '@/lib/types/overlay'
-import type { BetaFeature } from '@/lib/platform-availability'
+import type { EarlyAccessFeature } from '@/lib/platform-availability'
 
 const t = getTranslations()
 
@@ -58,8 +58,8 @@ interface PremiumFeature {
   messageStem: string
   /** Set on a row that advertises an overlay kind; hidden where that kind is beta-only. */
   overlayKind?: OverlayType
-  /** Set on a row that advertises an app feature; hidden where that feature is beta-only. */
-  feature?: BetaFeature
+  /** Set on a row that advertises an app feature; hidden where that feature is not offered. */
+  feature?: EarlyAccessFeature
 }
 
 // Keep in sync with the onboarding extras tour in
@@ -119,7 +119,7 @@ export default function UpgradePage() {
             const { icon: Icon, messageStem } = feature
             const row = (
               <div key={messageStem} className="flex items-start gap-4 p-5">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border-2 border-white text-white">
+                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center border-2 border-lanes-fg-strong text-lanes-fg-strong">
                   <Icon className="h-5 w-5" />
                 </span>
                 <div className="space-y-1">
@@ -151,7 +151,7 @@ export default function UpgradePage() {
           <h2 className="text-lg">{t('marketing.upgrade.howItWorks')}</h2>
           <ol className="space-y-3 text-sm text-text-sub">
             <li className="flex gap-3">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" />
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-lanes-fg-strong" />
               <span>
                 {interpolateElements(t('marketing.upgrade.step1'), {
                   patreon: (
@@ -168,7 +168,7 @@ export default function UpgradePage() {
               </span>
             </li>
             <li className="flex gap-3">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" />
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-lanes-fg-strong" />
               <span>
                 {interpolateElements(t('marketing.upgrade.step2'), {
                   settings: (
@@ -183,7 +183,7 @@ export default function UpgradePage() {
               </span>
             </li>
             <li className="flex gap-3">
-              <Check className="mt-0.5 h-4 w-4 shrink-0 text-white" />
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-lanes-fg-strong" />
               <span>{t('marketing.upgrade.step3')}</span>
             </li>
           </ol>
