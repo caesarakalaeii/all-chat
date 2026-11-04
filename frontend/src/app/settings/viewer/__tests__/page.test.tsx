@@ -26,7 +26,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, cleanup, within } from '@testing-library/react'
 import { expect as jestExpect } from 'vitest'
 import * as matchers from '@testing-library/jest-dom/matchers'
 jestExpect.extend(matchers)
@@ -531,5 +531,83 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
         })
       )
     })
+  })
+})
+
+describe('Viewer Settings Page — delete viewer data (ADR-0088)', () => {
+  const isErase = (url: unknown, init?: RequestInit) =>
+    String(url).endsWith('/api/v1/auth/viewer/me') && init?.method === 'DELETE'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
+
+  async function openConfirmation() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete my viewer data' }))
+    return screen.findByRole('alertdialog')
+  }
+
+  it('asks for confirmation, erases on the server, then signs the viewer out', async () => {
+    const jwt = buildFakeJWT({ viewer_id: 'v-del', display_name: 'Leaving', platform: 'kick' })
+    stubLocalStorage({ viewer_jwt_token: jwt })
+    render(<ViewerSettingsPage />)
+
+    const dialog = await openConfirmation()
+    expect(mockFetch.mock.calls.some(([url, init]) => isErase(url, init))).toBe(false)
+
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Yes, delete my viewer data' }))
+    })
+
+    await waitFor(() => {
+      const call = mockFetch.mock.calls.find(([url, init]) => isErase(url, init))
+      expect(call?.[1]?.headers).toMatchObject({ Authorization: `Bearer ${jwt}` })
+    })
+    await waitFor(() => {
+      expect(screen.getByText('Sign in to manage your viewer identity')).toBeInTheDocument()
+    })
+    expect(localStorage.getItem('viewer_jwt_token')).toBeNull()
+  })
+
+  it('cancelling erases nothing', async () => {
+    stubLocalStorage({
+      viewer_jwt_token: buildFakeJWT({ viewer_id: 'v-stay', platform: 'twitch' }),
+    })
+    render(<ViewerSettingsPage />)
+
+    const dialog = await openConfirmation()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+    expect(mockFetch.mock.calls.some(([url, init]) => isErase(url, init))).toBe(false)
+  })
+
+  it('stays signed in and reports the failure when the server cannot erase', async () => {
+    const jwt = buildFakeJWT({ viewer_id: 'v-err', platform: 'twitch' })
+    stubLocalStorage({ viewer_jwt_token: jwt })
+    mockFetch.mockImplementation((url: unknown, init?: RequestInit) =>
+      Promise.resolve(
+        isErase(url, init)
+          ? { ok: false, status: 500, statusText: 'err', json: () => Promise.resolve({}) }
+          : { ok: true, json: () => Promise.resolve({}) }
+      )
+    )
+    render(<ViewerSettingsPage />)
+
+    const dialog = await openConfirmation()
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Yes, delete my viewer data' }))
+    })
+
+    expect(
+      await screen.findByText('Could not delete your viewer data. Please try again.')
+    ).toBeInTheDocument()
+    expect(localStorage.getItem('viewer_jwt_token')).toBe(jwt)
   })
 })

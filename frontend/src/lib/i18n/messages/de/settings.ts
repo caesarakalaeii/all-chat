@@ -159,6 +159,18 @@ export const settings: LocaleNamespace<'settings'> = {
     disconnecting: 'Verbindung wird getrennt…',
     loadLinkedFailed: 'Verknüpfte Plattformen konnten nicht geladen werden',
     disconnectFailed: 'Plattformverbindung konnte nicht getrennt werden',
+    deleteHeading: 'Zuschauerdaten löschen',
+    deleteBody:
+      'Lösche deine Zuschauer-Identität endgültig: verknüpfte Plattformen, Namensfarbe und Avatar-Kosmetik, Punkte, Umfragestimmen und Vorhersagen in allen Kanälen, die Nachrichten, die du über All-Chat gesendet hast, und deine Zuschauer-Verbindung zu Patreon. Stimmen und Punkte, die du ohne Anmeldung per Chat-Befehl gesammelt hast, gehören dazu. Ein Streamer-Konto, das du hast, bleibt unberührt.',
+    deleteButton: 'Meine Zuschauerdaten löschen',
+    deleteConfirmTitle: 'Deine Zuschauerdaten löschen?',
+    deleteConfirmBody:
+      'Alles Genannte wird sofort gelöscht und du wirst abgemeldet. Das lässt sich nicht rückgängig machen. Eine Patreon-Mitgliedschaft wird dadurch nicht gekündigt; kündige sie bei Patreon. Wenn du weiter in Kanälen chattest, die All-Chat-Umfragen oder -Punkte nutzen, entstehen ab dann neue Daten.',
+    deleteCancel: 'Abbrechen',
+    deleteConfirm: 'Ja, meine Zuschauerdaten löschen',
+    deleting: 'Wird gelöscht…',
+    deleteFailed: 'Deine Zuschauerdaten konnten nicht gelöscht werden. Bitte versuche es erneut.',
+    deletedToast: 'Deine Zuschauerdaten wurden gelöscht',
   },
   apiTokens: {
     heading: 'API-Tokens',

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/media-service/handlers"
+	"github.com/caesar/all-chat/services/media-service/orphans"
 	"github.com/caesar/all-chat/services/media-service/repository"
 	"github.com/caesar/all-chat/services/media-service/storage"
 	sharedAuth "github.com/caesar/all-chat/shared/auth"
@@ -124,27 +125,31 @@ func main() {
 	if err != nil {
 		log.Fatal("Invalid media storage configuration", zap.Error(err))
 	}
+	mediaRepo := repository.NewMediaRepository(dbPool)
+	sweepCtx, stopSweep := context.WithCancel(context.Background())
+	defer stopSweep()
+
 	var objectStore handlers.ObjectStore
 	if storageCfg.Endpoint == "" {
 		log.Warn("MINIO_ENDPOINT not set — media routes will serve 503")
 		objectStore = storage.DisabledStore{}
+	} else if minioStore, err := storage.NewMinioStore(storageCfg); err != nil {
+		// minio.New only parses the endpoint; an error here is a malformed
+		// MINIO_ENDPOINT. Degrade to 503s instead of crash-looping: the
+		// rest of the stack does not depend on this service.
+		log.Error("Failed to build MinIO client — media routes will serve 503", zap.Error(err))
+		objectStore = storage.DisabledStore{}
 	} else {
-		objectStore, err = storage.NewMinioStore(storageCfg)
-		if err != nil {
-			// minio.New only parses the endpoint; an error here is a malformed
-			// MINIO_ENDPOINT. Degrade to 503s instead of crash-looping: the
-			// rest of the stack does not depend on this service.
-			log.Error("Failed to build MinIO client — media routes will serve 503", zap.Error(err))
-			objectStore = storage.DisabledStore{}
-		} else {
-			log.Info("MinIO object store configured",
-				zap.String("endpoint", storageCfg.Endpoint),
-				zap.String("bucket", storageCfg.Bucket),
-			)
-		}
+		objectStore = minioStore
+		log.Info("MinIO object store configured",
+			zap.String("endpoint", storageCfg.Endpoint),
+			zap.String("bucket", storageCfg.Bucket),
+		)
+		// Files whose registry row is gone (deleted by the user, or with the account)
+		// leave the public-read bucket within one interval (ADR-0088).
+		go orphans.Run(sweepCtx, storageCfg.OrphanSweepInterval, minioStore, mediaRepo, log)
 	}
 
-	mediaRepo := repository.NewMediaRepository(dbPool)
 	mediaHandler := handlers.NewMediaHandler(mediaRepo, objectStore, handlers.MediaConfig{
 		PublicBaseURL:     storageCfg.PublicBaseURL,
 		PresignExpiry:     storageCfg.PresignExpiry,

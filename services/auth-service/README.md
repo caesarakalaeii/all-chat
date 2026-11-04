@@ -261,6 +261,46 @@ Body: { "completed": true }
 POST /api/v1/auth/me/tos-acceptance
 Authorization: Bearer <jwt-token>
 → Returns: { "tos_accepted": true }
+
+# Delete the account (ADR-0088). Session only: a personal access token is refused (403).
+DELETE /api/v1/auth/me
+Authorization: Bearer <jwt-token>
+→ Returns: { "message": "Account deleted successfully" }
+```
+
+### Erasure (ADR-0088)
+
+`DELETE /api/v1/auth/me` runs one transaction (`repository/erasure.go`). It deletes the
+`users` row, and the foreign keys take everything keyed to the account or its overlays
+with it (`ON DELETE CASCADE`). Where another person's record must survive, the key is
+`SET NULL` instead: a ban outlives the admin who issued it (migration 119). The
+transaction also erases what has no foreign key to cascade through:
+
+- the user's own viewer identity: every viewer mapped to a platform account the user has
+  proven it controls (its login ids, the Twitch, Kick and YouTube accounts it connected,
+  the viewer sessions the viewer callback linked to it), with all of that viewer's data
+  (see below);
+- the overlays' alert history (`alert_events`) and YouTube quota bookkeeping
+  (`youtube_quota_audit_log`, `youtube_channel_quota`).
+
+The moderation audit log (`moderation_actions`) is kept: it must survive account
+deletion for abuse forensics (ADR-0017). Uploaded media files are removed from the
+bucket by media-service's orphan sweep once their `media_objects` rows are gone.
+
+`DELETE /api/v1/auth/viewer/me` erases the signed-in viewer's own data: the `viewers` row
+and, through it, every linked platform identity, cosmetics, points balances and ledger,
+poll votes, prediction wagers and the viewer Patreon token and subscription, plus every
+viewer session (tokens) of those identities and the messages sent through them
+(`viewer_message_history`). It also covers a viewer engagement-service created without a
+login, for someone who voted, bet or earned points by chat command: viewer login resolves
+the same `(platform, platform_user_id)` row. Open polls and predictions are tallied from
+the remaining rows. Viewer JWT only (a streamer token is 401); the bearer token is
+revoked after the erasure commits, and the `viewer:identity:*` cache is dropped.
+
+```bash
+DELETE /api/v1/auth/viewer/me
+Authorization: Bearer <viewer-jwt>
+→ 200 { "message": "Viewer data deleted" }
 ```
 
 ### Data export (DSGVO Art. 15/20)
@@ -600,6 +640,11 @@ go test ./... -cover
 go test ./oauth -v
 go test ./handlers -v
 go test ./repository -v
+
+# Erasure tests (ADR-0088) against a real Postgres with every migration applied
+# (CI's integration job does this):
+TEST_DATABASE_URL=postgres://allchat:allchat_dev_password@localhost:5432/allchat \
+  go test -tags=integration -run TestErase ./repository/
 ```
 
 The data-export tests apply the full migration set to a fresh database on a
