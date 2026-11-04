@@ -445,7 +445,10 @@ spec:
 | **YouTube quota audit log, alert events** | 30 days | retention-sweeper |
 | **Moderation actions** | 90 days | retention-sweeper |
 | **Abandoned device-link requests** | 1 hour after expiry | retention-sweeper |
-| **Logs** | 30 days | Automatic deletion (Loki retention) |
+| **Logs** | 7 days (Loki `retention_period: 168h` in caesar-deployment) | Automatic deletion (Loki compactor) |
+| **Client IPs in service logs** | As logs; anonymised before logging (IPv4 last octet zeroed, IPv6 cut to /48) | Go services log only `shared/middleware.AnonymizeIP` output; gin services use `middleware.GinAccessLog()`, never `gin.Logger()`, which prints the full IP from the forwarded `X-Forwarded-For` |
+| **Client IPs in rate-limit keys** | Until the end of the one-minute window | Redis key expiry (`shared/ratelimit`, emote-service) |
+| **Client IPs in the edge access log** | Not recorded | The `public` EnvoyProxy in caesar-deployment (`apps/infrastructure/gateway/gateway.yaml`) sets an access-log format without `x-forwarded-for`, client addresses or query strings |
 | **Metrics** | 90 days | Automatic deletion (Prometheus retention) |
 | **Overlays** | Until user deletion | Cascade delete (FK constraint) |
 

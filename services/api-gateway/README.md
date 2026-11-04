@@ -301,7 +301,7 @@ The gateway logs all requests with:
 - Method and path
 - Response status code
 - Latency
-- Client IP
+- Client IP, anonymised (IPv4 last octet zeroed, IPv6 cut to /48; `shared/middleware.AnonymizeIP`)
 - User agent
 
 **Example Log**:
@@ -314,7 +314,7 @@ The gateway logs all requests with:
   "path": "/api/v1/overlays",
   "status": 200,
   "latency": "15ms",
-  "client_ip": "192.168.1.1"
+  "client_ip": "192.168.1.0"
 }
 ```
 

@@ -159,9 +159,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
-		SkipPaths: []string{"/health/live", "/health/ready"},
-	}))
+	router.Use(middleware.GinAccessLog())
 
 	router.GET("/health/live", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "alive"})

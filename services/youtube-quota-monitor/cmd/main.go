@@ -38,6 +38,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/quota"
 
 	"github.com/gin-gonic/gin"
@@ -101,7 +102,7 @@ func main() {
 	}
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipPaths: []string{"/health/live", "/health/ready"}}))
+	router.Use(middleware.GinAccessLog())
 
 	health := handlers.NewHealthHandler(dbPool, redisClient)
 	status := handlers.NewStatusHandler(mon)
