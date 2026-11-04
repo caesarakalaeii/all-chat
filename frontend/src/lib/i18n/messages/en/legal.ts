@@ -86,7 +86,7 @@ export const legal = {
   // heading, paragraph, list item and legal basis, and nothing reworded.
   privacy: {
     title: 'Privacy Policy (Datenschutzerklärung)',
-    lastUpdated: 'November 3, 2026',
+    lastUpdated: 'November 4, 2026',
     // Every DSGVO article reference carries a U+00A0 from an &nbsp; entity.
     // It is part of the rendered text, so it stays escaped here to be
     // visible to a reviewer.
@@ -223,7 +223,7 @@ export const legal = {
       'If you are an ambassador and opt in to the public showcase: your username, display name, profile image, platform and tagline, shown publicly on allch.at',
     // 2.4
     viewerAccountBody:
-      'Viewers can sign in with Twitch, YouTube or Kick through the browser extension, the participation page or the viewer settings. For each sign-in we keep a session record with the platform user ID, username, display name, avatar and encrypted tokens (Twitch: no extra permissions; YouTube: read-only access and basic profile; Kick: basic profile) and counters of the chat messages you send, for rate limiting; signing out deletes it. We also store the name color, avatar frame, flair and viewer premium status you have. Unlinking a platform deletes its tokens and revokes them at the platform.',
+      'Viewers can sign in with Twitch, YouTube or Kick through the browser extension, the participation page or the viewer settings. For each sign-in we keep a session record with the platform user ID, username, display name, avatar and encrypted tokens (Twitch: no extra permissions; YouTube: read-only access and basic profile; Kick: basic profile) and counters of the chat messages you send, for rate limiting; signing out deletes it. We also store the name color, avatar frame, flair and viewer premium status you have. Unlinking a platform deletes its session record, tokens included, and revokes the tokens at the platform.',
     viewerStreamerLink:
       'If you sign in as a viewer with the same platform account that you use as a streamer on All-Chat, we link the viewer session to your streamer account automatically, so your viewer profile carries your premium status.',
     viewerIdentityBody:
@@ -412,7 +412,7 @@ export const legal = {
       '{label} deleted when you disconnect the platform or Patreon in the Settings, remove a custom bot account, unlink a platform in the viewer settings, or delete your account or your viewer data; the platform you sign in with stays connected until you delete your account. Deleting your account does not revoke the tokens at the platforms; to withdraw the grant there too, remove All-Chat from the connected apps of your platform account',
     retentionTokensLabel: 'OAuth tokens:',
     retentionSessions:
-      '{label} the streamer sign-in cookie expires after 24 hours and the refresh token that renews it after 14 days; a viewer session is kept until you sign out or delete your viewer data',
+      '{label} the streamer sign-in cookie expires after 24 hours and the refresh token that renews it after 14 days; a viewer session is kept until you sign out, unlink that platform or delete your viewer data',
     retentionSessionsLabel: 'Sign-in sessions:',
     retentionAccessTokens:
       '{label} unused pairing requests are deleted one hour after they expire; personal access tokens and paired devices are kept until you revoke them or delete your account',
@@ -547,7 +547,7 @@ export const legal = {
   // are contractual statements, and a reworded term is a different term.
   terms: {
     title: 'Terms of Service (Nutzungsbedingungen)',
-    lastUpdated: 'November 3, 2026',
+    lastUpdated: 'November 4, 2026',
     acceptanceHeading: '1. Acceptance of Terms',
     // The <Link> to the privacy policy sits mid-sentence, so the sentence is
     // whole with the link text as a param. Same shape throughout this section.

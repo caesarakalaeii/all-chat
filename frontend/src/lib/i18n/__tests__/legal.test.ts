@@ -181,7 +181,7 @@ describe('impressum fallback copy', () => {
 describe('privacy policy copy', () => {
   it('keeps every privacy policy string whole', () => {
     expect(t('legal.privacy.title')).toBe('Privacy Policy (Datenschutzerklärung)')
-    expect(t('legal.privacy.lastUpdated')).toBe('November 3, 2026')
+    expect(t('legal.privacy.lastUpdated')).toBe('November 4, 2026')
     expect(t('legal.privacy.controllerHeading')).toBe(
       '1. Controller (Verantwortlicher, Art.\u00A04 Nr.\u00A07 DSGVO)'
     )
@@ -363,7 +363,7 @@ describe('privacy policy copy', () => {
       'If you are an ambassador and opt in to the public showcase: your username, display name, profile image, platform and tagline, shown publicly on allch.at'
     )
     expect(t('legal.privacy.viewerAccountBody')).toBe(
-      'Viewers can sign in with Twitch, YouTube or Kick through the browser extension, the participation page or the viewer settings. For each sign-in we keep a session record with the platform user ID, username, display name, avatar and encrypted tokens (Twitch: no extra permissions; YouTube: read-only access and basic profile; Kick: basic profile) and counters of the chat messages you send, for rate limiting; signing out deletes it. We also store the name color, avatar frame, flair and viewer premium status you have. Unlinking a platform deletes its tokens and revokes them at the platform.'
+      'Viewers can sign in with Twitch, YouTube or Kick through the browser extension, the participation page or the viewer settings. For each sign-in we keep a session record with the platform user ID, username, display name, avatar and encrypted tokens (Twitch: no extra permissions; YouTube: read-only access and basic profile; Kick: basic profile) and counters of the chat messages you send, for rate limiting; signing out deletes it. We also store the name color, avatar frame, flair and viewer premium status you have. Unlinking a platform deletes its session record, tokens included, and revokes the tokens at the platform.'
     )
     expect(t('legal.privacy.viewerStreamerLink')).toBe(
       'If you sign in as a viewer with the same platform account that you use as a streamer on All-Chat, we link the viewer session to your streamer account automatically, so your viewer profile carries your premium status.'
@@ -631,7 +631,7 @@ describe('privacy policy copy', () => {
     )
     expect(t('legal.privacy.retentionTokensLabel')).toBe('OAuth tokens:')
     expect(t('legal.privacy.retentionSessions')).toBe(
-      '{label} the streamer sign-in cookie expires after 24 hours and the refresh token that renews it after 14 days; a viewer session is kept until you sign out or delete your viewer data'
+      '{label} the streamer sign-in cookie expires after 24 hours and the refresh token that renews it after 14 days; a viewer session is kept until you sign out, unlink that platform or delete your viewer data'
     )
     expect(t('legal.privacy.retentionSessionsLabel')).toBe('Sign-in sessions:')
     expect(t('legal.privacy.retentionAccessTokens')).toBe(
@@ -833,7 +833,7 @@ describe('privacy policy copy', () => {
 describe('terms of service copy', () => {
   it('keeps every terms of service string whole', () => {
     expect(t('legal.terms.title')).toBe('Terms of Service (Nutzungsbedingungen)')
-    expect(t('legal.terms.lastUpdated')).toBe('November 3, 2026')
+    expect(t('legal.terms.lastUpdated')).toBe('November 4, 2026')
     expect(t('legal.terms.acceptanceHeading')).toBe('1. Acceptance of Terms')
     expect(t('legal.terms.acceptanceBody')).toBe(
       'By accessing or using All-Chat you agree to these Terms of Service and our {privacy}. If you disagree with any part, you should discontinue use immediately.'
