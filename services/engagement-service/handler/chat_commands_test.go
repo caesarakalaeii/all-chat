@@ -163,6 +163,9 @@ func TestChatCommandsValidation(t *testing.T) {
 		`{"kind":"command","trigger":"!x","response":"` + strings.Repeat("y", 2001) + `","min_role":"everyone"}`,
 		`{"kind":"command","trigger":"!x","image_url":"` + strings.Repeat("y", 1001) + `","min_role":"everyone"}`,
 		`{"kind":"command","trigger":"!x","image_url":"   ","min_role":"everyone"}`,
+		`{"kind":"command","trigger":"!x","sound_url":"http://media.example.com/a.mp3","min_role":"everyone"}`,
+		`{"kind":"command","trigger":"!x","sound_url":"not a url","min_role":"everyone"}`,
+		`{"kind":"command","trigger":"!x","alert_text":"` + strings.Repeat("y", 501) + `","min_role":"everyone"}`,
 	}
 	for _, body := range bad {
 		assert.Equal(t, http.StatusBadRequest, do(r, http.MethodPost, "/chat-commands", body).Code, body[:min(len(body), 80)])
@@ -171,6 +174,10 @@ func TestChatCommandsValidation(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", ok).Code)
 	imageOnly := `{"kind":"command","trigger":"!hype","image_url":"https://img.example.com/hype.gif","min_role":"everyone"}`
 	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", imageOnly).Code)
+	soundOnly := `{"kind":"command","trigger":"!bark","sound_url":"https://media.example.com/bark.mp3","min_role":"everyone"}`
+	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", soundOnly).Code)
+	textOnly := `{"kind":"command","trigger":"!wave","alert_text":"{user} waves","min_role":"everyone"}`
+	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", textOnly).Code)
 }
 
 func TestChatCommandsCap(t *testing.T) {

@@ -156,8 +156,27 @@ primitive's styling on someone else's element:
 
 ## Layer 2: tokens
 
-Defined in the `@theme` block of `src/app/globals.css`. Dark-only; there is no
-light theme for app chrome.
+Defined in the `@theme` block of `src/app/globals.css`. Dark is the default;
+the light theme (ADR-0087) restates the semantic tokens under
+`:root[data-theme='light']`, switched by the toggle in every site nav. Use a
+token and both themes are handled for you; a literal colour is dark-only and
+disappears or fails contrast in light.
+
+### Light theme rules
+
+- **Every new token needs a light value** in the `:root[data-theme='light']`
+  block. `token-contrast.test.ts` runs every contrast assertion for both themes.
+- **Lanes pages** (`.lanes-app`, `.lanes-home`) paint with the lanes role
+  colours, not `#fff`/`#000` or `text-white`/`border-white/20`: in CSS
+  `var(--lanes-fg)`, `--lanes-fg-strong`, `--lanes-fg-dim`, `--lanes-page`,
+  `--lanes-panel`; in markup `text-lanes-fg`, `border-lanes-fg-strong/20`,
+  `bg-lanes-panel`. White on a coloured fill (a red danger button, a brand
+  sign-in button) is the exception and stays literal.
+- **Broadcast art stays dark**: anything that shows what viewers see on stream
+  (a chat-theme preview, a stream mockup) gets the `theme-dark` class, which
+  restates the dark values for its subtree. OBS overlay routes (`/overlay/*`)
+  and the editor's preview iframes (`/overlays/[id]/preview/*`) never take the
+  site theme at all (`lib/theme.ts`).
 
 ### Colour
 
@@ -187,6 +206,8 @@ design system. They are unverified for contrast and drift apart across files.
 `gray-*` and `slate-*` are lint errors; the rest are on their way out (ADR-0056).
 
 Reach for the status token instead. `text-red-400` → `text-destructive`.
+They also fail in the light theme: a 400 shade tuned to read on near-black is
+about 3:1 on white. The status tokens carry a light value.
 
 ### Type, spacing, radius
 

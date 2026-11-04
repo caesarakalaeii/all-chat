@@ -376,7 +376,7 @@ The service publishes messages to Redis Stream `chat:raw` in the following forma
 
 ## Health Endpoints
 
-- `GET /health/live` - Liveness probe (always returns 200)
+- `GET /health/live` - Liveness probe (503 once the Redis client has been not-ready for 2 minutes, so the kubelet restarts a pod whose client stopped reconnecting)
 - `GET /health/ready` - Readiness probe (checks Redis connection)
 - `GET /status` - Service status with active stream count
 

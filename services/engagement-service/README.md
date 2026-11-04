@@ -69,7 +69,7 @@ mp forwarder: message on a listed channel ──XADD chatcmd:jobs (roles, displa
 chatcmd consumer (NOACK, at most once): match → min_role → echo guard → per-message dedup → cooldown
    ├─ create_clip → auth-service POST /internal/twitch/clip  (Twitch, clips:edit)
    ├─ response    → render template → auth-service POST /internal/chat/bot-send (purpose=command, origin platform)
-   └─ image_url   → render (no chatter input) → PUBLISH overlay:{id}:alerts, one per alerts overlay
+   └─ alert       → image_url (no chatter input), sound_url, alert_text → PUBLISH overlay:{id}:alerts, one per alerts overlay
 ```
 
 - **Who can use it.** `min_role`: everyone < subscriber < vip < moderator < broadcaster. Roles come from Twitch/Kick badges and YouTube owner/moderator/member flags; TikTok and Discord chatters count as everyone.
@@ -78,12 +78,12 @@ chatcmd consumer (NOACK, at most once): match → min_role → echo guard → pe
 - **Loop guard.** Each sent reply is remembered for 60s (`chatcmd:echo:*`); a message with that text cannot fire a command, so a reply containing its own keyword does not answer itself.
 - **Templates** (`chatcmd/`): `{user}` `{touser}` `{query}` `{1}`…`{9}` `{count}` `{random 1 6}` `{pick a | b}` `{time Europe/Berlin}` `{platform}` `{channel}` `{clip}`, `{urlfetch https://…}` and `{js …}`. JavaScript runs in QuickJS (`modernc.org/quickjs`) with no host functions, 100 ms of eval time for all blocks of a reply, 16 MB memory, 256 KB stack; chat input reaches it as data, never as code. A failing block renders `[js error]`.
 - **urlfetch** (ADR-0080): inserts a response body (trimmed, ≤ 32 KB). Only https on port 443, no credentials, ≤ 3 per reply, 3 s each, through `shared/safehttp`, which refuses every non-public address at dial time (also on redirects). Variables inside the URL are query-escaped. Inside `{js}` the body arrives as a string literal (`null` on failure), so `JSON.parse({urlfetch …})` works. A failure renders `[urlfetch error]`.
-- **Images** (ADR-0080): `image_url` is a template rendered with the chatter's input withheld; when it yields an https URL, every alerts overlay of the streamer shows a `chat_command` alert with that image (the overlay's alert profile sets duration, sound and text). Like a clip, it fires from any chat in the streamer's overlays.
+- **Alerts** (ADR-0080): a command's alert is its `image_url` (a template rendered with the chatter's input withheld, kept only when it yields an https URL), its `sound_url` (an https URL, migration 123) and its `alert_text` (a template rendered like the reply, migration 123). When any of them is set, every alerts overlay of the streamer shows a `chat_command` alert carrying them; they override the overlay's `chat_command` profile, which still sets duration, volume, custom code and the text when the command has none. Like a clip, it fires from any chat in the streamer's overlays.
 
 | Method + Path | Auth | Purpose |
 |---|---|---|
 | `GET /chat-commands` | streamer | the streamer's commands + `status` (premium, Twitch send/clip grants, `consent_overlay_id` for the grant flow) |
-| `POST /chat-commands` | streamer · `chat_commands` gate | create (`kind`, `trigger`, `response`, `create_clip`, `image_url`, `min_role`, `cooldown_seconds`, `enabled`); max 100 per streamer |
+| `POST /chat-commands` | streamer · `chat_commands` gate | create (`kind`, `trigger`, `response`, `create_clip`, `image_url`, `sound_url`, `alert_text`, `min_role`, `cooldown_seconds`, `enabled`); max 100 per streamer |
 | `PUT /chat-commands/:cid` | streamer · `chat_commands` gate | replace a command |
 | `DELETE /chat-commands/:cid` | streamer | delete (never gated) |
 | `POST /chat-commands/preview` | streamer | render a `response` and `image` against sample `input` without sending (urlfetch really fetches); returns `output`, `image` + `errors` |
@@ -109,9 +109,6 @@ A streamer's timers (`chat_timers`, migration 116) post a recurring rendered mes
 
 Same scope/device/gate rules as the command writes; the GETs and the delete stay ungated.
 
-
-Writes take the `engagement:write` PAT scope; paired devices are refused (the routes have no overlay to bind to). The `chat_commands` gate is enforced on both dimensions (`RequireEarlyAccess` and `RequirePremium`) and seeded `early_access=TRUE, is_premium=FALSE`: beta testers and ambassadors only, free. Flip `early_access` off in the admin feature-gates UI to open it to everyone with no redeploy. The only paid part is the YouTube reply check above.
-
 ## Configuration
 
 `PORT` (8093), `DATABASE_*`, `REDIS_*`, `JWT_SECRET`/`JWT_SECRET_V1`, `ENGAGEMENT_RATE_PER_MIN` (120), `ENGAGEMENT_IDEMPOTENCY_TTL_SECONDS` (60), `ENGAGEMENT_SWEEP_INTERVAL_SECONDS` (10), `AUTH_SERVICE_URL` + `SERVICE_JWT_SECRET_V1` (announcements, chat command replies and clips; without them those are disabled). No platform API credentials: this service never calls a platform API itself, every post or clip goes through auth-service's internal routes.
@@ -120,5 +117,5 @@ Writes take the `engagement:write` PAT scope; paired devices are refused (the ro
 
 - `go test ./...` — payout conservation/rounding, command grammar, earn rules.
 - End-to-end (Postgres + Redis + binary): apply migrations 068–074, seed an overlay/source/poll, `XADD engagement:commands` a `!vote`, assert `poll_votes`; `PUBLISH engagement:events` a bits event, assert `viewer_points`. See the plan for the full recipe.
-- Integration (`go test -tags=integration ./repository/...`, needs Postgres with 068–074, 113, 114, 115 and 116): B1 IDOR, H1 cross-economy wager, P0-1 migration re-run over multi-overlay data, P2-1 round-independent wager dedup, P2-2 active-flag reconcile set, P2-4 sweep-cancel override, chat command CRUD, chat timer CRUD and claims, image-only commands, alerts overlay lookup and channel ownership.
-- `go test ./chatcmd/ ./consumer/ ./handler/` covers the template engine, JS sandbox limits, urlfetch rules and escaping, image rendering, matching and roles, and the chat command consumer (roles, cooldown, dedup, echo guard, YouTube premium, clips, image alerts) against miniredis.
+- Integration (`go test -tags=integration ./repository/...`, needs Postgres with 068–074 and 113–116, 123): B1 IDOR, H1 cross-economy wager, P0-1 migration re-run over multi-overlay data, P2-1 round-independent wager dedup, P2-2 active-flag reconcile set, P2-4 sweep-cancel override, chat command CRUD, chat timer CRUD and claims, image-only and sound/text-only commands, alerts overlay lookup and channel ownership.
+- `go test ./chatcmd/ ./consumer/ ./handler/` covers the template engine, JS sandbox limits, urlfetch rules and escaping, image rendering, matching and roles, and the chat command consumer (roles, cooldown, dedup, echo guard, YouTube premium, clips, image, sound and text alerts) against miniredis.

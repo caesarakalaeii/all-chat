@@ -19,18 +19,18 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useFeatureAvailable, type BetaFeature } from '@/lib/platform-availability'
+import { useFeatureAvailable, type EarlyAccessFeature } from '@/lib/platform-availability'
 
 /**
- * Renders its children only where `feature` may be offered (beta-only features
- * are hidden outside beta.allch.at). For server components, which cannot call the
- * hook themselves.
+ * Renders its children only where `feature` may be offered (early-access features
+ * are hidden outside beta.allch.at from users without early access). For server
+ * components, which cannot call the hook themselves.
  */
 export function FeatureOffered({
   feature,
   children,
 }: {
-  feature: BetaFeature
+  feature: EarlyAccessFeature
   children: ReactNode
 }) {
   return useFeatureAvailable()(feature) ? children : null

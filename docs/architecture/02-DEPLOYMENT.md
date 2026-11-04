@@ -41,8 +41,8 @@ All-Chat is designed as a **Kubernetes-native** application, leveraging Kubernet
 - **Platform**: Hetzner VPS with Kubernetes
 - **Storage**: node-local `local-path` volumes (no CSI snapshots)
 - **Backups**: Postgres WAL + nightly base backups to Hetzner Object Storage
-  (30-day PITR window), silo alert media mirrored nightly to the same store;
-  the Backblaze B2 copy is paused. See ADR-0003 → Backups.
+  (30-day PITR window), silo alert media mirrored nightly; both copied on to
+  Backblaze B2. See ADR-0003 → Backups.
 - **Cost**: ~€50-100/month
 
 **Phase 2+ - Production Scale**:
@@ -920,7 +920,7 @@ spec:
       memory: "4Gi"
 
   # WAL archiving + base backups through the Barman Cloud plugin; the
-  # ObjectStore, ScheduledBackup and media mirror are in caesar-deployment
+  # ObjectStore, ScheduledBackup and B2 mirror are in caesar-deployment
   # (ADR-0003 → Backups).
   plugins:
     - name: barman-cloud.cloudnative-pg.io

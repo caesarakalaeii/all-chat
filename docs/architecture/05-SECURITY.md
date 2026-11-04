@@ -413,6 +413,7 @@ func (r *PostgresOverlayRepository) GetByID(ctx context.Context, id string) (*do
 | Data Type | Encryption Method | Key Management |
 |-----------|-------------------|----------------|
 | **OAuth Tokens** | AES-256-GCM | Kubernetes Secret (encryption key) |
+| **Discord relay webhook URLs** (`overlay_chat_sources.config.relay_webhook_url`, ADR-0091) | AES-256-GCM, same versioned key; never returned by the API | Kubernetes Secret (`TOKEN_ENCRYPTION_KEY_V<n>` on discord-listener) |
 | **User Passwords** | N/A (OAuth only, no passwords) | N/A |
 | **Database** | PostgreSQL TDE (Transparent Data Encryption) | Cloud KMS (AWS RDS encryption) |
 | **Redis** | Redis encryption at rest (cloud provider) | Cloud KMS |

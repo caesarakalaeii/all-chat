@@ -140,7 +140,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Date**: 2025-11-11
 **Problem**: PostgreSQL in Kubernetes needs high availability, automated failover and backups, and the team prefers declarative configuration with minimal manual operations.
 **Decision**: Use the CloudNativePG operator; the team already had production experience with it. The CNPG `Cluster` manifest (`allchat-cluster`, 3 instances) is owned by the deployment pipeline, not this repo.
-**Impact**: Operator-driven failover measured at roughly 22 seconds in early deploys, Prometheus metrics out of the box, and connection budgets via `shared/database` (per ADR-0039) with `max_connections` raised to 300; WAL archiving and nightly base backups go to Hetzner Object Storage through the Barman Cloud plugin (30-day PITR window); the Backblaze B2 copy is paused.
+**Impact**: Operator-driven failover measured at roughly 22 seconds in early deploys, Prometheus metrics out of the box, and connection budgets via `shared/database` (per ADR-0039) with `max_connections` raised to 300; WAL archiving and nightly base backups go to Hetzner Object Storage through the Barman Cloud plugin (30-day PITR window), copied on to Backblaze B2.
 **→ Read**: [0003-cloudnative-postgres.md](./0003-cloudnative-postgres.md)
 
 ---
@@ -304,7 +304,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Status**: ✅ Accepted (revised 2026-11-03)
 **Date**: 2026-06-20
 **Problem**: `users.is_premium` could only be set by an admin; there was no self-serve monetization. We want users to unlock premium by backing All-Chat's own Patreon, an external provider granting and revoking an internal entitlement automatically and reliably, without breaking the admin grant or the premium read path.
-**Decision**: A new `payment-service` (Patreon OAuth connect, HMAC-MD5-verified membership webhooks, reconcile backstop) with `users.is_premium` derived: tri-state `premium_admin_override` first (grant→TRUE, revoke→NULL, FALSE reserved for a force-deny), else an active subscription; recomputed transactionally by `shared/premium.RecomputePremium` on any input change. Identity via Patreon OAuth user id, membership against the single campaign, active status from Patreon's own grace-aware signal, single-replica reconcile (the derivation also ORs in `is_beta_tester` since ADR-0020 and counts an expired override as absent since ADR-0027).
+**Decision**: A new `payment-service` (Patreon OAuth connect, HMAC-MD5-verified membership webhooks, reconcile backstop) with `users.is_premium` derived: tri-state `premium_admin_override` first (grant→TRUE, revoke→NULL, FALSE reserved for a force-deny), else an active subscription; recomputed transactionally by `shared/premium.RecomputePremium` on any input change. Identity via Patreon OAuth user id (a membership is linked to an account only while that Patreon account is connected; disconnecting deletes it), membership against the single campaign, active status from Patreon's own grace-aware signal, single-replica reconcile (the derivation also ORs in `is_beta_tester` since ADR-0020 and counts an expired override as absent since ADR-0027).
 **Impact**: Premium readers unchanged; admin comps survive subscription lapses and payment never clobbers admin decisions; the convergent, idempotent write path tolerates webhook loss and races; the new inbound surface is isolated in its own service. Patreon-only (Ko-fi was considered and rejected; it was never built).
 **→ Read**: [0018-premium-entitlements-via-patreon.md](./0018-premium-entitlements-via-patreon.md)
 
@@ -774,7 +774,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Date**: 2026-10-01
 **Problem**: Event data already flows through `chat:raw` as event-typed messages (Twitch/YouTube/TikTok listeners), but nothing routes it to a non-chat rendering surface, keeps event history, or holds streamer-uploaded alert media — and the chat pipeline must not grow a second job.
 **Decision**: Three new overlay kinds (`overlays.overlay_type` 'alerts'/'goal'/'list', default 'chat'); a separate **alert-processor** consuming `chat:raw` with its own consumer group `alert-processors`, normalizing via the message-processor's own normalizers (one-direction import), routing to alert-capable overlays, persisting to `alert_events`, publishing to `overlay:{id}:alerts`, and scoring `list` leaderboards — with idempotency as a first-class contract (deterministic UUIDv5 alert ids + ON CONFLICT DO NOTHING for history, per-alert SET NX claim inside one atomic Lua script for boards, ACK only after persist+publish). Alert media in single-node MinIO (public-read behind `media.allch.at`, presigned direct uploads, unguessable `{user_id}/{uuid}/{filename}` keys, `media_objects` index, 10 MiB cap).
-**Impact**: Alert features land without touching listeners or the chat pipeline; a broken alert-processor degrades to "no alerts", never "no chat"; redelivery can animate an alert twice (accepted, cosmetic) but never double-writes history or double-counts a board; single-node MinIO defers distribution/replication as follow-ups, and its bucket is mirrored nightly to Hetzner Object Storage.
+**Impact**: Alert features land without touching listeners or the chat pipeline; a broken alert-processor degrades to "no alerts", never "no chat"; redelivery can animate an alert twice (accepted, cosmetic) but never double-writes history or double-counts a board; single-node MinIO defers distribution/replication as follow-ups, and its bucket is mirrored nightly to Hetzner Object Storage and Backblaze B2.
 **→ Read**: [0068-event-alerts-platform.md](./0068-event-alerts-platform.md)
 
 ---
@@ -902,10 +902,10 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ### ADR-0080: Chat Command urlfetch and Images, With a Guarded Outbound HTTP Client
 
-**Status**: ✅ Accepted (revised 2026-11-03)
+**Status**: ✅ Accepted (revised 2026-11-04)
 **Date**: 2026-10-22
 **Problem**: ADR-0079 left out Nightbot's `$(urlfetch)` because a server-side fetch of a user-chosen URL is an SSRF surface in a cluster whose egress is open (any pod can reach private ranges and the metadata endpoint), and streamers also want a command to put an image on stream in chats that only accept text.
-**Decision**: `{urlfetch}` runs on the server behind new `shared/safehttp`: its dialer refuses every IP that is not public unicast after DNS resolution (covering DNS rebinding and redirects), the client never uses a proxy and follows at most 3 redirects. The URL must be https on port 443, no credentials, at most 2048 bytes, same at every hop, variables query-escaped, at most 3 fetches per render, 3 s each, 32 KB body; inside `{js}` the body enters as a string literal or `null`, and the JS budget now counts only time in `Eval`. The preview really fetches under the per-user rate limit. A command's `image_url` (migration 114) is rendered with chatter input withheld, becomes an `image_url` override on a `chat_command` alert on the owner's alerts overlays, and fires from any chat in the streamer's overlays. The Owncast listener (its instance URL is user input) uses the client and dialer now.
+**Decision**: `{urlfetch}` runs on the server behind new `shared/safehttp`: its dialer refuses every IP that is not public unicast after DNS resolution (covering DNS rebinding and redirects), the client never uses a proxy and follows at most 3 redirects. The URL must be https on port 443, no credentials, at most 2048 bytes, same at every hop, variables query-escaped, at most 3 fetches per render, 3 s each, 32 KB body; inside `{js}` the body enters as a string literal or `null`, and the JS budget now counts only time in `Eval`. The preview really fetches under the per-user rate limit. A command's `image_url` (migration 114) is rendered with chatter input withheld, becomes an `image_url` override on a `chat_command` alert on the owner's alerts overlays, and fires from any chat in the streamer's overlays. Since migration 123 a command also carries its own alert `sound_url` and `alert_text`, overriding the profile's sound and text the same way, so each command is its own alert and a sound alone is enough. The Owncast listener (its instance URL is user input) uses the client and dialer now.
 **Impact**: Our servers fetch third-party URLs for streamers (a fetch-heavy command adds up to about 9 s; the User-Agent identifies the feature and cooldowns plus the preview rate limit bound volume), and images need an alerts overlay, which is premium-gated. Any new code dialing a user-chosen URL must use `shared/safehttp`; a local Owncast on a private address is now refused. ADR-0081 later added the `custom_chat_bot` gate; timers and custom bots arrived separately.
 **→ Read**: [0080-chat-command-urlfetch-and-images.md](./0080-chat-command-urlfetch-and-images.md)
 
@@ -944,6 +944,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0087: A site-wide light theme
+
+**Status**: Accepted (2026-11-02)
+**Problem**: The site was dark-only; the legal pages' light button did nothing visible because those pages had moved onto the lanes art direction, which paints with literal colors the button never touched.
+**Decision**: `data-theme="light"` on `<html>` (stored per browser, applied before paint by an inline head script, kept across navigation by ThemeSync) restates the semantic tokens and new lanes role variables (`--lanes-fg`, `--lanes-panel`, …, also Tailwind colors via `@theme inline`). Dark stays the default. OBS overlay routes and preview iframes never take it; `.theme-dark` keeps chat-theme previews, the hero stage and stream mockups dark. Toggle in every site nav; not premium-gated.
+**Impact**: Dark mode unchanged apart from the toggle. Every new color needs a light value and every new broadcast-art area needs `.theme-dark`; `token-contrast.test.ts` locks AA in both themes and checks `.theme-dark` restates the dark values exactly.
+**→ Read**: [0087-site-light-theme.md](./0087-site-light-theme.md)
+
+---
+
 ### ADR-0089: Enforce data retention with a sweeper CronJob
 
 **Status**: ✅ Accepted (revised 2026-11-03)
@@ -952,6 +962,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Decision**: A `retention-sweeper` binary in the auth-service image, run by a Kubernetes CronJob every 15 minutes (`concurrencyPolicy: Forbid`, `backoffLimit: 0`), deletes in batches of 1000 with `FOR UPDATE SKIP LOCKED` over a single connection, re-checking each predicate under lock so a refresh that moved a row out of the window is kept; one table failing does not stop the others. Rules: viewer messages after 1 hour, YouTube audit log and `alert_events` after 30 days, `moderation_actions` after 90 days, abandoned device-link requests 1 hour after expiry; only OAuth credentials provably dead are swept (legacy TikTok rows, legacy Kick rows without `kick_user_id`, expired Instagram tokens), and the other credential tables are left to account deletion because nothing in them proves death. Migration 118 drops the pg_cron functions and adds the `created_at` indexes the deletes need.
 **Impact**: The policy periods hold and are checked by an integration test against the migrated schema in CI, with no new service, image or pooled connections. The admin viewer Activity dialog now covers only the last hour, nothing alerts when the CronJob stops running, and the privacy policy has to say that most tokens go with the account, with the 1-hour message promise holding to between 60 and about 75 minutes.
 **→ Read**: [0089-retention-sweeper-cronjob.md](./0089-retention-sweeper-cronjob.md)
+
+---
+
+### ADR-0091: Discord relay webhook URLs are encrypted at rest and server-owned
+
+**Status**: ✅ Accepted
+**Date**: 2026-11-03
+**Problem**: The Discord relay webhook URL (a credential: it embeds the webhook token) sat in plaintext in `overlay_chat_sources.config.relay_webhook_url`, was returned to the browser by every overlay-manager source response and shipped in the GDPR data export, and could be set by any client through the source create/PATCH config, which made discord-listener POST chat to whatever URL was stored. A moved relay also kept posting into the old channel, and poster errors logged the full URL.
+**Decision**: discord-listener encrypts the URL with the shared `MultiKeyEncryptor` (`TOKEN_ENCRYPTION_KEY_V<n>`, optional as in the other listeners) and, on every relay sync, decrypts it, re-encrypts plaintext (legacy, recognised by `://`, which base64 never contains) or old-key values in place with a compare-and-set update, and skips values that are undecryptable or not Discord webhook URLs. overlay-manager never returns the key (`ChatSource.MarshalJSON`) and never accepts it from a client; PATCH carries the stored value over only while `relay_channel_id` is unchanged. The relay manager restarts a relay whose URL changed; the data export drops the key; poster errors name only the webhook id.
+**Impact**: No migration or backfill job: legacy rows are encrypted on the first sync once discord-listener has the key, which its deployment must now mount (`allchat-secrets` / `token-encryption-key-v1`). Until then the relay keeps working but new URLs stay plaintext. The key-rotator does not cover this key; discord-listener rotates it itself, so it needs new keys like the other consumers.
+**→ Read**: [0091-discord-relay-webhook-encrypted-and-server-owned.md](./0091-discord-relay-webhook-encrypted-and-server-owned.md)
 
 ---
 

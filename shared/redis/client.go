@@ -25,13 +25,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Client captures the subset of redis.Client behavior used by shared packages.
-type Client interface {
-	Incr(ctx context.Context, key string) *redis.IntCmd
-	Expire(ctx context.Context, key string, expiration time.Duration) *redis.BoolCmd
-	TTL(ctx context.Context, key string) *redis.DurationCmd
-}
-
 // NewClientWithTracing creates a Redis client with optional OpenTelemetry instrumentation
 func NewClientWithTracing(addr, password string, tracingEnabled bool) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{

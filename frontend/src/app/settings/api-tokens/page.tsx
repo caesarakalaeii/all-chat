@@ -114,7 +114,7 @@ function MintedTokenReveal({
       data-testid="minted-token-reveal"
     >
       <h2 className="text-lg">{t('settings.apiTokens.revealHeading')}</h2>
-      <p className="mt-1 text-sm text-amber-400">
+      <p className="mt-1 text-sm text-warning">
         {interpolateElements(t('settings.apiTokens.revealWarning'), {
           name: <strong>{minted.name}</strong>,
         })}
@@ -122,7 +122,7 @@ function MintedTokenReveal({
 
       <code
         data-testid="minted-token-value"
-        className="mt-4 block overflow-x-auto rounded-none border border-white/40 bg-transparent p-3 font-mono text-sm break-all text-white"
+        className="mt-4 block overflow-x-auto rounded-none border border-lanes-fg-strong/40 bg-transparent p-3 font-mono text-sm break-all text-lanes-fg-strong"
       >
         {minted.token}
       </code>
@@ -135,7 +135,7 @@ function MintedTokenReveal({
           {t('settings.apiTokens.dismissReveal')}
         </button>
       </div>
-      {copyError && <p className="mt-2 text-xs text-red-400">{copyError}</p>}
+      {copyError && <p className="mt-2 text-xs text-destructive">{copyError}</p>}
     </div>
   )
 }
@@ -240,11 +240,11 @@ function CreateTokenForm({
             )
           })}
           {scopes.size === 0 && (
-            <p className="text-xs text-amber-400">{t('settings.apiTokens.noScopesWarning')}</p>
+            <p className="text-xs text-warning">{t('settings.apiTokens.noScopesWarning')}</p>
           )}
         </fieldset>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         <button type="submit" className="lanes-btn" disabled={!canSubmit}>
           {creating ? t('settings.apiTokens.creating') : t('settings.apiTokens.create')}
@@ -257,7 +257,7 @@ function CreateTokenForm({
 function EmptyState() {
   const t = useTranslations()
   return (
-    <div className="rounded-none border border-dashed border-white/40 p-6 text-center">
+    <div className="rounded-none border border-dashed border-lanes-fg-strong/40 p-6 text-center">
       <p className="text-sm font-medium">{t('settings.apiTokens.emptyHeading')}</p>
       <p className="text-sub mx-auto mt-2 max-w-md text-sm">{t('settings.apiTokens.emptyBody')}</p>
       <p className="text-sub mt-3 text-sm">
@@ -292,7 +292,7 @@ function EmptyState() {
 function TokenRow({ token, onRevoke }: { token: ApiToken; onRevoke: (token: ApiToken) => void }) {
   const t = useTranslations()
   return (
-    <li className="flex flex-wrap items-start justify-between gap-3 rounded-none border border-white/40 px-4 py-3">
+    <li className="flex flex-wrap items-start justify-between gap-3 rounded-none border border-lanes-fg-strong/40 px-4 py-3">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{token.name}</p>
         <p className="text-sub mt-0.5 text-xs">
@@ -407,7 +407,7 @@ function ApiTokensContent() {
               <Skeleton className="h-16 w-full rounded-none" />
             </div>
           ) : loadError ? (
-            <p className="text-sm text-red-400">{loadError}</p>
+            <p className="text-sm text-destructive">{loadError}</p>
           ) : tokens.length === 0 ? (
             <EmptyState />
           ) : (
@@ -428,7 +428,7 @@ function ApiTokensContent() {
       >
         <AlertDialog.Content
           size="sm"
-          className="rounded-none border-white bg-black text-[#f4f3ef]"
+          className="rounded-none border-lanes-fg-strong bg-lanes-panel text-lanes-fg"
         >
           <AlertDialog.Title>{t('settings.apiTokens.revokeConfirmTitle')}</AlertDialog.Title>
           <AlertDialog.Description>
