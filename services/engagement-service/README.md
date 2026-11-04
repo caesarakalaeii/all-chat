@@ -109,9 +109,6 @@ A streamer's timers (`chat_timers`, migration 116) post a recurring rendered mes
 
 Same scope/device/gate rules as the command writes; the GETs and the delete stay ungated.
 
-
-Writes take the `engagement:write` PAT scope; paired devices are refused (the routes have no overlay to bind to). The `chat_commands` gate is enforced on both dimensions (`RequireEarlyAccess` and `RequirePremium`) and seeded `early_access=TRUE, is_premium=FALSE`: beta testers and ambassadors only, free. Flip `early_access` off in the admin feature-gates UI to open it to everyone with no redeploy. The only paid part is the YouTube reply check above.
-
 ## Configuration
 
 `PORT` (8093), `DATABASE_*`, `REDIS_*`, `JWT_SECRET`/`JWT_SECRET_V1`, `ENGAGEMENT_RATE_PER_MIN` (120), `ENGAGEMENT_IDEMPOTENCY_TTL_SECONDS` (60), `ENGAGEMENT_SWEEP_INTERVAL_SECONDS` (10), `AUTH_SERVICE_URL` + `SERVICE_JWT_SECRET_V1` (announcements, chat command replies and clips; without them those are disabled). No platform API credentials: this service never calls a platform API itself, every post or clip goes through auth-service's internal routes.
