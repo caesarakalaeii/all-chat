@@ -53,7 +53,7 @@ type prefixCipher struct{}
 func (prefixCipher) Encrypt(s string) (string, error) { return "enc:" + s, nil }
 func (prefixCipher) Decrypt(s string) (string, error) { return strings.TrimPrefix(s, "enc:"), nil }
 
-func TestHandleUnlinkPlatform_RevokesTheWipedTokensAtTheProvider(t *testing.T) {
+func TestHandleUnlinkPlatform_RevokesTheDeletedTokensAtTheProvider(t *testing.T) {
 	viewerID := uuid.New()
 	mock := &mockViewerIdentityRepo{
 		unlinkPlatform: func(context.Context, uuid.UUID, string) ([]repository.RemovedToken, error) {

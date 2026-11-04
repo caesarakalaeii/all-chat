@@ -328,12 +328,12 @@ func (r *ViewerIdentityRepository) GetLinkedPlatforms(ctx context.Context, viewe
 	return platforms, nil
 }
 
-// UnlinkPlatform removes a platform identity from a viewer and wipes the OAuth
-// tokens of that platform's sessions, in one transaction. The session rows stay
-// (their ban flags and message history are not the viewer's to erase) but are
-// detached from the viewer and marked expired, so cleanup_expired_oauth_tokens()
-// removes them a week later. It returns the wiped tokens AS STORED (encrypted), so
-// the caller can decrypt and revoke them at the provider.
+// UnlinkPlatform removes a platform identity from a viewer and deletes that platform
+// account's sessions with their OAuth tokens, in one transaction, as signing out does.
+// A detached session would outlive viewer erasure (ADR-0088) and the retention sweeper
+// keeps sessions (ADR-0089), so nothing else would ever remove it. It returns the
+// deleted tokens AS STORED (encrypted), so the caller can decrypt and revoke them at
+// the provider.
 // Returns ErrLastPlatform if the viewer only has one platform linked (must retain at least one).
 // Returns ErrNotFound if the platform is not linked to this viewer.
 func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) ([]RemovedToken, error) {
@@ -368,27 +368,21 @@ func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID 
 		return nil, fmt.Errorf("failed to delete platform identity: %w", err)
 	}
 
-	// access_token is NOT NULL, so it is wiped to ''. The FROM self-join returns the
-	// tokens as they were before the wipe.
 	rows, err := tx.Query(ctx, `
-		UPDATE viewer_sessions vs
-		SET viewer_id = NULL, access_token = '', refresh_token = NULL,
-		    token_expires_at = NOW(), updated_at = NOW()
-		FROM viewer_sessions old
-		WHERE old.id = vs.id
-		  AND vs.platform = $1 AND vs.platform_user_id = $2 AND vs.viewer_id = $3
-		RETURNING old.access_token, COALESCE(old.refresh_token, '')`,
+		DELETE FROM viewer_sessions
+		WHERE platform = $1 AND platform_user_id = $2 AND viewer_id = $3
+		RETURNING access_token, COALESCE(refresh_token, '')`,
 		platform, platformUserID, viewerID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to wipe unlinked session tokens: %w", err)
+		return nil, fmt.Errorf("failed to delete unlinked sessions: %w", err)
 	}
 	removed, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (RemovedToken, error) {
 		var t RemovedToken
 		return t, row.Scan(&t.AccessToken, &t.RefreshToken)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to wipe unlinked session tokens: %w", err)
+		return nil, fmt.Errorf("failed to delete unlinked sessions: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

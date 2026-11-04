@@ -25,11 +25,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// Unlinking a platform from a viewer must take that platform's OAuth tokens with it:
-// the session row stays (its ban flags and message history are not the viewer's to
-// erase), but its tokens are wiped and it is marked expired, so the daily
-// cleanup_expired_oauth_tokens() job removes the row a week later.
-func TestUnlinkPlatform_WipesTheUnlinkedSessionsTokens(t *testing.T) {
+// Unlinking a platform from a viewer must take that platform's session with it, OAuth
+// tokens included. Nothing would remove the row later: the retention sweeper keeps
+// viewer sessions (ADR-0089), and a detached row is no longer reachable by viewer
+// erasure (ADR-0088), which follows the viewer and its linked identities. Signing out
+// deletes the row the same way.
+func TestUnlinkPlatform_DeletesTheUnlinkedSession(t *testing.T) {
 	if testing.Short() {
 		t.Skip("needs PostgreSQL")
 	}
@@ -65,34 +66,18 @@ func TestUnlinkPlatform_WipesTheUnlinkedSessionsTokens(t *testing.T) {
 		t.Errorf("removed = %+v, want the unlinked session's stored tokens (for revocation)", removed)
 	}
 
-	type session struct {
-		access  string
-		refresh *string
-		viewer  *string
-		expired bool
+	sessions := func(platformUserID string) (n int, access string) {
+		must(t, pool.QueryRow(ctx,
+			`SELECT COUNT(*), COALESCE(MAX(access_token), '') FROM viewer_sessions WHERE platform_user_id = $1`,
+			platformUserID).Scan(&n, &access))
+		return
 	}
-	read := func(platformUserID string) session {
-		var s session
-		must(t, pool.QueryRow(ctx, `
-			SELECT access_token, refresh_token, viewer_id::text, token_expires_at <= NOW()
-			FROM viewer_sessions WHERE platform_user_id = $1`, platformUserID).
-			Scan(&s.access, &s.refresh, &s.viewer, &s.expired))
-		return s
-	}
-
-	unlinked := read("yt-1")
-	if unlinked.access != "" || unlinked.refresh != nil {
-		t.Errorf("unlinked session still holds tokens: access=%q refresh=%v", unlinked.access, unlinked.refresh)
-	}
-	if unlinked.viewer != nil {
-		t.Errorf("unlinked session still points at the viewer: %v", *unlinked.viewer)
-	}
-	if !unlinked.expired {
-		t.Error("unlinked session must be marked expired so the cleanup job removes it")
+	if n, _ := sessions("yt-1"); n != 0 {
+		t.Errorf("unlinked session rows left = %d, want 0", n)
 	}
 	for _, id := range []string{"tw-1", "yt-2"} {
-		if s := read(id); s.access != "enc-access-"+id || s.refresh == nil {
-			t.Errorf("session %s lost its tokens: %+v", id, s)
+		if n, access := sessions(id); n != 1 || access != "enc-access-"+id {
+			t.Errorf("session %s = %d rows, access %q: other sessions must be untouched", id, n, access)
 		}
 	}
 

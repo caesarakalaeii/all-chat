@@ -291,9 +291,9 @@ sources stay: Twitch stops receiving chat on the EventSub listener's next sync,
 YouTube falls back to InnerTube, Kick subscribes without auth. The sign-in platform's
 tokens are deleted only with the account (`DELETE /me`).
 
-Viewer unlink (`DELETE /viewer/linked-platforms/:platform`) also wipes the unlinked
-platform's `viewer_sessions` tokens (row kept and marked expired until the viewer deletes their data) and
-revokes them with the viewer OAuth client.
+Viewer unlink (`DELETE /viewer/linked-platforms/:platform`) also deletes the unlinked
+platform's `viewer_sessions` rows, as signing out does, and revokes their tokens with the
+viewer OAuth client.
 
 ### Data export (DSGVO Art. 15/20)
 

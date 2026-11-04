@@ -2,7 +2,7 @@
 
 **Date**: 2026-11-02
 **Status**: Accepted
-**Revised**: 2026-11-04 (a disconnect also clears the platform id that linking records on the account)
+**Revised**: 2026-11-04 (a disconnect also clears the platform id that linking records on the account; viewer unlink deletes the unlinked session instead of keeping it with wiped tokens)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -57,12 +57,11 @@ api-gateway, session-only, refused while impersonating) and
    `users` row are how the account exists, and its per-link rows are written back
    on the next sign-in. They are deleted with the account (`DELETE /me`). The card
    lists it, marked as the sign-in, with that explanation.
-4. **Viewer unlink wipes the session's tokens.** `UnlinkPlatform` now runs in one
-   transaction and sets `access_token = ''`, `refresh_token = NULL` and an expired
-   `token_expires_at` on the unlinked sessions, then the handler revokes the old
-   tokens with the viewer OAuth client. The row stays: its ban flags and message
-   history are not the viewer's to erase; it goes when the viewer deletes their
-   viewer data (`DELETE /api/v1/auth/viewer/me`, ADR-0088).
+4. **Viewer unlink deletes the session.** `UnlinkPlatform` runs in one transaction:
+   it removes the platform identity and deletes that platform account's
+   `viewer_sessions` rows of the viewer (tokens, ban flags and message history with
+   them), as signing out does. The handler then revokes the deleted tokens with the
+   viewer OAuth client.
 5. **Refresh write-backs never insert.** youtube-listener's token store used an
    UPSERT to save a refreshed token, so a refresh in flight during a disconnect
    could recreate the deleted row. It now updates only; a missing row is an error.
@@ -80,8 +79,13 @@ api-gateway, session-only, refused while impersonating) and
 4. **Allow disconnecting the sign-in platform when another login exists.** Rejected
    for now: it would mean moving `auth_provider`, which the EventSub predicate,
    send paths and duplicate-account guard all key on.
-5. **Delete the unlinked viewer session row.** Rejected: it cascades the message
-   history and resets a per-session ban.
+5. **Keep the unlinked session row with its tokens wiped and marked expired** (the
+   first version of this ADR, so the row kept its ban flags and message history).
+   Replaced on 2026-11-04: nothing would ever remove the row. The pg_cron cleanup it
+   relied on never ran and is gone (ADR-0089), the retention sweeper keeps viewer
+   sessions, and viewer erasure (ADR-0088) follows the viewer and its linked
+   identities, which a detached row no longer belongs to. A session ban is lifted the
+   same way by signing out, and viewer messages are swept after an hour anyway.
 
 ## Consequences
 

@@ -1282,7 +1282,7 @@ func (h *ViewerAuthHandler) HandleUnlinkPlatform(c *gin.Context) {
 		return
 	}
 
-	// The unlinked session's tokens are already wiped; revoke them at the provider too.
+	// The unlinked sessions are already deleted; revoke their tokens at the provider too.
 	revokeAtProvider(c.Request.Context(), h.revokerFor(targetPlatform), h.decryptStored(stored),
 		h.logger.With(zap.String("platform", targetPlatform)))
 
@@ -1304,7 +1304,7 @@ func (h *ViewerAuthHandler) revokerFor(platform string) TokenRevoker {
 }
 
 // decryptStored decrypts viewer-session tokens as stored. A token that does not
-// decrypt is dropped: it is already wiped and cannot be revoked anyway.
+// decrypt is dropped: it is already deleted and cannot be revoked anyway.
 func (h *ViewerAuthHandler) decryptStored(stored []repository.RemovedToken) []repository.RemovedToken {
 	if h.cipher == nil {
 		return stored
