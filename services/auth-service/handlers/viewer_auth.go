@@ -53,6 +53,7 @@ type ViewerIdentityRepo interface {
 	GetLinkedPlatforms(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
 	UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) ([]repository.RemovedToken, error)
 	MigratePlatformUserID(ctx context.Context, platform, oldPlatformUserID, newPlatformUserID string) error
+	EraseViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) ([]repository.LinkedPlatform, error)
 }
 
 // ViewerAuthHandler handles authentication for viewers who want to send messages
@@ -491,6 +492,69 @@ func (h *ViewerAuthHandler) HandleLogout(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+}
+
+// HandleDeleteViewer erases the signed-in viewer's own data (ADR-0088): the viewer
+// identity, every linked platform and session (with its sent-message log), cosmetics,
+// points balances and ledger, poll votes, prediction wagers, and the viewer Patreon
+// connection and subscription. Rows engagement-service created for this platform
+// account without a login (chat votes, bets, earned points) are part of it.
+//
+// DELETE /viewer/me. Requires a viewer JWT; a streamer token has no viewer identity
+// and is refused. The token is revoked only after the erasure committed, so a failed
+// attempt can be retried with it.
+func (h *ViewerAuthHandler) HandleDeleteViewer(c *gin.Context) {
+	platform, platformUserID := c.GetString("platform"), c.GetString("platform_user_id")
+	if c.GetString("session_id") == "" || platform == "" || platformUserID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	// Tokens issued before viewer identities existed carry no viewer_id; the platform
+	// identity still finds the viewer.
+	viewerID := uuid.Nil
+	if raw := c.GetString("viewer_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid viewer ID"})
+			return
+		}
+		viewerID = parsed
+	}
+
+	erased, err := h.identityRepo.EraseViewer(c.Request.Context(), viewerID, platform, platformUserID)
+	if err != nil {
+		h.logger.Error("Failed to erase viewer data", zap.String("viewer_id", viewerID.String()), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete viewer data"})
+		return
+	}
+
+	// Revoke the token this request authenticated with: the Authorization bearer, the
+	// only header the auth middleware reads. Not blacklistableSessionToken, which
+	// prefers X-Access-Token: that is the streamer session cookie, a different login.
+	if token, ok := strings.CutPrefix(c.GetHeader("Authorization"), "Bearer "); ok && token != "" {
+		if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
+			h.logger.Warn("Failed to blacklist viewer token after erasure", zap.Error(err))
+		}
+	}
+	dropViewerIdentityCache(c.Request.Context(), h.redis, h.logger, erased)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Viewer data deleted"})
+}
+
+// dropViewerIdentityCache deletes the message-processor's per-identity viewer cache
+// (viewer:identity:{platform}:{platform_user_id}, 5 min TTL) so a changed or erased
+// viewer stops showing stale cosmetics in chat right away. Best-effort.
+func dropViewerIdentityCache(ctx context.Context, rdb redis.Cmdable, logger *zap.Logger, identities []repository.LinkedPlatform) {
+	if len(identities) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(identities))
+	for _, id := range identities {
+		keys = append(keys, fmt.Sprintf("viewer:identity:%s:%s", id.Platform, id.PlatformUserID))
+	}
+	if err := rdb.Del(ctx, keys...).Err(); err != nil {
+		logger.Warn("Failed to invalidate viewer identity cache", zap.Strings("keys", keys), zap.Error(err))
+	}
 }
 
 // getOrCreateViewerSession gets or creates a viewer session

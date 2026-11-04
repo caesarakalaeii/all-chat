@@ -24,6 +24,10 @@ import { AppNav } from '@/components/AppNav'
 import { PlatformSignInButton } from '@/components/PlatformSignInButton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
+import { AlertDialog } from '@/components/ui/alert-dialog'
+import { viewerApi } from '@/lib/api/viewer'
+import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
+import { toastManager } from '@/lib/toast'
 import { archivoBlack, spaceMono } from '@/lib/fonts'
 import { buildGradientCSS } from '@/lib/utils/gradient'
 import { cn } from '@/lib/utils'
@@ -859,7 +863,79 @@ function LinkedPlatformsCard({ claims }: { claims: ViewerJWTClaims }) {
   )
 }
 
-function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
+/**
+ * Erases the viewer's own data (ADR-0088). The server revokes the token; on success
+ * the local copy is cleared and the page falls back to the signed-out state.
+ */
+function DeleteViewerDataCard({ onDeleted }: { onDeleted: () => void }) {
+  const t = useTranslations()
+  const [open, setOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    setError(null)
+    try {
+      await viewerApi.deleteViewerData()
+      useViewerAuthStore.getState().viewerLogout()
+      toastManager.add({ title: t('settings.viewer.deletedToast'), type: 'success' })
+      onDeleted()
+    } catch {
+      setError(t('settings.viewer.deleteFailed'))
+      setOpen(false)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="lanes-panel p-6">
+      <h2 className="mb-1 text-lg">{t('settings.viewer.deleteHeading')}</h2>
+      <p className="text-sub mb-4 text-sm">{t('settings.viewer.deleteBody')}</p>
+      {error && <p className="mb-3 text-xs text-destructive">{error}</p>}
+      <AlertDialog.Root
+        open={open}
+        onOpenChange={(next: boolean) => {
+          if (!deleting) setOpen(next)
+        }}
+      >
+        <AlertDialog.Trigger
+          render={<button className="lanes-btn danger">{t('settings.viewer.deleteButton')}</button>}
+        />
+        <AlertDialog.Content className="rounded-none border-lanes-fg-strong bg-lanes-panel text-lanes-fg">
+          <AlertDialog.Title>{t('settings.viewer.deleteConfirmTitle')}</AlertDialog.Title>
+          <AlertDialog.Description>
+            {t('settings.viewer.deleteConfirmBody')}
+          </AlertDialog.Description>
+          <div className="mt-6 flex justify-end gap-2">
+            <AlertDialog.Close
+              disabled={deleting}
+              render={
+                <button className="lanes-btn ghost sm">{t('settings.viewer.deleteCancel')}</button>
+              }
+            />
+            <button
+              className="lanes-btn danger sm"
+              disabled={deleting}
+              onClick={() => void handleDelete()}
+            >
+              {deleting ? t('settings.viewer.deleting') : t('settings.viewer.deleteConfirm')}
+            </button>
+          </div>
+        </AlertDialog.Content>
+      </AlertDialog.Root>
+    </div>
+  )
+}
+
+function ViewerSettingsContent({
+  claims,
+  onDeleted,
+}: {
+  claims: ViewerJWTClaims
+  onDeleted: () => void
+}) {
   const t = useTranslations()
   return (
     <div className={cn('lanes-app min-h-screen', archivoBlack.variable, spaceMono.variable)}>
@@ -906,6 +982,7 @@ function ViewerSettingsContent({ claims }: { claims: ViewerJWTClaims }) {
         <LinkedPlatformsCard claims={claims} />
 
         <ViewerDataExportCard />
+        <DeleteViewerDataCard onDeleted={onDeleted} />
       </main>
     </div>
   )
@@ -940,5 +1017,5 @@ export default function ViewerSettingsPage() {
     return <UnauthenticatedState />
   }
 
-  return <ViewerSettingsContent claims={claims} />
+  return <ViewerSettingsContent claims={claims} onDeleted={() => setClaims(null)} />
 }

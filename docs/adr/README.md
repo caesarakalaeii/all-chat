@@ -954,6 +954,16 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0088: Account and viewer data erasure
+
+**Status**: Accepted (2026-11-02)
+**Problem**: `DELETE /api/v1/auth/me` returned 500 for anyone who ever sent or received a share request or (as an admin) banned someone, left uploaded media publicly downloadable in the `allchat-media` bucket, and left the streamer's own viewer identity behind; viewers, including chatters engagement-service created without a login, had no way to erase anything.
+**Decision**: Migration 119 makes share requests cascade with either party or the shared overlay and `banned_by` set null, plus a trigger dropping other users' `shared_overlay` sources of a deleted overlay. Account deletion is one transaction that also erases the viewer identity of every platform account the user proved it controls and the overlays' alert history and YouTube quota rows; the moderation audit log is kept (ADR-0017). New `DELETE /api/v1/auth/viewer/me` erases the viewer, every linked identity and session, cosmetics, points and ledger, votes, wagers and viewer Patreon rows, then revokes the token and drops the identity cache; `/settings/viewer` offers it behind a confirmation. media-service sweeps the bucket every `MEDIA_ORPHAN_SWEEP_INTERVAL` (15 min) and removes objects without a `media_objects` row.
+**Impact**: Every account and every shared overlay can be deleted; files leave the bucket within one sweep interval, including those orphaned before the change. Viewer bans stored on the session row are lifted with it (as logout already did); a chatter who keeps voting after erasure gets a new viewer row.
+**→ Read**: [0088-account-and-viewer-data-erasure.md](./0088-account-and-viewer-data-erasure.md)
+
+---
+
 ### ADR-0089: Enforce data retention with a sweeper CronJob
 
 **Status**: ✅ Accepted (revised 2026-11-03)

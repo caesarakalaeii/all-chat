@@ -100,9 +100,16 @@ The rate limiter uses different keys based on authentication:
    - Limits per user across all IPs
    - User ID extracted from JWT context
 
-2. **Anonymous users**: `{prefix}:ip:{ip_address}`
+2. **Viewers** (viewer tokens set `viewer_id`): `{prefix}:viewer:{viewer_id}`
+
+3. **Anonymous users**: `{prefix}:ip:{ip_address}`
    - Limits per IP address
    - Falls back to IP if no auth
+
+The raw IP lives only in the Redis key, which expires at the end of its
+one-minute window. Log lines (the 429 warning and the Redis-error log) carry
+the key with the IP anonymised (IPv4 last octet zeroed, IPv6 cut to /48), never
+the raw address, because logs are kept for days in Loki.
 
 ## Response Headers
 
@@ -240,7 +247,7 @@ Key metrics to track:
 - Rate limit hits (429 responses)
 - Redis errors in rate limiter
 - Per-endpoint rate limit usage
-- Top rate-limited IPs/users
+- Top rate-limited users and /24 (IPv6 /48) networks (logs hold anonymised IPs only)
 
 ## Redis Key Pattern
 

@@ -17,7 +17,9 @@
 package middleware
 
 import (
+	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -53,6 +55,33 @@ func RedactQuery(rawQuery string) string {
 		return rawQuery
 	}
 	return values.Encode()
+}
+
+// GinAccessLog is gin's stock access log line with the client IP anonymised
+// and sensitive query values redacted; health probes are skipped. Use it
+// instead of gin.Logger(): a backend behind the api-gateway receives Envoy's
+// X-Forwarded-For, gin trusts every proxy by default, so gin.Logger() prints
+// the visitor's full IP (and raw OAuth codes or tokens from the query) to
+// stdout, which Alloy ships to Loki.
+func GinAccessLog() gin.HandlerFunc {
+	return gin.LoggerWithConfig(gin.LoggerConfig{
+		SkipPaths: []string{"/health/live", "/health/ready"},
+		Formatter: func(p gin.LogFormatterParams) string {
+			path, rawQuery, hasQuery := strings.Cut(p.Path, "?")
+			if hasQuery {
+				path += "?" + RedactQuery(rawQuery)
+			}
+			return fmt.Sprintf("[GIN] %v | %3d | %13v | %15s | %-7s %#v\n%s",
+				p.TimeStamp.Format("2006/01/02 - 15:04:05"),
+				p.StatusCode,
+				p.Latency,
+				AnonymizeIP(p.ClientIP),
+				p.Method,
+				path,
+				p.ErrorMessage,
+			)
+		},
+	})
 }
 
 // Logging returns a gin middleware that logs HTTP requests

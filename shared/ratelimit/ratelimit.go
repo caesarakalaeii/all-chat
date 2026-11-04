@@ -79,15 +79,13 @@ func (rl *RateLimiter) MiddlewareScoped(bucket string) gin.HandlerFunc {
 
 func (rl *RateLimiter) middleware(bucket string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Determine the rate limit key (IP address or user ID if authenticated)
-		key := rl.getClientKey(c, bucket)
+		key, logKey := rl.getClientKey(c, bucket)
 
-		// Check rate limit
 		allowed, remaining, resetTime, err := rl.checkLimit(c.Request.Context(), key)
 		if err != nil {
 			rl.cfg.Logger.Error("Rate limit check failed",
 				zap.Error(err),
-				zap.String("key", key))
+				zap.String("key", logKey))
 			if rl.cfg.FailClosed {
 				// audit #15: security-critical limiter — deny rather than allow when
 				// the backing store is down, so a Redis outage can't disable the
@@ -109,7 +107,7 @@ func (rl *RateLimiter) middleware(bucket string) gin.HandlerFunc {
 
 		if !allowed {
 			rl.cfg.Logger.Warn("Rate limit exceeded",
-				zap.String("key", key),
+				zap.String("key", logKey),
 				zap.String("ip", anonymizeIP(c.ClientIP())),
 				zap.String("path", c.Request.URL.Path))
 
@@ -127,15 +125,18 @@ func (rl *RateLimiter) middleware(bucket string) gin.HandlerFunc {
 }
 
 // getClientKey determines the rate limit key for the client. When bucket is
-// non-empty the counter is isolated to that bucket (audit #14).
-func (rl *RateLimiter) getClientKey(c *gin.Context, bucket string) string {
+// non-empty the counter is isolated to that bucket (audit #14). logKey is the
+// form that may be logged: a logged-out client's key holds its raw IP, which
+// Redis drops after the one-minute window but logs would keep for days.
+func (rl *RateLimiter) getClientKey(c *gin.Context, bucket string) (key, logKey string) {
 	scope := rl.cfg.KeyPrefix
 	if bucket != "" {
 		scope = rl.cfg.KeyPrefix + ":" + bucket
 	}
 	// Try to get user ID from JWT context (if authenticated)
 	if userID, exists := c.Get("user_id"); exists {
-		return fmt.Sprintf("%s:user:%s", scope, userID)
+		key = fmt.Sprintf("%s:user:%s", scope, userID)
+		return key, key
 	}
 
 	// Viewer tokens set viewer_id, not user_id (shared/middleware/auth.go). Without
@@ -144,11 +145,12 @@ func (rl *RateLimiter) getClientKey(c *gin.Context, bucket string) string {
 	// collateral 429s and easy to exhaust a whole IP's budget (L-Sec1). Integrity is
 	// unaffected (writes dedupe), this only makes the limit per-viewer and fair.
 	if viewerID, exists := c.Get("viewer_id"); exists {
-		return fmt.Sprintf("%s:viewer:%s", scope, viewerID)
+		key = fmt.Sprintf("%s:viewer:%s", scope, viewerID)
+		return key, key
 	}
 
-	// Fall back to IP address
-	return fmt.Sprintf("%s:ip:%s", scope, c.ClientIP())
+	ip := c.ClientIP()
+	return scope + ":ip:" + ip, scope + ":ip:" + anonymizeIP(ip)
 }
 
 // checkLimit checks if the request is within rate limits using Redis
@@ -198,12 +200,13 @@ func (rl *RateLimiter) ResetLimit(ctx context.Context, key string) error {
 }
 
 // anonymizeIP truncates the last octet (IPv4) or last 80 bits (IPv6) for
-// DSGVO-compliant log output. Kept local to avoid a circular dependency
-// on the shared/middleware package.
+// DSGVO-compliant log output; unparseable input is dropped, never passed
+// through. A copy of shared/middleware.AnonymizeIP, kept local so this module
+// does not depend on the whole shared module.
 func anonymizeIP(raw string) string {
 	ip := net.ParseIP(raw)
 	if ip == nil {
-		return raw
+		return ""
 	}
 	if v4 := ip.To4(); v4 != nil {
 		v4[3] = 0

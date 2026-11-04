@@ -19,7 +19,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"regexp"
 
@@ -108,16 +107,7 @@ func (h *ViewerCosmeticsHandler) HandlePatchCosmetics(c *gin.Context) {
 						zap.Error(listErr),
 					)
 				} else {
-					// Delete cache key for every linked platform identity.
-					for _, lp := range linked {
-						cacheKey := fmt.Sprintf("viewer:identity:%s:%s", lp.Platform, lp.PlatformUserID)
-						if err := h.redis.Del(context.Background(), cacheKey).Err(); err != nil {
-							h.logger.Warn("Failed to invalidate viewer identity cache",
-								zap.String("key", cacheKey),
-								zap.Error(err),
-							)
-						}
-					}
+					dropViewerIdentityCache(context.Background(), h.redis, h.logger, linked)
 				}
 			}
 		}

@@ -665,6 +665,7 @@ func main() {
 	{
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
+		viewerProtected.DELETE("/me", viewerAuthHandler.HandleDeleteViewer) // erase own viewer data (ADR-0088)
 		viewerProtected.POST("/chat/send", chatSendHandler.HandleSendMessage)
 		viewerProtected.GET("/cosmetics", viewerCosmeticsHandler.HandleGetCosmetics)
 		viewerProtected.PATCH("/cosmetics", viewerCosmeticsHandler.HandlePatchCosmetics)

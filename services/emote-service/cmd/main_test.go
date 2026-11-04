@@ -17,6 +17,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -28,6 +29,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // TestRateLimitMiddleware_BypassesProbeEndpoints documents the contract that
@@ -72,4 +74,35 @@ func TestRateLimitMiddleware_BypassesProbeEndpoints(t *testing.T) {
 	// rate-limited. First request through, second must be 429.
 	assert.Equal(t, http.StatusOK, hit("/emotes/twitch/global"))
 	assert.Equal(t, http.StatusTooManyRequests, hit("/emotes/twitch/global"))
+}
+
+// The bucket key holds the raw client IP or the raw API key. Redis drops it
+// after the window; the 429 warning goes to Loki and may carry neither.
+func TestRateLimitMiddleware_LogsNoRawIPOrAPIKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	for name, apiKey := range map[string]string{"by IP": "", "by API key": "secret-api-key"} {
+		t.Run(name, func(t *testing.T) {
+			mr := miniredis.RunT(t)
+			rl := newRedisRateLimiter(redis.NewClient(&redis.Options{Addr: mr.Addr()}), 1, time.Minute)
+			core, logs := observer.New(zap.DebugLevel)
+
+			router := gin.New()
+			router.Use(rateLimitMiddleware(rl, zap.New(core)))
+			router.GET("/emotes/twitch/global", func(c *gin.Context) { c.Status(http.StatusOK) })
+			for i := 0; i < 2; i++ {
+				req := httptest.NewRequest(http.MethodGet, "/emotes/twitch/global", nil)
+				req.RemoteAddr = "203.0.113.42:54321"
+				if apiKey != "" {
+					req.Header.Set(apiKeyHeader, apiKey)
+				}
+				router.ServeHTTP(httptest.NewRecorder(), req)
+			}
+
+			require.Equal(t, 1, logs.FilterMessage("Rate limit exceeded").Len())
+			logged := fmt.Sprint(logs.All()[0].ContextMap())
+			assert.NotContains(t, logged, "203.0.113.42")
+			assert.NotContains(t, logged, "secret-api-key")
+		})
+	}
 }
