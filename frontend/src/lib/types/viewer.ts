@@ -30,6 +30,10 @@ export interface ViewerInfo {
   username: string
   display_name?: string
   avatar_url?: string
+  // Current viewers.is_premium (the JWT claim is only the value at sign-in).
+  is_premium?: boolean
+  // False = the Terms acceptance prompt is shown (TosAcceptanceDialog).
+  tos_accepted?: boolean
 }
 
 export interface ViewerAuthResponse {

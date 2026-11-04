@@ -18,7 +18,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -329,24 +328,52 @@ type ViewerListFilter struct {
 	Platform  string
 }
 
-// ListAll returns viewer sessions matching filter, paginated by limit/offset, plus
-// the total number of rows matching the filter (ignoring limit/offset) so the admin
-// UI can render pagination. The total is computed with COUNT(*) OVER(), which is
-// evaluated over the full filtered set before LIMIT/OFFSET are applied.
-func (r *ViewerRepository) ListAll(ctx context.Context, filter ViewerListFilter, limit, offset int) ([]models.ViewerSession, int, error) {
+// AdminViewer is one row of the admin Viewers page (ADR-0034): a platform account,
+// keyed by (platform, platform_user_id), with its sign-in session and its durable
+// viewer identity when each exists. SessionID is nil for an identity that never
+// signed in (engagement-service creates one for every chatter who earns points)
+// or that logged out; ViewerID is nil for a session no identity was resolved for.
+// Ban and activity act on the session, premium on the viewer.
+type AdminViewer struct {
+	SessionID        *uuid.UUID `json:"session_id"`
+	ViewerID         *uuid.UUID `json:"viewer_id"`
+	Platform         string     `json:"platform"`
+	PlatformUserID   string     `json:"platform_user_id"`
+	Username         string     `json:"username"`
+	DisplayName      string     `json:"display_name"`
+	AvatarURL        *string    `json:"avatar_url"`
+	LastMessageAt    *time.Time `json:"last_message_at"`
+	IsPremium        bool       `json:"is_premium"`
+	PremiumExpiresAt *time.Time `json:"premium_expires_at"` // ADR-0027: time-limited admin premium deadline (NULL = permanent)
+	UserID           *string    `json:"user_id"`            // Linked streamer account (migration 040)
+	IsBanned         bool       `json:"is_banned"`
+	BannedAt         *time.Time `json:"banned_at"`
+	BannedReason     *string    `json:"banned_reason"`
+	CreatedAt        time.Time  `json:"created_at"`
+}
+
+// ListAll returns the platform accounts matching filter, paginated by limit/offset,
+// plus the total number of rows matching the filter (ignoring limit/offset) so the
+// admin UI can render pagination. The total is computed with COUNT(*) OVER(), which
+// is evaluated over the full filtered set before LIMIT/OFFSET are applied.
+//
+// Sessions and identities are full-outer-joined on the account, so an identity
+// without a session is listed too. Premium is read from the identity's viewer,
+// the one the badge enricher reads, falling back to the session's.
+func (r *ViewerRepository) ListAll(ctx context.Context, filter ViewerListFilter, limit, offset int) ([]AdminViewer, int, error) {
 	conditions := make([]string, 0, 4)
 	args := make([]interface{}, 0, 6)
 	argIdx := 1
 
 	if filter.Query != "" {
 		conditions = append(conditions, fmt.Sprintf(
-			"(vs.username ILIKE $%d OR vs.display_name ILIKE $%d OR vs.platform_user_id ILIKE $%d)",
+			"(vs.username ILIKE $%d OR vs.display_name ILIKE $%d OR COALESCE(vs.platform_user_id, vpi.platform_user_id) ILIKE $%d)",
 			argIdx, argIdx, argIdx))
 		args = append(args, "%"+filter.Query+"%")
 		argIdx++
 	}
 	if filter.IsBanned != nil {
-		conditions = append(conditions, fmt.Sprintf("vs.is_banned = $%d", argIdx))
+		conditions = append(conditions, fmt.Sprintf("COALESCE(vs.is_banned, false) = $%d", argIdx))
 		args = append(args, *filter.IsBanned)
 		argIdx++
 	}
@@ -356,7 +383,7 @@ func (r *ViewerRepository) ListAll(ctx context.Context, filter ViewerListFilter,
 		argIdx++
 	}
 	if filter.Platform != "" {
-		conditions = append(conditions, fmt.Sprintf("vs.platform = $%d", argIdx))
+		conditions = append(conditions, fmt.Sprintf("COALESCE(vs.platform, vpi.platform) = $%d", argIdx))
 		args = append(args, filter.Platform)
 		argIdx++
 	}
@@ -367,73 +394,56 @@ func (r *ViewerRepository) ListAll(ctx context.Context, filter ViewerListFilter,
 	}
 
 	query := fmt.Sprintf(`
-		SELECT vs.id, vs.platform, vs.platform_user_id, vs.username, vs.display_name, vs.avatar_url,
-		       vs.access_token, vs.refresh_token, vs.token_expires_at,
-		       vs.last_message_at, vs.message_count_1min, vs.message_count_1hour,
-		       vs.rate_limit_reset_1min, vs.rate_limit_reset_1hour,
-		       COALESCE(v.is_premium, false) AS is_premium,
+		SELECT vs.id, v.id,
+		       COALESCE(vs.platform, vpi.platform), COALESCE(vs.platform_user_id, vpi.platform_user_id),
+		       COALESCE(vs.username, ''), COALESCE(vs.display_name, ''), vs.avatar_url,
+		       vs.last_message_at,
+		       COALESCE(v.is_premium, false),
 		       v.premium_admin_override_expires_at,
-		       vs.viewer_id,
 		       vs.user_id,
-		       vs.is_banned, vs.banned_at, vs.banned_reason,
-		       vs.created_at, vs.updated_at,
+		       COALESCE(vs.is_banned, false), vs.banned_at, vs.banned_reason,
+		       COALESCE(vs.created_at, vpi.created_at),
 		       COUNT(*) OVER() AS total_count
 		FROM viewer_sessions vs
-		LEFT JOIN viewers v ON vs.viewer_id = v.id
+		FULL OUTER JOIN viewer_platform_identities vpi
+		    ON vpi.platform = vs.platform AND vpi.platform_user_id = vs.platform_user_id
+		LEFT JOIN viewers v ON v.id = COALESCE(vpi.viewer_id, vs.viewer_id)
 		%s
-		ORDER BY vs.created_at DESC
+		ORDER BY COALESCE(vs.created_at, vpi.created_at) DESC
 		LIMIT $%d OFFSET $%d
 	`, whereClause, argIdx, argIdx+1)
 	args = append(args, limit, offset)
 
 	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list viewer sessions: %w", err)
+		return nil, 0, fmt.Errorf("failed to list viewers: %w", err)
 	}
 	defer rows.Close()
 
-	sessions := make([]models.ViewerSession, 0)
+	viewers := make([]AdminViewer, 0)
 	total := 0
 	for rows.Next() {
-		var session models.ViewerSession
-		var rowTotal int
-		err := rows.Scan(
-			&session.ID,
-			&session.Platform,
-			&session.PlatformUserID,
-			&session.Username,
-			&session.DisplayName,
-			&session.AvatarURL,
-			&session.AccessToken,
-			&session.RefreshToken,
-			&session.TokenExpiresAt,
-			&session.LastMessageAt,
-			&session.MessageCount1Min,
-			&session.MessageCount1Hour,
-			&session.RateLimitReset1Min,
-			&session.RateLimitReset1Hour,
-			&session.IsPremium,
-			&session.PremiumExpiresAt,
-			&session.ViewerID,
-			&session.UserID,
-			&session.IsBanned,
-			&session.BannedAt,
-			&session.BannedReason,
-			&session.CreatedAt,
-			&session.UpdatedAt,
-			&rowTotal,
-		)
-		if err != nil {
-			return nil, 0, fmt.Errorf("failed to scan viewer session: %w", err)
+		var v AdminViewer
+		if err := rows.Scan(
+			&v.SessionID, &v.ViewerID,
+			&v.Platform, &v.PlatformUserID,
+			&v.Username, &v.DisplayName, &v.AvatarURL,
+			&v.LastMessageAt,
+			&v.IsPremium, &v.PremiumExpiresAt,
+			&v.UserID,
+			&v.IsBanned, &v.BannedAt, &v.BannedReason,
+			&v.CreatedAt,
+			&total,
+		); err != nil {
+			return nil, 0, fmt.Errorf("failed to scan viewer: %w", err)
 		}
-		total = rowTotal
-		sessions = append(sessions, session)
+		viewers = append(viewers, v)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("failed to iterate viewer sessions: %w", err)
+		return nil, 0, fmt.Errorf("failed to iterate viewers: %w", err)
 	}
 
-	return sessions, total, nil
+	return viewers, total, nil
 }
 
 // ViewerActivityStreamer is one streamer/overlay/channel a viewer has sent
@@ -562,28 +572,20 @@ func (r *ViewerRepository) UnbanViewer(ctx context.Context, sessionID uuid.UUID)
 }
 
 // SetViewerPremium records the admin's viewer-premium decision as a tri-state
-// override (ADR-0019, mirroring users.premium_admin_override) on the viewer linked
-// to the session, then re-derives viewers.is_premium via shared/premium. Granting
-// maps to a force-grant (override TRUE) that survives a subscription lapse; revoking
-// clears the override (NULL) so premium then follows any active viewer subscription
-// or linked-streamer inheritance. A hard viewer-premium ban (override FALSE) is
-// reserved for a future explicit admin action.
+// override (ADR-0019, mirroring users.premium_admin_override) on the durable viewer,
+// then re-derives viewers.is_premium via shared/premium. It takes the viewer id, not
+// a session id, so a viewer without a session can be granted too (ADR-0034).
+// Granting maps to a force-grant (override TRUE) that survives a subscription lapse;
+// revoking clears the override (NULL) so premium then follows any active viewer
+// subscription or linked-streamer inheritance. A hard viewer-premium ban (override
+// FALSE) is reserved for a future explicit admin action. Returns ErrNotFound when
+// no such viewer exists.
 //
 // ttl makes the grant time-limited (ADR-0027): non-nil grants viewer premium only
 // until NOW()+ttl, after which RecomputeViewer (and the payment-service sweep) treat
 // the override as absent. ttl is only meaningful when granting; a nil ttl (or any
 // revoke) clears the expiry. The deadline is computed from the database clock.
-func (r *ViewerRepository) SetViewerPremium(ctx context.Context, sessionID uuid.UUID, isPremium bool, ttl *time.Duration) error {
-	var viewerID uuid.UUID
-	err := r.db.QueryRow(ctx,
-		`SELECT viewer_id FROM viewer_sessions WHERE id = $1 AND viewer_id IS NOT NULL`, sessionID).Scan(&viewerID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("viewer not found or no linked viewer identity")
-	}
-	if err != nil {
-		return fmt.Errorf("failed to resolve viewer for session: %w", err)
-	}
-
+func (r *ViewerRepository) SetViewerPremium(ctx context.Context, viewerID uuid.UUID, isPremium bool, ttl *time.Duration) error {
 	var override *bool
 	if isPremium {
 		v := true
@@ -594,15 +596,19 @@ func (r *ViewerRepository) SetViewerPremium(ctx context.Context, sessionID uuid.
 		s := ttl.Seconds()
 		ttlSeconds = &s
 	}
-	if _, err := r.db.Exec(ctx, `
+	tag, err := r.db.Exec(ctx, `
 		UPDATE viewers
 		SET premium_admin_override = $2,
 		    premium_admin_override_expires_at = CASE
 		        WHEN $3::double precision IS NULL THEN NULL
 		        ELSE NOW() + make_interval(secs => $3::double precision)
 		    END
-		WHERE id = $1`, viewerID, override, ttlSeconds); err != nil {
+		WHERE id = $1`, viewerID, override, ttlSeconds)
+	if err != nil {
 		return fmt.Errorf("failed to update viewer premium override: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
 	}
 
 	if _, err := r.recomputer.RecomputeViewer(ctx, viewerID.String()); err != nil {

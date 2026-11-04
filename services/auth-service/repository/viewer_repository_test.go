@@ -108,6 +108,14 @@ func setupViewerRepoTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW()
 		);
+		CREATE TABLE viewer_platform_identities (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			viewer_id UUID NOT NULL REFERENCES viewers(id) ON DELETE CASCADE,
+			platform VARCHAR(50) NOT NULL,
+			platform_user_id VARCHAR(100) NOT NULL,
+			created_at TIMESTAMP DEFAULT NOW(),
+			UNIQUE(platform, platform_user_id)
+		);
 		CREATE TABLE viewer_message_history (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			viewer_session_id UUID NOT NULL REFERENCES viewer_sessions(id) ON DELETE CASCADE,
@@ -344,6 +352,80 @@ func TestListAll_PopulatesUserID(t *testing.T) {
 	}
 	if sessions[0].UserID == nil || *sessions[0].UserID != streamerID.String() {
 		t.Errorf("UserID = %v, want %s", sessions[0].UserID, streamerID.String())
+	}
+}
+
+// insertIdentity maps (platform, platformUserID) to viewerID, as engagement-service
+// does for a chatter who earns points without ever signing in.
+func insertIdentity(t *testing.T, pool *pgxpool.Pool, viewerID uuid.UUID, platform, platformUserID string) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO viewer_platform_identities (viewer_id, platform, platform_user_id) VALUES ($1, $2, $3)`,
+		viewerID, platform, platformUserID); err != nil {
+		t.Fatalf("insert identity: %v", err)
+	}
+}
+
+// An identity without a session (a chatter engagement-service created, or a viewer
+// who logged out) must still be listed, so an admin can find it and grant premium.
+func TestListAll_IncludesIdentityWithoutSession(t *testing.T) {
+	pool, cleanup := setupViewerRepoTestDB(t)
+	defer cleanup()
+	repo := repository.NewViewerRepository(pool, nil, nil)
+	ctx := context.Background()
+
+	viewerID := insertViewer(t, pool, true)
+	insertIdentity(t, pool, viewerID, "youtube", "UC_sessionless")
+
+	viewers, total, err := repo.ListAll(ctx, repository.ViewerListFilter{Query: "UC_sessionless"}, 50, 0)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if total != 1 || len(viewers) != 1 {
+		t.Fatalf("total=%d len=%d, want the session-less identity", total, len(viewers))
+	}
+	got := viewers[0]
+	if got.SessionID != nil {
+		t.Errorf("SessionID = %v, want nil (no session)", got.SessionID)
+	}
+	if got.ViewerID == nil || *got.ViewerID != viewerID {
+		t.Errorf("ViewerID = %v, want %s", got.ViewerID, viewerID)
+	}
+	if got.Platform != "youtube" || got.PlatformUserID != "UC_sessionless" || !got.IsPremium {
+		t.Errorf("row = %+v, want premium youtube UC_sessionless", got)
+	}
+
+	youtube := "youtube"
+	if _, total, err = repo.ListAll(ctx, repository.ViewerListFilter{Platform: youtube}, 50, 0); err != nil || total != 1 {
+		t.Errorf("platform filter: total=%d err=%v, want 1", total, err)
+	}
+}
+
+// A signed-in viewer has both a session and an identity: one row, not two, and
+// premium comes from the identity's viewer even if the session still points nowhere.
+func TestListAll_SessionAndIdentityAreOneRow(t *testing.T) {
+	pool, cleanup := setupViewerRepoTestDB(t)
+	defer cleanup()
+	repo := repository.NewViewerRepository(pool, nil, nil)
+	ctx := context.Background()
+
+	viewerID := insertViewer(t, pool, true)
+	insertIdentity(t, pool, viewerID, "twitch", "both")
+	sessionID := insertSession(t, pool, sessionSpec{platform: "twitch", platformUserID: "both", username: "both_user", displayName: "d"})
+
+	viewers, total, err := repo.ListAll(ctx, repository.ViewerListFilter{}, 50, 0)
+	if err != nil {
+		t.Fatalf("ListAll: %v", err)
+	}
+	if total != 1 || len(viewers) != 1 {
+		t.Fatalf("total=%d len=%d, want one merged row", total, len(viewers))
+	}
+	got := viewers[0]
+	if got.SessionID == nil || *got.SessionID != sessionID || got.Username != "both_user" {
+		t.Errorf("row = %+v, want the session's id and username", got)
+	}
+	if got.ViewerID == nil || *got.ViewerID != viewerID || !got.IsPremium {
+		t.Errorf("row = %+v, want the identity's premium viewer", got)
 	}
 }
 

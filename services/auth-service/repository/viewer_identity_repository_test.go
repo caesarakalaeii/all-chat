@@ -199,3 +199,136 @@ func TestUpsertViewerCosmetics_PartialUpdatePreservesUntouchedColumns(t *testing
 	require.NotNil(t, res.AvatarFrameID, "name-only update must preserve the saved avatar frame")
 	assert.Equal(t, frameID, *res.AvatarFrameID)
 }
+
+// seedEngagementIdentity creates a viewers row plus its platform identity without a
+// viewer session, the way engagement-service does for a chatter who earns points
+// before ever signing in.
+func seedEngagementIdentity(t *testing.T, pool *pgxpool.Pool, platform, platformUserID string) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	var viewerID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `INSERT INTO viewers DEFAULT VALUES RETURNING id`).Scan(&viewerID))
+	_, err := pool.Exec(ctx,
+		`INSERT INTO viewer_platform_identities (viewer_id, platform, platform_user_id) VALUES ($1, $2, $3)`,
+		viewerID, platform, platformUserID)
+	require.NoError(t, err)
+	return viewerID
+}
+
+// seedSession inserts a viewer_sessions row with the given viewer_id (nil = NULL)
+// and removes it when the test ends.
+func seedSession(t *testing.T, pool *pgxpool.Pool, platform, platformUserID string, viewerID *uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO viewer_sessions (platform, platform_user_id, username, display_name, access_token, token_expires_at, viewer_id)
+		VALUES ($1, $2, 'itest', 'itest', 'x', NOW(), $3)`, platform, platformUserID, viewerID)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		pool.Exec(ctx, `DELETE FROM viewer_sessions WHERE platform = $1 AND platform_user_id = $2`, platform, platformUserID)
+	})
+}
+
+func sessionViewerID(t *testing.T, pool *pgxpool.Pool, platform, platformUserID string) *uuid.UUID {
+	t.Helper()
+	var viewerID *uuid.UUID
+	require.NoError(t, pool.QueryRow(context.Background(),
+		`SELECT viewer_id FROM viewer_sessions WHERE platform = $1 AND platform_user_id = $2`,
+		platform, platformUserID).Scan(&viewerID))
+	return viewerID
+}
+
+// A chatter who earned points first already has an identity when they sign in.
+// Resolving it must link their new session to that identity, or the admin premium
+// grant (which resolves the viewer through the session) has nothing to act on.
+func TestGetOrCreateViewerByPlatform_ExistingIdentityLinksSession(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.NewViewerIdentityRepository(pool, premium.NewRecomputer(pool, zap.NewNop()))
+	platform, platformUserID := "youtube", "UC_itest_engagement_first"
+	defer cleanupViewer(t, pool, platform, platformUserID)
+
+	existing := seedEngagementIdentity(t, pool, platform, platformUserID)
+	seedSession(t, pool, platform, platformUserID, nil)
+
+	viewerID, err := repo.GetOrCreateViewerByPlatform(context.Background(), platform, platformUserID)
+	require.NoError(t, err)
+	assert.Equal(t, existing, viewerID)
+	got := sessionViewerID(t, pool, platform, platformUserID)
+	require.NotNil(t, got, "session must be linked to the existing identity")
+	assert.Equal(t, existing, *got)
+}
+
+// Moving a platform to another viewer (connect flow) must move its session too, or
+// premium granted through the session lands on the old viewer while the badge
+// enricher reads the new one.
+func TestLinkPlatformToViewer_MoveRelinksSession(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.NewViewerIdentityRepository(pool, premium.NewRecomputer(pool, zap.NewNop()))
+	platform, platformUserID := "kick", "itest_move_session"
+	defer cleanupViewer(t, pool, platform, platformUserID)
+
+	oldViewer := seedEngagementIdentity(t, pool, platform, platformUserID)
+	seedSession(t, pool, platform, platformUserID, &oldViewer)
+	var newViewer uuid.UUID
+	require.NoError(t, pool.QueryRow(context.Background(), `INSERT INTO viewers DEFAULT VALUES RETURNING id`).Scan(&newViewer))
+	defer pool.Exec(context.Background(), `DELETE FROM viewers WHERE id = $1`, newViewer)
+
+	require.NoError(t, repo.LinkPlatformToViewer(context.Background(), newViewer, platform, platformUserID))
+	got := sessionViewerID(t, pool, platform, platformUserID)
+	require.NotNil(t, got)
+	assert.Equal(t, newViewer, *got)
+}
+
+// Premium lives on the durable viewer, so an admin can grant it to an identity
+// that has no session at all (ADR-0034).
+func TestSetViewerPremium_SessionlessIdentity(t *testing.T) {
+	pool := newTestDB(t)
+	recomputer := premium.NewRecomputer(pool, zap.NewNop())
+	repo := repository.NewViewerRepository(pool, nil, recomputer)
+	ctx := context.Background()
+	platform, platformUserID := "youtube", "UC_itest_sessionless_grant"
+	defer cleanupViewer(t, pool, platform, platformUserID)
+
+	viewerID := seedEngagementIdentity(t, pool, platform, platformUserID)
+	require.NoError(t, repo.SetViewerPremium(ctx, viewerID, true, nil))
+
+	var isPremium bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT is_premium FROM viewers WHERE id = $1`, viewerID).Scan(&isPremium))
+	assert.True(t, isPremium)
+
+	require.NoError(t, repo.SetViewerPremium(ctx, viewerID, false, nil))
+	require.NoError(t, pool.QueryRow(ctx, `SELECT is_premium FROM viewers WHERE id = $1`, viewerID).Scan(&isPremium))
+	assert.False(t, isPremium)
+}
+
+func TestSetViewerPremium_UnknownViewer(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.NewViewerRepository(pool, nil, premium.NewRecomputer(pool, zap.NewNop()))
+	err := repo.SetViewerPremium(context.Background(), uuid.New(), true, nil)
+	assert.ErrorIs(t, err, repository.ErrNotFound)
+}
+
+// New viewers start unaccepted (migration 126) and accepting persists.
+func TestViewerTos_AcceptRoundTrip(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.NewViewerIdentityRepository(pool, premium.NewRecomputer(pool, zap.NewNop()))
+	ctx := context.Background()
+	platform, platformUserID := "twitch", "itest_viewer_tos"
+	defer cleanupViewer(t, pool, platform, platformUserID)
+
+	viewerID, err := repo.GetOrCreateViewerByPlatform(ctx, platform, platformUserID)
+	require.NoError(t, err)
+	accepted, err := repo.GetViewerTosAccepted(ctx, viewerID)
+	require.NoError(t, err)
+	assert.False(t, accepted, "a new viewer must be prompted")
+
+	require.NoError(t, repo.AcceptViewerTos(ctx, viewerID))
+	accepted, err = repo.GetViewerTosAccepted(ctx, viewerID)
+	require.NoError(t, err)
+	assert.True(t, accepted)
+
+	unknown := uuid.New()
+	_, err = repo.GetViewerTosAccepted(ctx, unknown)
+	assert.ErrorIs(t, err, repository.ErrNotFound)
+	assert.ErrorIs(t, repo.AcceptViewerTos(ctx, unknown), repository.ErrNotFound)
+}

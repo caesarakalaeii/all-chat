@@ -36,6 +36,7 @@ func TestRegisterViewerRoutes_ForwardsEveryViewerRoute(t *testing.T) {
 
 	routes := []struct{ method, path string }{
 		{http.MethodGet, "/api/v1/auth/viewer/me"},
+		{http.MethodPost, "/api/v1/auth/viewer/me/tos-acceptance"},
 		{http.MethodDelete, "/api/v1/auth/viewer/me"}, // erase own viewer data (ADR-0088)
 		{http.MethodPost, "/api/v1/auth/viewer/logout"},
 		{http.MethodPost, "/api/v1/auth/viewer/chat/send"},
@@ -43,6 +44,7 @@ func TestRegisterViewerRoutes_ForwardsEveryViewerRoute(t *testing.T) {
 		{http.MethodPatch, "/api/v1/auth/viewer/cosmetics"},
 		{http.MethodGet, "/api/v1/auth/viewer/linked-platforms"},
 		{http.MethodDelete, "/api/v1/auth/viewer/linked-platforms/kick"},
+		{http.MethodGet, "/api/v1/auth/viewer/data-export"},
 	}
 	for _, req := range routes {
 		w := httptest.NewRecorder()
@@ -67,4 +69,25 @@ func TestRegisterViewerRoutes_DeleteDoesNotForwardStreamerCookie(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "access_token", Value: "streamer-session"})
 	r.ServeHTTP(httptest.NewRecorder(), req)
 	assert.Empty(t, accessHeader)
+}
+
+// The admin Viewers page's Activity dialog 404'd at the gateway because its route
+// was never registered (ADR-0034), and premium is keyed on the durable viewer.
+func TestRegisterAdminViewerRoutes_ForwardsEveryAdminViewerRoute(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	forward := func(c *gin.Context) { c.Status(http.StatusNoContent) }
+	registerAdminViewerRoutes(r.Group("/api/v1/admin"), forward)
+
+	for _, req := range []struct{ method, path string }{
+		{http.MethodGet, "/api/v1/admin/viewers"},
+		{http.MethodGet, "/api/v1/admin/viewers/s-1/activity"},
+		{http.MethodPost, "/api/v1/admin/viewers/s-1/ban"},
+		{http.MethodPost, "/api/v1/admin/viewers/s-1/unban"},
+		{http.MethodPost, "/api/v1/admin/viewers/identities/v-1/premium"},
+	} {
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(req.method, req.path, nil))
+		assert.Equal(t, http.StatusNoContent, w.Code, req.method+" "+req.path)
+	}
 }

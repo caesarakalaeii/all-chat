@@ -299,7 +299,8 @@ export const admin = {
   },
   viewers: {
     heading: 'Viewer Management',
-    intro: 'Search viewer sessions, inspect activity, and manage bans and premium',
+    intro:
+      'Search viewers, including chatters who never signed in, inspect activity, and manage bans and premium',
     // One key: the count and the word were JSX siblings, so a language that puts
     // the count last could not reorder them.
     totalMatching: '{count} matching',
@@ -315,7 +316,7 @@ export const admin = {
     premiumAny: 'Any',
     premiumOnly: 'Premium',
     premiumFree: 'Free',
-    empty: 'No viewer sessions match your search or filters.',
+    empty: 'No viewers match your search or filters.',
     tableCaption: 'Viewers',
     columnViewer: 'Viewer',
     columnPlatform: 'Platform',
@@ -328,6 +329,10 @@ export const admin = {
     badgeActive: 'Active',
     banReason: 'Reason: {reason}',
     sessionOnlyTitle: 'Session-only viewer (no linked account)',
+    // A viewer identity with no sign-in session: engagement-service creates one
+    // for every chatter who earns points, and logging out removes the session.
+    // Nothing to ban, no sent messages; premium still works.
+    neverSignedIn: 'Not signed in',
     premiumBadge: 'Premium',
     freeBadge: 'Free',
     // Two whole aria labels: the badge word was prefixed to the sentence, and a

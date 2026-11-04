@@ -98,10 +98,13 @@ export const useViewerAuthStore = create<ViewerAuthStore>((set) => ({
       const viewerInfo = await viewerApi.getMe()
       set({ viewerInfo, loading: false })
     } catch {
-      // Token invalid, clear it
-      inMemoryTokens.setViewerAccessToken(null)
-      localStorage.removeItem('viewer_jwt_token')
-      set({ viewerInfo: null, viewerToken: null, loading: false })
+      // ViewerApiClient already dropped the token on a 401. Any other failure
+      // (network, 5xx) must not sign the viewer out: init runs on every page load.
+      set({
+        viewerInfo: null,
+        viewerToken: localStorage.getItem('viewer_jwt_token'),
+        loading: false,
+      })
     }
   },
 }))

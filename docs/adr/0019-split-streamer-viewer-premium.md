@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-20
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation; the subscription's subject now comes from the connection, see ADR-0018)
+**Revised**: 2026-11-04 (viewer routes read premium from the database, not the JWT claim; admin grant keyed on the viewer, ADR-0034)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -63,7 +63,7 @@ We want a **cheaper, separately-priced viewer subscription** that grants only vi
   - `premium_subscriptions`: add `product VARCHAR(16) NOT NULL DEFAULT 'streamer'` (CHECK in `'streamer','viewer'`), add `viewer_id UUID REFERENCES viewers(id) ON DELETE CASCADE`, CHECK not-both-subjects; index `(viewer_id)`.
   - `patreon_oauth_tokens`: `ALTER user_id DROP NOT NULL`; add `viewer_id UUID REFERENCES viewers(id) ON DELETE CASCADE`; drop the inline `UNIQUE(user_id)` → two partial unique indexes (`user_id WHERE NOT NULL`, `viewer_id WHERE NOT NULL`); keep `UNIQUE(patreon_user_id)`; CHECK exactly-one-subject.
   - `viewers`: add `premium_admin_override BOOLEAN DEFAULT NULL` (tri-state mirror).
-- **Read path unchanged.** `ViewerBadgeEnricher` and `generateViewerJWT` keep reading `viewers.is_premium`; no enricher change.
+- **Read path unchanged.** `ViewerBadgeEnricher` and `generateViewerJWT` keep reading `viewers.is_premium`; no enricher change. The viewer JWT's `is_premium` claim is only the value at sign-in, so auth-service's `FreshViewerPremium` middleware replaces it with the current `viewers.is_premium` on every `/viewer/*` request, and `GET /viewer/me` returns that current value to the web page (2026-11-04): an admin grant, a new subscription or a lapse takes effect at once instead of when the day-long token expires. The admin grant targets the `viewers` row directly (`POST /admin/viewers/identities/:viewer_id/premium`, ADR-0034).
 
 ## Consequences
 

@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-05
 **Status**: Accepted
+**Revised**: 2026-11-04 (viewer premium route keyed on the durable viewer, ADR-0034)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -70,7 +71,7 @@ Because the recompute already nullifies an expired override, `is_premium` is cor
 - **payment-service**: `reconcile/override_expiry.go` (`OverrideExpirySweeper`) + wiring in `cmd/main.go` (`PAYMENT_OVERRIDE_SWEEP_INTERVAL`, `PAYMENT_OVERRIDE_SWEEP_BATCH_SIZE`).
 - **share-service**: `repository/premium_repo.go` `UpdateUserPremium(…, ttl)`, `handlers/admin.go` parses/validates `duration_seconds`.
 - **auth-service**: `repository/viewer_repository.go` `SetViewerPremium(…, ttl)`, `handlers/admin_viewers.go` parses/validates `duration_seconds`; `premium_expires_at` surfaced in the admin user + viewer lists.
-- **Gateway**: unchanged — the existing `POST /api/v1/admin/premium/users/:id` and `POST /api/v1/admin/viewers/:session_id/premium` routes only grow their request body.
+- **Gateway**: unchanged — the existing `POST /api/v1/admin/premium/users/:id` and `POST /api/v1/admin/viewers/:session_id/premium` routes only grew their request body. (The viewer route is now `POST /api/v1/admin/viewers/identities/:viewer_id/premium`, keyed on the durable viewer; see [ADR-0034](./0034-admin-viewer-identity-model.md).)
 - **Frontend**: `components/admin/PremiumDurationChooser.tsx` (presets + custom days, pure `customDaysToSeconds`), wired into `admin/users` and `admin/viewers` grant dialogs; expiry shown on the active-premium panels.
 - **Tests**: unit (`customDaysToSeconds`; handler duration validation) + testcontainers integration (recompute expiry truth table, `ExpireXOverrideIfDue` guard, end-to-end sweep flips `is_premium` and clears columns).
 

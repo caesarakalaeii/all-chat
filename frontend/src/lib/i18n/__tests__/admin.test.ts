@@ -441,7 +441,7 @@ describe('admin viewers page copy', () => {
   it('keeps the page header and the total count', () => {
     expect(t('admin.viewers.heading')).toBe('Viewer Management')
     expect(t('admin.viewers.intro')).toBe(
-      'Search viewer sessions, inspect activity, and manage bans and premium'
+      'Search viewers, including chatters who never signed in, inspect activity, and manage bans and premium'
     )
     // The count and the word 'matching' were siblings in JSX. One key, so a
     // language that puts the count last can.
@@ -466,7 +466,8 @@ describe('admin viewers page copy', () => {
   })
 
   it('keeps the table caption, column headers and empty state', () => {
-    expect(t('admin.viewers.empty')).toBe('No viewer sessions match your search or filters.')
+    expect(t('admin.viewers.empty')).toBe('No viewers match your search or filters.')
+    expect(t('admin.viewers.neverSignedIn')).toBe('Not signed in')
     expect(t('admin.viewers.tableCaption')).toBe('Viewers')
     expect(t('admin.viewers.columnViewer')).toBe('Viewer')
     expect(t('admin.viewers.columnPlatform')).toBe('Platform')

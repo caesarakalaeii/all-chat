@@ -1013,10 +1013,7 @@ func main() {
 		adminAPI.GET("/stats", proxyHandler.ForwardRequest)
 
 		// Viewer management (-> auth-service)
-		adminAPI.GET("/viewers", proxyHandler.ForwardRequest)
-		adminAPI.POST("/viewers/:session_id/ban", proxyHandler.ForwardRequest)
-		adminAPI.POST("/viewers/:session_id/unban", proxyHandler.ForwardRequest)
-		adminAPI.POST("/viewers/:session_id/premium", proxyHandler.ForwardRequest)
+		registerAdminViewerRoutes(adminAPI, proxyHandler.ForwardRequest)
 
 		// Overlay management (-> overlay-manager)
 		adminAPI.GET("/overlays", proxyHandler.ForwardRequest)

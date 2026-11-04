@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -54,6 +55,8 @@ type ViewerIdentityRepo interface {
 	UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) ([]repository.RemovedToken, error)
 	MigratePlatformUserID(ctx context.Context, platform, oldPlatformUserID, newPlatformUserID string) error
 	EraseViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) ([]repository.LinkedPlatform, error)
+	GetViewerTosAccepted(ctx context.Context, viewerID uuid.UUID) (bool, error)
+	AcceptViewerTos(ctx context.Context, viewerID uuid.UUID) error
 }
 
 // ViewerAuthHandler handles authentication for viewers who want to send messages
@@ -439,14 +442,73 @@ func (h *ViewerAuthHandler) HandleMe(c *gin.Context) {
 		return
 	}
 
-	// Return viewer info (without tokens)
+	// Return viewer info (without tokens). is_premium was refreshed from the
+	// database by FreshViewerPremium.
 	c.JSON(http.StatusOK, models.ViewerInfo{
 		ID:          session.ID,
 		Platform:    session.Platform,
 		Username:    session.Username,
 		DisplayName: session.DisplayName,
 		AvatarURL:   session.AvatarURL,
+		IsPremium:   c.GetBool("is_premium"),
+		TosAccepted: h.viewerTosAccepted(c),
 	})
+}
+
+// viewerTosAccepted reports whether the signed-in viewer accepted the Terms. It
+// fails open (true): a token without a durable viewer has nowhere to record an
+// acceptance, and a lookup failure must not lock the viewer out behind a prompt
+// that cannot be dismissed.
+func (h *ViewerAuthHandler) viewerTosAccepted(c *gin.Context) bool {
+	viewerID, err := uuid.Parse(c.GetString("viewer_id"))
+	if err != nil {
+		return true
+	}
+	accepted, err := h.identityRepo.GetViewerTosAccepted(c.Request.Context(), viewerID)
+	if err != nil {
+		h.logger.Warn("Failed to read viewer terms acceptance", zap.Error(err))
+		return true
+	}
+	return accepted
+}
+
+// HandleAcceptTos records the signed-in viewer's acceptance of the Terms of
+// Service and Privacy Policy, the viewer counterpart of AuthHandler.HandleAcceptTos.
+//
+// POST /viewer/me/tos-acceptance
+func (h *ViewerAuthHandler) HandleAcceptTos(c *gin.Context) {
+	viewerID, err := uuid.Parse(c.GetString("viewer_id"))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	if err := h.identityRepo.AcceptViewerTos(c.Request.Context(), viewerID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Viewer not found"})
+			return
+		}
+		h.logger.Error("Failed to record viewer terms acceptance", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to record terms acceptance"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tos_accepted": true})
+}
+
+// FreshViewerPremium replaces the is_premium claim baked into a viewer JWT at
+// sign-in with the current viewers.is_premium, so an admin grant, a new
+// subscription or a lapse takes effect on the next request instead of when the
+// token expires. On a lookup failure the claim stands.
+func FreshViewerPremium(repo interface {
+	GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error)
+}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if viewerID, err := uuid.Parse(c.GetString("viewer_id")); err == nil {
+			if isPremium, err := repo.GetViewerIsPremium(c.Request.Context(), viewerID); err == nil {
+				c.Set("is_premium", isPremium)
+			}
+		}
+		c.Next()
+	}
 }
 
 // HandleLogout deletes the viewer session
