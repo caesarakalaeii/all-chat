@@ -44,7 +44,7 @@ const (
 // CheckFetchURL reports why raw may not be fetched: only absolute https URLs on the
 // default port, without credentials.
 func CheckFetchURL(raw string) error {
-	u, err := checkHTTPS(raw)
+	u, err := CheckHTTPS(raw)
 	if err != nil {
 		return fmt.Errorf("urlfetch: %w", err)
 	}
@@ -54,7 +54,9 @@ func CheckFetchURL(raw string) error {
 	return nil
 }
 
-func checkHTTPS(raw string) (*url.URL, error) {
+// CheckHTTPS parses raw and rejects anything but an absolute https URL without
+// credentials. It also validates a command's alert sound (ADR-0080).
+func CheckHTTPS(raw string) (*url.URL, error) {
 	if len(raw) > maxURLBytes {
 		return nil, fmt.Errorf("URL is longer than %d bytes", maxURLBytes)
 	}
@@ -117,7 +119,7 @@ func ImageURL(tpl string, v Vars) (string, []string) {
 	if out = strings.TrimSpace(out); out == "" {
 		return "", errs
 	}
-	if _, err := checkHTTPS(out); err != nil {
+	if _, err := CheckHTTPS(out); err != nil {
 		return "", append(errs, "image: "+err.Error())
 	}
 	return out, errs

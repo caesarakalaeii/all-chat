@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Check, CircleAlert, ImageIcon, Plus, Scissors } from 'lucide-react'
+import { BellRing, Check, CircleAlert, Plus, Scissors } from 'lucide-react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { AppNav } from '@/components/AppNav'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -55,6 +55,8 @@ const BLANK: ChatCommandInput = {
   response: '',
   create_clip: false,
   image_url: '',
+  sound_url: '',
+  alert_text: '',
   min_role: 'everyone',
   cooldown_seconds: 5,
   enabled: true,
@@ -101,8 +103,18 @@ const EXAMPLES: {
 ]
 
 function inputOf(c: ChatCommand): ChatCommandInput {
-  const { kind, trigger, response, create_clip, image_url, min_role, cooldown_seconds, enabled } = c
-  return { kind, trigger, response, create_clip, image_url, min_role, cooldown_seconds, enabled }
+  return {
+    kind: c.kind,
+    trigger: c.trigger,
+    response: c.response,
+    create_clip: c.create_clip,
+    image_url: c.image_url,
+    sound_url: c.sound_url,
+    alert_text: c.alert_text,
+    min_role: c.min_role,
+    cooldown_seconds: c.cooldown_seconds,
+    enabled: c.enabled,
+  }
 }
 
 export default function CommandsPage() {
@@ -393,10 +405,10 @@ function CommandRow({
                 {t('commands.list.clips')}
               </Badge>
             )}
-            {c.image_url && (
+            {(c.image_url || c.sound_url || c.alert_text) && (
               <Badge size="sm" className="gap-1">
-                <ImageIcon className="size-3" aria-hidden="true" />
-                {t('commands.list.image')}
+                <BellRing className="size-3" aria-hidden="true" />
+                {t('commands.list.alert')}
               </Badge>
             )}
           </div>

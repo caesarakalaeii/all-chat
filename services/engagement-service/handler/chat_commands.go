@@ -64,6 +64,8 @@ type chatCommandBody struct {
 	Response        string `json:"response"`
 	CreateClip      bool   `json:"create_clip"`
 	ImageURL        string `json:"image_url"`
+	SoundURL        string `json:"sound_url"`
+	AlertText       string `json:"alert_text"`
 	MinRole         string `json:"min_role"`
 	CooldownSeconds int    `json:"cooldown_seconds"`
 	Enabled         *bool  `json:"enabled"`
@@ -74,6 +76,9 @@ type chatCommandBody struct {
 func (b chatCommandBody) command(userID uuid.UUID) (models.ChatCommand, string) {
 	trigger := strings.TrimSpace(b.Trigger)
 	image := strings.TrimSpace(b.ImageURL)
+	sound := strings.TrimSpace(b.SoundURL)
+	_, soundErr := chatcmd.CheckHTTPS(sound) // the overlay plays it in OBS unchecked
+	alertText := strings.TrimSpace(b.AlertText)
 	switch {
 	case b.Kind != models.TriggerCommand && b.Kind != models.TriggerKeyword:
 		return models.ChatCommand{}, "kind must be command or keyword"
@@ -87,8 +92,12 @@ func (b chatCommandBody) command(userID uuid.UUID) (models.ChatCommand, string) 
 		return models.ChatCommand{}, "response must be at most 2000 characters"
 	case len(image) > 1000:
 		return models.ChatCommand{}, "image must be at most 1000 characters"
-	case strings.TrimSpace(b.Response) == "" && !b.CreateClip && image == "":
-		return models.ChatCommand{}, "a command needs a response, a clip or an image"
+	case len(sound) > 1000 || (sound != "" && soundErr != nil):
+		return models.ChatCommand{}, "sound must be an https URL of at most 1000 characters"
+	case len(alertText) > 500:
+		return models.ChatCommand{}, "alert text must be at most 500 characters"
+	case strings.TrimSpace(b.Response) == "" && !b.CreateClip && image == "" && sound == "" && alertText == "":
+		return models.ChatCommand{}, "a command needs a response, a clip or an alert"
 	case b.CooldownSeconds < 0 || b.CooldownSeconds > 86400:
 		return models.ChatCommand{}, "cooldown must be between 0 and 86400 seconds"
 	}
@@ -97,7 +106,8 @@ func (b chatCommandBody) command(userID uuid.UUID) (models.ChatCommand, string) 
 	}
 	enabled := b.Enabled == nil || *b.Enabled
 	return models.ChatCommand{UserID: userID, Kind: b.Kind, Trigger: trigger, Response: b.Response,
-		CreateClip: b.CreateClip, ImageURL: image, MinRole: b.MinRole, CooldownSeconds: b.CooldownSeconds, Enabled: enabled}, ""
+		CreateClip: b.CreateClip, ImageURL: image, SoundURL: sound, AlertText: alertText, MinRole: b.MinRole,
+		CooldownSeconds: b.CooldownSeconds, Enabled: enabled}, ""
 }
 
 func streamerID(c *gin.Context) (uuid.UUID, bool) {
