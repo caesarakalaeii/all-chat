@@ -28,9 +28,9 @@ export const metadata: LocaleNamespace<'metadata'> = {
     titleTemplate: '%s | All-Chat',
     description:
       'Sieh den Chat von Twitch, YouTube, Kick, TikTok und Discord in einem OBS-Chat-Overlay. Einfach in OBS einfügen und loslegen. 7TV-, BTTV- und FFZ-Emotes eingebaut. Kostenlos und Open Source.',
-    socialTitle: 'All-Chat — Jeder Chat. Ein Overlay.',
+    socialTitle: 'All-Chat — Jeder Chat. Eine URL.',
     socialDescription:
-      'Den gesamten Chat von Twitch, YouTube, Kick, TikTok und Discord in einem OBS-Overlay. 7TV-, BTTV- und FFZ-Emotes eingebaut.',
+      'Kostenloses Multistream-Chat-Overlay und OBS-Dock für Twitch, YouTube, Kick, TikTok und Discord. 7TV-, BTTV- und FFZ-Emotes eingebaut.',
   },
   home: {
     title: 'Multi-Plattform-Chat-Overlay für Twitch, YouTube, Kick & TikTok | All-Chat',

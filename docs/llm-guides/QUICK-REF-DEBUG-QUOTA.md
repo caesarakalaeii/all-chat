@@ -61,7 +61,7 @@ kubectl exec -n allchat deployment/youtube-listener -- \
 
 **Symptom**: `/quota/status` shows `state: "EXHAUSTED"` or `state: "DEPLETED"`
 
-**Root Cause**: Daily quota limit (10,000 units) reached or exceeded.
+**Root Cause**: Daily quota limit (1,009,000 units) reached or exceeded.
 
 **Immediate Fix** (Wait for Reset):
 1. **Check reset time**:
@@ -88,7 +88,7 @@ kubectl exec -n allchat deployment/youtube-listener -- \
 5. Click "Edit Quotas" → Request increase to **1,000,000 units/day**
 6. Provide justification: "Multi-platform chat aggregation service for live streamers"
 
-**File Reference**: `services/youtube-listener/quota/tracker.go:GetGlobalState()`
+**File Reference**: `services/youtube-listener/quota/tracker.go:GetUsageToday()`
 
 ---
 
@@ -144,8 +144,8 @@ SELECT cleanup_stale_quota_reservations();
 
 **File References**:
 - `services/youtube-listener/quota/tracker.go:ReserveQuota()`
-- `services/youtube-listener/quota/tracker.go:ConfirmQuota()`
-- `services/youtube-listener/quota/tracker.go:RollbackQuota()`
+- `services/youtube-listener/quota/tracker.go:ConfirmReservation()`
+- `services/youtube-listener/quota/tracker.go:RollbackReservation()`
 - `migrations/008_quota_reservations.sql` (reservation schema)
 
 ---
@@ -186,7 +186,7 @@ curl http://localhost:8086/quota/status | jq .global.used
 - Fail-open circuit breaker: quota tracking failure doesn't block users
 
 **File Reference**:
-- `services/overlay-manager/youtube/quota_client.go` (HTTP client wrapper)
+- `services/overlay-manager/clients/youtube_quota_client.go` (HTTP client wrapper)
 - `services/youtube-listener/handlers/quota.go` (`POST /quota/record`)
 
 ---
@@ -232,7 +232,7 @@ kubectl rollout restart deployment/youtube-listener -n allchat
 kubectl rollout status deployment/youtube-listener -n allchat
 ```
 
-**File Reference**: `services/youtube-listener/quota/tracker.go:checkDailyReset()`
+**File Reference**: `services/youtube-listener/quota/tracker.go:periodicDateCheck()`
 
 ---
 
@@ -283,7 +283,7 @@ kubectl logs -n allchat deployment/youtube-listener --tail=500 | \
 # - "rollback failed" → Database connection problems
 ```
 
-**File Reference**: `services/youtube-listener/quota/tracker.go:cleanupStaleReservations()`
+**File Reference**: `services/youtube-listener/quota/tracker.go:periodicReservationCleanup()`
 
 ---
 
@@ -327,7 +327,7 @@ HEALTHY (0-70%)
 - **EXHAUSTED → DEPLETED**: Stop all API calls
 - **Midnight PT**: Automatic reset to HEALTHY
 
-**File Reference**: `services/youtube-listener/quota/states.go`
+**File Reference**: `shared/quota/state.go` (thresholds and `CalculateState`)
 
 ---
 
@@ -349,7 +349,7 @@ HEALTHY (0-70%)
 - **Chat**: 5 units per `streamList` connection (gRPC server streaming), not per message batch.
 - **10 opted-in channels**, overlays open all day: below ~30,000 units/day, against a 1,009,000 limit.
 
-**Quota Waste Elimination** (~9,000 units/day savings):
+**Quota Waste Elimination** (savings measured when the quota was 10,000 units/day):
 - Stop on exhaustion (not retry every 5 min): 1,440 units/day saved
 - Immediate cache clearing on stream end: 200+ units/event saved
 - Enhanced status check (returns liveChatID): 2,880 units/day saved

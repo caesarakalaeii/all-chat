@@ -202,7 +202,9 @@ func setupLinkTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 			granted_scopes TEXT[] NOT NULL DEFAULT '{}',
 			created_at TIMESTAMP DEFAULT NOW(),
 			updated_at TIMESTAMP DEFAULT NOW(),
-			onboarding_completed_at TIMESTAMP NULL
+			onboarding_completed_at TIMESTAMP NULL,
+			tos_accepted BOOLEAN NOT NULL DEFAULT FALSE,
+			tos_accepted_at TIMESTAMP NULL
 		);
 		CREATE TABLE IF NOT EXISTS kick_oauth_tokens (
 			id SERIAL PRIMARY KEY,
@@ -399,6 +401,108 @@ func TestLinkPlatformToUser_TwitchReflowRecordsChatScopes(t *testing.T) {
 	}
 	if got.AccessToken != "twitch-chat-token" {
 		t.Errorf("twitch reflow did not update the primary access token: %q", got.AccessToken)
+	}
+}
+
+// A Kick-login account that links Twitch must be found by a later Twitch login. Before the
+// fix the id was set only in memory, so the Twitch login missed the account, tried to create
+// a second one and failed on the username index ("Failed to process user"). The login must
+// also leave the Kick credentials on the users row alone.
+func TestLinkedTwitchLoginFindsKickAccount(t *testing.T) {
+	pool, cleanup := setupLinkTestDB(t)
+	defer cleanup()
+
+	h, repo := newLinkTestHandler(t, pool)
+	ctx := context.Background()
+
+	kickID := "k-42"
+	kickUser := &models.User{
+		KickID:         &kickID,
+		AuthProvider:   "kick",
+		Username:       "Nikocarlov",
+		DisplayName:    "Nikocarlov",
+		AccessToken:    "kick-access-token",
+		RefreshToken:   "kick-refresh-token",
+		TokenExpiresAt: time.Now().Add(time.Hour),
+		GrantedScopes:  []string{"user:read"},
+	}
+	if err := repo.Create(ctx, kickUser); err != nil {
+		t.Fatalf("failed to create kick user: %v", err)
+	}
+
+	twitchUser := &fakePlatformUser{id: "tw-777", username: "nikocarlov", platform: oauth.PlatformTwitch}
+	chatScopes := []string{"user:read:chat", "user:bot", "channel:bot"}
+	if _, err := h.linkPlatformToUser(ctx, kickUser.ID, oauth.PlatformTwitch, twitchUser,
+		tokenWithScopes("twitch-link-token", chatScopes)); err != nil {
+		t.Fatalf("linkPlatformToUser(twitch) failed: %v", err)
+	}
+
+	got, err := h.getOrCreateUser(ctx, oauth.PlatformTwitch, twitchUser,
+		tokenWithScopes("twitch-login-token", []string{"bits:read"}), nil)
+	if err != nil {
+		t.Fatalf("Twitch login after link failed: %v", err)
+	}
+	if got.ID != kickUser.ID {
+		t.Fatalf("Twitch login landed on account %s, want the linked Kick account %s", got.ID, kickUser.ID)
+	}
+
+	stored, err := repo.GetByID(ctx, kickUser.ID)
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
+	}
+	if stored.AccessToken != "kick-access-token" || stored.RefreshToken != "kick-refresh-token" {
+		t.Errorf("Twitch login replaced the Kick credentials: access=%q refresh=%q", stored.AccessToken, stored.RefreshToken)
+	}
+	scopes, err := repo.GetGrantedScopes(ctx, kickUser.ID)
+	if err != nil {
+		t.Fatalf("GetGrantedScopes failed: %v", err)
+	}
+	if containsScope(scopes, "bits:read") || !containsScope(scopes, "user:read") {
+		t.Errorf("Twitch login rewrote the Kick account's granted_scopes: %v", scopes)
+	}
+}
+
+// A Twitch identity that already logs in to its own account must stay there: linking it to
+// a second account keeps the link working but does not move the identity.
+func TestLinkDoesNotTakeIdentityOwnedByAnotherAccount(t *testing.T) {
+	pool, cleanup := setupLinkTestDB(t)
+	defer cleanup()
+
+	h, repo := newLinkTestHandler(t, pool)
+	ctx := context.Background()
+
+	twitchAccount := createTwitchTestUser(t, repo, nil) // twitch_id tw-123456
+
+	kickID := "k-1"
+	kickUser := &models.User{
+		KickID:         &kickID,
+		AuthProvider:   "kick",
+		Username:       "kickstreamer",
+		DisplayName:    "kickstreamer",
+		AccessToken:    "kick-access-token",
+		RefreshToken:   "kick-refresh-token",
+		TokenExpiresAt: time.Now().Add(time.Hour),
+	}
+	if err := repo.Create(ctx, kickUser); err != nil {
+		t.Fatalf("failed to create kick user: %v", err)
+	}
+
+	twitchUser := &fakePlatformUser{id: "tw-123456", username: "streamer", platform: oauth.PlatformTwitch}
+	if _, err := h.linkPlatformToUser(ctx, kickUser.ID, oauth.PlatformTwitch, twitchUser,
+		tokenWithScopes("twitch-link-token", nil)); err != nil {
+		t.Fatalf("link must still succeed when the identity is owned elsewhere: %v", err)
+	}
+
+	stored, err := repo.GetByID(ctx, kickUser.ID)
+	if err != nil {
+		t.Fatalf("GetByID failed: %v", err)
+	}
+	if stored.TwitchID != nil {
+		t.Errorf("twitch_id moved to the linking account: %q", *stored.TwitchID)
+	}
+	owner, err := repo.GetByTwitchID(ctx, "tw-123456")
+	if err != nil || owner.ID != twitchAccount.ID {
+		t.Errorf("Twitch identity no longer resolves to its own account: %v, %v", owner, err)
 	}
 }
 

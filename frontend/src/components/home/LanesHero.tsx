@@ -43,14 +43,16 @@
 
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { type MessageKey, formatNumber, useTranslations } from '@/lib/i18n'
 import { DISCORD_INVITE_URL } from '@/lib/constants'
+import { trackEvent } from '@/lib/analytics'
 import { useReducedMotion } from '@/hooks/useReducedMotion'
 import { usePrideMonth } from '@/hooks/usePrideMonth'
 import { LANE_COUNT, laneBaseWeights, useLaneWaves } from '@/hooks/useLaneWaves'
 import { EMOTE_SRC, type EmoteToken } from '@/components/home/emotes'
 import { LanguageToggle } from '@/components/home/LanguageToggle'
+import { ThemeToggle } from '@/components/ThemeToggle'
 
 // Static self-hosted artwork, not next/image: the hero renders at 17px where
 // optimization buys nothing (next.config disables it globally anyway) and
@@ -246,8 +248,54 @@ function buildMarqueeRows(
   })
 }
 
-const MARQUEE_ROWS = buildMarqueeRows(false)
+export const MARQUEE_ROWS = buildMarqueeRows(false)
 const PRIDE_MARQUEE_ROWS = buildMarqueeRows(true)
+
+/**
+ * One lane's text: the giant wordmark and its drifting marquee rows. Each row
+ * renders its items twice so the -50% drift loops seamlessly. Shared with the
+ * /browser-extension hero, which reuses the lanes without the WebGL waves.
+ */
+export function LaneText({ platform, rows }: { platform: string; rows: readonly MarqueeRow[] }) {
+  const t = useTranslations()
+  return (
+    <>
+      <div className="wordmark" aria-hidden="true">
+        {platform.toUpperCase()}
+      </div>
+      {rows.map(({ items, duration }, i) => (
+        <div
+          key={i}
+          className="flow"
+          aria-hidden="true"
+          style={{ animationDuration: `${duration}s` }}
+        >
+          {/* Two copies, so the -50% drift loops without a seam. */}
+          {['a', 'b'].map((copy) => (
+            <Fragment key={copy}>
+              {copy === 'b' && <span className="sep">·</span>}
+              {items.map((item, j) => (
+                <span key={j}>
+                  {j > 0 && <span className="sep">·</span>}
+                  <b>{item.user}</b> {t(item.messageKey)}
+                  {item.emote !== undefined && (
+                    <img
+                      className="emote"
+                      src={EMOTE_SRC[item.emote]}
+                      alt={item.emote}
+                      width={17}
+                      height={17}
+                    />
+                  )}
+                </span>
+              ))}
+            </Fragment>
+          ))}
+        </div>
+      ))}
+    </>
+  )
+}
 
 export interface LanesHeroProps {
   /** Ticking all-time count (shared with Numbers; formatted locally). */
@@ -384,7 +432,9 @@ export function LanesHero({
           {t('marketing.lanes.navThemes')}
         </a>
         <a href="/docs">{t('marketing.lanes.navDocs')}</a>
-        <a href={DISCORD_INVITE_URL}>{t('marketing.lanes.navDiscord')}</a>
+        <a className="nav-discord" href={DISCORD_INVITE_URL}>
+          {t('marketing.lanes.navDiscord')}
+        </a>
         {isLoggedIn ? (
           <a className="dash-chip" href="/dashboard">
             {t('marketing.lanes.navDashboardChip')}
@@ -393,10 +443,13 @@ export function LanesHero({
           <a href="#get-started">{t('marketing.lanes.navDashboard')}</a>
         )}
         <LanguageToggle />
+        <ThemeToggle />
       </nav>
 
       <header
-        className="lanes-stage"
+        // theme-dark: the WebGL bands are drawn from fixed lanePalette colors,
+        // so the ink and plates over them keep the dark palette in either theme.
+        className="lanes-stage theme-dark"
         ref={stageRef}
         data-pride={pride ? '' : undefined}
         style={
@@ -425,49 +478,7 @@ export function LanesHero({
               data-p={platform}
               style={{ flexGrow: laneBases[laneIndex] }}
             >
-              <div className="wordmark" aria-hidden="true">
-                {platform.toUpperCase()}
-              </div>
-              {rows.map(({ items, duration }, i) => (
-                <div
-                  key={i}
-                  className="flow"
-                  aria-hidden="true"
-                  style={{ animationDuration: `${duration}s` }}
-                >
-                  {items.map((item, j) => (
-                    <span key={j}>
-                      {j > 0 && <span className="sep">·</span>}
-                      <b>{item.user}</b> {t(item.messageKey)}
-                      {item.emote !== undefined && (
-                        <img
-                          className="emote"
-                          src={EMOTE_SRC[item.emote]}
-                          alt={item.emote}
-                          width={17}
-                          height={17}
-                        />
-                      )}
-                    </span>
-                  ))}
-                  <span className="sep">·</span>
-                  {items.map((item, j) => (
-                    <span key={`d${j}`}>
-                      {j > 0 && <span className="sep">·</span>}
-                      <b>{item.user}</b> {t(item.messageKey)}
-                      {item.emote !== undefined && (
-                        <img
-                          className="emote"
-                          src={EMOTE_SRC[item.emote]}
-                          alt={item.emote}
-                          width={17}
-                          height={17}
-                        />
-                      )}
-                    </span>
-                  ))}
-                </div>
-              ))}
+              <LaneText platform={platform} rows={rows} />
             </div>
           ))}
         </div>
@@ -498,6 +509,15 @@ export function LanesHero({
             <br />
             {t('marketing.lanes.manifestoLine2')}
           </p>
+          {/* Viewers are the extension's audience, not the overlay's: one
+              chip routes them out of the streamer funnel. */}
+          <a
+            className="lanes-viewer-chip"
+            href="/browser-extension"
+            onClick={() => trackEvent('cta_click', { cta: 'extension', location: 'lanes-hero' })}
+          >
+            {t('marketing.lanes.viewerChip')}
+          </a>
         </div>
 
         {/* Bottom CTA bar. */}

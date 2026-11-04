@@ -86,7 +86,7 @@ export const legal = {
   // heading, paragraph, list item and legal basis, and nothing reworded.
   privacy: {
     title: 'Privacy Policy (Datenschutzerklärung)',
-    lastUpdated: 'July 30, 2026',
+    lastUpdated: 'November 4, 2026',
     // Every DSGVO article reference carries a U+00A0 from an &nbsp; entity.
     // It is part of the rendered text, so it stays escaped here to be
     // visible to a reviewer.
@@ -118,6 +118,7 @@ export const legal = {
     youtubeNoticeSubheading: '5.4 YouTube-Specific Notice',
     noSalesSubheading: '5.5 No Data Sales',
     analyticsSubheading: '5.6 Usage Analytics (Self-Hosted, Cookieless)',
+    backupsSubheading: '5.7 Backup Storage',
     twitchSubheading: 'Twitch',
     youtubeSubheading: 'YouTube',
     tiktokSubheading: 'TikTok',
@@ -161,6 +162,8 @@ export const legal = {
     authProfileImages: 'Profile images provided by the platform',
     authTokens: 'Encrypted OAuth access and refresh tokens',
     authScopes: 'Token scopes and expiration dates',
+    authTermsAcceptance:
+      'Whether and when you accepted the current Terms of Service and this Privacy Policy',
     chatIntro: 'For active overlays we temporarily process:',
     chatMessages: 'Messages flowing through connected channels',
     chatMetadata: 'Message metadata (timestamps, emotes, badges, highlights)',
@@ -198,8 +201,10 @@ export const legal = {
     storagePostgres: 'PostgreSQL for account data, overlays, and encrypted OAuth tokens',
     storageRedis: 'Redis for ephemeral sessions, message fan-out, and rate limiting',
     storageLocation:
-      'All of the above runs on our own infrastructure on servers located in {country} (hosting provider: Hetzner Online GmbH)',
-    storageCountry: 'Germany',
+      'All of the above runs on our own infrastructure on servers located in {country} (hosting provider: Hetzner Online GmbH; data centres in Falkenstein and Nuremberg, Germany, and Helsinki, Finland)',
+    storageCountry: 'Germany and Finland',
+    storageBackups:
+      'Backups of the database and of uploaded alert media are kept outside that infrastructure, in Hetzner Object Storage (Falkenstein, Germany) and in Backblaze B2 (Amsterdam, Netherlands), and are transferred there over encrypted connections (see Sections\u00A05.7 and 6)',
     safeguardsEncryption: 'OAuth tokens encrypted with AES-GCM before touching the database',
     safeguardsHttps:
       'HTTPS at the ingress layer for all external traffic; internal services isolated via Kubernetes network policies',
@@ -250,6 +255,8 @@ export const legal = {
     analyticsIpNotStoredEmphasis: 'IP address is not stored',
     analyticsConsentNote:
       'Because the tracker stores no information on, and reads none from, your device, it does not require consent under §\u00A025 TDDDG; the processing of the resulting data rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in measuring and improving the service.',
+    backupsBody:
+      'So that the service can be restored after data loss, we keep backups of the database (including account and overlay data, encrypted OAuth tokens and the chat messages and logs retained under Section\u00A06) and of uploaded alert media with two storage providers acting as processors under Art.\u00A028 DSGVO: Hetzner Online GmbH (Germany) and Backblaze, Inc. (USA), whose copy is stored in its data center in Amsterdam, Netherlands. The providers only store the backups; we read them only to restore the service. The processing rests on Art.\u00A06(1)(f) DSGVO – our legitimate interest in not losing your data.',
     // Retention rows: the bolded label opens the row and the rest continues
     // the sentence it starts, per the legal.cookieBanner convention.
     retentionAccount: '{label} kept until you delete your account',
@@ -265,6 +272,9 @@ export const legal = {
     retentionLogsLabel: 'Usage logs:',
     retentionQuotaLogs: '{label} retained for 30 days',
     retentionQuotaLogsLabel: 'YouTube quota audit logs:',
+    retentionBackups:
+      '{label} kept for 30 days, after which the storage providers erase them within a further 30 days. Data that you delete, or that expires under the periods above, can therefore remain in backups for up to 60 days; it is not used for anything other than restoring the service',
+    retentionBackupsLabel: 'Backups:',
     // The Art. 15-21 data subject rights. Same {label} shape as the
     // retention rows above.
     rightsIntro: 'You can exercise the following at any time:',
@@ -301,7 +311,7 @@ export const legal = {
     childrenBody:
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.',
     transfersBody:
-      'All-Chat itself is hosted on servers located in Germany (see Section\u00A04.1). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US.',
+      'All-Chat itself is hosted on servers located in Germany and Finland, both within the EU (see Section\u00A04.1). One copy of our backups is stored by Backblaze, Inc. (USA), which is certified under the EU–US Data Privacy Framework, in its data center in Amsterdam, Netherlands (see Section\u00A05.7). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US.',
     transfersLegalBasis:
       "Where a provider is certified under the EU–US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded.",
     updatesBody:
@@ -435,5 +445,21 @@ export const legal = {
     // <code> elements.
     operatorHint:
       'If you are the operator: mount a ConfigMap containing your Impressum HTML to {path} or set the {variable} environment variable. See the deployment documentation for details.',
+  },
+  // The blocking post-login prompt shown while users.tos_accepted is false:
+  // for new accounts on their first login and for everyone after a reset when
+  // the terms change, so the copy fits both. Both documents are links the user
+  // can open (new tab) before accepting.
+  tosAcceptance: {
+    title: 'Terms of Service and Privacy Policy',
+    body: 'Please read our {terms} and {privacy} and accept them to continue using All-Chat.',
+    termsLinkText: 'Terms of Service',
+    privacyLinkText: 'Privacy Policy',
+    newTabHint: 'Opens in a new tab',
+    agreement: 'I have read and accept the Terms of Service and the Privacy Policy.',
+    accept: 'Accept',
+    accepting: 'Saving…',
+    logout: 'Log out',
+    error: 'Your acceptance could not be saved. Please try again.',
   },
 } as const

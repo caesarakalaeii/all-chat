@@ -9,7 +9,7 @@ The Message Processor service consumes raw chat messages from Redis Streams, nor
 
 ## Features
 
-- **Redis Streams Consumer**: Consumes from `chat:raw` stream using consumer group `message-processors`
+- **Redis Streams Consumer**: Consumes from `chat:raw` stream using consumer group `message-processor`
 - **Multi-Platform Normalization**: Converts Twitch, YouTube, Kick, TikTok messages to unified format
 - **Emote Enrichment**: Adds 7TV, BTTV, FFZ emotes via external APIs with caching
 - **Message Age Filtering**: Ignores messages >60 seconds old (configurable)
@@ -25,7 +25,7 @@ The Message Processor service consumes raw chat messages from Redis Streams, nor
 
 ```
 Redis Streams (chat:raw)
-  ↓ XREADGROUP (consumer group: message-processors)
+  ↓ XREADGROUP (consumer group: message-processor)
 Consumer (5-10 replicas)
   ↓ per-batch bounded worker pool (MP_PROCESS_CONCURRENCY, default 16 — ADR-0033)
   ↓ route by platform
@@ -81,10 +81,6 @@ LOG_LEVEL=info                      # debug, info, warn, error
 
 # Message age filtering
 MESSAGE_AGE_CUTOFF_SECONDS=60       # Ignore messages older than this (default: 60)
-
-# Consumer group settings
-CONSUMER_GROUP=message-processors   # Redis Streams consumer group name
-CONSUMER_ID=processor-1             # Unique ID for this instance (auto-generated if not set)
 
 # Enrichment concurrency (ADR-0033)
 MP_PROCESS_CONCURRENCY=16           # Messages enriched+published in parallel per read batch (default: 16).
@@ -161,7 +157,7 @@ GET /status
 {
   "status": "running",
   "consumer": {
-    "group": "message-processors",
+    "group": "message-processor",
     "consumer_id": "processor-abc123",
     "stream": "chat:raw",
     "pending_messages": 42
@@ -239,14 +235,14 @@ cache-efficiency or rate-anomaly alerts.
 
 ### 1. Consume from Redis Streams
 
-**Consumer Group**: `message-processors`
+**Consumer Group**: `message-processor`
 **Stream**: `chat:raw`
 **Pattern**: XREADGROUP, then a per-batch bounded worker pool, with per-message acknowledgment (XACK)
 
 ```go
 // consumer/stream_consumer.go
 streams, _ := client.XReadGroup(ctx, &redis.XReadGroupArgs{
-    Group:    "message-processors",
+    Group:    "message-processor",
     Consumer: consumerID,
     Streams:  []string{"chat:raw", ">"},
     Count:    ReadCount, // 100
@@ -336,6 +332,7 @@ normalizers := map[string]normalizer.Normalizer{
 
 5. **Pronoun Enrichment** (`enricher/pronoun_enricher.go`):
    - Fetches pronouns from Alejo API (api.pronouns.alejo.io/v1/)
+   - **Only for overlays that display pronouns**: the lookup sends the chatter's Twitch login to a third party, so it runs only while preparing a message for an overlay whose pronoun toggle is on. For an overlay with it off nothing is looked up, sent or cached, and its messages carry no pronouns. The toggle is resolved like the OBS overlay page does it: `visual_settings.showPronouns` wins when present (on unless `"none"`), else a boolean `display_settings.show_pronouns`, else on (the default). It comes from the same `overlay_configs` read that already fetches the 7TV emote-set override (`router.OverlayConfig`), so it costs no extra query
    - Runs **after** ViewerBadgeEnricher so `TwitchUsername` is available for cross-platform lookup
    - **CHAT PATH only** — not applied to events (subscriptions, raids, etc.)
    - Cache key: `pronoun:{twitch_login}`, 24h TTL
@@ -483,6 +480,10 @@ go test ./... -cover
 go test ./normalizer -v
 go test ./enricher -v
 go test ./consumer -v
+
+# The overlay-config query against a real Postgres (skipped without the variable,
+# and in -short runs; it creates and drops its own schema). Use a disposable database.
+TEST_DATABASE_URL='postgres://user@localhost:5432/scratch?sslmode=disable' go test ./router -run TestOverlayConfigAgainstPostgres -v
 ```
 
 ---
@@ -547,7 +548,7 @@ histogram_quantile(0.95, rate(processor_message_duration_seconds_bucket[5m]))
 rate(processor_emote_cache_operations_total{operation="hit"}[5m]) / rate(processor_emote_cache_operations_total[5m])
 
 # Consumer lag (pending messages)
-redis_xpending{stream="chat:raw", group="message-processors"}
+redis_xpending{stream="chat:raw", group="message-processor"}
 ```
 
 ### Alerts
@@ -555,7 +556,7 @@ redis_xpending{stream="chat:raw", group="message-processors"}
 **High Consumer Lag**:
 ```yaml
 alert: MessageProcessorLag
-expr: redis_xpending{stream="chat:raw", group="message-processors"} > 10000
+expr: redis_xpending{stream="chat:raw", group="message-processor"} > 10000
 for: 5m
 severity: warning
 ```
@@ -578,7 +579,7 @@ severity: warning
 
 **Check lag**:
 ```bash
-redis-cli XPENDING chat:raw message-processors
+redis-cli XPENDING chat:raw message-processor
 
 # Output:
 # 1) (integer) 5420        # Total pending
@@ -700,7 +701,7 @@ kubectl logs -n allchat deployment/message-processor | grep "7TV EventAPI"
 
 ## Production Considerations
 
-1. **Consumer Group**: All replicas must use same group name (`message-processors`)
+1. **Consumer Group**: All replicas must use same group name (`message-processor`)
 2. **Consumer ID**: Must be unique per replica (auto-generated with pod name)
 3. **Emote Cache**: Monitor hit rate, target >95% (higher = lower latency)
 4. **7TV EventAPI**: Keep WebSocket connected for real-time emote updates

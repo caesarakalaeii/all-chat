@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-19
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -17,7 +18,8 @@ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs' }
 ```
 
 Our application CSP (`frontend/next.config.js`) deliberately enumerates every
-allowed script host and does **not** include `cdn.jsdelivr.net`:
+allowed script host and does **not** include `cdn.jsdelivr.net`. At the time
+the directive read:
 
 ```
 script-src 'self' 'unsafe-inline' https://embed.twitch.tv https://analytics.allch.at
@@ -55,7 +57,7 @@ Two ways to make the editor load again:
   dependency of `@monaco-editor/react`, auto-installed and pinned in the
   lockfile (0.55.1), so `npm ci` supplies it deterministically without a
   separate direct-dependency entry (kept out to avoid npm-version lockfile
-  churn — see [[reference_frontend_npmci_lock_cache_masking]]). The output is
+  churn). The output is
   gitignored (16 MB) and regenerated via the `prebuild`/`predev` npm hooks; a
   `.monaco-version` marker skips the copy when already current.
 - `frontend/src/lib/monaco.ts` calls `loader.config({ paths: { vs: '/monaco/vs' } })`
@@ -91,3 +93,7 @@ Two ways to make the editor load again:
 - The only CSP broadening is `worker-src 'self' blob:`, applied globally in
   `cspBase`. Overlay/widget routes create no workers, so this does not
   meaningfully weaken them.
+- `script-src` has since shrunk to `'self' 'unsafe-inline'
+  https://analytics.allch.at`: `embed.twitch.tv` was dropped, and the credits
+  clip embed runs as an iframe under `frame-src https://clips.twitch.tv`
+  (`frontend/next.config.js`). The CSP stays first-party.

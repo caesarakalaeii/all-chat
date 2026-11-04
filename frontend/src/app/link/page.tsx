@@ -170,7 +170,7 @@ function CodeEntry({
         </Field.Root>
 
         {error && (
-          <p id={errorId} role="alert" className="text-sm text-red-400">
+          <p id={errorId} role="alert" className="text-sm text-destructive">
             {error}
           </p>
         )}
@@ -297,7 +297,7 @@ function ApproveForm({
           </legend>
           <p className="mt-1 mb-3 text-sm text-text-sub">{t('auth.link.overlayBody')}</p>
           {overlays.length === 0 ? (
-            <p className="text-sm text-amber-400">{t('auth.link.overlayNone')}</p>
+            <p className="text-sm text-warning">{t('auth.link.overlayNone')}</p>
           ) : (
             <div className="space-y-2" role="radiogroup" aria-labelledby={overlayGroupId}>
               {overlays.map((overlay) => (
@@ -342,11 +342,9 @@ function ApproveForm({
               </div>
             </Field.Root>
           ))}
-          {scopes.size === 0 && (
-            <p className="text-xs text-amber-400">{t('auth.link.scopeNone')}</p>
-          )}
+          {scopes.size === 0 && <p className="text-xs text-warning">{t('auth.link.scopeNone')}</p>}
           {scopes.has('chat:write') && (
-            <p className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-warning">
               {t('auth.link.chatWriteCaveat')}
             </p>
           )}
@@ -374,7 +372,7 @@ function ApproveForm({
       </Card>
 
       {error && (
-        <p id={errorId} role="alert" className="text-sm text-red-400">
+        <p id={errorId} role="alert" className="text-sm text-destructive">
           {error}
         </p>
       )}

@@ -89,7 +89,7 @@ export function MaintenanceInfoButton() {
         variant="outline"
         size="icon-sm"
         className={clsx(
-          !open && hasActive && 'border-amber-500/30 text-amber-300 hover:border-amber-500/50'
+          !open && hasActive && 'border-amber-500/30 text-warning hover:border-amber-500/50'
         )}
       >
         <Info className="h-3.5 w-3.5" />
@@ -105,7 +105,7 @@ export function MaintenanceInfoButton() {
               const active = isActive(mw)
               return (
                 <div key={mw.id} className="text-xs">
-                  <p className={clsx('font-semibold', active ? 'text-amber-300' : 'text-blue-300')}>
+                  <p className={clsx('font-semibold', active ? 'text-warning' : 'text-info')}>
                     {active
                       ? t('maintenanceBanner.popoverActiveHeading')
                       : t('maintenanceBanner.popoverScheduledHeading')}

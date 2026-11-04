@@ -162,6 +162,20 @@ func TestMigrationsSurviveRerun(t *testing.T) {
 		t.Errorf("re-running migrations re-fired the 077 onboarding backfill (onboarding_completed_at = %v); a deploy would silently complete onboarding for users who restarted it", onboardingCompleted)
 	}
 
+	// 122 backfills TRUE only through ADD COLUMN's default on the first run.
+	// The canary was created afterwards, so it is still waiting to accept; a
+	// re-run must not mark it accepted.
+	var tosAccepted bool
+	err = pool.QueryRow(ctx, `
+		SELECT tos_accepted FROM users WHERE username = 'rerun_canary'
+	`).Scan(&tosAccepted)
+	if err != nil {
+		t.Fatalf("failed to read canary terms acceptance: %v", err)
+	}
+	if tosAccepted {
+		t.Error("re-running migrations marked the canary as having accepted the terms; a deploy would silently skip the acceptance prompt for new users")
+	}
+
 	// The ambassador grant + opted-in showcase must survive the re-run (ADR-0041):
 	// migration 078 writes no entitlement/consent VALUES.
 	var isAmbassador, featuredConsent bool

@@ -59,12 +59,12 @@ export default function ImpressumPage() {
           <p className="text-dim text-sm">
             {interpolateElements(t('legal.impressum.operatorHint'), {
               path: (
-                <code className="border border-white/50 bg-black px-1.5 py-0.5 text-xs">
+                <code className="border border-lanes-fg-strong/50 bg-lanes-panel px-1.5 py-0.5 text-xs">
                   {IMPRESSUM_PATH}
                 </code>
               ),
               variable: (
-                <code className="border border-white/50 bg-black px-1.5 py-0.5 text-xs">
+                <code className="border border-lanes-fg-strong/50 bg-lanes-panel px-1.5 py-0.5 text-xs">
                   {IMPRESSUM_ENV_VAR}
                 </code>
               ),

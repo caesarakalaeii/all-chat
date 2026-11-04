@@ -112,7 +112,7 @@ export default function ErrorDisplay({
         return {
           bg: 'bg-orange-500/10',
           border: 'border-orange-500/30',
-          text: 'text-orange-400',
+          text: 'text-warning',
           icon: '⚠️',
         }
 
@@ -120,7 +120,7 @@ export default function ErrorDisplay({
         return {
           bg: 'bg-yellow-500/10',
           border: 'border-yellow-500/30',
-          text: 'text-yellow-400',
+          text: 'text-warning',
           icon: '⏱️',
         }
 

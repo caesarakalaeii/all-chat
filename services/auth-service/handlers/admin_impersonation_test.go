@@ -26,21 +26,33 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/caesar/all-chat/services/auth-service/models"
+	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap/zaptest"
 )
 
-// mockAdminUserRepo implements adminUserRepository for the impersonation
-// handler tests. Only GetUserByID is exercised by ImpersonateUser; the
-// remaining methods panic so accidental calls surface immediately.
+// mockAdminUserRepo implements adminUserRepository for the admin handler
+// tests. Methods without a stub panic so accidental calls surface immediately.
 type mockAdminUserRepo struct {
 	getUserByID func(ctx context.Context, id string) (*models.User, error)
+	listUsers   func(ctx context.Context, filter repository.UserListFilter, limit, offset int) ([]*models.User, error)
+	countUsers  func(ctx context.Context, query string) (map[string]int, error)
 }
 
-func (m *mockAdminUserRepo) GetAllUsers(ctx context.Context) ([]*models.User, error) {
-	panic("GetAllUsers: not expected")
+func (m *mockAdminUserRepo) ListUsers(ctx context.Context, filter repository.UserListFilter, limit, offset int) ([]*models.User, error) {
+	if m.listUsers == nil {
+		panic("ListUsers: not expected")
+	}
+	return m.listUsers(ctx, filter, limit, offset)
+}
+
+func (m *mockAdminUserRepo) CountUsers(ctx context.Context, query string) (map[string]int, error) {
+	if m.countUsers == nil {
+		panic("CountUsers: not expected")
+	}
+	return m.countUsers(ctx, query)
 }
 
 func (m *mockAdminUserRepo) GetUserByID(ctx context.Context, id string) (*models.User, error) {

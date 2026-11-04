@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/select'
 import { ApiError } from '@/lib/api/client'
 import { engagementApi } from '@/lib/api/engagement'
+import { MediaField } from '@/components/overlays/AlertsEditor'
 import { useTranslations } from '@/lib/i18n'
 import {
   CHAT_COMMAND_ROLES,
@@ -242,22 +243,58 @@ export function CommandEditor({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label htmlFor={`${ids}-image`} className="text-sm font-medium text-text">
-              {t('commands.editor.imageLabel')}
-            </label>
-            <Input
-              id={`${ids}-image`}
-              className="font-mono"
-              maxLength={1000}
-              value={form.image_url}
-              aria-describedby={`${ids}-image-hint`}
-              onChange={(e) => set('image_url', e.target.value)}
-            />
-            <p id={`${ids}-image-hint`} className="text-xs text-text-sub">
-              {t('commands.editor.imageHint')}
+          <fieldset
+            aria-describedby={`${ids}-alert-hint`}
+            className="space-y-3 rounded-lg border border-border p-3"
+          >
+            <legend className="px-1 text-sm font-semibold text-text">
+              {t('commands.editor.alertHeading')}
+            </legend>
+            <p id={`${ids}-alert-hint`} className="text-xs text-text-sub">
+              {t('commands.editor.alertHint')}
             </p>
-          </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor={`${ids}-image`} className="text-xs text-text-sub">
+                {t('commands.editor.imageLabel')}
+              </label>
+              <Input
+                id={`${ids}-image`}
+                className="font-mono"
+                maxLength={1000}
+                value={form.image_url}
+                aria-describedby={`${ids}-image-hint`}
+                onChange={(e) => set('image_url', e.target.value)}
+              />
+              <p id={`${ids}-image-hint`} className="text-xs text-text-sub">
+                {t('commands.editor.imageHint')}
+              </p>
+            </div>
+            <MediaField
+              id={`${ids}-sound`}
+              kind="sound"
+              label={t('commands.editor.soundLabel')}
+              value={form.sound_url}
+              onChange={(url) => set('sound_url', url)}
+              locked={false}
+              inherits={false}
+            />
+            <div className="flex flex-col gap-1">
+              <label htmlFor={`${ids}-alert-text`} className="text-xs text-text-sub">
+                {t('commands.editor.alertTextLabel')}
+              </label>
+              <Input
+                id={`${ids}-alert-text`}
+                className="font-mono"
+                maxLength={500}
+                value={form.alert_text}
+                aria-describedby={`${ids}-alert-text-hint`}
+                onChange={(e) => set('alert_text', e.target.value)}
+              />
+              <p id={`${ids}-alert-text-hint`} className="text-xs text-text-sub">
+                {t('commands.editor.alertTextHint')}
+              </p>
+            </div>
+          </fieldset>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">

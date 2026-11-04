@@ -19,6 +19,8 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/caesar/all-chat/services/overlay-manager/models"
 	"github.com/caesar/all-chat/services/overlay-manager/repository"
@@ -31,12 +33,12 @@ import (
 // concrete types keep the handler testable without a database, the same way
 // every other handler in this package takes its repositories.
 type adminOverlayStore interface {
-	GetAllOverlaysWithSourceCount(ctx context.Context) ([]*repository.OverlayWithSourceCount, error)
+	ListOverlaysWithSourceCount(ctx context.Context, filter repository.OverlayListFilter, limit, offset int) ([]*repository.OverlayWithSourceCount, int, error)
 	ListByUserIDWithSourceCount(ctx context.Context, userID string) ([]*repository.OverlayWithSourceCount, error)
 }
 
 type adminSourceStore interface {
-	GetAllSourcesWithOverlay(ctx context.Context) ([]*repository.SourceWithOverlay, error)
+	ListSourcesWithOverlay(ctx context.Context, filter repository.SourceListFilter, limit, offset int) ([]*repository.SourceWithOverlay, int, error)
 	ListByOverlayID(ctx context.Context, overlayID string) ([]*models.ChatSource, error)
 }
 
@@ -56,10 +58,33 @@ func NewAdminHandler(overlayRepo adminOverlayStore, sourceRepo adminSourceStore,
 	}
 }
 
-// ListOverlays returns all overlays in the system (admin only)
-// GET /api/v1/admin/overlays
+// pageParams reads the limit/offset pagination query parameters shared by the
+// admin list endpoints: 50 rows by default, at most 100, and junk or negative
+// values fall back to the defaults.
+func pageParams(c *gin.Context) (limit, offset int) {
+	limit = 50
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 {
+		limit = min(l, 100)
+	}
+	if o, err := strconv.Atoi(c.Query("offset")); err == nil && o > 0 {
+		offset = o
+	}
+	return limit, offset
+}
+
+// ListOverlays returns one page of overlays, newest first, with the total
+// number of matches (admin only). ids (comma-separated) restricts the listing
+// to those overlays, for the connected-only view and deep links.
+// GET /api/v1/admin/overlays?q=<search>&ids=<id,id>&limit=&offset=
 func (h *AdminHandler) ListOverlays(c *gin.Context) {
-	overlays, err := h.overlayRepo.GetAllOverlaysWithSourceCount(c.Request.Context())
+	limit, offset := pageParams(c)
+	filter := repository.OverlayListFilter{Query: strings.TrimSpace(c.Query("q"))}
+	for _, id := range strings.Split(c.Query("ids"), ",") {
+		if id != "" {
+			filter.IDs = append(filter.IDs, id)
+		}
+	}
+	overlays, total, err := h.overlayRepo.ListOverlaysWithSourceCount(c.Request.Context(), filter, limit, offset)
 	if err != nil {
 		h.logger.Error("Failed to fetch overlays", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -98,14 +123,27 @@ func (h *AdminHandler) ListOverlays(c *gin.Context) {
 		}
 	}
 
-	h.logger.Info("Listed overlays", zap.Int("count", len(overlays)))
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, gin.H{"overlays": response, "total": total, "limit": limit, "offset": offset})
 }
 
-// ListAllSources returns all sources across all overlays (admin only)
-// GET /api/v1/admin/sources
+// ListAllSources returns one page of sources across all overlays, newest
+// first, with the total number of matches (admin only). status is "active" or
+// "inactive" (anything else means either); user scopes to one overlay owner.
+// GET /api/v1/admin/sources?q=&platform=&status=&user=&limit=&offset=
 func (h *AdminHandler) ListAllSources(c *gin.Context) {
-	sources, err := h.sourceRepo.GetAllSourcesWithOverlay(c.Request.Context())
+	limit, offset := pageParams(c)
+	filter := repository.SourceListFilter{
+		Query:    strings.TrimSpace(c.Query("q")),
+		Platform: c.Query("platform"),
+		UserID:   c.Query("user"),
+	}
+	switch c.Query("status") {
+	case "active":
+		filter.Active = new(true)
+	case "inactive":
+		filter.Active = new(false)
+	}
+	sources, total, err := h.sourceRepo.ListSourcesWithOverlay(c.Request.Context(), filter, limit, offset)
 	if err != nil {
 		h.logger.Error("Failed to fetch sources", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -148,8 +186,7 @@ func (h *AdminHandler) ListAllSources(c *gin.Context) {
 		})
 	}
 
-	h.logger.Info("Listed all sources", zap.Int("count", len(response)))
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, gin.H{"sources": response, "total": total, "limit": limit, "offset": offset})
 }
 
 // GetUserOverlays returns all overlays for a specific user (admin only)

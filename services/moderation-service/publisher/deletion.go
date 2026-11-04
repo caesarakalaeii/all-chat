@@ -44,7 +44,7 @@ import (
 
 const (
 	// StreamKey is the Redis Stream the read pipeline consumes (XREADGROUP group
-	// "message-processors"). Identical to every listener's publish target.
+	// "message-processor"). Identical to every listener's publish target.
 	StreamKey = "chat:raw"
 
 	// maxStreamLength bounds the stream as a sliding window (matches the listeners).

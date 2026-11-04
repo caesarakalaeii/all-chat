@@ -26,8 +26,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { PlatformBadge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ChannelLink } from '@/components/ChannelLink'
+import { LoadMore } from '@/components/admin/LoadMore'
+import { usePagedList } from '@/hooks/usePagedList'
+import { useDebounce } from '@/hooks/useDebounce'
 import { type TFunction, formatDate, formatTimestamp, useTranslations } from '@/lib/i18n'
-import { formatConnectedFor } from '@/lib/utils'
+import { formatConnectedFor, readQueryParam } from '@/lib/utils'
 
 // Connections open longer than this are highlighted so admins can spot overlays
 // that are likely open but no longer live ("dead but open").
@@ -49,6 +52,28 @@ interface Overlay {
 interface ActiveOverlay {
   overlay_id: string
   connected_since?: string | null
+}
+
+// Overlay ids per ?ids= request, which keeps each request URL short.
+const IDS_PER_REQUEST = 100
+
+// The overlays with these ids, in the listing's shape.
+async function fetchOverlaysByIds(ids: string[]): Promise<Overlay[]> {
+  const chunks: string[][] = []
+  for (let i = 0; i < ids.length; i += IDS_PER_REQUEST) {
+    chunks.push(ids.slice(i, i + IDS_PER_REQUEST))
+  }
+  const pages = await Promise.all(
+    chunks.map(async (chunk) => {
+      const res = await fetch(
+        `/api/v1/admin/overlays?limit=${IDS_PER_REQUEST}&ids=${chunk.map(encodeURIComponent).join(',')}`,
+        { credentials: 'same-origin' }
+      )
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return ((await res.json()) as { overlays?: Overlay[] }).overlays ?? []
+    })
+  )
+  return pages.flat()
 }
 
 interface OverlaySource {
@@ -94,17 +119,24 @@ function ownerLinkText(t: TFunction, overlay: Overlay): string {
 
 export default function OverlaysPage() {
   const t = useTranslations()
-  const [overlays, setOverlays] = useState<Overlay[]>([])
   const [selectedOverlay, setSelectedOverlay] = useState<Overlay | null>(null)
   const [sources, setSources] = useState<OverlaySource[]>([])
   const [activeOverlayIds, setActiveOverlayIds] = useState<Set<string>>(new Set())
   // overlay id -> connection start timestamp (RFC3339), for "connected for X".
   const [connectedSince, setConnectedSince] = useState<Map<string, string>>(new Map())
-  const [loading, setLoading] = useState(true)
   const [sourcesLoading, setSourcesLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [showConnectedOnly, setShowConnectedOnly] = useState(false)
+  // Deep links (ADR-0036): ?overlay=<id> searches by that id until the overlay
+  // resolves (from the Sources owner/View links); ?connected=true opens the
+  // connected-only view (from the dashboard "Active Overlays" card).
+  const [deepLinkOverlayId] = useState(() => readQueryParam('overlay'))
+  const [searchTerm, setSearchTerm] = useState(deepLinkOverlayId)
+  const [showConnectedOnly, setShowConnectedOnly] = useState(
+    () => readQueryParam('connected') === 'true'
+  )
+  // The connected overlays (null until first loaded), for the connected-only
+  // view. Bounded by live connections, so it is loaded whole rather than paged.
+  const [connectedOverlays, setConnectedOverlays] = useState<Overlay[] | null>(null)
+  const [connectedFailed, setConnectedFailed] = useState(false)
   // True when the live-connection endpoint can't be read, so the UI can say
   // "status unknown" instead of implying every overlay is disconnected.
   const [connectionStatusUnavailable, setConnectionStatusUnavailable] = useState(false)
@@ -118,50 +150,51 @@ export default function OverlaysPage() {
     return () => clearInterval(clockTick)
   }, [])
 
-  // Fetch all overlays
+  // Overlays are searched (name, id, owner) and paged server-side: the full
+  // list grew too large to load and render at once.
+  const search = useDebounce(searchTerm.trim(), 300)
+  const list = usePagedList<Overlay>(
+    showConnectedOnly
+      ? null
+      : `/api/v1/admin/overlays?${new URLSearchParams(search ? { q: search } : {})}`,
+    'overlays'
+  )
+
+  // Select the deep-linked overlay once it resolves, and show its name rather
+  // than the raw id in the search box.
   useEffect(() => {
-    async function fetchOverlays() {
-      try {
-        // Auth is via the httpOnly session cookie (same-origin); the gateway
-        // CookieToBearer middleware copies the access cookie to Authorization
-        // before backend validation (no JS-readable token).
-        const response = await fetch('/api/v1/admin/overlays', {
-          credentials: 'same-origin',
-        })
+    if (!deepLinkOverlayId) return
+    fetchOverlaysByIds([deepLinkOverlayId])
+      .then(([match]) => {
+        if (!match) return
+        setSelectedOverlay(match)
+        setSearchTerm(match.name)
+      })
+      .catch((err) => console.error('Failed to load deep-linked overlay:', err))
+  }, [deepLinkOverlayId])
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-        }
-
-        const data = await response.json()
-        setOverlays(data)
-        setLoading(false)
-
-        // Deep-links (read post-await, client-only). ?overlay=<id> auto-selects
-        // an overlay (from the Sources owner/View links); ?connected=true opens
-        // the connected-only view (from the dashboard "Active Overlays" card).
-        const params = new URLSearchParams(window.location.search)
-        const targetId = params.get('overlay')
-        if (targetId) {
-          const match = (data as Overlay[]).find((o) => o.id === targetId)
-          if (match) {
-            setSelectedOverlay(match)
-            // Surface the target in the (potentially long) list.
-            setSearchTerm(match.name)
-          }
-        }
-        if (params.get('connected') === 'true') {
-          setShowConnectedOnly(true)
-        }
-      } catch (err) {
-        console.error('Failed to load overlays:', err)
-        setError(t('admin.overlays.loadError'))
-        setLoading(false)
-      }
+  // Load the connected overlays whenever the connected set changes (not on
+  // every 30s poll that finds the same set).
+  const activeKey = [...activeOverlayIds].sort().join(',')
+  useEffect(() => {
+    if (!showConnectedOnly) return
+    let cancelled = false
+    fetchOverlaysByIds(activeKey ? activeKey.split(',') : [])
+      .then((overlays) => {
+        if (cancelled) return
+        setConnectedOverlays(overlays)
+        setConnectedFailed(false)
+      })
+      .catch((err) => {
+        console.error('Failed to load connected overlays:', err)
+        if (!cancelled) setConnectedFailed(true)
+      })
+    return () => {
+      cancelled = true
     }
+  }, [showConnectedOnly, activeKey])
 
-    fetchOverlays()
-
+  useEffect(() => {
     async function fetchActiveOverlays() {
       try {
         const response = await fetch('/api/v1/admin/overlays/active', {
@@ -191,7 +224,7 @@ export default function OverlaysPage() {
     fetchActiveOverlays()
     const interval = setInterval(fetchActiveOverlays, 30000)
     return () => clearInterval(interval)
-  }, [t])
+  }, [])
 
   // Fetch sources for selected overlay
   useEffect(() => {
@@ -242,25 +275,25 @@ export default function OverlaysPage() {
     return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed
   }
 
-  // Filter overlays by search term and connected status
-  const connectedCount = overlays.filter((o) => activeOverlayIds.has(o.id)).length
-  const filteredOverlays = overlays.filter((o) => {
-    if (showConnectedOnly && !activeOverlayIds.has(o.id)) return false
-    if (!searchTerm) return true
-    const term = searchTerm.toLowerCase()
-    return (
-      o.name.toLowerCase().includes(term) ||
-      o.id.toLowerCase().includes(term) ||
-      o.user_id.toLowerCase().includes(term) ||
-      (o.owner_username?.toLowerCase().includes(term) ?? false)
-    )
-  })
-
-  // When narrowed to connected overlays, surface the longest-open first so the
-  // likely "dead but open" overlays rise to the top.
+  // The connected-only view filters its (small, wholly loaded) set on the
+  // client and surfaces the longest-open first, so the likely "dead but open"
+  // overlays rise to the top.
+  const term = searchTerm.trim().toLowerCase()
   const orderedOverlays = showConnectedOnly
-    ? [...filteredOverlays].sort((a, b) => connectedStartMs(a.id) - connectedStartMs(b.id))
-    : filteredOverlays
+    ? (connectedOverlays ?? [])
+        .filter(
+          (o) =>
+            !term ||
+            o.name.toLowerCase().includes(term) ||
+            o.id.toLowerCase().includes(term) ||
+            o.user_id.toLowerCase().includes(term) ||
+            (o.owner_username?.toLowerCase().includes(term) ?? false)
+        )
+        .sort((a, b) => connectedStartMs(a.id) - connectedStartMs(b.id))
+    : list.items
+  const listLoading = showConnectedOnly ? connectedOverlays === null : list.loading
+  // The current view's rows failed to load (not just a next page).
+  const listFailed = showConnectedOnly ? connectedFailed : list.error && !list.hasMore
 
   // Connection status for the detail panel of the selected overlay.
   const selectedConnected = selectedOverlay ? activeOverlayIds.has(selectedOverlay.id) : false
@@ -269,11 +302,13 @@ export default function OverlaysPage() {
   const selectedLongOpen =
     selectedConnected && !!selectedSince && now - Date.parse(selectedSince) >= LONG_OPEN_MS
 
-  if (error) {
+  // Only the very first load failing takes over the page; a later failure
+  // leaves the search and the connected toggle usable.
+  if (list.error && list.response === undefined && connectedOverlays === null) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8">
         <Card className="border-destructive p-4">
-          <p className="text-destructive">{error}</p>
+          <p className="text-destructive">{t('admin.overlays.loadError')}</p>
         </Card>
       </div>
     )
@@ -287,7 +322,7 @@ export default function OverlaysPage() {
       </div>
 
       {connectionStatusUnavailable && (
-        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-400">
+        <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-warning">
           {t('admin.overlays.statusUnavailable')}
         </div>
       )}
@@ -295,7 +330,7 @@ export default function OverlaysPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Overlays List */}
         <div className="lg:col-span-2">
-          {loading ? (
+          {list.response === undefined && connectedOverlays === null ? (
             <Card className="space-y-3 p-6">
               {Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-14 w-full rounded-lg" />
@@ -305,12 +340,14 @@ export default function OverlaysPage() {
             <Card className="overflow-hidden">
               <div className="border-b border-border px-4 py-5">
                 <h3 className="text-base font-medium text-text">
-                  {filteredOverlays.length !== overlays.length
+                  {!showConnectedOnly && list.hasMore
                     ? t('admin.overlays.listHeadingFiltered', {
-                        shown: filteredOverlays.length,
-                        total: overlays.length,
+                        shown: list.items.length,
+                        total: list.total,
                       })
-                    : t('admin.overlays.listHeadingAll', { count: filteredOverlays.length })}
+                    : t('admin.overlays.listHeadingAll', {
+                        count: showConnectedOnly ? orderedOverlays.length : list.total,
+                      })}
                 </h3>
 
                 {/* Search Input */}
@@ -337,12 +374,20 @@ export default function OverlaysPage() {
                       aria-hidden="true"
                       className="inline-block h-2 w-2 rounded-full bg-kick"
                     />
-                    {t('admin.overlays.connectedFilter', { count: connectedCount })}
+                    {t('admin.overlays.connectedFilter', { count: activeOverlayIds.size })}
                   </button>
                 </div>
               </div>
-              <ul className="max-h-[70vh] divide-y divide-border overflow-y-auto">
-                {orderedOverlays.map((overlay) => {
+              <ul
+                className="max-h-[70vh] divide-y divide-border overflow-y-auto"
+                aria-busy={listLoading}
+              >
+                {listFailed && (
+                  <li className="px-4 py-10 text-center text-sm text-destructive">
+                    {t('admin.overlays.loadError')}
+                  </li>
+                )}
+                {(listFailed ? [] : orderedOverlays).map((overlay) => {
                   const isConnected = activeOverlayIds.has(overlay.id)
                   const since = connectedSince.get(overlay.id)
                   const connectedFor = formatConnectedFor(t, since)
@@ -402,7 +447,7 @@ export default function OverlaysPage() {
                                 <span
                                   className={clsx(
                                     'font-medium',
-                                    isLongOpen ? 'text-amber-400' : 'text-kick'
+                                    isLongOpen ? 'text-warning' : 'text-kick'
                                   )}
                                 >
                                   {connectedFor
@@ -458,13 +503,14 @@ export default function OverlaysPage() {
                     </li>
                   )
                 })}
-                {orderedOverlays.length === 0 && (
+                {!listFailed && !listLoading && orderedOverlays.length === 0 && (
                   <li className="px-4 py-10 text-center text-sm text-text-dim">
-                    {overlays.length === 0
-                      ? t('admin.overlays.emptyNone')
-                      : t('admin.overlays.emptyFiltered')}
+                    {term || showConnectedOnly
+                      ? t('admin.overlays.emptyFiltered')
+                      : t('admin.overlays.emptyNone')}
                   </li>
                 )}
+                {!showConnectedOnly && <LoadMore list={list} as="li" />}
               </ul>
             </Card>
           )}
@@ -533,7 +579,7 @@ export default function OverlaysPage() {
                             <span
                               className={clsx(
                                 'font-medium',
-                                selectedLongOpen ? 'text-amber-400' : 'text-kick'
+                                selectedLongOpen ? 'text-warning' : 'text-kick'
                               )}
                             >
                               {selectedConnectedFor

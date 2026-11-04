@@ -735,8 +735,9 @@ func main() {
 	{
 		// Auth service - protected routes
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest)  // DSGVO Art. 20 data portability
-		protectedAPI.PATCH("/auth/me/onboarding", proxyHandler.ForwardRequest) // first-run setup guide state
+		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest)     // DSGVO Art. 20 data portability
+		protectedAPI.PATCH("/auth/me/onboarding", proxyHandler.ForwardRequest)    // first-run setup guide state
+		protectedAPI.POST("/auth/me/tos-acceptance", proxyHandler.ForwardRequest) // post-login Terms of Service acceptance
 		protectedAPI.POST("/auth/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/stop-impersonation", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
@@ -807,6 +808,7 @@ func main() {
 		protectedAPI.PATCH("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
 		protectedAPI.GET("/auth/viewer/linked-platforms", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/viewer/linked-platforms/:platform", proxyHandler.ForwardRequest)
+		protectedAPI.GET("/auth/viewer/data-export", proxyHandler.ForwardRequest) // DSGVO Art. 15/20 for viewers
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)

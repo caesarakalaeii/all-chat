@@ -121,7 +121,7 @@ function ViewerPremiumContent() {
         <div className="space-y-1">
           <Link
             href="/settings/viewer"
-            className="text-sub text-sm transition-colors hover:text-white"
+            className="text-sub text-sm transition-colors hover:text-lanes-fg-strong"
           >
             {t('settings.viewerPremium.back')}
           </Link>
@@ -186,7 +186,7 @@ function ViewerPremiumContent() {
                   />
                   <Dialog.Content
                     showCloseButton={false}
-                    className="rounded-none border-white bg-black text-[#f4f3ef]"
+                    className="rounded-none border-lanes-fg-strong bg-lanes-panel text-lanes-fg"
                   >
                     <Dialog.Title>{t('common.patreon.disconnectTitle')}</Dialog.Title>
                     <Dialog.Description>

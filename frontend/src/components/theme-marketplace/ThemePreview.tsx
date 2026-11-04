@@ -103,7 +103,8 @@ export default function ThemePreview({
   }, [css, uniqueId])
 
   return (
-    <div className="theme-preview-wrapper overflow-hidden rounded-t-lg border border-border bg-surface">
+    // theme-dark: a chat theme is broadcast art; the site theme must not repaint it.
+    <div className="theme-preview-wrapper theme-dark overflow-hidden rounded-t-lg border border-border bg-surface">
       {/* Scoped styles - use data attribute to create unique scope */}
       {scopedCss && (
         <style dangerouslySetInnerHTML={{ __html: scopedCss }} data-theme-id={themeId} />

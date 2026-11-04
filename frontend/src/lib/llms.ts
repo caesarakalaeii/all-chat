@@ -54,7 +54,7 @@ function overview(): string {
 - Emotes: 7TV, BTTV and FFZ, plus native Twitch and YouTube emotes.
 - Look: 16 built-in themes, or your own CSS.
 - Engagement: cross-platform polls, predictions and per-overlay viewer points, an events feed (subs, bits, raids, Super Chats, memberships, follows) and an end-of-stream credit roll.
-- Browser extension for Chrome and Firefox that replaces native Twitch, YouTube and Kick chat with the All-Chat feed.
+- Browser extension for Chrome and Firefox that replaces native Twitch, YouTube and Kick chat with the All-Chat feed on channels whose streamer uses All-Chat, described at ${SITE_URL}/browser-extension.
 - Developer API: a public WebSocket stream of the normalized chat, documented at ${SITE_URL}/docs/api.
 - Demand-driven: a platform is read only while an overlay that uses it is connected. With "Shutdown source when not visible" ticked in OBS, hiding the source stops the reading after a grace period.
 - Privacy: no cookies and no viewer tracking. Usage analytics are cookieless and self-hosted, and chat messages are deleted after about an hour.`

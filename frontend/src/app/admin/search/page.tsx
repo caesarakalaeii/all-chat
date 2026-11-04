@@ -22,9 +22,9 @@
  * Global admin entity search (ADR-0035).
  *
  * Resolves a free-text query across users, overlays, sources, and viewers and
- * deep-links each hit into the URL-addressable admin views (ADR-0036). Users,
- * overlays, and sources are federated on the client over the existing admin
- * list endpoints; viewers use the server-side ?q= search.
+ * deep-links each hit into the URL-addressable admin views (ADR-0036). Each
+ * group asks its admin list endpoint for the first few server-side ?q= matches
+ * and their total (ADR-0086); no full list is loaded.
  */
 
 import { useEffect, useState } from 'react'
@@ -33,7 +33,9 @@ import { Card } from '@/components/ui/card'
 import { PlatformBadge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { UserAvatar } from '@/components/UserAvatar'
+import { useDebounce } from '@/hooks/useDebounce'
 import { useTranslations } from '@/lib/i18n'
+import { readQueryParam } from '@/lib/utils'
 
 const GROUP_LIMIT = 8
 
@@ -77,72 +79,40 @@ async function getJson<T>(url: string): Promise<T> {
   return res.json()
 }
 
-function readInitialQuery(): string {
-  if (typeof window === 'undefined') return ''
-  return new URLSearchParams(window.location.search).get('q') ?? ''
-}
-
 export default function AdminSearchPage() {
   const t = useTranslations()
-  // Seed both from ?q= via lazy initializers (e.g. arriving from a deep link) so
+  // Seeded from ?q= (e.g. arriving from a deep link) via a lazy initializer, so
   // results appear immediately without a synchronous setState in an effect.
-  const [query, setQuery] = useState(readInitialQuery)
-  const [debounced, setDebounced] = useState(() => readInitialQuery().trim())
+  const [query, setQuery] = useState(() => readQueryParam('q'))
+  const debounced = useDebounce(query.trim(), 300)
   const [users, setUsers] = useState<UserRow[]>([])
   const [overlays, setOverlays] = useState<OverlayRow[]>([])
   const [sources, setSources] = useState<SourceRow[]>([])
   const [viewers, setViewers] = useState<ViewerRow[]>([])
+  // Matches per group, of which only the first GROUP_LIMIT are fetched.
+  const [totals, setTotals] = useState({ users: 0, overlays: 0, sources: 0, viewers: 0 })
   const [loading, setLoading] = useState(false)
 
-  // Debounce the query.
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(query.trim()), 300)
-    return () => clearTimeout(t)
-  }, [query])
-
-  useEffect(() => {
-    const term = debounced.toLowerCase()
-    if (!term) return // render shows the prompt; keep prior results untouched
+    if (!debounced) return // render shows the prompt; keep prior results untouched
     let cancelled = false
 
     async function run() {
       setLoading(true)
+      const page = `limit=${GROUP_LIMIT}&q=${encodeURIComponent(debounced)}`
       try {
-        const [allUsers, allOverlays, allSources, viewerResp] = await Promise.all([
-          getJson<UserRow[]>('/api/v1/admin/users'),
-          getJson<OverlayRow[]>('/api/v1/admin/overlays'),
-          getJson<SourceRow[]>('/api/v1/admin/sources'),
-          getJson<{ viewers: ViewerRow[] }>(
-            `/api/v1/admin/viewers?limit=${GROUP_LIMIT}&q=${encodeURIComponent(debounced)}`
-          ),
+        const [u, o, s, v] = await Promise.all([
+          getJson<{ users: UserRow[]; total: number }>(`/api/v1/admin/users?${page}`),
+          getJson<{ overlays: OverlayRow[]; total: number }>(`/api/v1/admin/overlays?${page}`),
+          getJson<{ sources: SourceRow[]; total: number }>(`/api/v1/admin/sources?${page}`),
+          getJson<{ viewers: ViewerRow[]; total: number }>(`/api/v1/admin/viewers?${page}`),
         ])
         if (cancelled) return
-        setUsers(
-          allUsers.filter(
-            (u) =>
-              u.username.toLowerCase().includes(term) ||
-              u.display_name.toLowerCase().includes(term) ||
-              u.id.toLowerCase().includes(term)
-          )
-        )
-        setOverlays(
-          allOverlays.filter(
-            (o) =>
-              o.name.toLowerCase().includes(term) ||
-              o.id.toLowerCase().includes(term) ||
-              (o.owner_username?.toLowerCase().includes(term) ?? false)
-          )
-        )
-        setSources(
-          allSources.filter(
-            (s) =>
-              s.channel_name.toLowerCase().includes(term) ||
-              s.channel_id.toLowerCase().includes(term) ||
-              (s.channel_handle?.toLowerCase().includes(term) ?? false) ||
-              (s.owner_username?.toLowerCase().includes(term) ?? false)
-          )
-        )
-        setViewers(viewerResp.viewers ?? [])
+        setUsers(u.users ?? [])
+        setOverlays(o.overlays ?? [])
+        setSources(s.sources ?? [])
+        setViewers(v.viewers ?? [])
+        setTotals({ users: u.total, overlays: o.total, sources: s.total, viewers: v.total })
       } catch (err) {
         if (!cancelled) console.error('Global search failed:', err)
       } finally {
@@ -190,8 +160,8 @@ export default function AdminSearchPage() {
       ) : (
         <div className="space-y-6">
           {users.length > 0 && (
-            <ResultGroup title={t('admin.search.groupUsers')} count={users.length}>
-              {users.slice(0, GROUP_LIMIT).map((u) => (
+            <ResultGroup title={t('admin.search.groupUsers')} count={totals.users}>
+              {users.map((u) => (
                 <Link
                   key={u.id}
                   href={`/admin/users?user=${u.id}`}
@@ -224,8 +194,8 @@ export default function AdminSearchPage() {
           )}
 
           {overlays.length > 0 && (
-            <ResultGroup title={t('admin.search.groupOverlays')} count={overlays.length}>
-              {overlays.slice(0, GROUP_LIMIT).map((o) => (
+            <ResultGroup title={t('admin.search.groupOverlays')} count={totals.overlays}>
+              {overlays.map((o) => (
                 <Link
                   key={o.id}
                   href={`/admin/overlays?overlay=${o.id}`}
@@ -246,8 +216,8 @@ export default function AdminSearchPage() {
           )}
 
           {sources.length > 0 && (
-            <ResultGroup title={t('admin.search.groupSources')} count={sources.length}>
-              {sources.slice(0, GROUP_LIMIT).map((s) => (
+            <ResultGroup title={t('admin.search.groupSources')} count={totals.sources}>
+              {sources.map((s) => (
                 <Link
                   key={s.id}
                   href={`/admin/overlays?overlay=${s.overlay_id}`}
@@ -267,8 +237,8 @@ export default function AdminSearchPage() {
           )}
 
           {viewers.length > 0 && (
-            <ResultGroup title={t('admin.search.groupViewers')} count={viewers.length}>
-              {viewers.slice(0, GROUP_LIMIT).map((v) => (
+            <ResultGroup title={t('admin.search.groupViewers')} count={totals.viewers}>
+              {viewers.map((v) => (
                 <Link
                   key={v.id}
                   href={`/admin/viewers?q=${encodeURIComponent(v.username)}`}

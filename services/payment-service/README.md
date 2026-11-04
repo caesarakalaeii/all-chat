@@ -76,10 +76,10 @@ the deadline server-side as `NOW() + duration_seconds`.
 | `GET`  | `/api/v1/payment/patreon/connect` | user JWT | Start OAuth; returns `{auth_url}` |
 | `GET`  | `/api/v1/payment/patreon/callback` | one-time Redis state | OAuth callback; links account, grants premium |
 | `GET`  | `/api/v1/payment/status` | user JWT | `{connected, status, tier_id, cents, renews_at, is_premium}` |
-| `DELETE` | `/api/v1/payment/patreon/connection` | user JWT | Unlink Patreon; revoke subscription-derived premium |
+| `DELETE` | `/api/v1/payment/patreon/connection` | user JWT | Unlink Patreon: delete the connection and the linked membership; revoke subscription-derived premium |
 | `GET`  | `/api/v1/payment/viewer/patreon/connect` | viewer JWT | Start viewer OAuth; returns `{auth_url}` (ADR-0019) |
 | `GET`  | `/api/v1/payment/viewer/status` | viewer JWT | Viewer subscription status |
-| `DELETE` | `/api/v1/payment/viewer/patreon/connection` | viewer JWT | Unlink viewer Patreon; revoke viewer premium |
+| `DELETE` | `/api/v1/payment/viewer/patreon/connection` | viewer JWT | Unlink viewer Patreon: delete the connection and the linked membership; revoke viewer premium |
 | `POST` | `/api/v1/webhooks/patreon` | Patreon HMAC | `members:create/update/delete` (resolves to either subject) |
 | `GET`  | `/health/live`, `/health/ready`, `/metrics` | none | Ops |
 
@@ -89,6 +89,35 @@ Patreon signs webhooks with **HMAC-MD5 of the raw body**, hex-encoded, in the
 `X-Patreon-Signature` header — NOT the HMAC-SHA256+timestamp scheme used by Twitch
 EventSub. The raw body must be read before any JSON decode. See
 `patreon/webhook.go` (`VerifyWebhookSignature`).
+
+## Patron data we keep
+
+The OAuth consent asks for the `identity` scope only, and the identity call asks for
+no user attributes, so Patreon returns the patron's id and their membership to our
+campaign, nothing personal. A `members:*` webhook body is different: it carries the
+patron's email, full name, creator note and profile, and can include their address.
+The body is parsed in memory and dropped. Only these values reach Postgres:
+
+- `patreon_oauth_tokens`: Patreon user id, encrypted access and refresh tokens,
+  expiry, granted scopes.
+- `premium_subscriptions`: Patreon user id, status, tier id, entitled cents, next
+  charge date. A webhook for a patron who never connected through all-chat still
+  creates this row (unlinked); it is linked when they connect.
+
+The row is linked to an all-chat account only while that account has the Patreon
+account connected: `SubscriptionRepository.Upsert` reads `user_id` / `viewer_id`
+from `patreon_oauth_tokens` on every write instead of trusting its caller.
+Disconnecting deletes the connection and the account's membership rows and
+recomputes premium, so premium ends at once; later webhooks for the patron only
+store an unlinked row, and only connecting again links it. Each reconcile pass
+starts with `entitlement.PruneDisconnected`, which deletes rows still linked
+without a connection (from disconnects before this rule, or a switch to another
+Patreon account) and recomputes those accounts. The data export and account
+deletion therefore only ever cover the membership of a connected Patreon account.
+
+Migration 120 dropped `premium_subscriptions.raw`, which used to hold every webhook
+body in full. `MembershipSnapshot` has no personal fields, so the parser has nowhere
+to put them.
 
 ## Subscription status
 

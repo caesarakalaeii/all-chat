@@ -2,20 +2,21 @@
 
 **Date**: 2026-03-29
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: All-Chat Platform Team
 
 ---
 
 ## Context and Problem Statement
 
-All 6 Go listeners (twitch-listener, kick-listener, youtube-listener, youtube-listener-innertube, discord-listener, twitch-eventsub-listener) silently drop messages when `XADD chat:raw` fails. During a temporary Redis unavailability (pod restart, network blip, rolling update), messages from Twitch IRC, Kick WebSocket, YouTube InnerTube, Discord, and EventSub are lost with no retry and no metric increment.
+Six Go listeners originally had the problem (twitch-listener, kick-listener, youtube-listener, youtube-listener-innertube, discord-listener, twitch-eventsub-listener): they silently dropped messages when `XADD chat:raw` failed. During a temporary Redis unavailability (pod restart, network blip, rolling update), messages were lost with no retry and no metric increment.
 
-This is diagnosed as issues LI-01, LI-02, and LI-03 in the Phase 8 resilience audit. The pattern is identical across all 6 listeners: the `Publish` method returns the `XADD` error directly and the caller logs it and moves on — the message is gone.
+This was diagnosed as issues LI-01, LI-02, and LI-03 in the Phase 8 resilience audit. The pattern was identical across listeners: the `Publish` method returned the `XADD` error directly and the caller logged it and moved on — the message was gone.
 
 ## Decision Drivers
 
 - **Silent data loss is unacceptable**: Streamers depend on reliable message delivery; dropping messages on a temporary Redis blip is a user-visible failure
-- **Shared solution over per-listener duplication**: All 6 listeners share the same failure pattern — a shared SDK component eliminates 6 separate fix sites
+- **Shared solution over per-listener duplication**: the six listeners sharing this failure pattern at decision time meant six separate fix sites — a shared SDK component eliminates that duplication
 - **Bounded memory**: Any buffering solution must have a fixed memory ceiling — unbounded queues are a liability in a long-running Kubernetes pod
 - **Opt-in adoption**: Existing listeners should be able to adopt the buffer independently without a flag-day migration
 - **Observability**: Operations must be able to see buffer depth and drop rate via existing Prometheus scraping
@@ -46,7 +47,7 @@ This is diagnosed as issues LI-01, LI-02, and LI-03 in the Phase 8 resilience au
 
 **Chosen**: Option 4 — Mutex-protected circular buffer with retry goroutine
 
-**Rationale**: The core problem is temporary Redis unavailability lasting seconds, not minutes. A 1000-message in-memory buffer with 500ms retry covers ~8 minutes of a high-volume Twitch channel (2 messages/second) before dropping — well beyond any normal Redis blip. The shared SDK implementation eliminates the 6-listener duplication problem and provides a single place to add metrics and tune behavior.
+**Rationale**: The core problem is temporary Redis unavailability lasting seconds, not minutes. A 1000-message in-memory buffer with 500ms retry covers ~8 minutes of a high-volume Twitch channel (2 messages/second) before dropping — well beyond any normal Redis blip. The shared SDK implementation eliminates the listener duplication problem and provides a single place to add metrics and tune behavior.
 
 ## Consequences
 
@@ -56,7 +57,13 @@ This is diagnosed as issues LI-01, LI-02, and LI-03 in the Phase 8 resilience au
 - Bounded memory: 1000 messages maximum; oldest is dropped when full (ring semantics prevent unbounded growth)
 - Opt-in: existing listeners add one line to wrap their `Publish` function; no forced migration
 - Prometheus metrics (`ring_buffer_depth`, `ring_buffer_drops_total`) provide visibility into buffer utilization under load
-- Single implementation in `shared/listener/ring_buffer.go` replaces 6 potential per-listener implementations
+- Single implementation in `shared/listener/ring_buffer.go` replaces per-listener implementations
+- Early adoption is near-universal: twitch-listener, kick-listener,
+  youtube-listener-innertube, twitch-eventsub-listener, discord-listener,
+  owncast-listener, goodgame-listener, picarto-listener, facebook-listener,
+  altstream-listener and moderation-service all wrap their `Publish` with the
+  shared buffer. youtube-listener (official Data-API mode) and the TypeScript
+  tiktok-listener still publish `chat:raw` without it.
 
 ### Negative
 
@@ -70,7 +77,7 @@ This is diagnosed as issues LI-01, LI-02, and LI-03 in the Phase 8 resilience au
   - `shared/listener/ring_buffer_test.go` — Full test suite
 - **Type**: `RingBufferPublisher` wraps any `PublishFunc func(ctx context.Context, payload []byte) error`
 - **Constructor**: `NewRingBufferPublisher(capacity int, publishFn PublishFunc, logger *zap.Logger, serviceName string) *RingBufferPublisher`
-- **Capacity**: 1000 messages (default for all listeners)
+- **Capacity**: 1000 messages (recommended default; each adopting listener declares it as a constant in its publisher)
 - **Retry interval**: 500ms using `time.NewTicker`
 - **Overflow policy**: Drop oldest (ring semantics), increment `ring_buffer_drops_total`
 - **Shutdown**: `Stop()` closes `stopCh` and calls `wg.Wait()` — safe to call from any goroutine

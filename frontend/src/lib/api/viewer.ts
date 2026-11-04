@@ -133,6 +133,14 @@ export const viewerApi = {
   },
 
   /**
+   * Everything stored about the signed-in viewer identity, as the JSON export
+   * the privacy policy promises (DSGVO Art. 15/20).
+   */
+  async exportData(): Promise<unknown> {
+    return viewerApiClient.get<unknown>('/api/v1/auth/viewer/data-export')
+  },
+
+  /**
    * Viewer premium (ADR-0019): the viewer-scoped Patreon connection, authenticated
    * with the viewer JWT. Mirrors the streamer payment API but grants the cheaper
    * viewer cosmetic product.

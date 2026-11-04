@@ -168,7 +168,7 @@ func (c *Client) Disconnect() error {
 
 // Subscribe sends a join frame for a numeric channel id. Like the
 // kick-listener, the membership is recorded first; the frame is sent only
-// once the welcome frame has been processed (isReady), and resubscribeAll
+// once the welcome frame has been processed (isReady), and markWelcomedAndRejoin
 // replays the join on every (re)connect. The deferred case returns nil —
 // delivery is guaranteed by the welcome replay.
 func (c *Client) Subscribe(channelID int64) error {
@@ -181,9 +181,12 @@ func (c *Client) Subscribe(channelID int64) error {
 		return nil
 	}
 	c.subscribedChannels[id] = struct{}{}
+	// Checked under channelsMu: markWelcomedAndRejoin flips welcomed and snapshots the channels
+	// under the same lock, so a channel is joined either here or by the replay, never both.
+	ready := c.isReady()
 	c.channelsMu.Unlock()
 
-	if !c.isReady() {
+	if !ready {
 		c.logger.Debug("Connection not ready yet, join deferred to welcome replay",
 			zap.String("channel_id", id))
 		return nil
@@ -268,14 +271,19 @@ func (c *Client) ReconnectChan() <-chan struct{} {
 	return c.reconnectChan
 }
 
-// resubscribeAll re-joins every recorded channel after a reconnect.
-func (c *Client) resubscribeAll() {
-	c.channelsMu.RLock()
+// markWelcomedAndRejoin marks the connection welcomed and re-joins every recorded channel. Both
+// happen under channelsMu so a concurrent Subscribe sees either "not ready" (and is replayed
+// here) or "ready" (and is not in this snapshot).
+func (c *Client) markWelcomedAndRejoin() {
+	c.channelsMu.Lock()
+	c.connMu.Lock()
+	c.welcomed = true
+	c.connMu.Unlock()
 	ids := make([]string, 0, len(c.subscribedChannels))
 	for id := range c.subscribedChannels {
 		ids = append(ids, id)
 	}
-	c.channelsMu.RUnlock()
+	c.channelsMu.Unlock()
 
 	for _, id := range ids {
 		if err := c.sendEnvelope(Envelope{
@@ -371,14 +379,11 @@ func (c *Client) handleFrame(data []byte) {
 	case "welcome":
 		var w WelcomeData
 		_ = json.Unmarshal(env.Data, &w)
-		c.connMu.Lock()
-		c.welcomed = true
-		c.connMu.Unlock()
 		c.logger.Info("GoodGame chat welcome",
 			zap.Float64("protocol_version", w.ProtocolVersion),
 			zap.String("server_ident", w.ServerIdent),
 		)
-		c.resubscribeAll()
+		c.markWelcomedAndRejoin()
 
 	case "ping":
 		// Server-initiated ping — answer with pong, protocol symmetric.

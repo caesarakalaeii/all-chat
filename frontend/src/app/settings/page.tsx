@@ -32,6 +32,7 @@ import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { toastManager } from '@/lib/toast'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AmbassadorSettingsCard } from '@/components/settings/AmbassadorSettingsCard'
+import { DataExportButton } from '@/components/settings/DataExportButton'
 import { LanguageSettingsCard } from '@/components/settings/LanguageSettingsCard'
 import {
   getGuilds,
@@ -306,6 +307,7 @@ function SettingsContent() {
           <h2 className="mb-4 text-lg">{t('settings.index.privacyHeading')}</h2>
           <p className="text-sub mb-4 text-sm">{t('settings.index.privacyBody')}</p>
           <div className="flex flex-col gap-3">
+            <DataExportButton load={authApi.exportData} filename="allchat-data-export" />
             <Link href="/legal/privacy" className="lanes-btn ghost justify-between">
               <span>{t('settings.index.privacyPolicyLink')}</span>
               <span aria-hidden="true">→</span>
@@ -347,7 +349,7 @@ function SettingsContent() {
                         className="rounded-full object-cover"
                       />
                     ) : (
-                      <div className="text-sub flex h-8 w-8 items-center justify-center rounded-full border border-white/40 text-sm font-medium">
+                      <div className="text-sub flex h-8 w-8 items-center justify-center rounded-full border border-lanes-fg-strong/40 text-sm font-medium">
                         {guild.guild_name.charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -371,7 +373,7 @@ function SettingsContent() {
                     />
                     <Dialog.Content
                       showCloseButton={false}
-                      className="rounded-none border-white bg-black text-[#f4f3ef]"
+                      className="rounded-none border-lanes-fg-strong bg-lanes-panel text-lanes-fg"
                     >
                       <Dialog.Title>
                         {t('settings.index.discordDisconnectTitle', {
@@ -412,7 +414,7 @@ function SettingsContent() {
               records who you are on Discord. Moderation needs both — Discord has no per-user
               moderation API, so the shared bot writes and All-Chat checks real people's server
               permissions itself (ADR-0048). No token is kept. */}
-          <div className="mt-6 border-t border-white/20 pt-4">
+          <div className="mt-6 border-t border-lanes-fg-strong/20 pt-4">
             <h3 className="text-sm font-semibold">{t('settings.index.discordAccountHeading')}</h3>
             {identityLoading ? (
               <div role="status" className="mt-3">
@@ -449,7 +451,7 @@ function SettingsContent() {
 
         {/* Danger zone */}
         <div className="lanes-panel p-6">
-          <h2 className="mb-2 text-lg text-[#ff3b30]">{t('settings.index.dangerHeading')}</h2>
+          <h2 className="mb-2 text-lg text-destructive">{t('settings.index.dangerHeading')}</h2>
           <p className="text-sub mb-4 text-sm">{t('settings.index.dangerBody')}</p>
           <Dialog.Root>
             <Dialog.Trigger
@@ -459,7 +461,7 @@ function SettingsContent() {
             />
             <Dialog.Content
               showCloseButton={false}
-              className="rounded-none border-white bg-black text-[#f4f3ef]"
+              className="rounded-none border-lanes-fg-strong bg-lanes-panel text-lanes-fg"
             >
               <Dialog.Title>{t('settings.index.deleteConfirmTitle')}</Dialog.Title>
               <Dialog.Description>{t('settings.index.deleteConfirmBody')}</Dialog.Description>

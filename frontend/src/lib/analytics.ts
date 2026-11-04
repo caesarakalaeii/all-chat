@@ -20,9 +20,9 @@
  * Analytics event tracking
  *
  * A thin, typed wrapper over Umami's `window.umami.track(...)`. The Umami script
- * is loaded by `components/Analytics.tsx` (production only, `/overlay/*` excluded),
- * so this wrapper must **no-op gracefully** whenever the tracker isn't present:
- * local dev, OBS overlay views, or before the deferred script has loaded.
+ * is loaded by `components/Analytics.tsx` (production only; `/overlay/*` loads are
+ * tagged `overlay`), so this wrapper must **no-op gracefully** whenever the tracker
+ * isn't present: local dev, beta, or before the deferred script has loaded.
  *
  * Privacy contract: event payloads stay **non-PII and aggregate** — platform names,
  * counts, enum-like surface/section labels, booleans. Never pass usernames, tokens,

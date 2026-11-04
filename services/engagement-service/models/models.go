@@ -188,7 +188,9 @@ type ChatCommand struct {
 	Trigger         string    `json:"trigger"`
 	Response        string    `json:"response"`
 	CreateClip      bool      `json:"create_clip"`
-	ImageURL        string    `json:"image_url"` // template; shown on alerts overlays (ADR-0080)
+	ImageURL        string    `json:"image_url"`  // template; shown on alerts overlays (ADR-0080)
+	SoundURL        string    `json:"sound_url"`  // https URL played with the command's alert
+	AlertText       string    `json:"alert_text"` // template; the alert's text instead of the profile's
 	MinRole         string    `json:"min_role"`
 	CooldownSeconds int       `json:"cooldown_seconds"`
 	Enabled         bool      `json:"enabled"`
