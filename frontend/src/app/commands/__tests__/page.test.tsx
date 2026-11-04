@@ -259,6 +259,9 @@ describe('Chat commands page', () => {
       within(panel).getByText(/A verified phone number is required to chat in this channel\./)
     ).toBeInTheDocument()
     expect(within(panel).getByText(/The All-Chat Bot lost its authorization/)).toBeInTheDocument()
+    expect(
+      within(panel).getByText(/Make the bot a moderator or VIP in your channel/)
+    ).toBeInTheDocument()
   })
 
   it('shows no failure panel while every bot message arrives', async () => {

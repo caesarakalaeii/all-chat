@@ -76,6 +76,8 @@ export const commands = {
     offline: 'Your stream was not live.',
     quota: 'The YouTube quota for today is used up.',
     failed: 'It could not be sent. Try again later.',
+    modHint:
+      'Make the bot a moderator or VIP in your channel: chat restrictions like followers-only mode, slow mode or a required verified phone number do not apply to them.',
     clears: 'This clears as soon as a message gets through.',
   },
   status: {

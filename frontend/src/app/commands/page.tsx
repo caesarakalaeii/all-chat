@@ -547,6 +547,9 @@ function SendFailuresPanel({ failures }: { failures: ChatCommandSendFailure[] })
                     {t('commands.sendFailures.platformSays', { platform, detail: f.detail })}
                   </p>
                 )}
+                {f.error_kind === 'message_dropped' && f.sender !== 'self' && (
+                  <p className="text-text-sub">{t('commands.sendFailures.modHint')}</p>
+                )}
               </li>
             )
           })}

@@ -72,6 +72,8 @@ export const commands: LocaleNamespace<'commands'> = {
     offline: 'Dein Stream war nicht live.',
     quota: 'Das YouTube-Kontingent für heute ist aufgebraucht.',
     failed: 'Sie konnte nicht gesendet werden. Versuch es später noch einmal.',
+    modHint:
+      'Mach den Bot in deinem Kanal zum Moderator oder VIP: Chat-Beschränkungen wie der Followers-only-Modus, Slow-Mode oder eine Pflicht zur verifizierten Telefonnummer gelten für sie nicht.',
     clears: 'Das verschwindet, sobald eine Nachricht durchkommt.',
   },
   status: {
