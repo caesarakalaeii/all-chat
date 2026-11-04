@@ -787,8 +787,12 @@ func TestUserRepository_Update(t *testing.T) {
 }
 
 func TestUserRepository_Delete(t *testing.T) {
-	pool, cleanup := setupTestDB(t)
+	// The real migration set, not setupTestDB's hand-written subset: account erasure
+	// (ADR-0088) also reads the platform token tables and erases viewer, alert and
+	// quota rows, which the subset does not have.
+	pool, cleanup := setupMigrationTestDB(t)
 	defer cleanup()
+	runMigrations(t, pool, loadUpMigrations(t))
 
 	repo := newTestUserRepository(t, pool)
 	ctx := context.Background()
@@ -831,7 +835,7 @@ func TestUserRepository_Delete(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			id := tt.setup()
-			err := repo.Delete(ctx, id)
+			_, err := repo.Delete(ctx, id)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Delete() error = %v, wantErr %v", err, tt.wantErr)
 				return

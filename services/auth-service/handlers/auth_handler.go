@@ -822,7 +822,10 @@ func (h *AuthHandler) HandleLogout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
-// HandleDeleteAccount deletes the authenticated user's account and cascades associated data
+// HandleDeleteAccount erases the authenticated user's account (ADR-0088): the account
+// and everything keyed to it or its overlays, plus the user's own viewer identity (see
+// UserRepository.Delete). Uploaded media files are removed from object storage by
+// media-service's orphan sweep once their registry rows are gone.
 func (h *AuthHandler) HandleDeleteAccount(c *gin.Context) {
 	userIDValue, exists := c.Get("user_id")
 	if !exists {
@@ -843,7 +846,8 @@ func (h *AuthHandler) HandleDeleteAccount(c *gin.Context) {
 		return
 	}
 
-	if err := h.userRepo.Delete(c.Request.Context(), userID); err != nil {
+	erasedViewers, err := h.userRepo.Delete(c.Request.Context(), userID)
+	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
@@ -882,6 +886,7 @@ func (h *AuthHandler) HandleDeleteAccount(c *gin.Context) {
 		}
 	}
 	auth.ClearAuthCookies(c)
+	dropViewerIdentityCache(c.Request.Context(), h.redis, h.logger, erasedViewers)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Account deleted successfully"})
 }

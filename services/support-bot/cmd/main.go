@@ -45,6 +45,7 @@ import (
 	"github.com/caesar/all-chat/services/support-bot/tools"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/middleware"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -198,7 +199,7 @@ func startHealthServer(cfg *config.Config, dbPool *pgxpool.Pool, log *zap.Logger
 	}
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{SkipPaths: []string{"/health/live", "/health/ready"}}))
+	router.Use(middleware.GinAccessLog())
 	health := handlers.NewHealthHandler(dbPool)
 	router.GET("/health/live", health.Live)
 	router.GET("/health/ready", health.Ready)

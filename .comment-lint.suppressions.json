@@ -26,9 +26,6 @@
   "frontend/tests/e2e/dashboard.spec.ts": {
     "restate": 1
   },
-  "services/api-gateway/cmd/main.go": {
-    "restate": 3
-  },
   "services/api-gateway/handlers/health_test.go": {
     "restate": 2
   },

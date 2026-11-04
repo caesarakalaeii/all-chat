@@ -263,24 +263,6 @@ func (r *UserRepository) SetPlatformID(ctx context.Context, userID, platform, pl
 	return stored != nil && *stored == platformID, nil
 }
 
-// Delete removes a user by ID
-func (r *UserRepository) Delete(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("user id is required")
-	}
-
-	result, err := r.db.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
-	}
-
-	if result.RowsAffected() == 0 {
-		return ErrUserNotFound
-	}
-
-	return nil
-}
-
 // UpdateTokens updates only the OAuth tokens for a user
 func (r *UserRepository) UpdateTokens(ctx context.Context, userID, accessToken, refreshToken string, expiresAt time.Time) error {
 	encAccessToken, err := r.encryptToken(accessToken)

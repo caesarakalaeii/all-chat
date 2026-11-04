@@ -228,8 +228,8 @@ func (h *MediaHandler) List(c *gin.Context) {
 
 // Delete removes the registry row (owner-checked) and then the MinIO object.
 // A MinIO failure is logged but NOT fatal: the registry row is the source of
-// truth for "the user deleted this", and an orphaned object in a
-// public-read bucket is unreachable junk, not a live leak.
+// truth for "the user deleted this". The object would stay downloadable at its
+// public URL, so the orphan sweep (package orphans, ADR-0088) removes it later.
 func (h *MediaHandler) Delete(c *gin.Context) {
 	userID := c.GetString("user_id") // set by JWTAuth middleware
 	if userID == "" {
