@@ -1,7 +1,7 @@
 # All-Chat: Architecture Overview
 
-**Version**: 2.1
-**Last Updated**: 2026-05-27
+**Version**: 3.0
+**Last Updated**: 2026-11-04
 **Status**: Production
 
 ---
@@ -21,14 +21,14 @@
 
 ## Introduction
 
-All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from multiple live streaming platforms (Twitch, YouTube, Kick, TikTok, Discord) on streaming overlays.
+All-Chat is a **cloud-native microservices platform** for aggregating and displaying chat messages from multiple live streaming platforms on streaming overlays. Twitch, YouTube, Kick, TikTok and Discord are generally available; Owncast, GoodGame, Picarto, Facebook and Instagram are beta-only, and Altstream is early access (the per-platform rollout state lives in `CLAUDE.md` and `frontend/src/lib/platform-availability.ts`).
 
-**Core Value Proposition**: Unified chat display for multi-platform streamers, supporting 7TV, BTTV, and FFZ emotes with real-time updates.
+**Core Value Proposition**: Unified chat display for multi-platform streamers, supporting 7TV, BTTV, and FFZ emotes with real-time updates. Around the chat overlay sit alerts, goal and list overlays, polls, predictions and a viewer points economy, streamer chat commands, and cross-platform moderation.
 
 **Architecture Philosophy**:
 - **Standard Go Layout** (not hexagonal) - LLM-friendly, less boilerplate
 - **Microservices** - Clear boundaries, independent scaling
-- **Cloud-native** - Kubernetes, CNPG (PostgreSQL), LGTM observability stack
+- **Cloud-native** - Kubernetes (K3s), CNPG (PostgreSQL), LGTM observability stack, GitOps
 - **LLM-first development** - Optimized for code generation by AI agents
 
 ---
@@ -37,262 +37,235 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 
 ### Key Design Principles
 
-1. **Horizontal Scalability**: All stateless services can scale to N replicas
-2. **Fault Tolerance**: Services are resilient to dependency failures
+1. **Horizontal Scalability**: Stateless services scale to N replicas; listeners coordinate through leases and demand snapshots instead of a single leader
+2. **Fault Tolerance**: Services are resilient to dependency failures (ring buffers in front of Redis, consumer-group PEL recovery, Redis and PostgreSQL failover)
 3. **Separation of Concerns**: Each service has a single, well-defined responsibility
-4. **Modularity**: Platform listeners are pluggable (can enable/disable any platform)
-5. **Observability**: Comprehensive metrics, logs, and traces (LGTM stack)
-6. **Eventual Consistency**: Acceptable for non-critical paths (emote cache, metadata)
+4. **Modularity**: Platform listeners are pluggable; a platform is enabled per deployment and gated per user via feature gates (ADR-0008)
+5. **Observability**: Prometheus metrics, structured Zap logs, OpenTelemetry traces (LGTM stack)
+6. **Eventual Consistency**: Acceptable for non-critical paths (emote cache, metadata, viewer points earning)
 
 ### Non-Goals (Explicit Constraints)
 
-- **Not a chat bot platform** - Only displays chat, does not send messages
-- **Not a chat archive** - Messages are transient (Redis Streams trimmed to 50K)
-- **Not a moderation tool** - No filtering, banning, or spam detection
-- **Not multi-region (Phase 1)** - Single data center deployment
+- **Not a chat archive** - Chat is transient: `chat:raw` is a sliding window (approx. `MAXLEN` 100,000 entries) and delivery to overlays is fire-and-forget Pub/Sub. Only derived state is persisted (alert history, points, poll results), and the retention sweeper enforces the privacy-policy retention periods (ADR-0089).
+- **Not a general-purpose chat bot** - All-Chat does write to platform chat, but only on the streamer's behalf: send-to-all, engagement and chat-command replies, and moderation actions (ADR-0017, ADR-0028, ADR-0079).
+- **Not automated moderation** - Moderation is manual actions by the streamer or delegated overlay moderators (ADR-0048); there is no spam detection of its own. Platform-side AutoMod events are surfaced, not decided (ADR-0054).
+- **Not multi-region** - Single cluster. The one exception is `tiktok-relay`, a small US-region Cloud Run relay for TikTok handle lookups.
 
 ---
 
 ## System Overview
 
-### High-Level Architecture
+### Full Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     External Platforms                       │
-│ Twitch │ YouTube │ Kick │ TikTok │ Discord                   │
-└──────────────┬──────────────┬──────────────┬────────────────┘
-               │              │              │
-               ▼              ▼              ▼
-         ┌──────────────────────────────────────────┐
-         │           Platform Listeners              │
-         │  • twitch-listener (IRC)                  │
-         │  • twitch-eventsub-listener (webhooks/WS) │
-         │  • youtube-listener (Data API)            │
-         │  • youtube-listener-innertube             │
-         │  • kick-listener (Centrifugo/Pusher WS)   │
-         │  • tiktok-listener (Node, unofficial lib) │
-         │  • discord-listener (gateway WS)          │
-         └───────────────┬──────────────────────────┘
-                         │ publish raw messages
-                         ▼
-                  ┌─────────────┐
-                  │ Redis Stream│ (chat:raw)
-                  │ XADD        │
-                  └──────┬──────┘
-                         │ XREADGROUP (consumer group)
-                         ▼
-              ┌──────────────────────┐
-              │ Message Processor     │ (8087)
-              │ • Normalize format    │
-              │ • Enrich emotes       │
-              │ • Filter by age       │
-              └──────────┬────────────┘
-                         │ publish enriched messages
-                         ▼
-                  ┌─────────────┐
-                  │ Redis Pub/Sub│ (overlay:*)
-                  │ PUBLISH      │
-                  └──────┬──────┘
-                         │ SUBSCRIBE
-                         ▼
-              ┌──────────────────────┐
-              │  API Gateway (8080)   │
-              │  • WebSocket Hub      │
-              │  • HTTP Reverse Proxy │
-              └──────────┬────────────┘
-                         │ WebSocket broadcast
-                         ▼
-              ┌──────────────────────┐
-              │  Overlay (Frontend)   │
-              │  • React + Next.js    │
-              │  • Real-time display  │
-              └───────────────────────┘
+Every deployed component and the paths between them, laid out left to right along the chat pipeline: platforms, listeners, Redis, processing, gateway, clients. Solid arrows carry chat and events; dotted arrows are control, persistence or outbound paths. Database access is drawn once per group rather than per service.
+
+```mermaid
+flowchart LR
+    subgraph EXT["External platforms and APIs"]
+        P_CHAT["Twitch · YouTube · Kick · TikTok · Discord<br/>Owncast · GoodGame · Picarto · Altstream · Facebook"]
+        P_EMOTE["7TV · BTTV · FFZ"]
+        PATREON["Patreon"]
+        RELAY["tiktok-relay<br/>(Cloud Run, US)"]
+    end
+
+    subgraph LISTEN["Platform listeners"]
+        L_TW["twitch-eventsub-listener :8090"]
+        L_TWI["twitch-listener :8085<br/>(IRC, deprecated, joins nothing)"]
+        L_YT["youtube-listener-innertube :8080"]
+        L_YTO["youtube-listener-official :8086<br/>(premium Data API)"]
+        L_KICK["kick-listener :8089"]
+        L_TT["tiktok-listener :8089 (Node)"]
+        SIGNER["tiktok-signer :8092<br/>(headless browser)"]
+        L_DC["discord-listener :8086"]
+        L_BETA["owncast :8095 · goodgame :8096<br/>picarto :8097 · altstream :8101<br/>facebook :8099 · instagram :8100"]
+    end
+
+    subgraph REDIS["Redis 7 HA: 3 data nodes + 3 Sentinels behind HAProxy"]
+        RAW[("stream<br/>chat:raw")]
+        ENGS[("streams engagement:commands,<br/>chatcmd:jobs, engagement:twitch-native")]
+        OVL(["pub/sub overlay:{id}<br/>:updates :poll :prediction :alerts"])
+        DEMAND(["pub/sub source:demand"])
+        STATUS(["pub/sub platform:status"])
+        EARN(["pub/sub engagement:events,<br/>engagement:chat"])
+        QUOTA(["pub/sub quota:alerts"])
+    end
+
+    subgraph PROC["Processing and coordination"]
+        MP["message-processor :8087<br/>normalize, enrich, route"]
+        AP["alert-processor :8098<br/>alerts, goals, leaderboards"]
+        SM["source-manager :8088<br/>source registry, demand, leases"]
+    end
+
+    subgraph EDGE["Edge"]
+        GW["api-gateway :8080<br/>reverse proxy + WebSocket hub<br/>(+ api-gateway-beta)"]
+        FE["frontend :3000<br/>Next.js (+ frontend-beta)"]
+    end
+
+    INGRESS{{"Envoy Gateway<br/>allch.at · beta.allch.at<br/>media.allch.at"}}
+
+    subgraph CLIENTS["Clients"]
+        OBS["OBS browser source<br/>/overlay/:id"]
+        WEB["Dashboard, viewer pages"]
+        DEV["Desktop / Stream Deck plugins<br/>(PAT, paired device tokens)"]
+    end
+
+    subgraph CORE["Core HTTP services, proxied by api-gateway"]
+        AUTH["auth-service :8081<br/>OAuth, JWT, PATs, admin"]
+        OM["overlay-manager :8082<br/>overlays, sources, alert/goal config"]
+        EMOTE["emote-service :8083<br/>emote cache"]
+        SHARE["share-service :8090<br/>share links, roles, feature gates"]
+        MOD["moderation-service :8092<br/>delete, timeout, ban"]
+        PAY["payment-service :8091<br/>Patreon entitlements"]
+        ENG["engagement-service :8093<br/>polls, predictions, points, commands"]
+        MEDIA["media-service :8094<br/>alert media presign"]
+    end
+
+    subgraph BG["Background and ops"]
+        TR["token-refresh-service"]
+        QM["youtube-quota-monitor :8093"]
+        CRON["CronJobs: retention-sweeper,<br/>key-rotator"]
+        DBOT["discord-bot (Node)"]
+        SBOT["support-bot<br/>(local LLM agent)"]
+    end
+
+    subgraph DATA["Persistent stores"]
+        PG[("PostgreSQL 17<br/>CNPG, 3 instances")]
+        MINIO[("MinIO<br/>allchat-media")]
+        BACKUP[("Hetzner Object Storage<br/>backups")]
+    end
+
+    %% chat ingestion
+    P_CHAT --> LISTEN
+    L_TT -.- SIGNER
+    L_TT -. "US-only handles" .-> RELAY
+    LISTEN -- "XADD" --> RAW
+    LISTEN -- "status" --> STATUS
+    SM -- "PUBLISH" --> DEMAND
+    DEMAND -. "demand snapshots" .-> LISTEN
+
+    %% processing
+    RAW -- "group message-processor" --> MP
+    RAW -- "group alert-processors" --> AP
+    MP -- "PUBLISH" --> OVL
+    MP -- "XADD votes, wagers, commands" --> ENGS
+    MP -- "earn signals" --> EARN
+    L_TW -- "XADD native polls/predictions" --> ENGS
+    AP -- "alert, goal, list frames" --> OVL
+    MP -. "emote lookup" .-> EMOTE
+    EMOTE -.-> P_EMOTE
+
+    %% delivery
+    OVL -- "SUBSCRIBE" --> GW
+    STATUS --> GW
+    OVL -. "relay non-Discord chat" .-> L_DC
+    GW <-- "/api/ · /ws/" --> INGRESS
+    FE <-- "/" --> INGRESS
+    INGRESS <--> OBS & WEB & DEV
+    INGRESS -- "/webhooks/eventsub" --> L_TW
+    INGRESS -- "public GET" --> MINIO
+
+    %% core services
+    GW -- "HTTP proxy" --> CORE
+    ENGS --> ENG
+    EARN --> ENG
+    ENG -- "poll, prediction, command alerts" --> OVL
+    MOD -- "XADD deletions" --> RAW
+    MOD -. "moderation writes" .-> P_CHAT
+    ENG -. "bot replies" .-> P_CHAT
+    PATREON -. "webhooks" .-> PAY
+    MEDIA -. "presigned PUT" .-> MINIO
+
+    %% background and ops
+    QM --> QUOTA --> DBOT
+    TR -. "token refresh" .-> P_CHAT
+
+    %% persistence
+    CORE & PROC & LISTEN & BG -.-> PG
+    PG -. "WAL + base backups" .-> BACKUP
+    MINIO -. "nightly mirror" .-> BACKUP
 ```
 
-### Supporting Services
+Ports are the `containerPort` values in the production manifests; `deployments/docker-compose.yml` uses its own assignments for some services. Not drawn, to keep the picture readable: every Go service also uses Redis for caches, rate limits and leases; overlay-manager publishes test alerts and goal frames to `overlay:{id}:alerts`; the gateway proxies `/api/v1/test-stream` to message-processor; alert-processor polls platform APIs for follower/subscriber goals; Prometheus, Loki and Tempo scrape or receive from every pod; `support-bot` talks to Discord and reads Grafana, GitHub and the cluster for its tools.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Core Services                            │
-│                                                               │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │ Auth Service│  │Overlay Manager│  │Emote Service │      │
-│  │   (8081)    │  │    (8082)     │  │   (8083)     │      │
-│  │ • OAuth     │  │ • CRUD        │  │ • 7TV cache  │      │
-│  │ • JWT       │  │ • Multi-source│  │ • BTTV cache │      │
-│  └─────────────┘  └──────────────┘  └──────────────┘      │
-│                                                               │
-│  ┌──────────────────────────────────────────────────┐       │
-│  │          Source Manager (8088)                    │       │
-│  │          • Leader election (YouTube)              │       │
-│  │          • Active source registry                 │       │
-│  └──────────────────────────────────────────────────┘       │
-└─────────────────────────────────────────────────────────────┘
+### Where it runs
 
-┌─────────────────────────────────────────────────────────────┐
-│                   Infrastructure                             │
-│                                                               │
-│  ┌──────────────────┐         ┌─────────────────────┐       │
-│  │  PostgreSQL      │         │  Redis 7            │       │
-│  │  (CloudNativePG) │         │  • Streams (durable)│       │
-│  │  • 3 nodes       │         │  • Pub/Sub (fast)   │       │
-│  │  • Auto failover │         │  • Cache (emotes)   │       │
-│  └──────────────────┘         └─────────────────────┘       │
-│                                                               │
-│  ┌──────────────────────────────────────────────────┐       │
-│  │  LGTM Stack (Observability)                       │       │
-│  │  • Loki (logs) • Grafana • Prometheus • Tempo    │       │
-│  └──────────────────────────────────────────────────┘       │
-└─────────────────────────────────────────────────────────────┘
-```
+- **Production**: a K3s cluster (HA control plane, separate worker nodes), managed by ArgoCD from the `caesar-deployment` GitOps repository (`apps/workloads/all-chat/`). Keel rolls deployments when a new `:main` or `:beta` image is pushed by `.github/workflows/build-and-push.yml`. Database migrations run as an `allchat-migrations` init container in front of the services that own schema.
+- **beta.allch.at**: `frontend-beta` and `api-gateway-beta` run the `:beta` images next to prod and share every backend service with it. The beta-platform listeners (facebook, goodgame, instagram, owncast, picarto) run from `:beta` only; everything else runs from `:main`.
+- **Local development**: `deployments/docker-compose.yml` (`make docker-up`, `make frontend-dev`). The manifests in `deployments/k8s/` are for a local k3d cluster, not production.
+
+Details: [02-DEPLOYMENT.md](./02-DEPLOYMENT.md).
 
 ---
 
 ## Service Map
 
-> **Port note:** Ports listed below match `deployments/docker-compose.yml`. Several listener
-> services use port `8089`/`8090` defaults that overlap in code (`PORT` env var); in production
-> they're set via deployment manifests, so trust the manifest, not the default constant.
+Each service has its own README under `services/`; the table links the ones that exist. Ports are production `containerPort`s; replica counts and HPAs live in [02-DEPLOYMENT.md](./02-DEPLOYMENT.md) and [03-SCALING.md](./03-SCALING.md) because they change often.
 
-### Edge Layer
+### Edge
 
-**API Gateway** (`:8080`)
-- **Purpose**: Entry point for all HTTP/WebSocket traffic
-- **Features**: HTTP reverse proxy, WebSocket hub, CORS, auth middleware
-- **Scaling**: 2-20 replicas, 2,500 WebSocket connections per pod
-- **→ Documentation**: [services/api-gateway/README.md](../../services/api-gateway/README.md)
+| Service | Port | Responsibility |
+|---|---|---|
+| frontend | 3000 | Next.js App Router UI: dashboard, overlay editor, OBS overlay pages (`/overlay/[id]`) |
+| [api-gateway](../../services/api-gateway/README.md) | 8080 | Single public entry for `/api/` and `/ws/`: reverse proxy to the core services (`models/service_config.go`), JWT/PAT checks, WebSocket hub subscribing to `overlay:{id}*` channels |
 
-### Core Services
+### Core HTTP services
 
-**Auth Service** (`:8081`)
-- **Purpose**: OAuth flows (Twitch, YouTube, Kick) + JWT token issuance
-- **Features**: Multi-platform OAuth, token refresh, user management
-- **Scaling**: 2-5 replicas (low traffic, mostly session-based)
-- **→ Documentation**: [services/auth-service/README.md](../../services/auth-service/README.md)
+| Service | Port | Responsibility |
+|---|---|---|
+| [auth-service](../../services/auth-service/README.md) | 8081 | Streamer and viewer OAuth (Twitch, YouTube, Kick, TikTok, Discord, Facebook/Instagram), JWT key chain, personal access tokens and paired device tokens (ADR-0049, ADR-0051), admin user APIs; its image also runs the `retention-sweeper` (ADR-0089) and `key-rotator` CronJobs |
+| [overlay-manager](../../services/overlay-manager/README.md) | 8082 | Overlay CRUD, chat sources per overlay, alert profiles, goal/list overlay configuration, test alerts |
+| [emote-service](../../services/emote-service/README.md) | 8083 | 7TV / BTTV / FFZ emote aggregation and cache |
+| share-service | 8090 | Shareable overlay links, admin role grants (premium, beta tester, ambassador) and feature gates, ambassador showcase (ADR-0041), localization contribution tool (ADR-0063), UI language gate (ADR-0066) |
+| [moderation-service](../../services/moderation-service/README.md) | 8092 | Cross-platform moderation write path (ADR-0017); publishes deletions back into `chat:raw` so overlays drop the message |
+| [payment-service](../../services/payment-service/README.md) | 8091 | Patreon webhooks and reconcile; writes `users.is_premium` and `viewers.is_premium` (ADR-0018, ADR-0019) |
+| [engagement-service](../../services/engagement-service/README.md) | 8093 | Polls, predictions and per-overlay viewer points (#523), Twitch-native poll/prediction mirroring (ADR-0030), streamer chat commands, keyword triggers, timers, clips and images (ADR-0079, ADR-0080, ADR-0081) |
+| [media-service](../../services/media-service/README.md) | 8094 | Registry and presigned uploads for alert media in MinIO (ADR-0068, ADR-0071); never serves bytes |
 
-**Overlay Manager** (`:8082`)
-- **Purpose**: Overlay CRUD operations + multi-source configuration
-- **Features**: Create/update/delete overlays, add/remove chat sources per overlay
-- **Scaling**: 2-5 replicas (low traffic, CRUD operations)
-- **→ Documentation**: [services/overlay-manager/README.md](../../services/overlay-manager/README.md)
+### Platform listeners
 
-**Emote Service** (`:8083`)
-- **Purpose**: Cache 7TV, BTTV, FFZ emotes with real-time updates
-- **Features**: Emote API aggregation, Redis cache (1-hour TTL), 7TV EventAPI WebSocket
-- **Scaling**: 2-5 replicas (cache hit rate >95%)
-- **→ Documentation**: [services/emote-service/README.md](../../services/emote-service/README.md)
+All listeners publish raw messages to the `chat:raw` stream and connection state to `platform:status`. Most follow `source:demand` snapshots from source-manager so they only connect to channels some overlay needs.
 
-### Platform Listeners
+| Service | Port | Platform and protocol |
+|---|---|---|
+| [twitch-eventsub-listener](../../services/twitch-eventsub-listener/README.md) | 8090 | Twitch chat and events via EventSub (webhooks at `/webhooks/eventsub`); the only Twitch chat path in production (ADR-0026). Also feeds `engagement:twitch-native` |
+| [twitch-listener](../../services/twitch-listener/README.md) | 8085 | Twitch IRC, **deprecated** (ADR-0026). Production runs it in `enforce` mode: it joins no channels |
+| [youtube-listener-innertube](../../services/youtube-listener-innertube/README.md) | 8080 | YouTube chat via InnerTube polling for every channel not claimed by the official listener; no quota cost for chat, optional subscriber-alert polling spends accounted Data API units |
+| [youtube-listener](../../services/youtube-listener/README.md) | 8086 | Deployed as `youtube-listener-official`: Data API / gRPC chat for opted-in, owner-verified premium channels (unlisted and members-only streams), with reserve-confirm-rollback quota accounting (ADR-0006, ADR-0065) |
+| [kick-listener](../../services/kick-listener/README.md) | 8089 | Kick realtime: Centrifugo (pooled, up to 100 chatrooms per connection) or Pusher, whichever Kick serves at startup (ADR-0077) |
+| [tiktok-listener](../../services/tiktok-listener/README.md) | 8089 | TikTok Live via an unofficial library (Node); signing by `tiktok-signer`, US handle lookups via `tiktok-relay` (ADR-0052, ADR-0064) |
+| [tiktok-signer](../../services/tiktok-signer/README.md) | 8092 | Self-hosted TikTok webcast signing with TikTok's own SDK in a headless browser (ADR-0052) |
+| [tiktok-relay](../../services/tiktok-relay/README.md) | n/a | US-region Cloud Run relay for TikTok live lookup by handle; not in the cluster |
+| discord-listener | 8086 | Discord channel chat in, and relay of non-Discord overlay chat out to a Discord channel |
+| [owncast-listener](../../services/owncast-listener/README.md) | 8095 | Owncast chat websocket, instance URL as channel (ADR-0058). Beta |
+| [goodgame-listener](../../services/goodgame-listener/README.md) | 8096 | GoodGame.ru chat websocket. Beta |
+| [picarto-listener](../../services/picarto-listener/README.md) | 8097 | Picarto pop-out chat websocket, defensively parsed (ADR-0059). Beta |
+| [altstream-listener](../../services/altstream-listener/README.md) | 8101 | Altstream official SSE chat API, `lastId` mandatory, read-only (ADR-0082). Early access |
+| [facebook-listener](../../services/facebook-listener/README.md) | 8099 | Facebook Live comments via Graph API polling; moderation via moderation-service (ADR-0060). Beta |
+| [instagram-listener](../../services/instagram-listener/README.md) | 8100 | Instagram Live `live_comments` polling, read-only (ADR-0062). Beta |
 
-**Twitch Listener** (`:8085`)
-- **Purpose**: Connect to Twitch IRC, publish raw messages to Redis Streams
-- **Protocol**: IRC (gempir/go-twitch-irc)
-- **Capacity**: 500+ concurrent channels per pod
-- **Rate Limits**: 20 JOIN/10 seconds (Twitch limit)
-- **→ Documentation**: [services/twitch-listener/README.md](../../services/twitch-listener/README.md)
+### Processing and coordination
 
-**YouTube Listener** (`:8086`)
-- **Purpose**: Poll YouTube Live Chat API, publish raw messages to Redis Streams
-- **Protocol**: HTTP polling (2-5 second intervals)
-- **Capacity**: 50+ concurrent streams per pod (quota-limited)
-- **Critical**: Advanced quota tracking (reserve-confirm-rollback, 99.95%+ accuracy)
-- **→ Documentation**: [services/youtube-listener/README.md](../../services/youtube-listener/README.md)
+| Service | Port | Responsibility |
+|---|---|---|
+| [message-processor](../../services/message-processor/README.md) | 8087 | Consumer group `message-processor` on `chat:raw`: per-platform normalization, emote enrichment with bounded concurrency (ADR-0033), 60 s age cutoff (`MESSAGE_AGE_CUTOFF_SECONDS`), publish to `overlay:{id}`; forwards vote/wager and chat-command candidates to the engagement streams |
+| [alert-processor](../../services/alert-processor/README.md) | 8098 | Second consumer group `alert-processors` on `chat:raw`: routes event messages to alerts/goal/list overlays on `overlay:{id}:alerts`, persists `alert_events`, scores leaderboards, counts bits/Super Chat goals, polls follower/subscriber goals (ADR-0068, ADR-0070, ADR-0072) |
+| [source-manager](../../services/source-manager/README.md) | 8088 | Active source registry (DB sync + LISTEN/NOTIFY), `ActivateSource` calls from listeners, `source:demand` snapshots for listeners, leadership lease API (ADR-0007). Source liveness is kept by the gateway and listener heartbeats (ADR-0032) |
 
-**Kick Listener** (`:8089`)
-- **Purpose**: Connect to Kick's realtime server, publish raw messages to Redis Streams
-- **Protocol**: Centrifugo JSON protocol (pooled connections) or Pusher Protocol 7, whichever Kick picks at startup (ADR-0077)
-- **Capacity**: 200+ concurrent channels per pod
-- **Latency**: ~100ms (real-time WebSocket)
-- **→ Documentation**: [services/kick-listener/README.md](../../services/kick-listener/README.md)
+### Background jobs
 
-**TikTok Listener** (`:8090`)
-- **Purpose**: Connect to TikTok Live, publish raw messages to Redis Streams
-- **Protocol**: Unofficial TikTok Live library
-- **Features**: Username-based connection, no OAuth required
-- **→ Documentation**: [services/tiktok-listener/README.md](../../services/tiktok-listener/README.md)
+| Service | Port | Responsibility |
+|---|---|---|
+| [token-refresh-service](../../services/token-refresh-service/README.md) | 8090 | Refreshes stored platform OAuth tokens before expiry; single replica |
+| [youtube-quota-monitor](../../services/youtube-quota-monitor/README.md) | 8093 | Reads the shared YouTube quota table, exports the quota metric, publishes `quota:alerts` (ADR-0023) |
+| retention-sweeper (CronJob) | n/a | Enforces privacy-policy retention periods every 15 minutes (ADR-0089) |
+| key-rotator (CronJob) | n/a | Weekly (Sundays 03:00 UTC) re-encryption of stored tokens onto the versioned encryption keys (`shared/encryption/versioned.go`) until the legacy key is retired |
 
-**Discord Listener** (`:8091`)
-- **Purpose**: Relay messages from configured Discord channels to Redis Streams
-- **Protocol**: Discord Gateway WebSocket
-- **→ Documentation**: [services/discord-listener/README.md](../../services/discord-listener/README.md)
+### Community and ops
 
-**Twitch EventSub Listener** (`:8092`)
-- **Purpose**: Receive Twitch EventSub webhooks (channel points, moderation actions)
-- **Protocol**: HTTP webhooks from Twitch
-- **→ Documentation**: [services/twitch-eventsub-listener/README.md](../../services/twitch-eventsub-listener/README.md)
-
-**YouTube Listener InnerTube** (`:8093`)
-- **Purpose**: Poll YouTube via InnerTube API (chat ingestion at no quota cost; optional subscriber-alert polling spends accounted Data API units)
-- **Protocol**: HTTP polling (InnerTube internal API; Data API for subscriber alerts)
-- **→ Documentation**: [services/youtube-listener-innertube/README.md](../../services/youtube-listener-innertube/README.md)
-
-**Owncast Listener** (`:8095`) — ADR-0058
-- **Purpose**: Read chat from self-hosted Owncast instances (one connection per instance URL; offline instances are a normal state)
-- **Protocol**: Owncast chat websocket (`/api/chat/register` → `/ws`)
-- **Rollout**: premium-gated (`platform_owncast`, migration 091) until graduated via the feature-gate admin endpoint
-- **→ Documentation**: [services/owncast-listener/README.md](../../services/owncast-listener/README.md)
-
-**GoodGame Listener** (`:8096`)
-- **Purpose**: Read chat from GoodGame.ru channels (channel key resolves to a numeric chat id via the public API)
-- **Protocol**: GoodGame chat websocket
-- **Rollout**: premium-gated (`platform_goodgame`, migration 092)
-- **→ Documentation**: [services/goodgame-listener/README.md](../../services/goodgame-listener/README.md)
-
-**Picarto Listener** (`:8097`) — ADR-0059
-- **Purpose**: Read chat from Picarto channels via the undocumented pop-out chat websocket (defensive parsing, log-and-drop unknown frames)
-- **Protocol**: `wss://chat.picarto.tv/chat/token=<jwt>` (anonymous token via the GraphQL endpoint)
-- **Rollout**: premium-gated (`platform_picarto`, migration 093)
-- **→ Documentation**: [services/picarto-listener/README.md](../../services/picarto-listener/README.md)
-
-**Altstream Listener** (`:8101`) — ADR-0082
-- **Purpose**: Read chat from Altstream channels (keyed by lowercased username) via Altstream's official, unauthenticated developer API; read-only (messages, highlights, native delete/clear)
-- **Protocol**: Server-Sent Events, `GET https://altstream.online/api/chat/stream?channel=<user>&lastId=<id>` (`lastId` is mandatory: without it the stream only pings), plus REST for live status and channel emotes
-- **Rollout**: early access (`platform_altstream`, `early_access=TRUE`, migration 117); allch.at shows it only to early-access users
-- **→ Documentation**: [services/altstream-listener/README.md](../../services/altstream-listener/README.md)
-
-**Facebook Listener** (`:8099`) — ADR-0060
-- **Purpose**: Poll the streamer's Facebook Page live-video comments; moderation write path (delete/hide comment, ban/unban viewer) via moderation-service with the stored Page token
-- **Protocol**: Graph API HTTP polling (no public realtime comment API)
-- **Rollout**: premium-gated (`platform_facebook`, migration 094); requires the operator's Meta app to pass App Review for Advanced Access
-- **→ Documentation**: [services/facebook-listener/README.md](../../services/facebook-listener/README.md)
-
-**Instagram Listener** (`:8100`) — ADR-0062
-- **Purpose**: Poll live comments on the streamer's Instagram professional account broadcasts; read-only
-- **Protocol**: Graph API HTTP polling of `live_comments`
-- **Rollout**: premium-gated (`platform_instagram`, migration 096); same Meta App Review dependency as Facebook
-- **→ Documentation**: [services/instagram-listener/README.md](../../services/instagram-listener/README.md)
-
-### Processing Layer
-
-**Message Processor** (`:8087`)
-- **Purpose**: Normalize, enrich, and route messages
-- **Features**:
-  - Platform-specific normalizers (Twitch, YouTube, Kick, TikTok, Discord, Owncast, GoodGame, Picarto, Altstream, Facebook, Instagram)
-  - Emote enrichment (7TV, BTTV, FFZ)
-  - Message age filtering (60s cutoff)
-  - Publish to overlay-specific Redis Pub/Sub channels
-- **Capacity**: ~3,000 messages/second per pod
-- **Scaling**: 3-10 replicas (CPU-intensive with emote enrichment)
-- **→ Documentation**: [services/message-processor/README.md](../../services/message-processor/README.md)
-
-**Source Manager** (`:8088`)
-- **Purpose**: Active source registry + Redis-based leader election
-- **Features**:
-  - Track which chat sources are active
-  - Leader election for YouTube Listener (prevents duplicate API calls)
-  - Coordination between listener replicas
-- **Scaling**: 1-3 replicas (lightweight, coordination only)
-- **→ Documentation**: [services/source-manager/README.md](../../services/source-manager/README.md)
-
-**Token Refresh Service** (background service)
-- **Purpose**: Refresh OAuth tokens before expiry (internal 5-minute ticker)
-- **Features**: Platform-specific refresh flows, retry logic, error handling
-- **Scaling**: 1 replica (always-on Deployment; prevents duplicate refreshes)
-- **→ Documentation**: [services/token-refresh-service/README.md](../../services/token-refresh-service/README.md)
-**Share Service** (`:8090`)
-- **Purpose**: Generate and serve shareable overlay links for viewers
-- **→ Documentation**: [services/share-service/README.md](../../services/share-service/README.md)
+| Service | Port | Responsibility |
+|---|---|---|
+| [discord-bot](../../services/discord-bot/README.md) | n/a | TypeScript community bot; posts `quota:alerts` and quota status to Discord |
+| [support-bot](../../services/support-bot/README.md) | 8094 | Go Discord support/admin agent over a locally hosted OpenAI-compatible LLM with code-enforced tool access |
 
 ---
 
@@ -302,72 +275,77 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 
 | Technology | Purpose | Version |
 |------------|---------|---------|
-| **Go** | Microservices language | 1.25+ |
+| **Go** | Microservices language | 1.26 (`go.mod`) |
+| **Node.js / TypeScript** | tiktok-listener, tiktok-signer, tiktok-relay, discord-bot | - |
 | **Gin** | HTTP framework | Latest |
 | **pgx/v5** | PostgreSQL driver | v5 |
 | **go-redis/v9** | Redis client | v9 |
 | **Zap** | Structured logging | Latest |
-| **gempir/go-twitch-irc** | Twitch IRC client | v4 |
 | **gorilla/websocket** | WebSocket server/client | Latest |
 | **golang-jwt/jwt** | JWT authentication | v5 |
+| **OpenTelemetry** | Tracing (`shared/tracing/`) | - |
 
 ### Frontend
 
 | Technology | Purpose | Version |
 |------------|---------|---------|
-| **React** | UI library | 19+ |
-| **Next.js** | SSR framework | 16+ (App Router) |
+| **React** | UI library | 19 |
+| **Next.js** | SSR framework | 16 (App Router) |
 | **TypeScript** | Type safety | Latest |
-| **Tailwind CSS** | Styling | Latest |
+| **Tailwind CSS + shadcn/ui** | Styling and primitives (ADR-0056) | Latest |
 
 ### Infrastructure
 
 | Technology | Purpose | Version |
 |------------|---------|---------|
-| **Kubernetes** | Container orchestration | 1.28+ |
-| **CloudNativePG** | PostgreSQL operator | Latest |
-| **Hetzner Cloud** | VPS hosting | - |
-| **Loki** | Log aggregation | Latest |
-| **Grafana** | Dashboards | Latest |
-| **Prometheus** | Metrics | Latest |
-| **Tempo** | Tracing (planned) | Latest |
+| **K3s** | Kubernetes distribution, HA control plane | - |
+| **ArgoCD** | GitOps sync from `caesar-deployment` | - |
+| **Keel** | Image-push driven rollouts | - |
+| **Envoy Gateway** | Gateway API ingress, TLS via cert-manager | - |
+| **CloudNativePG** | PostgreSQL operator | PostgreSQL 17 (prod), 16 in local compose |
+| **Redis** | Streams, Pub/Sub, caches; Sentinel + HAProxy for HA | 7.4 |
+| **MinIO** | Object storage for alert media | - |
+| **Hetzner Object Storage** | Off-site backups (Barman Cloud WAL + base backups, media mirror) | - |
+| **Prometheus / Grafana / Loki / Tempo** | Metrics, dashboards, logs, traces | - |
 
 ---
 
 ## Message Flow
 
-### End-to-End Message Pipeline
+### End-to-End Chat Pipeline
 
 ```
 1. Platform → Listener
-   Twitch IRC message arrives
+   Chat arrives (EventSub webhook, websocket, SSE, or poll)
    ↓
 2. Listener → Redis Streams
-   Publish to chat:raw (XADD)
+   XADD to chat:raw (approx. MAXLEN 100,000; ring buffer absorbs Redis blips)
    ↓
 3. Redis Streams → Message Processor
-   Consumer group reads (XREADGROUP)
+   Consumer group message-processor (XREADGROUP); alert-processor reads the
+   same entries through its own group alert-processors
    ↓
-4. Message Processor - Normalize
-   Platform-specific format → Unified format
+4. Message Processor - Filter and normalize
+   Drop messages older than the age cutoff; platform format → UnifiedChatMessage
    ↓
 5. Message Processor - Enrich
-   Add 7TV/BTTV/FFZ emotes, user badges
+   7TV/BTTV/FFZ emotes, badges, username colour (ADR-0047), pronouns
    ↓
 6. Message Processor → Redis Pub/Sub
-   Publish to overlay:{overlay_id} (PUBLISH)
+   PUBLISH to overlay:{overlay_id} for every overlay that carries the source
    ↓
 7. Redis Pub/Sub → API Gateway
-   Gateway subscribes to overlay channels (SUBSCRIBE)
+   Gateway pods subscribe per connected overlay (overlay:{id}, :updates, :poll,
+   :prediction, and :alerts for alerts/goal/list overlays)
    ↓
 8. API Gateway → Frontend
-   Broadcast to WebSocket clients
+   WebSocket broadcast to the overlay's clients
    ↓
 9. Frontend - Render
-   Display message with emotes in overlay
+   Display message with emotes in the overlay
 ```
 
-**Latency Budget** (P95):
+**Latency targets** (P95, design budget rather than a measurement; see [04-OBSERVABILITY.md](./04-OBSERVABILITY.md) for the metrics that track it):
 - Listener → Redis Streams: <50ms
 - Redis Streams → Processor: <100ms
 - Processor (normalize + enrich): <300ms
@@ -376,45 +354,41 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - Gateway → Frontend: <50ms
 - **Total P95**: <500ms (listener → overlay display)
 
+Alerts, engagement and moderation flows: [01-DATA-FLOW.md](./01-DATA-FLOW.md).
+
 ### Unified Message Format
 
-All platforms normalized to common schema:
+All platforms are normalized to `UnifiedChatMessage` (`services/message-processor/models/message.go`). Abbreviated:
 
 ```json
 {
   "id": "uuid",
   "overlay_id": "uuid",
-  "platform": "twitch|youtube|kick|tiktok",
+  "platform": "twitch",
   "channel_id": "platform-channel-id",
   "channel_name": "DisplayName",
   "user": {
     "id": "platform-user-id",
     "username": "username",
     "display_name": "DisplayName",
-    "avatar_url": "https://...",
-    "badges": ["subscriber", "moderator"],
-    "color": "#FF0000"
+    "badges": [{ "name": "subscriber", "version": "12", "icon_url": "https://..." }],
+    "color": "#FF0000",
+    "auto_color": "#1E90FF"
   },
   "message": {
     "text": "Hello world!",
     "emotes": [
-      {
-        "code": "Kappa",
-        "provider": "twitch",
-        "url": "https://...",
-        "positions": [[0, 5]]
-      }
-    ]
+      { "code": "Kappa", "provider": "twitch", "url": "https://...", "positions": [[0, 4]] }
+    ],
+    "attachments": []
   },
   "timestamp": "2026-01-28T10:00:00Z",
-  "metadata": {
-    "is_subscriber": true,
-    "is_moderator": false,
-    "bits": 0,
-    "super_chat_amount": 0
-  }
+  "metadata": {},
+  "event": null
 }
 ```
+
+`platforms` (send-to-all collapse, ADR-0024), avatar, gradient, pronoun and shared-chat source-badge fields are optional; `event` is set for subscriptions, bits, raids and other platform events. The struct is the reference, not this sample.
 
 ---
 
@@ -438,14 +412,14 @@ All platforms normalized to common schema:
 **Decision**: Use Redis Streams for durable message queue + Redis Pub/Sub for low-latency broadcast.
 
 **Rationale**:
-- **Streams**: Durable, consumer groups, backpressure-capable (chat:raw)
-- **Pub/Sub**: Low-latency, fan-out to many subscribers (overlay:*)
-- Single Redis instance (Phase 1), simpler than Kafka/NATS
+- **Streams**: Durable, consumer groups, backpressure-capable (`chat:raw`, engagement streams)
+- **Pub/Sub**: Low-latency, fan-out to many subscribers (`overlay:*`)
+- One Redis deployment (made highly available with Sentinel + HAProxy), simpler than Kafka/NATS
 - 100-500ms latency achievable (vs 2-5s with Kafka)
 
 **Trade-offs**:
-- Pub/Sub not durable (messages lost if subscriber crashes)
-- O(n) memory growth with subscribers (mitigated by Redis Cluster in Phase 2)
+- Pub/Sub not durable (messages lost if subscriber crashes); state that must not be lost (votes, wagers, native poll lifecycle) goes through streams instead
+- Memory grows with subscriber count
 
 **→ Details**: [ADR-0002: Redis Streams + Pub/Sub](../adr/0002-redis-streams-pubsub.md)
 
@@ -455,9 +429,9 @@ All platforms normalized to common schema:
 
 **Rationale**:
 - Team has production experience with CNPG
-- Automated failover (<30 seconds RTO)
+- Automated failover
 - PITR (Point-in-Time Recovery) built-in
-- Backup automation (daily to S3-compatible storage)
+- Continuous WAL archiving and nightly base backups to S3-compatible storage
 - Rolling updates with zero downtime
 
 **→ Details**: [ADR-0003: CloudNativePG](../adr/0003-cloudnative-postgres.md)
@@ -467,7 +441,7 @@ All platforms normalized to common schema:
 **Decision**: Use React 19+ with Next.js 16+ (App Router) for frontend.
 
 **Rationale**:
-- LLMs excel at generating React code (90%+ accuracy)
+- LLMs excel at generating React code
 - SSR for SEO and initial load performance
 - App Router for server components (reduced bundle size)
 - TypeScript for type safety
@@ -487,7 +461,7 @@ All platforms normalized to common schema:
 - Rollback if 4xx client error (release reservation)
 - Cleanup stale reservations every 60 seconds (crash recovery)
 
-**Impact**: 99.95%+ accuracy, 9,000+ units/day waste eliminated (90% reduction).
+Today only the premium official listener and InnerTube's optional subscriber-alert polling spend Data API quota; regular chat ingestion goes through InnerTube at no quota cost (ADR-0065).
 
 **→ Details**: [ADR-0006: YouTube Quota Tracking](../adr/0006-youtube-quota-tracking.md)
 
@@ -515,13 +489,13 @@ All platforms normalized to common schema:
 
 ### Service Documentation
 
-All services have detailed READMEs: [services/*/README.md](../../services/)
+Service READMEs: [services/*/README.md](../../services/) (discord-listener and share-service have none yet).
 
 ### Quick Reference Guides
 
-- **[QUICK-REF-ADD-PLATFORM.md](../llm-guides/QUICK-REF-ADD-PLATFORM.md)** - Add new platform (150 lines)
-- **[QUICK-REF-DEBUG-QUOTA.md](../llm-guides/QUICK-REF-DEBUG-QUOTA.md)** - YouTube quota debugging (200 lines)
-- **[QUICK-REF-SCALING.md](../llm-guides/QUICK-REF-SCALING.md)** - Scale services (150 lines)
+- **[QUICK-REF-ADD-PLATFORM.md](../llm-guides/QUICK-REF-ADD-PLATFORM.md)** - Add new platform
+- **[QUICK-REF-DEBUG-QUOTA.md](../llm-guides/QUICK-REF-DEBUG-QUOTA.md)** - YouTube quota debugging
+- **[QUICK-REF-SCALING.md](../llm-guides/QUICK-REF-SCALING.md)** - Scale services
 
 ### Troubleshooting
 
@@ -531,19 +505,18 @@ All services have detailed READMEs: [services/*/README.md](../../services/)
 
 ## Current Status
 
-**Production** (2026-05-27):
-- ✅ 17 services in `services/` (15 Go services + 2 TypeScript/Node services: `discord-bot`, `tiktok-listener`; `support-bot` was rewritten TypeScript → Go)
-- ✅ Twitch (IRC + EventSub), YouTube (Data API + InnerTube), Kick, TikTok, Discord integrations live
-- ✅ CloudNativePG deployed
-- ✅ LGTM observability stack (Loki, Grafana, Prometheus, Tempo)
-- ✅ Prometheus metrics across all main Go services (`shared/metrics/`)
-- ✅ HPA autoscaling configured
+**Production**:
+- ✅ Twitch (EventSub), YouTube (InnerTube + premium Data API), Kick, TikTok, Discord live; beta/early-access platforms as listed in [Platform listeners](#platform-listeners)
+- ✅ CloudNativePG cluster with continuous backups to Hetzner Object Storage
+- ✅ Redis HA (Sentinel + HAProxy)
+- ✅ LGTM observability stack (Loki, Grafana, Prometheus, Tempo); Prometheus metrics via `shared/metrics/`, tracing via `shared/tracing/`
+- ✅ HPAs on the platform listeners
 - ✅ AES-GCM token encryption (`shared/encryption/`, versioned key rotation)
-- ✅ Service-to-service signing (`shared/signing/`)
 - ✅ Rate limiting (`shared/ratelimit/`)
-- ✅ Distributed tracing via OpenTelemetry (`shared/tracing/`)
+- ✅ Kubernetes NetworkPolicies as the service-to-service isolation control
 
 **Known Limitations**:
-- YouTube API quota: 1,009,000 units/day (default — increase via Google Cloud quota request as needed)
-- Redis single instance
-- Kubernetes NetworkPolicies still recommended on top of s2s signing
+- Service-to-service request signing exists in `shared/signing/` but is not wired into any production service (see [05-SECURITY.md](./05-SECURITY.md) and `docs/security/RESIDUALS.md`)
+- Single PostgreSQL database shared by all services; connections are budgeted per pod (ADR-0039)
+- YouTube Data API quota: 1,009,000 units/day
+- facebook-listener and instagram-listener are deployed but inert: auth-service (and moderation-service for Facebook) has no Meta app credentials yet, so no streamer can connect either platform

@@ -1,8 +1,8 @@
 # All-Chat: Data Flow & Integration Architecture
 
-**Version:** 1.0
-**Last Updated:** 2025-11-11
-**Related Docs**: [Approved Architecture](./APPROVED_ARCHITECTURE.md), [Approved Architecture](./APPROVED_ARCHITECTURE.md)
+**Last Updated:** 2026-11-04
+**Related Docs**: [System Overview](./00-OVERVIEW.md), [Deployment](./02-DEPLOYMENT.md), [Scaling](./03-SCALING.md)
+**ADRs**: see the [ADR index](../adr/README.md) — ADR-0001, ADR-0002 (Redis Streams + Pub/Sub hybrid), ADR-0007 (leadership rebalancing), ADR-0031 (websocket replay), ADR-0032 (heartbeat), ADR-0033 (processor concurrency), ADR-0047 (username color), ADR-0065 (YouTube listener split), ADR-0068 (alerts), ADR-0070 (alerts overlay editor variants), ADR-0072 (goal/list overlays), ADR-0079 (chat commands), ADR-0082 (Altstream).
 
 ---
 
@@ -10,24 +10,27 @@
 
 1. [Introduction](#introduction)
 2. [End-to-End Message Flow](#end-to-end-message-flow)
-3. [Redis Streams Architecture](#redis-streams-architecture)
+3. [Streams Consumers and Groups](#streams-consumers-and-groups)
 4. [Redis Pub/Sub Architecture](#redis-pubsub-architecture)
-5. [Database Schema](#database-schema)
-6. [Unified Message Format](#unified-message-format)
-7. [Integration Patterns](#integration-patterns)
-8. [Error Handling & Retry Logic](#error-handling--retry-logic)
-9. [Performance Considerations](#performance-considerations)
+5. [Redis Key Inventory](#redis-key-inventory)
+6. [Alerts, Goal and List Flow](#alerts-goal-and-list-flow)
+7. [Engagement Flow (points, commands, polls, predictions)](#engagement-flow-points-commands-polls-predictions)
+8. [Moderation (Deletion) Flow](#moderation-deletion-flow)
+9. [Unified Message Format](#unified-message-format)
+10. [Integration Patterns](#integration-patterns)
+11. [Error Handling & Retry Logic](#error-handling--retry-logic)
+12. [Performance Considerations](#performance-considerations)
 
 ---
 
 ## Introduction
 
 All-Chat uses a **hybrid messaging architecture** combining:
-- **Redis Streams**: Durable message queues for reliable processing
-- **Redis Pub/Sub**: Low-latency message broadcast to WebSocket clients
-- **PostgreSQL**: Persistent state and configuration storage
+- **Redis Streams**: durable queues for reliable processing (`chat:raw`, plus the engagement command and native-event streams)
+- **Redis Pub/Sub**: low-latency broadcast to WebSocket clients (`overlay:{id}` and its per-feature sub-channels)
+- **PostgreSQL**: persistent state, configuration, message history and the alert ledger
 
-This document details how messages flow from streaming platforms through the system to overlay displays, and how services integrate with each other.
+This document details how messages flow from streaming platforms through the system to overlay displays, and how services integrate with each other. Pair it with the [system overview](./00-OVERVIEW.md) for the full-service diagram.
 
 ---
 
@@ -37,311 +40,144 @@ This document details how messages flow from streaming platforms through the sys
 
 ```mermaid
 sequenceDiagram
-    participant Twitch as Twitch IRC
-    participant TW_Listener as Twitch Listener
-    participant Redis_S as Redis Streams<br/>stream:raw-messages
-    participant Processor as Message Processor
-    participant Emote as Emote Service
+    participant Twitch as Twitch (EventSub / IRC handoff)
+    participant TW as twitch-eventsub-listener
+    participant Redis_S as Redis Streams<br/>chat:raw
+    participant MP as Message Processor
+    participant ES as Emote Service
     participant Redis_PS as Redis Pub/Sub<br/>overlay:{id}
     participant Gateway as API Gateway
     participant Overlay as Overlay WebSocket
 
-    Note over Twitch,Overlay: User sends chat message on Twitch
+    Note over Twitch,Overlay: Viewer sends a chat message
 
-    Twitch->>TW_Listener: PRIVMSG #shroud :Hello Kappa
-    TW_Listener->>TW_Listener: Parse IRC message
-    TW_Listener->>Redis_S: XADD stream:raw-messages<br/>{platform: "twitch", text: "Hello Kappa", ...}
+    Twitch->>TW: channel.chat.message webhook
+    TW->>TW: Build RawChatMessage
+    TW->>Redis_S: XADD chat:raw {data: "<JSON>"}
 
-    Redis_S->>Processor: XREADGROUP consumer-group<br/>Batch of raw messages
-    Processor->>Processor: Normalize to unified format
-    Processor->>Emote: GET /emotes/channel/shroud
-    Emote-->>Processor: {7TV, BTTV, FFZ, Twitch emotes}
-    Processor->>Processor: Parse "Kappa" → match Twitch emote
-    Processor->>Processor: Build enriched message
-    Processor->>Processor: Query: which overlays monitor #shroud?
-    Note over Processor: Result: overlay-abc-123 has source (twitch, shroud)
-
-    Processor->>Redis_PS: PUBLISH overlay:abc-123<br/>{enriched unified message}
-    Redis_PS->>Gateway: Subscribed to overlay:abc-123
-    Gateway->>Gateway: Lookup WebSocket connections for overlay-abc-123
-    Gateway->>Overlay: WebSocket push {message}
-    Overlay->>Overlay: Render message with emote image
-
-    Note over Twitch,Overlay: Total latency: ~100-500ms
+    Redis_S->>MP: XREADGROUP GROUP message-processor (batch up to 100)
+    MP->>MP: Native-id + per-overlay dedup, age filter
+    MP->>MP: Normalize to UnifiedChatMessage
+    MP->>ES: GET /emotes/channel/{channel}?user_id&platform
+    ES-->>MP: {7TV, BTTV, FFZ, Twitch emotes}
+    MP->>MP: Badge/cheermote/avatar/pronoun/viewer-color enrichment
+    MP->>Redis_PS: PUBLISH overlay:{id} {unified message}
+    Redis_PS->>Gateway: Deliver on overlay:{id} channel
+    Gateway->>Gateway: Fan out to sockets bound to overlay {id}
+    Gateway->>Overlay: WebSocket frame
+    Overlay->>Overlay: Render with emote images and badges
 ```
 
-### Flow Stages Breakdown
+**Latency claims**: none in this document are measurements — the per-stage table below only names stages. End-to-end latency is dominated by cache hits and upstream fan-out and is not asserted numerically here.
 
-| Stage | Component | Input | Output | Latency | Purpose |
-|-------|-----------|-------|--------|---------|---------|
-| **1. Capture** | Platform Listener | Platform-specific message | Raw message struct | ~10-50ms | Connect to platform, parse protocol |
-| **2. Queue** | Redis Streams | Raw message | Queued message | ~5ms | Durable storage, decoupling |
-| **3. Normalize** | Message Processor | Raw message | Unified format | ~20ms | Platform-agnostic format |
-| **4. Enrich** | Message Processor + Emote Service | Unified message | Enriched with emotes | ~30-100ms | Add emote URLs |
-| **5. Route** | Message Processor | Enriched message | Overlay-specific messages | ~10ms | Determine target overlays |
-| **6. Broadcast** | Redis Pub/Sub | Enriched message | Pub/Sub event | ~5ms | Low-latency distribution |
-| **7. Push** | API Gateway | Pub/Sub event | WebSocket frame | ~10ms | Deliver to connected clients |
-| **8. Render** | Overlay Client | WebSocket message | Rendered HTML/CSS | ~20-50ms | Display in browser |
+### Flow Stages
 
-**Total End-to-End Latency**: ~100-500ms (varies by emote cache hits and network)
+| Stage | Component | What happens |
+|-------|-----------|--------------|
+| **1. Capture** | Platform listener | Connect to the platform, parse its protocol, build a `RawChatMessage` |
+| **2. Queue** | Redis Streams | `XADD chat:raw` with the JSON in the `data` field (ring-buffer retry wraps each listener's publish) |
+| **3. Consume** | Message-processor | Consumer group `message-processor`, batches up to 100, in-batch worker pool of 16 (`MP_PROCESS_CONCURRENCY`, ADR-0033) |
+| **4. Filter/Dedup** | Message-processor | Drop messages older than the age cutoff, drop duplicate native ids (ADR-0015), per-overlay dedup, event-type filtering |
+| **5. Normalize** | Message-processor normalizers | One normalizer per platform produces a `UnifiedChatMessage` (see [normalizers](#platform-normalizers)) |
+| **6. Enrich** | Message-processor enrichers | Avatars, badge icons, emotes (7TV/BTTV/FFZ via emote-service), cheermotes, viewer identity/color (ADR-0047), pronouns |
+| **7. Route+Publish** | Message-processor | Resolve target overlays from the DB (direct sources UNION shared-overlay fan-out), `PUBLISH overlay:{id}` per target |
+| **8. Broadcast** | API Gateway | Subscribed per-overlay, forwards to connected WebSocket clients; captures into the chat replay buffer |
+
+### Producers on `chat:raw`
+
+Every listener publishes to `chat:raw` with the payload JSON in a single **`data`** field, wrapped in a shared ring-buffer publisher so transient `XADD` failures are retried; the stream is trimmed with `MAXLEN ~100000` (`shared/listener` ring-buffer publisher, per-listener `StreamKey`/`chatStreamKey` constants). Listeners that publish today (see `services/` for the current set):
+
+- `twitch-eventsub-listener` (Twitch EventSub webhooks; primary Twitch path, ADR-0026 supersedes the deprecated `twitch-listener`, which now runs with prod configured so it joins **no channels** and only publishes deprecation notices)
+- `youtube-listener-innertube` (InnerTube polling, quota-free ingestion for unclaimed channels, ADR-0065; publish only happens after its startup canary/creds checks pass — see `services/youtube-listener-innertube/cmd/main.go`)
+- `youtube-listener` (deployed as `youtube-listener-official`, premium official-API mode, ADR-0065)
+- `kick-listener` (Centrifugo/Pusher, ADR-0077)
+- `tiktok-listener` (unofficial TikTok library; signed by `tiktok-signer`, US-region handle lookups via `tiktok-relay`)
+- `discord-listener` (channel relay)
+- `owncast-listener`, `goodgame-listener`, `picarto-listener`, `altstream-listener` (beta platforms, ADR-0058/0059/0082 and goodgame README)
+- `facebook-listener`, `instagram-listener` (beta platforms, ADR-0060/0062)
+- `message-processor`'s **chatcmd forwarder** is *not* a producer on `chat:raw` — it unconditionally uses a separate key (`chatcmd:jobs`); see the [engagement flow](#engagement-flow-points-commands-polls-predictions).
+
+`source-manager` does **not** publish to `chat:raw`; the source lifecycle it manages is HTTP-facing and DB-backed (`services/source-manager/README.md`), plus the DB-backed leader election and the `source:demand` Pub/Sub snapshots described in [Source-manager and leadership](#source-manager-and-leadership). Listeners subscribe to that demand channel with the shared SDK (`shared/listener/demand.go`) — the discord-listener, the youtube-listener pair and tiktok-listener each run a subscriber (tiktok's is `src/demand/subscriber.ts`) — and start/stop polling as snapshots change.
+
+### Consumer groups on `chat:raw`
+
+Two independent consumer groups run concurrently over the same stream (ADR-0002):
+
+| Group | Service | Purpose |
+|-------|---------|---------|
+| `message-processor` | message-processor | Chat normalization + enrichment + overlay fan-out |
+| `alert-processors` | alert-processor | Event-typed messages → alerts, goals, list leaderboards (ADR-0068, ADR-0072) |
+
+The groups are independent by design (ADR-0002): a pod joining one group does not see the other's pending entries. The alert group is created with `XGROUP CREATE` **without `MKSTREAM`** so a fresh deployment where no listener has yet published does not fabricate the stream.
+
+The message-processor consumer reads up to 100 entries per `XREADGROUP` with a 5s block, then drives them through a bounded in-batch worker pool (default concurrency 16, `MP_PROCESS_CONCURRENCY`, ADR-0033). Entries are ACKed after processing succeeds; failures go through retry then the dead-letter queue (see [Error Handling & Retry Logic](#error-handling--retry-logic)).
 
 ---
 
-## Redis Streams Architecture
+## Streams Consumers and Groups
 
-### Stream: `stream:raw-messages`
+| Stream | Producer | Consumer group | Notes |
+|--------|----------|----------------|-------|
+| `chat:raw` | every listener (see above), plus `moderation-service` deletions (see [Moderation flow](#moderation-deletion-flow)) and `twitch-listener` deprecation notices (`listener_deprecation_notice` system events consumed by the message-processor `system_normalizer`) | `message-processor`, `alert-processors` | both with their own PEL |
+| `chat:dlq` | message-processor (dead-letter; drained manually by `POST /admin/dlq/replay`, handler in `services/message-processor/handlers/dlq.go`) | (none — replayed by hand) | fields: `original_stream_id`, `source_service`, `failure_reason`, `retry_count`, `original_data`, `dlq_timestamp` |
+| `chatcmd:jobs` | message-processor (chat-command forwarding) | engagement-service command consumer | MAXLEN trimmed by `engagementCommandsMaxLen` so a stalled engagement-service cannot grow it unbounded |
+| `engagement:commands` | message-processor (chat-command command payloads, ADR-0079) | engagement-service command consumer | durable; sessions/wagers resolve through it |
+| `engagement:twitch-native` | twitch-eventsub-listener (native engagement-domain events: subs/donation/gift challenges etc.) | engagement-service native consumer | stream max length bounded |
 
-**Purpose**: Queue raw messages from all platform listeners for processing.
+Italicised detail: streams above are constant strings in `services/message-processor/models/engagement.go` and `services/message-processor/models/chatcmd.go`. No `chat:*` name should be assumed beyond this table; new names come from each source file.
 
-#### Schema
-
-```json
-{
-  "message_id": "1699999999999-0",  // Redis auto-generated
-  "fields": {
-    "platform": "twitch",            // "twitch", "youtube", "kick", "tiktok"
-    "channel_id": "shroud",          // Platform-specific channel identifier
-    "channel_name": "shroud",        // Display name
-    "user_id": "12345",              // Platform user ID
-    "username": "viewer123",         // Lowercase username
-    "display_name": "Viewer123",     // Display name
-    "text": "Hello world! Kappa",    // Message text
-    "raw_emotes": "25:13-17",        // Platform-specific emote data (optional)
-    "badges": "subscriber/12",       // Platform-specific badges (optional)
-    "color": "#FF0000",              // User color (optional)
-    "timestamp": "2025-11-11T12:34:56.789Z",
-    "metadata": "{...}"              // JSON string with platform-specific data
-  }
-}
-```
-
-#### Producer: Platform Listeners
-
-```go
-// Example: Twitch Listener producing raw message
-func (l *TwitchListener) handleMessage(twitchMsg *twitch.PrivateMessage) {
-    rawMsg := map[string]interface{}{
-        "platform":     "twitch",
-        "channel_id":   twitchMsg.RoomID,
-        "channel_name": twitchMsg.Channel,
-        "user_id":      twitchMsg.User.ID,
-        "username":     strings.ToLower(twitchMsg.User.Name),
-        "display_name": twitchMsg.User.DisplayName,
-        "text":         twitchMsg.Message,
-        "raw_emotes":   twitchMsg.Emotes.String(),
-        "badges":       twitchMsg.User.Badges.String(),
-        "color":        twitchMsg.User.Color,
-        "timestamp":    time.Now().Format(time.RFC3339Nano),
-        "metadata":     marshalMetadata(twitchMsg),
-    }
-
-    // Add to Redis Stream
-    l.redisClient.XAdd(ctx, &redis.XAddArgs{
-        Stream: "stream:raw-messages",
-        Values: rawMsg,
-    })
-}
-```
-
-#### Consumer: Message Processor
-
-```go
-// Message Processor consuming with consumer group
-func (p *MessageProcessor) consumeRawMessages(ctx context.Context) {
-    for {
-        // XREADGROUP GROUP processor-group consumer-1 COUNT 10 BLOCK 1000 STREAMS stream:raw-messages >
-        streams, err := p.redisClient.XReadGroup(ctx, &redis.XReadGroupArgs{
-            Group:    "processor-group",
-            Consumer: "consumer-1",
-            Streams:  []string{"stream:raw-messages", ">"},
-            Count:    10,
-            Block:    1 * time.Second,
-        }).Result()
-
-        for _, stream := range streams {
-            for _, message := range stream.Messages {
-                // Process message
-                enriched := p.processMessage(message)
-                p.publishToOverlays(enriched)
-
-                // ACK message
-                p.redisClient.XAck(ctx, "stream:raw-messages", "processor-group", message.ID)
-            }
-        }
-    }
-}
-```
-
-#### Consumer Group Benefits
-
-- **Load Balancing**: Multiple processor instances share workload
-- **Fault Tolerance**: Unacknowledged messages are redelivered
-- **Exactly-Once Processing**: Each message processed by one consumer
-- **Monitoring**: Track pending messages with `XPENDING`
-
----
-
-### Stream: `stream:control-commands`
-
-**Purpose**: Coordinate platform listener lifecycle (start/stop/status).
-
-#### Schema
-
-```json
-{
-  "message_id": "1699999999999-0",
-  "fields": {
-    "command_id": "uuid-v4",
-    "action": "start",                // "start", "stop", "status"
-    "platform": "twitch",             // "twitch", "youtube", "kick", "tiktok"
-    "channel_id": "shroud",
-    "overlay_id": "uuid-overlay",     // Associated overlay
-    "config": "{...}",                // JSON string: platform-specific config
-    "timestamp": "2025-11-11T12:34:56.789Z"
-  }
-}
-```
-
-#### Producer: Source Manager
-
-```go
-// Source Manager detects new active source
-func (c *SourceController) handleNewSource(source *domain.ChatSource) {
-    command := map[string]interface{}{
-        "command_id": uuid.New().String(),
-        "action":     "start",
-        "platform":   source.Platform,
-        "channel_id": source.ChannelID,
-        "overlay_id": source.OverlayID,
-        "config":     marshalConfig(source.Config),
-        "timestamp":  time.Now().Format(time.RFC3339Nano),
-    }
-
-    c.redisClient.XAdd(ctx, &redis.XAddArgs{
-        Stream: "stream:control-commands",
-        Values: command,
-    })
-}
-```
-
-#### Consumer: Platform Listeners
-
-```go
-// Twitch Listener consuming control commands
-func (l *TwitchListener) consumeControlCommands(ctx context.Context) {
-    for {
-        streams, _ := l.redisClient.XReadGroup(ctx, &redis.XReadGroupArgs{
-            Group:    "twitch-listener-group",
-            Consumer: l.instanceID,
-            Streams:  []string{"stream:control-commands", ">"},
-            Count:    5,
-            Block:    2 * time.Second,
-        }).Result()
-
-        for _, stream := range streams {
-            for _, message := range stream.Messages {
-                action := message.Values["action"].(string)
-                platform := message.Values["platform"].(string)
-
-                if platform != "twitch" {
-                    continue // Not for this listener
-                }
-
-                switch action {
-                case "start":
-                    l.joinChannel(message.Values["channel_id"].(string))
-                case "stop":
-                    l.partChannel(message.Values["channel_id"].(string))
-                }
-
-                l.redisClient.XAck(ctx, "stream:control-commands", "twitch-listener-group", message.ID)
-            }
-        }
-    }
-}
-```
-
----
-
-### Stream Monitoring
-
-```bash
-# Check stream length
-XLEN stream:raw-messages
-
-# View pending messages
-XPENDING stream:raw-messages processor-group
-
-# View stream info
-XINFO STREAM stream:raw-messages
-
-# View consumer group info
-XINFO GROUPS stream:raw-messages
-
-# Manually read latest messages
-XREAD COUNT 10 STREAMS stream:raw-messages 0
-```
-
----
 
 ## Redis Pub/Sub Architecture
 
 ### Channel Pattern: `overlay:{overlay_id}`
 
-**Purpose**: Broadcast enriched messages to all connected WebSocket clients for a specific overlay.
+**Purpose**: Broadcast enriched messages to the WebSocket clients of one overlay.
+
+| Channel | Producer | Emitted payload |
+|---------|----------|-----------------|
+| `overlay:{id}` | message-processor, alert-processor (alert envelopes), engagement-service (chat-command image deliverables and other command reactions) | `UnifiedChatMessage`, alt-set `Alert`/`GoalFrame`/`ListUpdateFrame` payloads |
+| `overlay:{id}:updates` | message-processor | `UnifiedChatMessage` with `Event.IsUpdate` (TikTok like aggregates currently) — delivered in place of the main channel for update semantics |
+| `overlay:{id}:alerts` | alert-processor (ADR-0068/0072), engagement-service (command-triggered alerts) | `shared/alerts.Alert` / `GoalFrame` / `ListUpdateFrame` envelopes |
+| `overlay:{id}:poll` | engagement-service | `PollSnapshot` |
+| `overlay:{id}:prediction` | engagement-service | `PredictionSnapshot` |
+| `quota:alerts` | youtube-quota-monitor (via `shared/quota` Notifier) | quota event payloads for the discord-bot (ADR-0023) |
+| `platform:status` | each listener's status publisher | listener up/down liveness (ADR-0032) |
+| `source:demand` | source-manager (`demand/subscriber.go`) | full-replacement `DemandUpdate` snapshot: which listeners should be polling which platform/channel, derived from the api-gateway's `overlay:connected:*` keys |
+
+`overlay:{id}` and `overlay:{id}:updates` are the message-processor chat channels; the alert/goal/list frames and the engagement snapshots land on their own sub-channels so chat-only and alert-only sockets can subscribe selectively (see below).
 
 #### Why Pub/Sub Instead of Streams?
 
-| Requirement | Redis Streams | Redis Pub/Sub | Winner |
-|-------------|---------------|---------------|--------|
-| **Durability** | ✅ Persisted | ❌ Ephemeral | Streams |
-| **Latency** | ~10ms | **~2ms** | **Pub/Sub** |
-| **Delivery** | Exactly-once | At-most-once | Streams |
-| **Fan-out** | Manual | **Built-in** | **Pub/Sub** |
-| **Use Case** | Processing pipeline | **Real-time broadcast** | **Pub/Sub** |
-
-**Decision**: Use **Pub/Sub** for overlay broadcast because:
-- Ultra-low latency is critical for chat display
-- Messages are already processed (durability not needed)
-- Multiple API Gateway instances need to receive same message
-- Ephemeral nature is acceptable (clients reconnect on disconnect)
+Streams are chosen when durability and consumer-group fan-out matter (the `chat:raw` pipeline, engagement commands, native events). Pub/Sub is chosen for overlay broadcast: ultra-low latency, already-processed payload, multiple API Gateway instances receiving the same message, and ephemeral loss is acceptable since clients reconnect and replay from the gateway's buffers (ADR-0031).
 
 #### Publisher: Message Processor
 
 ```go
-// After enrichment, publish to overlay-specific channel
-func (p *MessageProcessor) publishToOverlay(overlayID string, message *domain.UnifiedMessage) {
-    messageJSON, _ := json.Marshal(message)
-
-    // PUBLISH overlay:abc-123 {json}
-    p.redisClient.Publish(ctx, fmt.Sprintf("overlay:%s", overlayID), messageJSON)
+// services/message-processor/publisher/pubsub_publisher.go (abridged)
+channel := "overlay:" + overlayID
+if update := msg.Event != nil && msg.Event.IsUpdate; update {
+    channel = "overlay:" + overlayID + ":updates"
 }
+err := retryPublish(ctx, func() error { return p.client.Publish(ctx, channel, string(jsonStr)).Err() })
 ```
+
+Retry via `retryPublish` (per MP-04), a bounded per-publish retry with logging and a `publish_retry_total` metric.
 
 #### Subscriber: API Gateway
 
+The API Gateway groups subscriptions per overlay (`services/api-gateway/subscription/subscriber.go`):
+
 ```go
-// API Gateway subscribes to overlay channels
-func (g *Gateway) subscribeToOverlay(overlayID string) {
-    pubsub := g.redisClient.Subscribe(ctx, fmt.Sprintf("overlay:%s", overlayID))
-    defer pubsub.Close()
-
-    ch := pubsub.Channel()
-    for msg := range ch {
-        // msg.Payload contains JSON message
-        g.broadcastToWebSockets(overlayID, msg.Payload)
-    }
-}
-
-func (g *Gateway) broadcastToWebSockets(overlayID string, messageJSON string) {
-    connections := g.connectionPool[overlayID]
-    for _, conn := range connections {
-        conn.WriteMessage(websocket.TextMessage, []byte(messageJSON))
-    }
-}
+// channelsFor(overlayID, viewerOnly, withAlerts):
+//   overlay:{id}
+//   overlay:{id}:updates (omitted for viewer-only sockets)
+//   overlay:{id}:poll, overlay:{id}:prediction
+//   overlay:{id}:alerts (only when overlay kind is alerts/goal/list — withAlerts)
 ```
 
-#### Subscription Lifecycle
+- The subscription is **decoupled from the socket lifetime** with a linger window (default 5 min, `lingerDuration`): when the last connection for an overlay drops, the Pub/Sub subscription stays open so messages arriving during the gap keep landing in the chat replay buffer (ADR-0031) `replay:chat:{id}` for replay on reconnect.
+- First-connection socket type decides the shape: an OBS socket (`/ws/overlay/{id}`) subscribes the wide set; a viewer-only socket (`viewerParticipant=true`) subscribes just the main channel.
+- An OBS socket for a `alerts`/`goal`/`list` overlay also gets `overlay:{id}:alerts`; a later chat-kind joiner upgrades only the alerts channel if the original subscription lacked it.
 
 ```mermaid
 sequenceDiagram
@@ -349,307 +185,264 @@ sequenceDiagram
     participant Gateway as API Gateway
     participant Redis as Redis Pub/Sub
 
-    Overlay->>Gateway: WebSocket connect /ws/overlay/abc-123
-    Gateway->>Gateway: Validate JWT
-    Gateway->>Gateway: Add to connectionPool[abc-123]
+    Overlay->>Gateway: GET /ws/overlay/abc-123 (token in query/header)
+    Gateway->>Gateway: Validate JWT via auth.ValidateJWTWithKeyChain
+    Gateway->>Redis: SUBSCRIBE overlay:abc-123, :updates, :poll, :prediction [, :alerts]
+    Note over Redis,Gateway: reference counter per overlay, reuse on re-subscribe
 
-    alt First connection for this overlay
-        Gateway->>Redis: SUBSCRIBE overlay:abc-123
-        Note over Gateway,Redis: Goroutine starts listening
-    end
+    Note over Gateway: Message arrives on any subscribed channel
+    Redis->>Gateway: message
+    Gateway->>Gateway: fan out to sockets bound to overlay {id} (tag message to the matching socket kind)
 
-    Note over Gateway: Message arrives from processor
-    Redis->>Gateway: Message on channel overlay:abc-123
-    Gateway->>Gateway: Lookup connections[abc-123]
-    loop For each WebSocket
-        Gateway->>Overlay: Push message
-    end
-
-    Overlay->>Gateway: WebSocket disconnect
-    Gateway->>Gateway: Remove from connectionPool[abc-123]
-
-    alt Last connection for this overlay
-        Gateway->>Redis: UNSUBSCRIBE overlay:abc-123
-        Note over Gateway: Stop listening goroutine
-    end
+    Overlay->>Gateway: disconnect
+    Note over Gateway: decrement refs, if 0 → linger timer keeps subscription + replay capture
+    Overlay->>Gateway: reconnect within linger
+    Note over Gateway: cancel timer, reuse the Pub/Sub subscription
 ```
+
+Deletion events are replayed from a separate bounded Redis buffer `replay:deletions:{id}` (TTL 60s) so a reconnecting overlay sees the removals it missed.
 
 ---
 
-## Database Schema
+## Redis Key Inventory
 
-### Entity Relationship Diagram
+The channel patterns above plus these key families (verified against the code; names may continue to gain suffixes in `shared/` and per-service packages):
+
+| Key | Writer | Purpose |
+|-----|--------|---------|
+| `chat:raw`, `chat:dlq` | see streams table | pipeline + dead-letter |
+| `chatcmd:channels` | engagement-service (`ChannelSync`, atomically replaced via a `:tmp:` key then `RENAME`) | set of `platform:channel_id` members whose chat message-processor must forward to `chatcmd:jobs` |
+| `chatcmd:jobs` | message-processor | job stream consumed by engagement-service |
+| `engagement:commands`, `engagement:twitch-native` | message-processor, twitch-eventsub-listener | durable engagement work streams |
+| `engagement:events`, `engagement:chat` | message-processor (earn republish, throttled chat activity) | earn accounting inputs (Pub/Sub channels per `models/engagement.go`) |
+| `engagement:channels:{engagementID}` | engagement-service publisher | broadcast per-engagement inventory |
+| `engagement:active:{platform}:{channel_id}` | engagement-service | current activity engagement for a channel (lowercased both halves) |
+| `overlay:{id}:goal:{metric}` | alert-processor goals poller | goal counts (bits, Super Chats, followers, subscribers) |
+| `overlay:{id}:goal-poll-lock` | alert-processor poller | SetNX leader lock so only one replica polls per interval |
+| `overlay:{id}:goal-status` | alert-processor goals poller | why the last poll could not produce a count (`"reconnect"`, `"hidden"`); absent on success |
+| `overlay:{id}:goal-counted:{alertID}` | alert-processor | idempotency guard for that goal increment |
+| `overlay:{id}:leaderboard:{category}` | alert-processor leaderboard | sorted set of summed amount-bearing events, 30-day rolling TTL |
+| `overlay:{id}:lb-scored:{alertID}` | alert-processor | dedup marker for a scored alert |
+| `overlay:{id}:list-push:{category}` | alert-processor listpush | debounce window/queue for the `list_update` frame |
+| `overlay:connected:{id}` | api-gateway | demand/liveness TTL key: an overlay has a live WebSocket. Consulted by the goal poller and scanned (`overlay:connected:*`) by source-manager to build `source:demand` snapshots |
+| `replay:chat:{id}`, `replay:chat:{id}:seen:{msgID}` | api-gateway | chat replay buffer (ADR-0031), per-message seen marker |
+| `replay:deletions:{id}` | api-gateway | deletion replay buffer (TTL 60s) |
+| `msgid:registry:{platform}:{channelID}` | twitch-listener (the only writer) | native-id → internal-id registry for deletion resolution; moderation-service deletions carry `target_uuid` instead so other platforms resolve without it |
+| `msgid:deletion_buffer:{platform}:{channelID}:{nativeID}` | message-processor deletion buffer | deletions that arrived before their target message; drained by `platformMessageID` matching (ADR-0046) |
+| `emotes:v2:{provider}:{channel}` | emote-service cache | emote-set cache (global Twitch entries 30d, negative entries 15m; per-user keys embed `userID`/`twitchChannel`/`seventvSetID`) |
+| `platform:status` | each listener's status publisher | listener liveness (Pub/Sub) |
+
+Not in the list? Do not assume a name from this doc — grep `services/*/` and `shared/` for the constant instead.
+
+---
+
+## Platform Normalizers
+
+One normalizer file per platform under `services/message-processor/normalizer/`:
+
+| Normalizer | Platform | Notes |
+|------------|----------|-------|
+| `twitch_normalizer.go` | twitch | `Tags["badges"]`, emote positions, event paths via `NormalizeEvent` |
+| `youtube_normalizer.go` | youtube | InnerTube and Data API shapes |
+| `kick_normalizer.go` | kick | event + badge parsing |
+| `tiktok_normalizer.go` | tiktok | like aggregates (`Event.IsUpdate` → `overlay:{id}:updates`) |
+| `discord_normalizer.go` | discord | attachments preserved |
+| `owncast_normalizer.go` | owncast | beta |
+| `goodgame_normalizer.go` | goodgame | beta; deletions arrive as tag-encoded events promoted by `promoteTagDeletion` |
+| `picarto_normalizer.go` | picarto | beta |
+| `altstream_normalizer.go` | altstream | self-registered message ids (ADR-0082) |
+| `facebook_normalizer.go` | facebook | beta, moderation ids in metadata (ADR-0060) |
+| `instagram_normalizer.go` | instagram | beta, read-only (ADR-0062) |
+| `system_normalizer.go` | system | `listener_deprecation_notice` and other system event types |
+
+---
+
+## Alerts, Goal and List Flow
+
+The **alert-processor** (`services/alert-processor/README.md`) is a read-only sibling of the message-processor: it runs its own consumer group over `chat:raw`, never re-runs the chat pipeline, and never sees the message-processor's PEL.
 
 ```mermaid
-erDiagram
-    users ||--o{ overlays : owns
-    overlays ||--|| overlay_configs : has
-    overlays ||--o{ overlay_chat_sources : has
-    supported_platforms ||--o{ overlay_chat_sources : defines
-
-    users {
-        uuid id PK
-        string twitch_id UK
-        string username UK
-        string display_name
-        string profile_image_url
-        text access_token "encrypted"
-        text refresh_token "encrypted"
-        timestamp token_expires_at
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    overlays {
-        uuid id PK
-        uuid user_id FK
-        string name
-        text description
-        boolean is_active
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    overlay_configs {
-        uuid id PK
-        uuid overlay_id FK
-        jsonb display_settings
-        jsonb filter_settings
-        boolean enable_7tv
-        boolean enable_bttv
-        boolean enable_ffz
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    overlay_chat_sources {
-        uuid id PK
-        uuid overlay_id FK
-        string platform FK
-        string channel_id
-        string channel_name
-        boolean auth_required
-        jsonb config "platform-specific"
-        boolean is_active
-        timestamp created_at
-        timestamp updated_at
-    }
-
-    supported_platforms {
-        string platform PK
-        string display_name
-        boolean is_enabled
-        boolean requires_oauth
-        jsonb config_schema
-        timestamp created_at
-        timestamp updated_at
-    }
+flowchart LR
+    A[chat:raw<br/>event-typed messages] --> B[alert-processor<br/>group alert-processors]
+    B --> C{event_type filter}
+    C -- "empty / chat / message_deletion" --> D[ACK + drop]
+    C -- event payloads --> E[message-processor normalizers<br/>reused import]
+    E --> F{overlay fan-out<br/>overlay_type in alerts, goal, list<br/>direct sources UNION share_requests}
+    F --> G[INSERT alert_events<br/>idempotent on alert_id]
+    F --> H[PUBLISH overlay:id:alerts]
+    H --> I[api-gateway<br/>forward to subscribed sockets]
+    F --> J["goal overlays: goal:{metric} counters"]
+    F --> K["list overlays: leaderboard sorted sets<br/>→ debounced list_update frames"]
+    L[goal poller] --> M[Helix followers / YouTube subs<br/>only while overlay:connected:id exists]
+    M --> N["goal frames on overlay:id:alerts"]
 ```
 
-### Table: `users`
+- The routing query is a UNION of `overlay_chat_sources` and `share_requests` rows, filtered to `overlay_type IN ('alerts','goal','list')` — chat overlays are never flooded with alerts.
+- Pure chat (`event_type` empty or `"chat"`), moderation deletions and system notices are ACKed and dropped; the alert-processor reuses the message-processor's case-by-case normalizers — Twitch, YouTube, TikTok, system — to parse `EventData` rather than duplicating the parsing logic.
+- Goal overlays with follower (Twitch) or subscriber (YouTube) goals get an API-polling path that runs **only while the overlay is connected** (the `overlay:connected:{id}` demand key from the api-gateway) and uses a `SETNX`-based poll lock (`overlay:{id}:goal-poll-lock`) so two replicas do not double-count an interval. Poll counts are `INCRBYFLOAT overlay:{id}:goal:{metric}`; poller failures latch a goal's `goal-status` marker so the UI does not report a stale zero. YouTube goal polls go through the quota reserve/confirm path (ADR-0006).
+- List overlays get Redis sorted sets (`overlay:{id}:leaderboard:{category}`) fed by amount-bearing alerts (bits, gifts, Super Chats), and a debounced 24/7 alert scorer pushes `list_update` frames to `overlay:{id}:alerts` (`services/alert-processor/listpush/`).
+- Alert publishing is broadcast-framing agnostic: each overlay decides which alert `event_type` renders from its alert editor profile (ADR-0070); the registering gateway does not filter payload kinds beyond routing channels by `overlay_type`.
 
-```sql
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    twitch_id VARCHAR(50) UNIQUE NOT NULL,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    display_name VARCHAR(100) NOT NULL,
-    profile_image_url TEXT,
-    access_token TEXT NOT NULL,      -- Encrypted OAuth token
-    refresh_token TEXT NOT NULL,     -- Encrypted refresh token
-    token_expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
+See ADR-0068 (alert envelopes and event flow), ADR-0070 (alert overlay editor variants) and ADR-0072 (goal/list overlays) for the decision rationale.
 
-CREATE INDEX idx_users_twitch_id ON users(twitch_id);
-CREATE INDEX idx_users_username ON users(username);
-```
+---
 
-### Table: `overlays`
+## Engagement Flow (points, commands, polls, predictions)
 
-```sql
-CREATE TABLE overlays (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
+The **engagement-service** (`services/engagement-service/README.md`) keeps the per-overlay viewer points economy, streamer chat commands, keyword triggers, polls and predictions (ADR-0079, issue #523).
 
-CREATE INDEX idx_overlays_user_id ON overlays(user_id);
-CREATE INDEX idx_overlays_is_active ON overlays(is_active);
-```
+- **Earn** (`services/engagement-service/consumer/earn.go`): idempotent awards from (a) event-bearing messages the message-processor republishes onto `engagement:events`, and (b) throttled chat-activity events on `engagement:chat`. Every award is guarded by the `dedup_key` in the points ledger, so a missed exploit or a replay never adds points twice.
+- **Chat commands** (ADR-0079): the message-processor holds an in-process copy of `chatcmd:channels` (`chatcmd:channels` is written by engagement-service's `ChannelSync` on change, refreshed periodically on the MP side) and forwards each chat message from a listed channel to the durable `engagement:commands` stream (plus a bounded `chatcmd:jobs` stream for plain jobs). engagement-service's `CommandConsumer` drains it, resolves the durable viewer, applies `min_role` checks (roles are derived from listener tags — Twitch/Kick badges, YouTube `is_owner`/`is_moderator`/is-sponsor flags), evaluates template or JS replies, handles `{urlfetch}`, Twitch clips and command images (images emitted onto `overlay:{id}:alerts` as alert frames, ADR-0080). The parser itself applies the digit and duration validators again rather than trusting the forwarder.
+- **Native Twitch events**: `twitch-eventsub-listener` writes native engagement-domain events (subscription/cheer/community-gift lifecycle etc.) to the `engagement:twitch-native` stream; engagement-service consumes it to drive earn awards and community-gift challenges.
+- **Polls & predictions**: votes arrive via the API gateway or chat commands. engagement-service writes the vote to Postgres, guards against cross-tenant wagering, then snapshots the poll (`PublishPoll`) onto `overlay:{id}:poll` or `overlay:{id}:prediction` so both OBS overlays and viewer sockets see live state. Wager rounds are kept alive by the native track-replay path if the connection drops mid-round, using native idempotency keyed by a dedup token.
 
-### Table: `overlay_configs`
+---
 
-```sql
-CREATE TABLE overlay_configs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    overlay_id UUID NOT NULL UNIQUE REFERENCES overlays(id) ON DELETE CASCADE,
-    display_settings JSONB DEFAULT '{}',  -- Font, colors, animations
-    filter_settings JSONB DEFAULT '{}',   -- Banned words, user filters
-    enable_7tv BOOLEAN DEFAULT TRUE,
-    enable_bttv BOOLEAN DEFAULT TRUE,
-    enable_ffz BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
+## Moderation (Deletion) Flow
 
-CREATE INDEX idx_overlay_configs_overlay_id ON overlay_configs(overlay_id);
-```
+The **moderation-service** implements the cross-platform moderation write path (ADR-0017: delete/timeout/ban). Its **read side of the pipeline** is a deletion emitter:
 
-**Example `display_settings`**:
-```json
-{
-  "font_family": "Inter",
-  "font_size": 18,
-  "text_color": "#FFFFFF",
-  "background_color": "#00000080",
-  "animation": "slide-in-left",
-  "message_duration": 10
-}
-```
-
-### Table: `overlay_chat_sources`
-
-```sql
-CREATE TABLE overlay_chat_sources (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    overlay_id UUID NOT NULL REFERENCES overlays(id) ON DELETE CASCADE,
-    platform VARCHAR(50) NOT NULL REFERENCES supported_platforms(platform),
-    channel_id VARCHAR(100) NOT NULL,     -- Platform-specific ID
-    channel_name VARCHAR(100) NOT NULL,   -- Display name
-    auth_required BOOLEAN DEFAULT FALSE,
-    config JSONB DEFAULT '{}',            -- Platform-specific settings
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(overlay_id, platform, channel_id)  -- Prevent duplicate sources
-);
-
-CREATE INDEX idx_overlay_chat_sources_overlay_id ON overlay_chat_sources(overlay_id);
-CREATE INDEX idx_overlay_chat_sources_platform ON overlay_chat_sources(platform);
-CREATE INDEX idx_overlay_chat_sources_is_active ON overlay_chat_sources(is_active);
-```
-
-**Example `config` (YouTube-specific)**:
-```json
-{
-  "live_stream_id": "abc123xyz",
-  "oauth_user_id": "google-user-123",
-  "polling_interval": 5
-}
-```
-
-### Table: `supported_platforms`
-
-```sql
-CREATE TABLE supported_platforms (
-    platform VARCHAR(50) PRIMARY KEY,    -- "twitch", "youtube", "kick", "tiktok"
-    display_name VARCHAR(100) NOT NULL,  -- "Twitch", "YouTube", "Kick", "TikTok"
-    is_enabled BOOLEAN DEFAULT FALSE,    -- Feature flag
-    requires_oauth BOOLEAN DEFAULT FALSE,
-    config_schema JSONB DEFAULT '{}',    -- JSON Schema for platform-specific config
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-
--- Initial data
-INSERT INTO supported_platforms (platform, display_name, is_enabled, requires_oauth) VALUES
-    ('twitch', 'Twitch', TRUE, FALSE),
-    ('youtube', 'YouTube', TRUE, TRUE),
-    ('kick', 'Kick', FALSE, FALSE),
-    ('tiktok', 'TikTok', FALSE, TRUE);
-```
+- The message-processor's `message_deletion` handler resolves the deletion against the registry deletion buffer and `msgid:registry:{platform}:{channelID}` (only twitch-listener populates the registry; moderation-service deletions carry `target_uuid` direct, and self-registered platforms like Altstream register their ids post-publish, ADR-0082). If the deletion overtakes its target, it is buffered in `msgid:deletion_buffer:{platform}:{channelID}:{nativeID}` (TTL 60s) and drained when the target message is published (ADR-0046).
+- The resolved deletion is normalized (deletion path of the per-platform normalizers), then published to `overlay:{id}` so the gateway can swap the affected message frame; the gateway also keeps `replay:deletions:{id}` so a reconnecting overlay replays missed removals.
 
 ---
 
 ## Unified Message Format
 
-### Complete Specification
+### Raw producer shape on `chat:raw`
 
-```typescript
-interface UnifiedMessage {
-  // Message identity
-  id: string;          // UUID v4
-  overlay_id: string;  // Target overlay UUID
+Every listener serialises a `RawChatMessage`-shaped JSON into the single `data` field:
 
-  // Source information
-  platform: 'twitch' | 'youtube' | 'kick' | 'tiktok';
-  channel_id: string;  // Platform-specific identifier
-  channel_name: string; // Display name
+```go
+// services/message-processor/models/message.go (abridged)
+type RawChatMessage struct {
+    MessageID   string            `json:"message_id"`
+    Platform    string            `json:"platform"`
+    OverlayID   string            `json:"overlay_id,omitempty"`
+    ChannelID   string            `json:"channel_id"`
+    ChannelName string            `json:"channel_name,omitempty"`
+    UserID      string            `json:"user_id"`
+    Username    string            `json:"username"`
+    Text        string            `json:"text"`
+    Timestamp   time.Time         `json:"timestamp"`
+    Tags        map[string]string `json:"tags"`
+    Attachments []Attachment      `json:"attachments,omitempty"`
+    RawMessage  json.RawMessage   `json:"raw_message,omitempty"`
 
-  // User information
-  user: {
-    id: string;           // Platform user ID
-    username: string;     // Lowercase, unique
-    display_name: string; // Display name (may differ from username)
-    avatar_url: string;   // Profile picture URL
-    badges: string[];     // ["subscriber", "moderator", "vip", "partner"]
-    color: string;        // Hex color (#RRGGBB)
-  };
-
-  // Message content
-  message: {
-    text: string;         // Plain text message
-    emotes: Emote[];      // Parsed emotes
-  };
-
-  // Timing
-  timestamp: string;      // ISO 8601 timestamp
-
-  // Platform-specific metadata
-  metadata: {
-    is_subscriber: boolean;
-    is_moderator: boolean;
-    is_vip: boolean;
-    is_partner: boolean;
-    bits: number;              // Twitch bits (0 if not applicable)
-    super_chat_amount: number; // YouTube Super Chat (0 if not applicable)
-    membership_months: number; // Subscription months (0 if not applicable)
-  };
-}
-
-interface Emote {
-  code: string;         // "Kappa", "KEKW", "PogChamp"
-  provider: string;     // "twitch", "youtube", "7tv", "bttv", "ffz"
-  url: string;          // Image URL (1x size)
-  urls?: {              // Multiple sizes (optional)
-    "1x": string;       // 28x28
-    "2x": string;       // 56x56
-    "4x": string;       // 112x112
-  };
-  positions: [number, number][]; // [[start, end]] indices in text
+    // Event support (omitted for chat messages)
+    EventType string                 `json:"event_type,omitempty"` // "subscription", "raid", "like_aggregate", ...
+    EventData map[string]interface{} `json:"event_data,omitempty"`
 }
 ```
 
-### Platform Mapping
+Platform-specific extra data lives in `Tags` (Twitch/Kick/Glyph tag tokens) and `RawMessage`, not in a fixed schema; listeners are free to omit `overlay_id` (the message-processor resolves targets itself).
 
-#### Twitch → Unified
+### Normalized consumer shape
 
-| Twitch Field | Unified Field | Transformation |
-|--------------|---------------|----------------|
-| `user.id` | `user.id` | Direct |
-| `user.name` | `user.username` | `strings.ToLower()` |
-| `user.displayName` | `user.display_name` | Direct |
-| `user.color` | `user.color` | Default to `#FFFFFF` if empty |
-| `badges` | `user.badges` | Parse badge string → array |
-| `emotes` | `message.emotes` | Parse positions, add provider="twitch" |
+```go
+// services/message-processor/models/message.go (abridged)
+type UnifiedChatMessage struct {
+    ID          string                 `json:"id"`
+    OverlayID   string                 `json:"overlay_id"`
+    Platform    string                 `json:"platform"`     // may be overridden when Platforms is set
+    Platforms   []string               `json:"platforms,omitempty"` // send-to-all collapse: every platform echoed
+    ChannelID   string                 `json:"channel_id"`
+    ChannelName string                 `json:"channel_name"`
+    User        UserInfo               `json:"user"`
+    Message     MessageInfo            `json:"message"`
+    Timestamp   time.Time              `json:"timestamp"`
+    Metadata    map[string]interface{} `json:"metadata"`
+    Event       *EventInfo             `json:"event,omitempty"`
+}
 
-#### YouTube → Unified
+type UserInfo struct {
+    ID            string  `json:"id"`
+    Username      string  `json:"username"`
+    DisplayName   string  `json:"display_name"`
+    AvatarURL     string  `json:"avatar_url,omitempty"`
+    Badges        []Badge `json:"badges"`
+    Color         string  `json:"color,omitempty"` // viewer-chosen colour, else platform-native (ADR-0047)
+    AutoColor     string  `json:"auto_color,omitempty"` // deterministic fallback palette
+    NameGradient  string  `json:"name_gradient,omitempty"` // cosmetics JSONB, "linear", angle…
+    SourceBadges  []Badge `json:"source_badges,omitempty"` // shared-chat source badges
+    SourceUserID  string  `json:"source_user_id,omitempty"`
+    AvatarFrameURL string `json:"avatar_frame_url,omitempty"`
+    AvatarFlairURL string `json:"avatar_flair_url,omitempty"`
+    Pronouns      string  `json:"pronouns,omitempty"`
+    // TwitchUsername `json:"-"` — internal, never serialized; keys pronoun lookup for non-Twitch chatters
+}
 
-| YouTube Field | Unified Field | Transformation |
-|---------------|---------------|----------------|
-| `authorDetails.channelId` | `user.id` | Direct |
-| `authorDetails.displayName` | `user.display_name` | Direct |
-| `authorDetails.displayName` | `user.username` | `strings.ToLower()` |
-| `authorDetails.profileImageUrl` | `user.avatar_url` | Direct |
-| `snippet.textMessageDetails.messageText` | `message.text` | Direct |
-| `authorDetails.isChatModerator` | `metadata.is_moderator` | Direct |
-| `snippet.superChatDetails.amountMicros` | `metadata.super_chat_amount` | Divide by 1,000,000 |
+type Badge struct {
+    Name    string `json:"name"`     // "subscriber", "moderator", …
+    Version string `json:"version"`
+    IconURL string `json:"icon_url"`
+}
+
+type MessageInfo struct {
+    Text        string       `json:"text"`
+    Emotes      []Emote      `json:"emotes"`
+    Attachments []Attachment `json:"attachments,omitempty"`
+}
+
+type Emote struct {
+    Code      string   `json:"code"`
+    Provider  string   `json:"provider"` // "twitch", "7tv", "bttv", "ffz", …
+    URL       string   `json:"url"`
+    Positions [][]int  `json:"positions"`
+}
+
+type Attachment struct {
+    Type        string `json:"type"`
+    URL         string `json:"url"`
+    ContentType string `json:"content_type,omitempty"`
+    Width       int    `json:"width,omitempty"`
+    Height      int    `json:"height,omitempty"`
+    ThumbURL    string `json:"thumb_url,omitempty"`
+    Spoiler     bool   `json:"spoiler,omitempty"`
+    Filename    string `json:"filename,omitempty"`
+}
+
+type EventInfo struct {
+    Type          string                 `json:"type"`
+    Tier          string                 `json:"tier"`
+    Value         *EventValue            `json:"value,omitempty"`
+    Duration      int                    `json:"duration"`
+    AggregationID string                 `json:"aggregation_id,omitempty"`
+    IsUpdate      bool                   `json:"is_update"` // TikTok like aggregates publish on overlay:{id}:updates
+    Metadata      map[string]interface{} `json:"metadata,omitempty"`
+}
+
+type EventValue struct {
+    Amount      float64 `json:"amount"`
+    Currency    string  `json:"currency"`
+    DisplayText string  `json:"display_text"`
+}
+```
+
+Notable semantics (from the struct comments in `services/message-processor/models/message.go`):
+
+- `User.Color` is the **authoritative** colour: a viewer-chosen All-Chat colour first, else the platform colour; empty falls back to the streamer's per-overlay setting, then `AutoColor` (ADR-0047). `AutoColor` is a separate deterministic palette field, kept apart so overlays can rank the streamer setting between them. `NameGradient` is a raw JSONB cosmetics string.
+- `User.SourceBadges` and `User.SourceUserID` carry shared-chat authorship (badges from the original Twitch channel of a shared-chat message).
+- `Platforms` is set only for a streamer "send to all" message whose per-platform echoes were collapsed into one combined message in the publish loop; `Platform` is then the first echo's platform and the singular value is not authoritative.
+- `MessageInfo.Attachments` is usually present only for Discord and Facebook/Instagram platform messages (photos, clips, spoilers).
+- `Event.IsUpdate` converts the message into a separate Pub/Sub delivery on `overlay:{id}:updates` (currently the TikTok like-aggregate flow only).
+
+### Platform normalizer mapping
+
+The normalizers do not share a rigid layout; they translate flexible platform shapes into the unified struct above and into `Metadata`:
+
+| Platform normalizer | Key transformations |
+|---------------------|--------------------|
+| Twitch | `Tags` → badges, emotes, color; assumes Twitch event data shape (`NormalizeEvent`) |
+| YouTube | InnerTube/Data API authors + superchat amounts → `EventValue` |
+| Kick | Kick badges → roleBadges; events (`NormalizeEvent`-style) |
+| TikTok | Like aggregates → `Event.IsUpdate` + `AggregationID`; gift maps → `EventValue` |
+| Discord | attachments preserved verbatim; colour from platform |
+| Facebook / Instagram | moderation ids stored in `Metadata` (ADR-0060) — ingest is read-only on Instagram (ADR-0062) |
+| GoodGame, Owncast, Picarto, Altstream | minimal mapping; GoodGame deletions arrive as `Tags`-carried events and are promoted by `promoteTagDeletion` |
+| System | `listener_deprecation_notice` and similar go straight to `NormalizeEvent` |
+
+Badges from every platform are normalized into the shared `Badge` struct (`Name`/`Version`/`IconURL`), with platform-specific parsing in `services/message-processor/normalizer/kick_normalizer_badges_test.go` and the role mapping in `services/message-processor/models/chatcmd.go`.
 
 ---
 
@@ -657,7 +450,7 @@ interface Emote {
 
 ### Pattern 1: Synchronous HTTP (Service-to-Service)
 
-**Use Case**: Message Processor fetching emotes from Emote Service
+**Use case**: message-processor fetching emotes from emote-service.
 
 ```mermaid
 sequenceDiagram
@@ -665,264 +458,129 @@ sequenceDiagram
     participant ES as Emote Service
     participant Redis as Redis Cache
 
-    MP->>ES: GET /emotes/channel/shroud
-    ES->>Redis: GET emotes:all:shroud
+    MP->>ES: GET /emotes/channel/{channel}?user_id&platform&user (full set when user-scoped)
+    ES->>Redis: GET emotes:v2:{provider}{cacheKey}
     alt Cache hit
-        Redis-->>ES: Cached emote set
+        Redis-->>ES: cached emote set
         ES-->>MP: 200 OK {emotes}
     else Cache miss
         Redis-->>ES: nil
-        ES->>ES: Fetch from 7TV, BTTV, FFZ APIs
-        ES->>Redis: SETEX emotes:all:shroud 3600 {emotes}
+        ES->>ES: Fetch from 7TV / BTTV / FFZ (+ Twitch for badges/cheermotes)
+        ES->>Redis: SET with per-provider TTL
         ES-->>MP: 200 OK {emotes}
     end
 ```
 
-**Circuit Breaker** (planned):
-```go
-type CircuitBreaker struct {
-    failures      int
-    lastFailure   time.Time
-    state         string // "closed", "open", "half-open"
-    threshold     int
-    timeout       time.Duration
-}
-
-func (mp *MessageProcessor) fetchEmotes(channel string) ([]Emote, error) {
-    if mp.circuitBreaker.state == "open" {
-        if time.Since(mp.circuitBreaker.lastFailure) < mp.circuitBreaker.timeout {
-            return nil, ErrCircuitOpen
-        }
-        mp.circuitBreaker.state = "half-open"
-    }
-
-    emotes, err := mp.emoteClient.GetChannelEmotes(channel)
-    if err != nil {
-        mp.circuitBreaker.failures++
-        mp.circuitBreaker.lastFailure = time.Now()
-        if mp.circuitBreaker.failures >= mp.circuitBreaker.threshold {
-            mp.circuitBreaker.state = "open"
-        }
-        return nil, err
-    }
-
-    mp.circuitBreaker.failures = 0
-    mp.circuitBreaker.state = "closed"
-    return emotes, nil
-}
-```
-
----
+The emote-service cache namespaces under `emotes:v2` with a per-provider key; global Twitch emotes are cached 30 days, negative results 15 minutes (`services/emote-service/cache/emote_cache.go`). The enricher also caches at the message-processor side (Redis, with a background single-flight refresh per channel — see `services/message-processor/enricher/emote_enricher.go`), so most chat messages never hit emote-service at all.
 
 ### Pattern 2: Asynchronous Messaging (Redis Streams)
 
-**Use Case**: Platform Listener → Message Processor
+**Use case**: any listener → message-processor/alert-processor on `chat:raw`; command chains into engagement-service.
 
-- **Decoupling**: Listener and processor are independent
-- **Durability**: Messages survive crashes
-- **Load Balancing**: Multiple processors share workload
-- **Exactly-Once**: Consumer groups ensure no duplicate processing
-
----
+- **Decoupling**: listeners and processors are independently deployable and independently scaled.
+- **Durability**: entries survive crashes; per-entry ACK restores after failure.
+- **Load balancing**: consumer groups fan work across pods of a service.
+- **Bounded processing** (ADR-0033): batches up to 100 with bounded concurrent workers so a slow upstream does not stall the group.
+- **Streams trims**: `MAXLEN ~100000` for `chat:raw` and small caps on engagement command streams keep Redis stable even when a downstream stalls.
 
 ### Pattern 3: Event Broadcasting (Redis Pub/Sub)
 
-**Use Case**: Message Processor → API Gateway → Overlays
+**Use case**: message-processor → api-gateway → overlays, plus alert/goal/list and engagement snapshot channels.
 
-- **Fan-Out**: One message, many receivers
-- **Low Latency**: ~2ms propagation
-- **Ephemeral**: No storage overhead
-- **Dynamic Subscriptions**: Subscribe/unsubscribe on WebSocket connect/disconnect
+- **Fan-out**: one publish, many gateway instances and sockets.
+- **Channel enum** (see [Pub/Sub section](#redis-pubsub-architecture)): message-processor/enricher-produced channels plus alert-processor, goal, list, and engagement service channels.
+- **Ephemeral**: no storage; loss is healed by the gateway replay buffers (`replay:chat:{id}`, `replay:deletions:{id}`, ADR-0031).
+- **Dynamic subscriptions**: subscriptions follow sockets with a linger window, per [Subscriber](#subscriber-api-gateway).
+
+#### Source-manager and leadership
+
+Source-manager owns the multi-listener registry and (for the YouTube listeners) a leader-election API over Redis-expiring locks (`services/source-manager/election/leader.go`, dependencies injected as `client.SetNX/Get/TTL` calls in `services/source-manager/README.md`; callers use the shared library `shared/sourcemanager`):
+
+- `LeaderKeyPrefix = "leader"`, sliding TTL lock (`DefaultLockTTL` 10s, renewed every 5s) with a token-gated release, called through `shared/sourcemanager.Coordinator` (`ClaimLeadership`, `Release`, plus background lease-refresh).
+- A 30-second stabilization period (`DefaultRebalanceStabilizationPeriod`) stops a leader flip-split between replicas.
+- Source liveness (used by the cleanup jobs and the admin panel) is HTTP-based: listeners call source-manager's `/sources/activate` and `/sources/deactivate` (see `shared/sourcemanager/client.go`) rather than a Redis heartbeat. The api-gateway's own demand signal for live overlays is the TTL key `overlay:connected:{id}` (see ADR-0032 for the gateway demand model).
+- **Demand fan-out (ADR-0032)**: the api-gateway marks live overlays with TTL keys `overlay:connected:{id}`; source-manager scans those keys (`overlay:connected:*`) and publishes full-replacement `DemandUpdate` snapshots onto the `source:demand` Pub/Sub channel (`services/source-manager/demand/subscriber.go`). Listeners subscribe via `shared/listener/demand.go` (discord-listener, youtube-listener(-innertube); tiktok has its own `src/demand/subscriber.ts`) and start/stop polling to match demand, so idle channels consume no platform quota.
 
 ---
 
 ## Error Handling & Retry Logic
 
-### Redis Streams Failure Scenarios
+### `chat:raw` failure scenarios
 
-#### Scenario 1: Consumer Crashes Before ACK
+#### Producer side (listeners)
+
+Each listener's publish is wrapped in the shared **ring-buffer publisher** (`shared/listener/ring_buffer.go`): a transient `XADD` failure does not drop the message, it is buffered (small per-listener capacity) and retried; overflow drops are surfaced through structured metrics/log fields. This is the LI-01/LI-02/LI-03 hardening.
+
+#### Consumer side (message-processor)
 
 ```mermaid
 sequenceDiagram
-    participant Stream as Redis Stream
-    participant Consumer1 as Consumer 1
-    participant Consumer2 as Consumer 2
+    participant Stream as chat:raw
+    participant C1 as Consumer pod 1
+    participant C2 as Consumer pod 2
 
-    Stream->>Consumer1: Deliver message ID 123
-    Consumer1->>Consumer1: Processing...
-    Note over Consumer1: CRASH!
-    Note over Stream: Message 123 remains in PEL<br/>(Pending Entry List)
-
-    Note over Stream: After idle timeout (5 minutes)
-    Stream->>Consumer2: Redeliver message ID 123
-    Consumer2->>Consumer2: Process successfully
-    Consumer2->>Stream: XACK 123
+    Stream->>C1: XREADGROUP delivers entry
+    C1->>C1: processAndAck: retry (3 attempts, 100ms/500ms/2s)
+    Note over C1: still failing → XADD chat:dlq {original_data…} then XACK
+    Note over Stream: entry is gone from the group PEL, DLQ carries it
 ```
 
-**Implementation**:
-```go
-// Claim idle messages
-func (p *MessageProcessor) claimIdleMessages(ctx context.Context) {
-    pending, _ := p.redisClient.XPendingExt(ctx, &redis.XPendingExtArgs{
-        Stream: "stream:raw-messages",
-        Group:  "processor-group",
-        Idle:   5 * time.Minute,
-        Count:  10,
-    }).Result()
+Details (from `services/message-processor/consumer/retry.go`, `dlq.go`):
 
-    for _, msg := range pending {
-        // Claim message
-        claimed, _ := p.redisClient.XClaim(ctx, &redis.XClaimArgs{
-            Stream:   "stream:raw-messages",
-            Group:    "processor-group",
-            Consumer: p.instanceID,
-            MinIdle:  5 * time.Minute,
-            Messages: []string{msg.ID},
-        }).Result()
+- Retry is **per message, inside `processAndAck`**, not whole-batch; batches never block on one failing entry.
+- DLQ entries carry `original_stream_id`, `source_service`, `failure_reason`, `retry_count`, `original_data`, `dlq_timestamp`. Replay is manual: `POST /admin/dlq/replay` reads up to 100 entries and `XADD`s them back to `chat:raw`, then trims them off the DLQ.
+- Consumer-group redelivery still exists as the underlying mechanism for a pod dying mid-process; a sweep reclaims PEL entries idle beyond a threshold and reprocesses them (at-least-once; idempotency comes from the per-overlay dedup and per-alert id).
 
-        for _, claimedMsg := range claimed {
-            p.processMessage(claimedMsg)
-            p.redisClient.XAck(ctx, "stream:raw-messages", "processor-group", claimedMsg.ID)
-        }
-    }
-}
-```
+Alert-processor failure handling: at-least-once with a reclamation sweep of its `alert-processors` group's PEL (idle > 5 min, swept every minute) and `alert_events` idempotent on `alert_id`, so a redelivered alert does not double-write history (see [Alerts flow](#alerts-goal-and-list-flow)).
 
-#### Scenario 2: Processing Fails (Business Logic Error)
-
-```go
-func (p *MessageProcessor) processMessage(msg redis.XMessage) error {
-    defer func() {
-        if r := recover(); r != nil {
-            // Panic recovery
-            logger.Error("Panic processing message", zap.Any("panic", r), zap.String("message_id", msg.ID))
-            // Do NOT ACK - message will be redelivered
-        }
-    }()
-
-    enrichedMsg, err := p.enrichMessage(msg)
-    if err != nil {
-        logger.Error("Failed to enrich message", zap.Error(err), zap.String("message_id", msg.ID))
-
-        // Check retry count
-        retryCount := getRetryCount(msg)
-        if retryCount >= 3 {
-            // Move to dead letter queue
-            p.redisClient.XAdd(ctx, &redis.XAddArgs{
-                Stream: "stream:dead-letter-queue",
-                Values: msg.Values,
-            })
-            // ACK original message
-            p.redisClient.XAck(ctx, "stream:raw-messages", "processor-group", msg.ID)
-            return nil
-        }
-
-        // Do NOT ACK - will be redelivered after idle timeout
-        return err
-    }
-
-    p.publishToOverlays(enrichedMsg)
-    p.redisClient.XAck(ctx, "stream:raw-messages", "processor-group", msg.ID)
-    return nil
-}
-```
-
----
+engagement-service failure handling: command and native-event streams are consumed with explicit **at-least-once durability** (`services/engagement-service/consumer/durability_test.go` covers replays), with the ledger `dedup_key` as the safety net for repeated awards.
 
 ### HTTP Request Retries
 
-```go
-type RetryableHTTPClient struct {
-    client      *http.Client
-    maxRetries  int
-    retryDelay  time.Duration
-}
-
-func (c *RetryableHTTPClient) Get(url string) (*http.Response, error) {
-    var resp *http.Response
-    var err error
-
-    for attempt := 0; attempt <= c.maxRetries; attempt++ {
-        resp, err = c.client.Get(url)
-        if err == nil && resp.StatusCode < 500 {
-            return resp, nil
-        }
-
-        if attempt < c.maxRetries {
-            time.Sleep(c.retryDelay * time.Duration(math.Pow(2, float64(attempt))))
-        }
-    }
-
-    return nil, fmt.Errorf("failed after %d retries: %w", c.maxRetries, err)
-}
-```
+The Pub/Sub publisher wraps each publish in `retryPublish` (bounded retries, structured logging, `publish_retry_total` metric). Service-to-service HTTP calls (emote enricher, source-manager client, moderation-service client) use per-request timeouts with limited retries, not generic exponential backoff wrappers; the specific policy lives with each client in `services/*/` and `shared/`.
 
 ---
 
 ## Performance Considerations
 
-### Throughput Estimates
+### Scaling levers
 
-| Component | Throughput | Bottleneck | Scaling Strategy |
-|-----------|------------|------------|------------------|
-| **Twitch Listener** | ~500 msgs/s per instance | IRC connection limit | Horizontal: 1 instance per 500 channels |
-| **YouTube Listener** | ~50 API calls/s per project | API quota | Horizontal: Multiple projects, leader per stream |
-| **Message Processor** | ~2,000 msgs/s per instance | CPU (emote parsing) | Horizontal: Consumer group (3-10 instances) |
-| **Redis Streams** | ~100,000 msgs/s | Redis CPU | Vertical: More Redis CPU cores |
-| **Redis Pub/Sub** | ~500,000 msgs/s | Network bandwidth | Vertical: Redis Cluster (planned) |
-| **API Gateway WebSocket** | ~10,000 connections per instance | Memory (connection pool) | Horizontal: Sticky sessions + Redis pub/sub |
+- **Bounded concurrency** (ADR-0033): the message-processor's in-batch worker pool (`MP_PROCESS_CONCURRENCY`, default 16) is the throughput control; raising it trades Redis/DB/HTTP pressure on the enrichers for a higher ceiling per pod. See [03-SCALING.md](./03-SCALING.md) for HPA settings and per-service replica posture.
+- **Emote caching**: two layers (message-processor Redis cache with background refresh; emote-service `emotes:v2` cache) mean most messages do not touch the platform APIs on cache hit.
+- **Replay buffers**: the gateway captures into `replay:chat:{id}` regardless of subscription linger, so an overlay reconnect costs one sorted-set read instead of a re-subscribe storm (ADR-0031).
+- **Streams trimming**: `chat:raw` MAXLEN ~100000, bounded `chatcmd:*`/`engagement:*` stream lengths.
+- **Demand valves**: goal polling and list-push burn time only while an overlay has a live connection (`overlay:connected:{id}`), so idle overlays contribute no platform API spend.
 
-### Latency Optimization
+### Batch processing
 
-#### 1. Emote Caching
-- **Problem**: Fetching emotes adds 50-200ms per message
-- **Solution**: Redis cache with 1-hour TTL
-- **Impact**: 95% cache hit rate → ~5ms average lookup
-
-#### 2. Batch Processing
 ```go
-// Instead of processing one message at a time
-for msg := range msgChan {
-    process(msg)
+// services/message-processor/consumer/stream_consumer.go (abridged)
+sem := make(chan struct{}, c.concurrency)  // bounded in-batch pool; blocking acquire = backpressure
+for _, message := range messages {
+    wg.Add(1)
+    sem <- struct{}{}
+    go func(msg redis.XMessage) { defer wg.Done(); defer func(){ <-sem }()
+        if err := c.processAndAck(ctx, msg); err != nil { /* DLQ path */ }
+    }(message)
 }
-
-// Process in batches
-batch := []Message{}
-for msg := range msgChan {
-    batch = append(batch, msg)
-    if len(batch) >= 10 || time.Since(lastFlush) > 100*time.Millisecond {
-        processBatch(batch)
-        batch = batch[:0]
-    }
-}
+wg.Wait() // bound in-flight to batch size; natural backpressure before the next XREADGROUP
 ```
 
-#### 3. Connection Pooling
-```go
-// PostgreSQL connection pool (via pgx)
-config, _ := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
-config.MaxConns = 20
-config.MinConns = 5
-config.MaxConnLifetime = 1 * time.Hour
-config.MaxConnIdleTime = 10 * time.Minute
+### Connection pooling
 
-pool, _ := pgxpool.NewWithConfig(ctx, config)
-```
+PostgreSQL access is via a shared `pgxpool` helper (`shared/database`), sized via env per service; Redis is go-redis/v9 client (or universal client for alert-processor, which shares one client for stream, pub/sub and sorted sets).
 
 ---
 
 ## Summary
 
-This document provides a comprehensive overview of data flow and integration patterns in All-Chat:
-
-1. **End-to-End Flow**: Messages flow from platforms → listeners → streams → processor → pub/sub → gateway → overlays
-2. **Redis Streams**: Durable queues for reliable message processing
-3. **Redis Pub/Sub**: Low-latency broadcast for real-time delivery
-4. **Database Schema**: Relational model supporting multi-source overlays
-5. **Unified Format**: Platform-agnostic message structure
-6. **Integration Patterns**: HTTP, streams, pub/sub
-7. **Error Handling**: Retries, dead letter queues, circuit breakers
-8. **Performance**: Caching, batching, connection pooling
+1. **End-to-End Flow**: platforms → listeners → `chat:raw` → message-processor (normalize/enrich/route) → `overlay:{id*}` Pub/Sub → api-gateway → overlays.
+2. **Second chat:raw consumer**: alert-processor, its own `alert-processors` group, feeding alerts/goal/list overlays.
+3. **Redis key inventory**: the table under [Redis Key Inventory](#redis-key-inventory) is authoritative for the names cited here.
+4. **Unified format**: `RawChatMessage` (producers) and `UnifiedChatMessage` (pub/sub payload), defined in `services/message-processor/models/message.go`.
+5. **Engagement & moderation** ride parallel flows: engagement command/native/event/chat channels and the moderation deletion loop re-enter through `chat:raw`.
+6. **Errors**: ring-buffer publish on producers, per-message retry + `chat:dlq` + group reclamation on consumers.
+7. **Performance**: bounded concurrency, two-tier emote caches, replay buffers and demand-gated polling.
 
 **Next Steps**:
 - [02-DEPLOYMENT.md](./02-DEPLOYMENT.md) - Kubernetes deployment specifications
@@ -932,4 +590,4 @@ This document provides a comprehensive overview of data flow and integration pat
 ---
 
 **Document Maintainers**: Development Team
-**Last Review**: 2025-11-11
+**Last Review**: 2026-11-04

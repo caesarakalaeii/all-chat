@@ -1,7 +1,7 @@
 # New-Listener Deployment Runbook (Owncast, GoodGame, Picarto, Altstream, Facebook, Instagram)
 
 **Owner:** Platform / SRE
-**Last reviewed:** 2026-10-31
+**Last reviewed:** 2026-11-04
 **Applies to:** the platform-expansion listeners (PR to `beta`, ADR-0058–0062, ADR-0082)
 **Related:** `docs/runbooks/secret-rotation.md` (hazard notes on `allchat-secrets`
 SOPS-vs-live drift apply here unchanged — `kubectl patch` only, never
@@ -18,9 +18,10 @@ SOPS-vs-live drift apply here unchanged — `kubectl patch` only, never
 | Deploy the instagram listener | Section 2a — same Meta app as facebook plus the Instagram product; separate `instagram-app-id`/`instagram-app-secret` keys |
 | A listener CrashLoops after deploy | Section 3 — the two known failure modes are both key-name drift |
 
-Decision taken 2026-09-11: deploy the secretless listeners when ready; facebook-listener
-waits for the Meta app (business verification takes weeks — start it now if the
-platform is wanted at all; see Section 2 step 1).
+Decision taken 2026-09-11: deploy the secretless listeners when ready. The facebook and
+instagram listeners are deployed too (instagram on 2026-11-04) but stay inert until the
+Meta app exists and its credentials are wired into auth-service (business verification
+takes weeks; see Section 2 step 1).
 
 ---
 
@@ -34,8 +35,8 @@ Third-party credentials needed *at the pod*:
 | goodgame-listener | none — anonymous chat WebSocket | deploy as-is |
 | picarto-listener | none — unofficial pop-out chat WebSocket | deploy as-is |
 | altstream-listener | none — Altstream's official, unauthenticated public API (SSE chat plus REST) | deploy as-is |
-| facebook-listener | none *in the pod*, but the platform is dead end-to-end without Meta credentials in auth-service + moderation-service | **do not deploy yet** |
-| instagram-listener | none *in the pod*, but the platform is inert without Meta credentials in auth-service (same Meta app as facebook, plus the Instagram product) | **do not deploy yet** |
+| facebook-listener | none *in the pod*, but the platform is dead end-to-end without Meta credentials in auth-service + moderation-service | deployed; inert until Section 2 steps 1-3 are done |
+| instagram-listener | none *in the pod*, but the platform is inert without Meta credentials in auth-service (same Meta app as facebook, plus the Instagram product) | deployed; inert until Section 2a steps 1-3 are done |
 
 Infrastructure secrets every listener needs already exist in
 `allchat-secrets` (verified live 2026-09-11): `database-password`,
@@ -319,11 +320,13 @@ OAuth redirect URI: `<FRONTEND_URL>/api/v1/auth/instagram/callback`.
    `instagram-app-secret`).
 3. **Wire the env into the auth-service deployment** (same secretKeyRef shape
    as the facebook block in Section 2 step 3), then rolling-restart.
-4. **Deploy the listener** (port 8100, single replica by design — ADR-0062,
-   no HPA). Env: the shared block plus `TOKEN_ENCRYPTION_KEY_V1` (key
-   `token-encryption-key-v1`) for decrypting IG tokens,
-   `INSTAGRAM_POLLING_INTERVAL_MS: "10000"`,
-   `INSTAGRAM_SOURCE_SYNC_SECONDS: "30"`.
+4. **The listener is already deployed** (`instagram-listener-deployment.yaml`
+   in caesar-deployment: port 8100, single replica by design — ADR-0062, no
+   HPA, image `allchat-instagram-listener:beta`). Env: the shared block plus
+   `TOKEN_ENCRYPTION_KEY_V1` (key `token-encryption-key-v1`) for decrypting
+   IG tokens, `INSTAGRAM_POLLING_INTERVAL_MS: "10000"`,
+   `INSTAGRAM_SOURCE_SYNC_SECONDS: "30"`. Nothing to do here once steps 1-3
+   are done; it picks up sources on its next 30 s sync.
 5. **Verify**: dashboard → add Instagram source → consent → poller appears;
    comments from a live IG broadcast flow to a beta overlay.
 

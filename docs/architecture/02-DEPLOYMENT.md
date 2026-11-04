@@ -1,1459 +1,565 @@
 # All-Chat: Kubernetes Deployment Architecture
 
-**Version:** 1.0
-**Last Updated:** 2025-11-11
-**Related Docs**: [Architecture Overview](./00-OVERVIEW.md), [Scaling & Performance](./03-SCALING.md)
+**Version:** 2.0
+**Last Updated:** 2026-11-04
+**Related Docs**: [Architecture Overview](./00-OVERVIEW.md) (system map), [Scaling & Performance](./03-SCALING.md), [Observability](./04-OBSERVABILITY.md), [Security](./05-SECURITY.md)
 
 ---
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Cluster Architecture](#cluster-architecture)
-3. [Namespace Strategy](#namespace-strategy)
-4. [Deployment Specifications](#deployment-specifications)
-5. [Service Networking](#service-networking)
-6. [Ingress & Load Balancing](#ingress--load-balancing)
-7. [ConfigMaps & Secrets](#configmaps--secrets)
-8. [Persistent Storage](#persistent-storage)
-9. [Resource Quotas & Limits](#resource-quotas--limits)
-10. [Health Checks & Probes](#health-checks--probes)
-11. [Horizontal Pod Autoscaling](#horizontal-pod-autoscaling)
-12. [Rolling Updates & Rollbacks](#rolling-updates--rollbacks)
-13. [Monitoring & Logging](#monitoring--logging)
-14. [Deployment Commands](#deployment-commands)
+1. [How production is deployed (the one important thing)](#how-production-is-deployed-the-one-important-thing)
+2. [Cluster and namespace](#cluster-and-namespace)
+3. [Deployed workloads](#deployed-workloads)
+4. [Networking, ingress and TLS](#networking-ingress-and-tls)
+5. [Configuration and secrets](#configuration-and-secrets)
+6. [Resource budget (quota, requests/limits)](#resource-budget-quota-requestslimits)
+7. [Probes and rollout behaviour](#probes-and-rollout-behaviour)
+8. [Horizontal Pod Autoscaling](#horizontal-pod-autoscaling)
+9. [PodDisruptionBudgets and node reboots (kured)](#poddisruptionbudgets-and-node-reboots-kured)
+10. [Observability in the cluster](#observability-in-the-cluster)
+11. [CronJobs](#cronjobs)
+12. [Local development environments](#local-development-environments)
+13. [Operational snippets](#operational-snippets)
 
 ---
 
-## Introduction
+## How production is deployed (the one important thing)
 
-All-Chat is designed as a **Kubernetes-native** application, leveraging Kubernetes features for:
-- **Auto-scaling**: HPA based on CPU/memory/custom metrics
-- **Self-healing**: Automatic pod restarts and health checks
-- **Rolling updates**: Zero-downtime deployments
-- **Service discovery**: Internal DNS for service-to-service communication
-- **Configuration management**: ConfigMaps and Secrets
-- **Observability**: Prometheus metrics and structured logging
+**Production is not in this repo.** The production manifests live in the sibling
+GitOps repository `caesar-deployment` (`apps/workloads/all-chat/`), and an
+ArgoCD Application (`caesar-deployment/argocd/apps/all-chat.yaml`) syncs them
+into the `allchat` namespace of the production K3s cluster continuously:
 
-### Deployment Context
+- `syncPolicy.automated` with `prune: true` and `selfHeal: true`: every merge
+  to `caesar-deployment/main` is applied automatically, manual `kubectl`
+  changes are reverted, and deleting a resource from the manifest deletes it
+  from the cluster.
+- ADR numbers are shared between the two repos (see
+  `caesar-deployment/docs/adr/`), so "ADR-XXXX" may resolve in either.
 
-**Phase 1 - Early Stages (Current)**:
-- **Platform**: Hetzner VPS with Kubernetes
-- **Storage**: node-local `local-path` volumes (no CSI snapshots)
-- **Backups**: Postgres WAL + nightly base backups to Hetzner Object Storage
-  (30-day PITR window), silo alert media mirrored nightly to the same store;
-  the Backblaze B2 copy is paused. See ADR-0003 → Backups.
-- **Cost**: ~€50-100/month
+Nothing in this repo is ever applied to production. The manifests under
+`deployments/` in **this** repo are for **local development only** (see
+[Local development environments](#local-development-environments)).
 
-**Phase 2+ - Production Scale**:
-- **Storage**: Migrate to Hetzner Object Storage or S3-compatible
-- **Multi-region**: Consider geographic distribution
+### Image builds and rollouts
 
-This document provides complete Kubernetes deployment specifications for both phases.
+- `.github/workflows/build-and-push.yml` in this repo builds and pushes images
+  to `ghcr.io/caesarakalaeii/`: every branch push builds that branch's tag
+  (`main`, `beta`, plus a `<branch>-<shortsha>` tag), driven by paths-filtered
+  per-service jobs. Required PR checks (`test (*)`, `test-node`) also live in
+  this workflow.
+- Every production Deployment carries
+  `keel.sh/policy: force`, `keel.sh/match-tag: "true"` and
+  `keel.sh/trigger: poll` annotations. Keel (deployed in
+  `caesar-deployment/apps/infrastructure/keel/`, polling schedule configured
+  there) watches the pinned digest of the pinned tag and rolls the Deployment
+  when the digest changes. `match-tag` matters: without it, Keel ≥ 0.20 would
+  follow the newest tag in the repository instead of this Deployment's tag.
+- Consequence: **merging to `main` in this repo deploys prod without any PR
+  against caesar-deployment** — when the image digest moves, Keel does the
+  rollout. `:beta` works the same way for the two beta workloads (below).
+- Database schema changes run as an `allchat-migrations` init container in
+  front of the deployments that own their migrations (see
+  [Deployed workloads](#deployed-workloads)).
 
----
+### Release flow
 
-## Cluster Architecture
+The release cycle, gated by this repo's `CONTRIBUTING.md` → Release Flow:
 
-### Logical Architecture
+1. Merge to the `beta` branch → `:beta` images are built; Keel rolls
+   `frontend-beta` and `api-gateway-beta`, which serve `beta.allch.at`.
+2. After a human checks beta: merge to `main` → `:main` images trigger the
+   prod rollout. Agents never promote to `main` themselves.
 
-```mermaid
-graph TB
-    subgraph "External Traffic"
-        INTERNET[Internet]
-        LB[Cloud Load Balancer<br/>AWS ALB / GCP LB / Azure LB]
-    end
-
-    subgraph "Kubernetes Cluster - all-chat namespace"
-        subgraph "Ingress Layer"
-            INGRESS[Ingress Controller<br/>NGINX / Traefik]
-        end
-
-        subgraph "Application Layer"
-            GW_SVC[api-gateway-service<br/>ClusterIP]
-            AUTH_SVC[auth-service<br/>ClusterIP]
-            OVM_SVC[overlay-service<br/>ClusterIP]
-            EMOTE_SVC[emote-service<br/>ClusterIP]
-        end
-
-        subgraph "Control Plane"
-            SC_SVC[source-manager-service<br/>ClusterIP]
-        end
-
-        subgraph "Data Layer"
-            TWL_SVC[twitch-listener-service<br/>Headless]
-            YTL_SVC[youtube-listener-service<br/>Headless]
-            MP_SVC[message-processor-service<br/>Headless]
-        end
-
-        subgraph "Infrastructure"
-            PG_SVC[postgresql-service<br/>StatefulSet]
-            RD_SVC[redis-service<br/>StatefulSet]
-        end
-    end
-
-    INTERNET --> LB
-    LB --> INGRESS
-    INGRESS --> GW_SVC
-    GW_SVC --> AUTH_SVC
-    GW_SVC --> OVM_SVC
-    GW_SVC --> EMOTE_SVC
-
-    SC_SVC --> RD_SVC
-    SC_SVC --> PG_SVC
-
-    TWL_SVC --> RD_SVC
-    YTL_SVC --> RD_SVC
-    MP_SVC --> RD_SVC
-    MP_SVC --> EMOTE_SVC
-
-    style GW_SVC fill:#ffe1f5
-    style INGRESS fill:#e1f5ff
-```
-
-### Node Groups (Recommended)
-
-| Node Group | Purpose | Instance Type | Min | Max | Taints/Labels |
-|------------|---------|---------------|-----|-----|---------------|
-| **core** | Application services | t3.large (2 vCPU, 8GB) | 2 | 10 | `workload=application` |
-| **data** | PostgreSQL, Redis | r5.large (2 vCPU, 16GB) | 2 | 5 | `workload=stateful` |
-| **listeners** | Platform listeners | t3.medium (2 vCPU, 4GB) | 2 | 10 | `workload=listeners` |
+Beta coverage is incomplete — only frontend and api-gateway have a beta
+deployment. The beta-only platform listeners (facebook, goodgame, owncast,
+picarto) run `:beta` images in prod directly; every other service runs
+`:main` only. A backend feature in one of the `:main`-only services has no
+beta environment; staging is a human decision.
 
 ---
 
-## Namespace Strategy
+## Cluster and namespace
 
-### Namespace: `all-chat`
-
-All All-Chat services run in the `all-chat` namespace for isolation and resource management.
-
-```yaml
-# deployments/k8s/namespace.yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: all-chat
-  labels:
-    app: all-chat
-    environment: production
-```
-
-### Resource Quota
-
-```yaml
-# deployments/k8s/resource-quota.yaml
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: all-chat-quota
-  namespace: all-chat
-spec:
-  hard:
-    requests.cpu: "50"          # Total CPU requests
-    requests.memory: "100Gi"    # Total memory requests
-    limits.cpu: "100"           # Total CPU limits
-    limits.memory: "200Gi"      # Total memory limits
-    pods: "100"                 # Max pods
-    services: "20"              # Max services
-    persistentvolumeclaims: "10"
-```
-
-### Network Policy (Optional)
-
-```yaml
-# deployments/k8s/network-policy.yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: all-chat-network-policy
-  namespace: all-chat
-spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: all-chat
-        - namespaceSelector:
-            matchLabels:
-              name: ingress-nginx
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              name: all-chat
-    - to:  # Allow external API calls
-        - podSelector: {}
-      ports:
-        - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 80
-```
+- **Platform**: self-managed K3s on Hetzner VPS/VMs, provisioned by the
+  Ansible playbook in `caesar-deployment/ansible/` (`provision-cluster.yaml`;
+  node inventory in `ansible/inventory/hosts.ini`: three master nodes
+  `caes`, `caesar-control-2/3` plus three workers `caesar2/3/4`). kured
+  patches OS packages with coordinated single-node reboots in a nightly
+  maintenance window (see `caesar-deployment/docs/adr/ADR-0021-*`).
+- **Ingress layer**: Envoy Gateway (ADR-0083 in `caesar-deployment/docs/adr/`)
+  exposing a single shared `Gateway` (`envoy-gateway-system/public`); each
+  app attaches its own HTTPRoute. Cloudflare sits in front as DNS/CDN; the
+  LoadBalancer service carries the two external IPs used as Cloudflare
+  origins.
+- **Namespace**: everything runs in namespace `allchat`
+  (`namespace.yaml`), with `pod-security.kubernetes.io/warn|audit: restricted`
+  labels. The namespace name is `allchat` (one word), not `all-chat` — older
+  docs and some older manifests use the hyphenated name; the cluster uses
+  the short one.
+- **Secrets**: all secrets are SOPS-encrypted with age in
+  `caesar-deployment/apps/workloads/all-chat/secrets/` and rendered in-cluster
+  via ksops during the ArgoCD sync. Plain `Secret` manifests do not exist in
+  Git (never quote or commit secret *values*; this doc only names keys).
+- **Sync waves** control the platform dependency order: infrastructure first
+  (cert-manager, Envoy Gateway, CNPG, kube-prometheus-stack, loki, tempo),
+  then `allchat-monitoring` (wave 4), then the application workloads (wave 6).
+- **A `ResourceQuota` and `LimitRange`** bound the namespace; see
+  [Resource budget](#resource-budget-quota-requestslimits).
 
 ---
 
-## Deployment Specifications
+## Deployed workloads
 
-### API Gateway
+Names below are the actual workload names; the full picture (what each
+service does, the ports) lives in `00-OVERVIEW.md` → Service Map.
 
-**File**: `deployments/k8s/api-gateway/deployment.yaml`
+| Workload | Source manifest (`caesar-deployment/apps/workloads/all-chat/`) | Replicas | Image | Notes |
+|---|---|---|---|---|
+| `frontend` | `frontend-deployment.yaml` | 2 (+ `frontend-hpa` 2–10) | `allchat-frontend:main` | Next.js UI; mounts the `impressum` ConfigMap |
+| `frontend-beta` | `frontend-beta-deployment.yaml` | 1 | `allchat-frontend:beta` | serves `beta.allch.at`, shares every backend with prod |
+| `api-gateway` | `api-gateway-deployment.yaml` | 3 (+ `api-gateway-hpa` 3–20) | `allchat-api-gateway:main` | single public HTTP/WS entry |
+| `api-gateway-beta` | `api-gateway-beta-deployment.yaml` | 1 | `allchat-api-gateway:beta` | single replica; shares all backend services with prod |
+| `auth-service` | `auth-service-deployment.yaml` | 2 | `allchat-auth-service:main` | also builds the `retention-sweeper` and `key-rotator` CronJob images |
+| `overlay-manager` | `overlay-manager-deployment.yaml` | 2 | `allchat-overlay-manager:main` | |
+| `emote-service` | `emote-service-deployment.yaml` | 2 | `allchat-emote-service:main` | |
+| `share-service` | `share-service-deployment.yaml` | 2 | `allchat-share-service:main` | |
+| `moderation-service` | `moderation-service-deployment.yaml` | 2 | `allchat-moderation-service:main` | |
+| `payment-service` | `payment-service-deployment.yaml` | 1 | `allchat-payment-service:main` | |
+| `engagement-service` | `engagement-service-deployment.yaml` | 2 | `allchat-engagement-service:main` | |
+| `media-service` | `media-service-deployment.yaml` (+ `-service.yaml`) | 2 | `allchat-media-service:main` | presigns MinIO uploads; stateless |
+| `message-processor` | `message-processor-deployment.yaml` | 3 | `allchat-message-processor:main` | consumer group `message-processor` |
+| `alert-processor` | `alert-processor-deployment.yaml` | 2 | `allchat-alert-processor:main` | consumer group `alert-processors` (ADR-0068) |
+| `source-manager` | `source-manager-deployment.yaml` (+ `-rbac.yaml`) | 2 | `allchat-source-manager:main` | Redis-lease leadership (only leader activates sources) |
+| `token-refresh-service` | `token-refresh-service-deployment.yaml` | 1 | `allchat-token-refresh-service:main` | single replica on purpose |
+| `twitch-listener` | `twitch-listener-deployment.yaml` (+ `-hpa.yaml`) | 2 (+ `twitch-listener` HPA 2–5) | `allchat-twitch-listener:main` | **deprecated path** (ADR-0026): runs `TWITCH_IRC_DEPRECATION_MODE=enforce`, joins no channels |
+| `twitch-eventsub-listener` | `twitch-eventsub-listener-deployment.yaml` | 2 | `allchat-twitch-eventsub-listener:main` | `/webhooks/eventsub` HTTPRoute; only Twitch chat path in prod |
+| `youtube-listener-official` | `youtube-listener-official-deployment.yaml` | 2 | `allchat-youtube-listener:main` | premium official-API listener (ADR-0065); lease-claimed, one active |
+| `youtube-listener-innertube` | `youtube-listener-innertube-deployment.yaml` | 2 | `allchat-youtube-listener-innertube:main` | InnerTube polling, default ingest path |
+| `youtube-quota-monitor` | `youtube-quota-monitor-deployment.yaml` | 1 | `allchat-youtube-quota-monitor:main` | |
+| `kick-listener` | `kick-listener-deployment.yaml` (+ `-hpa.yaml`) | 1 (+ `kick-listener` HPA 1–5) | `allchat-kick-listener:main` | Centrifugo/Pusher, pooled connections (ADR-0077) |
+| `tiktok-listener` | `tiktok-listener-deployment.yaml` | 2 | `allchat-tiktok-listener:main` | Node; publishes to `tiktok-signer` |
+| `tiktok-signer` | `tiktok-signer-deployment.yaml` | 1 | `allchat-tiktok-signer:main` | Node + headless Chromium; pinned to node `caesar3`; single replica on purpose |
+| `discord-listener` | `discord-listener-deployment.yaml` | 1 | `allchat-discord-listener:main` | one Gateway connection per bot token |
+| `owncast-listener` | `owncast-listener-deployment.yaml` | 1 (+ HPA) | `allchat-owncast-listener:beta` | ADR-0058, beta |
+| `goodgame-listener` | `goodgame-listener-deployment.yaml` | 1 (+ HPA) | `allchat-goodgame-listener:beta` | beta |
+| `picarto-listener` | `picarto-listener-deployment.yaml` | 1 (+ HPA) | `allchat-picarto-listener:beta` | ADR-0059, beta |
+| `facebook-listener` | `facebook-listener-deployment.yaml` | 1 | `allchat-facebook-listener:beta` | ADR-0060, beta |
+| `instagram-listener` | `instagram-listener-deployment.yaml` | 1 | `allchat-instagram-listener:beta` | ADR-0062, beta; inert until auth-service has Instagram credentials |
+| `altstream-listener` | `altstream-listener-deployment.yaml` | 1 (+ HPA) | `allchat-altstream-listener:main` | ADR-0082, early access |
+| `discord-bot` | `discord-bot-deployment.yaml` | 1 | `allchat-discord-bot:main` | TypeScript; single replica (no duplicate messages) |
+| `support-bot` | `support-bot-deployment.yaml` (+ `-rbac.yaml`) | 1 | `allchat-support-bot:main` | Go; `support-bot` ServiceAccount with two Roles: patcher of only the `allchat-secrets` Secret (key rotation helper) and a namespace-wide read of pods/events/deployments; talks to an OpenAI-compatible LLM endpoint |
+| `minio` (StatefulSet `minio`) | `minio-statefulset.yaml` | 1 | `pgsty/silo:RELEASE.2026-10-26*` | no keel; ADR-0068 alert media; no PDB on purpose |
+| CronJobs / backups / CNPG | see below | — | — | |
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: api-gateway
-  namespace: all-chat
-  labels:
-    app: api-gateway
-    version: v1
-spec:
-  replicas: 2
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-  selector:
-    matchLabels:
-      app: api-gateway
-  template:
-    metadata:
-      labels:
-        app: api-gateway
-        version: v1
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/metrics"
-    spec:
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchExpressions:
-                    - key: app
-                      operator: In
-                      values:
-                        - api-gateway
-                topologyKey: kubernetes.io/hostname
-      containers:
-        - name: api-gateway
-          image: allchat/api-gateway:latest
-          imagePullPolicy: IfNotPresent
-          ports:
-            - name: http
-              containerPort: 8080
-              protocol: TCP
-          env:
-            - name: PORT
-              value: "8080"
-            - name: LOG_LEVEL
-              value: "info"
-            - name: REDIS_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: redis_host
-            - name: REDIS_PORT
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: redis_port
-            - name: AUTH_SERVICE_URL
-              value: "http://auth-service:8081"
-            - name: OVERLAY_SERVICE_URL
-              value: "http://overlay-service:8082"
-            - name: EMOTE_SERVICE_URL
-              value: "http://emote-service:8083"
-            - name: WEBSOCKET_ALLOWED_ORIGINS
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: websocket_allowed_origins
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: all-chat-secrets
-                  key: jwt_secret
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
-          livenessProbe:
-            httpGet:
-              path: /health/live
-              port: 8080
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /health/ready
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 3
-            failureThreshold: 2
-          lifecycle:
-            preStop:
-              exec:
-                command: ["/bin/sh", "-c", "sleep 15"]
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: api-gateway
-  namespace: all-chat
-  labels:
-    app: api-gateway
-spec:
-  type: ClusterIP
-  ports:
-    - name: http
-      port: 8080
-      targetPort: 8080
-      protocol: TCP
-  selector:
-    app: api-gateway
-```
+### Services that are NOT deployed
 
----
+- `tiktok-relay` runs on Cloud Run (US region), not in the cluster; the
+  tiktok-listener reaches it over the public internet via
+  `TIKTOK_US_RELAY_URL`.
+- `twitch-listener` runs, but in `enforce` mode it effectively does nothing
+  (ADR-0026); it stays deployed because it is the mechanism the enforce
+  phase stands on and can be retired once the IRC path is fully removed.
 
-### Auth Service
+### Migrations init container
 
-**File**: `deployments/k8s/auth-service/deployment.yaml`
+The `allchat-migrations` image (built from `migrations/Dockerfile`, which
+copies the SQL from `migrations/` and `scripts/run-migrations.sh`) runs as
+an init container on exactly the deployments whose manifest references it —
+currently: auth-service, overlay-manager, emote-service, share-service,
+moderation-service, payment-service, engagement-service, media-service,
+alert-processor, twitch-listener, twitch-eventsub-listener,
+token-refresh-service, support-bot. It is
+idempotent, so every rollout re-runs it safely; services that don't touch
+the schema simply don't run it.
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: auth-service
-  namespace: all-chat
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: auth-service
-  template:
-    metadata:
-      labels:
-        app: auth-service
-    spec:
-      containers:
-        - name: auth-service
-          image: allchat/auth-service:latest
-          ports:
-            - containerPort: 8081
-          env:
-            - name: PORT
-              value: "8081"
-            - name: DATABASE_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: database_host
-            - name: DATABASE_PORT
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: database_port
-            - name: DATABASE_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: database_name
-            - name: DATABASE_USER
-              valueFrom:
-                secretKeyRef:
-                  name: all-chat-secrets
-                  key: database_user
-            - name: DATABASE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: all-chat-secrets
-                  key: database_password
-            - name: REDIS_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: redis_host
-            - name: TWITCH_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: all-chat-secrets
-                  key: twitch_client_id
-            - name: TWITCH_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: all-chat-secrets
-                  key: twitch_client_secret
-            - name: FRONTEND_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: frontend_url
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: all-chat-secrets
-                  key: jwt_secret
-          resources:
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-            limits:
-              cpu: "200m"
-              memory: "256Mi"
-          livenessProbe:
-            httpGet:
-              path: /health/live
-              port: 8081
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /health/ready
-              port: 8081
-            initialDelaySeconds: 5
-            periodSeconds: 5
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: auth-service
-  namespace: all-chat
-spec:
-  type: ClusterIP
-  ports:
-    - port: 8081
-      targetPort: 8081
-  selector:
-    app: auth-service
-```
+### CronJobs and backup resources
+
+| Resource | Source | Schedule / trigger | Purpose |
+|---|---|---|---|
+| `retention-sweeper` | `retention-sweeper-cronjob.yaml` | `*/15 * * * *` | deletes rows past the privacy-policy retention periods (ADR-0089); every 15 min because "sent viewer messages deleted after one hour" is promised |
+| `key-rotator-weekly` | `key-rotator-cronjob.yaml` (+ `key-rotator-job.yaml`, not applied by default) | `0 3 * * 0` (Sundays 03:00 UTC) | re-encrypts stored tokens onto the versioned AES-GCM key chain (`shared/encryption/versioned.go`); delete or suspend once the legacy `TOKEN_ENCRYPTION_KEY` is retired |
+| `backup-offsite-mirror` | `backup-offsite-mirror-cronjob.yaml` | `0 6 * * *` (Europe/Berlin) | mirrors silo media → Hetzner Object Storage, the only backup of the alert media (see below) |
+| `minio-bucket-job` | `minio-bucket-job.yaml` | Job (on sync) | creates the `allchat-media` bucket |
+| `allchat-cluster-daily` | `backup-objectstore.yaml` (`kind: ScheduledBackup`) | `0 0 23 * * *` (six-field CNPG schedule, 23:00 UTC), `immediate: true` | nightly Barman base backup |
+| `allchat-cluster` | `allchat-cluster.yaml` (+ `-secret.yaml`) | CNPG `Cluster`, 3 instances | the Postgres cluster (see below) |
+
+
+### Redis
+
+Redis migrated from a single-replica Deployment to a Sentinel-managed HA
+group fronted by HAProxy in `caesar-deployment/apps/workloads/all-chat/`:
+
+- `redis-deployment.yaml` now holds only the `redis` ClusterIP Service; its
+  selector points at `app: redis-haproxy` (the Stage 2 cutover from
+  `redis-ha-runbook.md` in the same directory is already applied). Clients
+  were never changed: they still use `REDIS_HOST=redis`.
+- `redis-ha-node.yaml` — StatefulSet `redis-node`, 3 pods (1 master + 2
+  replicas) with per-pod PVCs, anti-affinity across nodes, stable pod-DNS
+  replication (`replica-announce-ip`), `min-replicas-to-write 1` to prevent
+  split-brain writes during failover.
+- `redis-ha-sentinel.yaml` — StatefulSet `redis-sentinel`, 3 sentinels,
+  quorum 2/3, failover orchestration, `podManagementPolicy: Parallel`.
+- `redis-ha-haproxy.yaml` — Deployment `redis-haproxy`, 2 replicas, routes
+  `:6379` to whichever node currently answers `role:master` (1-second
+  tcp-check). No controller in the path means no "stale Service" failure
+  mode.
+- `redis-ha-networkpolicy.yaml` — ingress allow-lists for node / haproxy /
+  sentinel.
+- The rollout procedure and rollback steps are in
+  `REDIS-HA-RUNBOOK.md` in the same directory; the runbook also documents
+  that since the cutover, message-processor recreates the `chat:raw`
+  consumer group on NOGROUP without needing a restart after Redis blips.
+- `maxmemory` is `2gb` per node; `save ""` (RDB snapshots off, AOF only,
+  `appendfsync everysec`). No Redis AUTH is configured today.
+
+The Redis data is transient (chat streams, pub/sub, leases, LRU caches) by
+design — an empty cluster self-heals, consumers recreate their groups on
+NOGROUP, and demand re-syncs on source-manager's next reconcile tick.
+
+### PostgreSQL (CNPG)
+
+The database is a CloudNativePG `Cluster` named `allchat-cluster` (3
+instances: 1 primary + 2 replicas), defined in `allchat-cluster.yaml`:
+
+- Image: `ghcr.io/cloudnative-pg/postgresql:17.11-…-standard-trixie`
+  (PostgreSQL 17).
+- `primaryUpdateMethod: switchover` so an image update hands the primary
+  role to an updated replica instead of restarting the primary in place.
+  (Adding/removing a WAL-archiver plugin still restarts the pod spec,
+  including the primary, and takes minutes — the manifest header documents
+  how to window such a change.)
+- Storage: `local-path`, 20Gi per instance. `local-path` volumes are
+  node-pinned, so PVCs together with
+  `podAntiAffinityType: required` (one instance per node) decide where each
+  instance can ever live. See the manifest header comment for the failure
+  mode when you flip anti-affinity while two instances share a node —
+  re-provisioning the stranded instance is required in the same change.
+- `max_connections: 300` sized against the per-service connection budget
+  (`shared/database`, ADR-0039 in this repo's `docs/adr/`); ~40 service
+  instances share this cluster.
+- Services: CNPG creates `-rw` (primary) and `-r`; the `ro`/`r` read
+  services are explicitly disabled (`disabledDefaultServices`), and there
+  is no PgBouncer pooler — services connect to `allchat-cluster-rw`
+  directly and cap their own pools (ADR-0039).
+- Monitoring: `enablePodMonitor: true` (Prometheus PodMonitor).
+
+This matches ADR-0003 in this repo (`docs/adr/0003-cloudnative-postgres.md`,
+revised 2026-11-03). The CNPG operator itself runs in `cnpg-system` and is
+installed by ArgoCD from `caesar-deployment/argocd/apps/`.
+
+### Backups
+
+WAL archiving plus nightly base backups go through the Barman Cloud plugin
+to Hetzner Object Storage; the `backup-offsite-mirror` CronJob mirrors the
+alert media from silo to the same Hetzner account. The details — bucket,
+credentials, rollout order, restore procedure and the reason the mirror
+CronJob uses `mc mirror --remove` (so deletions propagate and retention
+stays honest) — live in the header comments of `backup-objectstore.yaml`
+and `backup-offsite-mirror-cronjob.yaml`. The Backblaze B2 copies (Postgres
+archive and media) are paused until the B2 account's processor terms are
+confirmed (ADR-0003 → Backups), so Hetzner holds the only off-cluster copy
+and the privacy policy names Hetzner only.
+
+Recovery point: any moment in the last 30 days, to within the 5-minute
+`archive_timeout`. Restore = a new `Cluster` with `bootstrap.recovery` from
+the `ObjectStore`; the manifest header carries the exact YAML shape.
+
+### Alert media (MinIO)
+
+The `minio` StatefulSet (1 replica, image `pgsty/silo`, a maintained MinIO
+fork; the entrypoint maps the `server` arg onto the `silo` binary) runs the
+alert-media bucket (ADR-0068):
+
+- `minio-service.yaml` exposes S3 API on 9000 and the admin console on
+  9001 (in-namespace only — `kubectl port-forward`, never routed).
+- `minio-route.yaml` attaches an HTTPRoute for `media.allch.at` to the
+  shared Gateway with a SecurityPolicy giving CORS for PUT/GET from
+  allch.at, and a BackendTrafficPolicy capping the request buffer at
+  12 MiB (alert media ≤ 10 MiB). Browsers PUT uploads with presigned
+  URLs minted by media-service.
+- No PDB on purpose: with one replica a PDB can only deadlock kured drains.
+- Single-node and unreplicated by design; the nightly
+  `backup-offsite-mirror` CronJob is the copy.
 
 ---
 
-### Source Manager (Leader Election)
+## Networking, ingress and TLS
 
-**File**: `deployments/k8s/source-manager/deployment.yaml`
+Production does **not** use ingress-nginx. The edge is Envoy Gateway
+(`apps/infrastructure/gateway/`): one shared `Gateway`
+(`envoy-gateway-system/public`, listener `https`), and every app attaches
+its own `HTTPRoute` to it (ADR-0083 in `caesar-deployment/docs/adr/`).
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: source-manager
-  namespace: all-chat
-spec:
-  replicas: 2  # Only one will be leader
-  selector:
-    matchLabels:
-      app: source-manager
-  template:
-    metadata:
-      labels:
-        app: source-manager
-    spec:
-      containers:
-        - name: source-manager
-          image: allchat/source-manager:latest
-          ports:
-            - containerPort: 8084
-          env:
-            - name: PORT
-              value: "8084"
-            - name: INSTANCE_ID
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name  # Unique pod name
-            - name: DATABASE_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: database_host
-            - name: REDIS_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: redis_host
-            - name: LEADER_ELECTION_KEY
-              value: "leader:source-manager"
-            - name: LEADER_TTL
-              value: "30"  # seconds
-            - name: POLL_INTERVAL
-              value: "10"  # seconds
-          resources:
-            requests:
-              cpu: "50m"
-              memory: "64Mi"
-            limits:
-              cpu: "200m"
-              memory: "256Mi"
-          livenessProbe:
-            httpGet:
-              path: /health/live
-              port: 8084
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /health/ready
-              port: 8084
-            initialDelaySeconds: 5
-            periodSeconds: 5
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: source-manager
-  namespace: all-chat
-spec:
-  type: ClusterIP
-  ports:
-    - port: 8084
-      targetPort: 8084
-  selector:
-    app: source-manager
-```
+App routes live in two places:
+
+- `caesar-deployment/ingress/allchat-route.yaml` — the frontend/API edge:
+  - `HTTPRoute allchat` (host `allch.at`): `/api/` → `api-gateway:8080`,
+    `Exact /webhooks/eventsub` → `twitch-eventsub-listener:8090`,
+    `/` → `frontend:3000`.
+  - `HTTPRoute allchat-ws` (host `allch.at`, `/ws/`) → `api-gateway:8080`,
+    with a BackendTrafficPolicy keeping the stream alive
+    (`requestTimeout: 0s`, `streamIdleTimeout: 168h`).
+  - `HTTPRoute allchat-beta` / `allchat-beta-ws` (host `beta.allch.at`)
+    → `api-gateway-beta` / `frontend-beta`.
+  - A `SecurityPolicy` gives CORS: `https://allch.at` and
+    `https://beta.allch.at`.
+  - A `BackendTrafficPolicy` disables the HTTP request timeout on `/api/`
+    routes and caps the proxy request buffer at 10 MiB.
+- `caesar-deployment/apps/workloads/all-chat/minio-route.yaml` —
+  `media.allch.at` → `minio:9000` with its own CORS policy.
+
+TLS: per-zone wildcard `Certificate`s in
+`apps/infrastructure/gateway/certificates.yaml` (`allch.at` / `*.allch.at`
+among them), issued through cert-manager with Cloudflare DNS-01
+(`clusterissuer.yaml`; the HTTP-01 issuer was retired because the beta and
+media certs never got issued through it). The Gateway consumes the
+`allch-at-tls` Secret. Cloudflare proxies the public edge; the two nodes it
+uses as origins are pinned into the Envoy service via `externalIPs` on the
+LoadBalancer.
 
 ---
 
-### Twitch Listener
+## Configuration and secrets
 
-**File**: `deployments/k8s/twitch-listener/deployment.yaml`
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: twitch-listener
-  namespace: all-chat
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: twitch-listener
-  template:
-    metadata:
-      labels:
-        app: twitch-listener
-        workload: listeners
-    spec:
-      nodeSelector:
-        workload: listeners  # Schedule on listener-specific nodes
-      containers:
-        - name: twitch-listener
-          image: allchat/twitch-listener:latest
-          ports:
-            - containerPort: 8085
-          env:
-            - name: PORT
-              value: "8085"
-            - name: INSTANCE_ID
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: REDIS_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: redis_host
-            - name: TWITCH_BOT_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: all-chat-secrets
-                  key: twitch_bot_username
-            - name: TWITCH_BOT_OAUTH
-              valueFrom:
-                secretKeyRef:
-                  name: all-chat-secrets
-                  key: twitch_bot_oauth
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "128Mi"
-            limits:
-              cpu: "500m"
-              memory: "512Mi"
-          livenessProbe:
-            httpGet:
-              path: /health/live
-              port: 8085
-            initialDelaySeconds: 15
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /health/ready
-              port: 8085
-            initialDelaySeconds: 10
-            periodSeconds: 5
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: twitch-listener
-  namespace: all-chat
-spec:
-  clusterIP: None  # Headless service
-  ports:
-    - port: 8085
-      targetPort: 8085
-  selector:
-    app: twitch-listener
-```
+- **ConfigMap `allchat-config`** (`configmap.yaml`) carries the shared env
+  (`envFrom`) for all Go services: hosts and URLs, OAuth redirect URLs
+  (`https://allch.at/auth/<platform>/callback`), the WebSocket/CORS allow
+  list (`https://allch.at`, `https://beta.allch.at`,
+  `chrome-extension://*`, `moz-extension://*`), and the OpenTelemetry
+  endpoint (`tempo.monitoring.svc.cluster.local:4317`, 10% trace sampling).
+  Services override `OTEL_SERVICE_NAME` per pod.
+- **ConfigMap `impressum`** is the German legal notice baked into the
+  frontend (mounted read-only at `/etc/allchat`).
+- **Secrets** are kept out of Git. `apps/workloads/all-chat/secrets/` holds
+  SOPS-encrypted files rendered by a ksops generator into the `allchat-secrets`
+  Secret plus database/backup credentials. The `jwt_secret`,
+  `database-password`, `minio-root-user/-password`, `twitch-*`, `youtube-*`,
+  `patreon-*`, `discord-*` and every OAuth client secret live there — never
+  quote their values, and never commit new plaintext keys.
+- `api-gateway` (and the beta variant) additionally carries a
+  `checksum/config` pod-template annotation; bumping it forces a Keel
+  rollout after a ConfigMap-only change.
 
 ---
 
-### Message Processor
+## Resource budget (quota, requests/limits)
 
-**File**: `deployments/k8s/message-processor/deployment.yaml`
+`resource-quota.yaml` sets the namespace ceiling: 20 CPU / 40Gi requested,
+50 CPU / 80Gi limited, 100 pods. A `LimitRange` defaults any container that
+declares no resources to 500m CPU / 512Mi limit and 100m / 128Mi request.
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: message-processor
-  namespace: all-chat
-spec:
-  replicas: 3  # Consumer group members
-  selector:
-    matchLabels:
-      app: message-processor
-  template:
-    metadata:
-      labels:
-        app: message-processor
-    spec:
-      containers:
-        - name: message-processor
-          image: allchat/message-processor:latest
-          ports:
-            - containerPort: 8087
-          env:
-            - name: PORT
-              value: "8087"
-            - name: INSTANCE_ID
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
-            - name: REDIS_HOST
-              valueFrom:
-                configMapKeyRef:
-                  name: all-chat-config
-                  key: redis_host
-            - name: EMOTE_SERVICE_URL
-              value: "http://emote-service:8083"
-            - name: CONSUMER_GROUP
-              value: "processor-group"
-            - name: BATCH_SIZE
-              value: "10"
-          resources:
-            requests:
-              cpu: "200m"
-              memory: "256Mi"
-            limits:
-              cpu: "1000m"
-              memory: "1Gi"
-          livenessProbe:
-            httpGet:
-              path: /health/live
-              port: 8087
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /health/ready
-              port: 8087
-            initialDelaySeconds: 5
-            periodSeconds: 5
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: message-processor
-  namespace: all-chat
-spec:
-  clusterIP: None  # Headless service
-  ports:
-    - port: 8087
-      targetPort: 8087
-  selector:
-    app: message-processor
-```
+Per-pod requests are deliberately modest (128–256Mi, 100–200m CPU for most
+Go services) and limits are 4× requests; api-gateway and message-processor
+run 256Mi/200m requests with 1Gi/1 CPU limits. The out-of-band exceptions to
+know about:
+
+- `tiktok-signer`: requests 1Gi CPU 500m, limits **6Gi / 3 CPUs**. Chromium
+  software-renders the live page (llvmpipe) while xvfb and the signature
+  browser share the core; it OOMKilled at 2Gi with three concurrent lanes
+  and its pod is pinned to node `caesar3` (the documented fallback node).
+- `tiktok-listener` (Node) also runs with a larger footprint than a typical
+  Go listener.
+- The resource quota was raised to fit the signer's surge; a further
+  increase needs the quota bumped in the same change.
 
 ---
 
-## Service Networking
-
-### Service Types
-
-| Service | Type | Port | Purpose |
-|---------|------|------|---------|
-| `api-gateway` | ClusterIP | 8080 | Internal HTTP routing, exposed via Ingress |
-| `auth-service` | ClusterIP | 8081 | Internal service-to-service communication |
-| `overlay-service` | ClusterIP | 8082 | Internal service-to-service communication |
-| `emote-service` | ClusterIP | 8083 | Internal service-to-service communication |
-| `source-manager` | ClusterIP | 8084 | Health checks only |
-| `twitch-listener` | Headless (ClusterIP: None) | 8085 | Individual pod targeting |
-| `youtube-listener` | Headless | 8086 | Individual pod targeting |
-| `message-processor` | Headless | 8087 | Consumer group members |
-| `postgresql` | ClusterIP | 5432 | Database access |
-| `redis` | ClusterIP | 6379 | Cache & messaging |
-
-### DNS Resolution
-
-All services are discoverable via Kubernetes DNS:
-
-```
-<service-name>.<namespace>.svc.cluster.local
-```
-
-Examples:
-- `auth-service.all-chat.svc.cluster.local` → Resolves to ClusterIP
-- `twitch-listener.all-chat.svc.cluster.local` → Resolves to individual pod IPs (headless)
-
----
-
-## Ingress & Load Balancing
-
-### Ingress Configuration
-
-**File**: `deployments/k8s/ingress.yaml`
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: all-chat-ingress
-  namespace: all-chat
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/websocket-services: "api-gateway"
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - api.allch.at
-        - overlays.allch.at
-      secretName: allchat-tls
-  rules:
-    - host: api.allch.at
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: api-gateway
-                port:
-                  number: 8080
-    - host: overlays.allch.at
-      http:
-        paths:
-          - path: /ws
-            pathType: Prefix
-            backend:
-              service:
-                name: api-gateway
-                port:
-                  number: 8080
-```
-
-### WebSocket Support
-
-Ingress NGINX requires special annotations for WebSocket:
-- `nginx.ingress.kubernetes.io/websocket-services`: List of services supporting WebSocket
-- `nginx.ingress.kubernetes.io/proxy-read-timeout`: Keep connection alive (3600s = 1 hour)
-- `nginx.ingress.kubernetes.io/proxy-send-timeout`: Send timeout
-
----
-
-## ConfigMaps & Secrets
-
-### ConfigMap: `all-chat-config`
-
-**File**: `deployments/k8s/configmaps/all-chat-config.yaml`
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: all-chat-config
-  namespace: all-chat
-data:
-  # Database
-  database_host: "postgresql.all-chat.svc.cluster.local"
-  database_port: "5432"
-  database_name: "allchat"
-
-  # Redis
-  redis_host: "redis.all-chat.svc.cluster.local"
-  redis_port: "6379"
-
-  # Service URLs
-  auth_service_url: "http://auth-service:8081"
-  overlay_service_url: "http://overlay-service:8082"
-  emote_service_url: "http://emote-service:8083"
-
-  # Frontend URL (used for OAuth redirect generation)
-  frontend_url: "https://app.allch.at"
-
-  # Logging
-  log_level: "info"
-
-  # WebSocket Overlay Security
-  websocket_allowed_origins: "https://app.allch.at,https://studio.allch.at"
-```
-
-> **API Gateway runtime knobs**
-> - `JWT_SECRET` (stored in `all-chat-secrets.jwt_secret`) is now mandatory. The gateway refuses to start if it is missing or empty, ensuring all proxied routes and WebSocket auth reuse the same verified signing key.
-> - `WEBSOCKET_ALLOWED_ORIGINS` (stored in `all-chat-config.websocket_allowed_origins`) defines the comma-separated allowlist for WebSocket upgrades. Use `*` or leave it blank only in trusted dev environments; production clusters should enumerate the exact frontend domains.
-
-### Secret: `all-chat-secrets`
-
-**File**: Create manually or via CI/CD
-
-```bash
-kubectl create secret generic all-chat-secrets \
-  --namespace=all-chat \
-  --from-literal=jwt_secret='your-secret-key' \
-  --from-literal=database_user='allchat' \
-  --from-literal=database_password='secure-password' \
-  --from-literal=twitch_client_id='your-client-id' \
-  --from-literal=twitch_client_secret='your-client-secret' \
-  --from-literal=twitch_bot_username='your-bot-username' \
-  --from-literal=twitch_bot_oauth='oauth:your-token'
-```
-
-**IMPORTANT**: Never commit secrets to Git. Use:
-- Sealed Secrets (bitnami-labs/sealed-secrets)
-- External Secrets Operator
-- Vault integration
-- Cloud-provider secret managers (AWS Secrets Manager, GCP Secret Manager)
-
----
-
-## Persistent Storage
-
-### CloudNativePG Cluster
-
-**File**: `deployments/k8s/postgresql/cnpg-cluster.yaml`
-
-All-Chat uses CloudNativePG operator for PostgreSQL instead of manual StatefulSets, providing:
-- Automated failover (~30 seconds)
-- Point-in-time recovery (PITR)
-- Automated backups to S3/compatible storage
-- Built-in connection pooling (PgBouncer)
-- Read replica support
-
-#### Prerequisites
-
-```bash
-# Install CloudNativePG operator
-kubectl apply -f \
-  https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.22/releases/cnpg-1.22.0.yaml
-
-# Verify operator is running
-kubectl get deployment -n cnpg-system cnpg-controller-manager
-```
-
-#### CNPG Cluster Configuration
-
-```yaml
-apiVersion: postgresql.cnpg.io/v1
-kind: Cluster
-metadata:
-  name: allchat-pg
-  namespace: all-chat
-spec:
-  instances: 3  # 1 primary + 2 replicas
-
-  # PostgreSQL configuration
-  postgresql:
-    parameters:
-      max_connections: "200"
-      shared_buffers: "256MB"
-      effective_cache_size: "1GB"
-      maintenance_work_mem: "64MB"
-      checkpoint_completion_target: "0.9"
-      wal_buffers: "16MB"
-      default_statistics_target: "100"
-      random_page_cost: "1.1"
-      effective_io_concurrency: "200"
-      work_mem: "2621kB"
-      min_wal_size: "1GB"
-      max_wal_size: "4GB"
-
-  # Bootstrap from scratch (or restore from backup)
-  bootstrap:
-    initdb:
-      database: allchat
-      owner: allchat
-      secret:
-        name: allchat-pg-credentials
-
-  # Storage configuration (node-local volumes)
-  storage:
-    storageClass: local-path
-    size: 50Gi
-
-  # Resource limits
-  resources:
-    requests:
-      cpu: "500m"
-      memory: "1Gi"
-    limits:
-      cpu: "2000m"
-      memory: "4Gi"
-
-  # WAL archiving + base backups through the Barman Cloud plugin; the
-  # ObjectStore, ScheduledBackup and media mirror are in caesar-deployment
-  # (ADR-0003 → Backups).
-  plugins:
-    - name: barman-cloud.cloudnative-pg.io
-      isWALArchiver: true
-      parameters:
-        barmanObjectName: allchat-hetzner
-
-  # Connection pooling (optional but recommended)
-  connectionPooler:
-    enabled: true
-    type: pgbouncer
-    instances: 3
-    pgbouncer:
-      poolMode: transaction
-      parameters:
-        max_client_conn: "1000"
-        default_pool_size: "25"
-
-  # Monitoring
-  monitoring:
-    enablePodMonitor: true
-
-  # Node affinity (spread across nodes)
-  affinity:
-    podAntiAffinity:
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                cnpg.io/cluster: allchat-pg
-            topologyKey: kubernetes.io/hostname
-
----
-# Database credentials secret
-apiVersion: v1
-kind: Secret
-metadata:
-  name: allchat-pg-credentials
-  namespace: all-chat
-type: kubernetes.io/basic-auth
-stringData:
-  username: allchat
-  password: CHANGE_ME_SECURE_PASSWORD
-
-# NOTE: S3 credentials not needed for Phase 1 (local backups only)
-# For production migration to object storage, create:
-# ---
-# apiVersion: v1
-# kind: Secret
-# metadata:
-#   name: s3-credentials
-#   namespace: all-chat
-# type: Opaque
-# stringData:
-#   ACCESS_KEY_ID: YOUR_S3_ACCESS_KEY
-#   SECRET_ACCESS_KEY: YOUR_S3_SECRET_KEY
-```
-
-#### Connecting Applications to CNPG
-
-Applications should use the following connection strings:
-
-```bash
-# Primary (read-write)
-postgresql://allchat:password@allchat-pg-rw.all-chat.svc.cluster.local:5432/allchat
-
-# Read replicas (read-only)
-postgresql://allchat:password@allchat-pg-ro.all-chat.svc.cluster.local:5432/allchat
-
-# Connection pooler (if enabled)
-postgresql://allchat:password@allchat-pg-pooler-rw.all-chat.svc.cluster.local:5432/allchat
-```
-
-**CNPG automatically creates these services:**
-- `allchat-pg-rw`: Primary instance (read-write)
-- `allchat-pg-ro`: Read replicas (read-only, load balanced)
-- `allchat-pg-r`: All instances (for admin tasks)
-- `allchat-pg-pooler-rw`: PgBouncer pooler (if enabled)
-
-### Redis StatefulSet with AOF Persistence
-
-**File**: `deployments/k8s/redis/statefulset.yaml`
-
-**Important**: Redis is configured with AOF (Append-Only File) persistence to prevent data loss on crashes. This provides ~1-second RPO (Recovery Point Objective).
-
-```yaml
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: redis
-  namespace: all-chat
-spec:
-  serviceName: redis
-  replicas: 1  # Single instance for Phase 1, migrate to Redis Cluster in Phase 5
-  selector:
-    matchLabels:
-      app: redis
-  template:
-    metadata:
-      labels:
-        app: redis
-    spec:
-      nodeSelector:
-        workload: stateful
-      containers:
-        - name: redis
-          image: redis:7-alpine
-          ports:
-            - containerPort: 6379
-              name: redis
-          command:
-            - redis-server
-          args:
-            # Memory management
-            - --maxmemory
-            - "768mb"  # Leave headroom for AOF rewrite
-            - --maxmemory-policy
-            - allkeys-lru
-
-            # AOF persistence (CRITICAL for durability)
-            - --appendonly
-            - "yes"
-            - --appendfsync
-            - everysec  # Fsync every second (balance performance/durability)
-            - --auto-aof-rewrite-percentage
-            - "100"
-            - --auto-aof-rewrite-min-size
-            - 64mb
-
-            # Performance tuning
-            - --tcp-backlog
-            - "511"
-            - --timeout
-            - "300"
-            - --tcp-keepalive
-            - "60"
-
-            # Logging
-            - --loglevel
-            - notice
-
-            # Save snapshots (backup to AOF)
-            - --save
-            - "900 1"  # After 900s if ≥1 key changed
-            - --save
-            - "300 10"  # After 300s if ≥10 keys changed
-            - --save
-            - "60 10000"  # After 60s if ≥10000 keys changed
-
-          volumeMounts:
-            - name: redis-storage
-              mountPath: /data
-          resources:
-            requests:
-              cpu: "100m"
-              memory: "256Mi"
-            limits:
-              cpu: "500m"
-              memory: "1Gi"
-          livenessProbe:
-            tcpSocket:
-              port: 6379
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          readinessProbe:
-            exec:
-              command:
-                - redis-cli
-                - ping
-            initialDelaySeconds: 5
-            periodSeconds: 5
-  volumeClaimTemplates:
-    - metadata:
-        name: redis-storage
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        storageClassName: hcloud-volumes  # Hetzner Cloud Volumes
-        resources:
-          requests:
-            storage: 20Gi  # Increased for AOF + RDB files
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: redis
-  namespace: all-chat
-spec:
-  type: ClusterIP
-  ports:
-    - port: 6379
-      targetPort: 6379
-  selector:
-    app: redis
-```
-
----
-
-## Resource Quotas & Limits
-
-### Resource Requests vs Limits
-
-| Resource Type | Requests (Guaranteed) | Limits (Maximum) | Purpose |
-|---------------|----------------------|------------------|---------|
-| **CPU** | Pod scheduling decision | Throttled if exceeded | CPU time slicing |
-| **Memory** | Pod scheduling decision | **OOM kill** if exceeded | Memory allocation |
-
-### Best Practices
-
-1. **Always set requests**: Ensures pod gets minimum resources
-2. **Set limits conservatively**: Prevents resource hogging
-3. **Request = Limit for critical services**: Guaranteed QoS (PostgreSQL, Redis)
-4. **Request < Limit for burstable**: Allows scaling up (API Gateway)
-
----
-
-## Health Checks & Probes
-
-### Liveness Probe
-
-**Purpose**: Determine if the container is alive. If fails → restart container.
-
-```yaml
-livenessProbe:
-  httpGet:
-    path: /health/live
-    port: 8080
-  initialDelaySeconds: 10  # Wait before first check
-  periodSeconds: 10        # Check every 10 seconds
-  timeoutSeconds: 5        # Timeout for request
-  failureThreshold: 3      # Restart after 3 failures
-```
-
-**Implementation** (`/health/live`):
-```go
-func (h *HealthHandler) HandleLiveness(c *gin.Context) {
-    c.JSON(200, gin.H{"status": "alive"})
-}
-```
-
-### Readiness Probe
-
-**Purpose**: Determine if the container is ready to serve traffic. If fails → remove from service endpoints.
-
-```yaml
-readinessProbe:
-  httpGet:
-    path: /health/ready
-    port: 8080
-  initialDelaySeconds: 5
-  periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 2
-```
-
-**Implementation** (`/health/ready`):
-```go
-func (h *HealthHandler) HandleReadiness(c *gin.Context) {
-    // Check database connection
-    if err := h.db.Ping(c.Request.Context()); err != nil {
-        c.JSON(503, gin.H{"status": "not ready", "error": "database unreachable"})
-        return
-    }
-
-    // Check Redis connection
-    if err := h.redis.Ping(c.Request.Context()).Err(); err != nil {
-        c.JSON(503, gin.H{"status": "not ready", "error": "redis unreachable"})
-        return
-    }
-
-    c.JSON(200, gin.H{"status": "ready"})
-}
-```
+## Probes and rollout behaviour
+
+- HTTP probes follow the standard shape: `livenessProbe` on `/health/live`
+  (process up) and `readinessProbe` on `/health/ready` (DB + Redis ping).
+  api-gateway uses a single `/health` endpoint as both; frontend probes
+  `/api/health`. A handful of services expose only a live probe; check the
+  manifest rather than assuming.
+- `initialDelaySeconds` is generally 30 for the liveness probe so a
+  migrations init container + slow first-run doesn't restart-loop a fresh
+  pod.
+- `minReadySeconds: 10` on the frontends and the beta gateway to let
+  endpoints settle before the next pod is touched.
+- Rolling updates use `maxUnavailable: 1, maxSurge: 1` wherever a hard
+  topology spread constraint is set (`DoNotSchedule`, `topologyKey:
+  kubernetes.io/hostname`, `matchLabelKeys: [pod-template-hash]`), because
+  the default 25% surge-only behaviour rounds down to 0 at these replica
+  counts and would deadlock against the spread constraint. The manifest
+  comment (message-processor, api-gateway, frontend, twitch-listener) is the
+  rationale: no two replicas of a service on one node, so one node reboot
+  (kured) can never take the service down alone.
+- Graceful shutdown is implemented in each service's `cmd/main.go` (25s
+  drain window).
 
 ---
 
 ## Horizontal Pod Autoscaling
 
-### HPA: API Gateway
+HPAs exist for the workloads that need to scale with load; the rest are
+fixed at their "special" replica counts (1 for singletons that must never
+multiply side effects, 2–3 for the horizontally-scaled core). All
+autoscaling/v2, CPU (and some memory) based. The actual targets live in
+five HPA manifests:
 
-**File**: `deployments/k8s/api-gateway/hpa.yaml`
+- `api-gateway` (`api-gateway-deployment.yaml`, bottom): 3–20, CPU 70%.
+- `frontend` (`frontend-deployment.yaml`): 2–10, CPU 70%.
+- `twitch-listener-hpa.yaml`: 2–5, CPU 70% + memory 80%, with stabilization
+  windows (scale-down waits 5 min).
+- `kick-listener-hpa.yaml`: 1–5, CPU + memory.
+- `platform-listeners-hpa.yaml`: one HPA each for owncast, goodgame,
+  picarto and altstream listeners, 1–5.
 
-```yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: api-gateway-hpa
-  namespace: all-chat
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: api-gateway
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70  # Scale up if CPU > 70%
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80  # Scale up if memory > 80%
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-        - type: Percent
-          value: 50  # Scale up by 50% of current replicas
-          periodSeconds: 60
-    scaleDown:
-      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
-      policies:
-        - type: Pods
-          value: 1  # Scale down 1 pod at a time
-          periodSeconds: 60
-```
-
-### HPA: Message Processor
-
-```yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: message-processor-hpa
-  namespace: all-chat
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: message-processor
-  minReplicas: 3
-  maxReplicas: 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 80
-```
+Everything else scales only vertically or by human decision — see
+`03-SCALING.md` for why (single-master Redis, Postgres write path,
+listener connection models).
 
 ---
 
-## Rolling Updates & Rollbacks
+## PodDisruptionBudgets and node reboots (kured)
 
-### Rolling Update Strategy
+`pdbs.yaml` sets `maxUnavailable: 1` on every horizontally-scaled service
+(api-gateway, message-processor, auth-service, overlay-manager,
+emote-service, source-manager, moderation-service, share-service,
+tiktok-listener, twitch-listener, twitch-eventsub-listener, kick-listener,
+youtube-listener-innertube, youtube-listener-official,
+engagement-service). `frontend-pdb.yaml` sets `minAvailable: 1` for the
+frontend pair. This keeps kured's 02:00–05:00 Europe/Berlin reboot window
+(concurrency 1, cluster-wide lock, drainTimeout 5m — see
+`caesar-deployment/apps/infrastructure/kured/` and
+`caesar-deployment/docs/adr/ADR-0021-*`) draining one node at a time
+without ever blocking on an unsatisfiable drain.
 
-```yaml
-spec:
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1          # Max 1 extra pod during update
-      maxUnavailable: 0    # Zero downtime
-```
-
-**Process**:
-1. Create 1 new pod (v2)
-2. Wait for v2 pod to be ready
-3. Terminate 1 old pod (v1)
-4. Repeat until all pods replaced
-
-### Deployment Commands
-
-```bash
-# Apply updated deployment
-kubectl apply -f deployments/k8s/api-gateway/deployment.yaml
-
-# Check rollout status
-kubectl rollout status deployment/api-gateway -n all-chat
-
-# View rollout history
-kubectl rollout history deployment/api-gateway -n all-chat
-
-# Rollback to previous version
-kubectl rollout undo deployment/api-gateway -n all-chat
-
-# Rollback to specific revision
-kubectl rollout undo deployment/api-gateway --to-revision=3 -n all-chat
-
-# Pause rollout (for canary testing)
-kubectl rollout pause deployment/api-gateway -n all-chat
-
-# Resume rollout
-kubectl rollout resume deployment/api-gateway -n all-chat
-```
+Single-replica services deliberately have **no** PDB (tiktok-signer,
+discord-listener, discord-bot, support-bot, token-refresh-service, minio,
+the CNPG/Redis exceptions documented in their manifests): a PDB over one
+replica can never permit a voluntary eviction and just wedges the drain.
 
 ---
 
-## Monitoring & Logging
+## Observability in the cluster
 
-### Prometheus Metrics (Planned)
-
-Each service exposes `/metrics` endpoint:
-
-```yaml
-metadata:
-  annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "8080"
-    prometheus.io/path: "/metrics"
-```
-
-**Example metrics**:
-- `http_requests_total{method="GET",path="/api/v1/overlays",status="200"}`
-- `http_request_duration_seconds{method="GET",path="/api/v1/overlays"}`
-- `websocket_connections_active{overlay_id="abc-123"}`
-- `redis_stream_messages_pending{stream="raw-messages",consumer_group="processor-group"}`
-
-### Structured Logging
-
-All services use **Zap** for structured JSON logging:
-
-```json
-{
-  "level": "info",
-  "ts": "2025-11-11T12:34:56.789Z",
-  "caller": "services/overlay_service.go:123",
-  "msg": "overlay created",
-  "user_id": "uuid-123",
-  "overlay_id": "uuid-456",
-  "name": "My Overlay"
-}
-```
-
-**Log Aggregation** (planned):
-- Fluent Bit / Fluentd → Elasticsearch / Loki
-- Accessible via Kibana / Grafana
+- Three `ServiceMonitor`s in `servicemonitor.yaml` (`allchat-listeners`,
+  `allchat-source-manager`, `allchat-services`) plus a
+  `kubernetes-pods-annotations` scrape job in the kube-prometheus-stack
+  values. Services are deliberately split: a workload is either scraped via
+  its pod annotations **or** by a ServiceMonitor, never both, to avoid
+  double time-series (the manifest header documents
+  youtube-listener-innertube being scraped twice and firing a false alert).
+- Logs: Grafana Alloy DaemonSet ships pod stdout to Loki; the Envoy proxy
+  access log is privacy-shaped (no client IPs, no query strings) to match
+  the privacy policy's anonymized-IP promise.
+- Traces: OpenTelemetry in `shared/tracing/` sends OTLP to Tempo, 10%
+  sampling via `OTEL_TRACES_SAMPLER_ARG: "0.1"`.
+- Alerts, dashboards and contact points live in
+  `caesar-deployment/apps/platform/allchat-monitoring/` (PrometheusRule
+  files at critical/warning/info levels, several Grafana dashboards, a
+  Discord contact point) synced by its own ArgoCD app into the `monitoring`
+  namespace. Details: `04-OBSERVABILITY.md`.
 
 ---
 
-## Deployment Commands
+## CronJobs
 
-### Initial Deployment
+The five batch resources (`retention-sweeper`, `key-rotator-weekly`,
+`backup-offsite-mirror`, `minio-bucket-job`, and the CNPG
+`allchat-cluster-daily` ScheduledBackup) are listed in
+[Deployed workloads](#deployed-workloads) with their schedules; each
+manifest's header carries the operational playbook (suspend order, manual
+run command, what happens if it stops running).
+
+---
+
+## Local development environments
+
+Two local options exist in this repo; production is neither of them.
+
+### `deployments/docker-compose.yml` (default, `make docker-up`)
+
+Full stack on Docker: Postgres 16 (migrations mounted into
+`/docker-entrypoint-initdb.d`), Redis 7, MinIO, and the Go/Node services.
+Internal ports are bound to 127.0.0.1 only; every secret is a required env
+var with no insecure defaults (see the file header for the full list).
+`make frontend-dev` boots the smaller profile; `make frontend-seed` /
+`make frontend-messages` seed data.
+
+### `deployments/k8s/` (k3d, kustomize)
+
+Base kustomization lists every service plus shared network policies and a
+resource quota:
 
 ```bash
-# Create namespace
-kubectl apply -f deployments/k8s/namespace.yaml
-
-# Create ConfigMap
-kubectl apply -f deployments/k8s/configmaps/all-chat-config.yaml
-
-# Create Secrets (use your own values!)
-kubectl create secret generic all-chat-secrets \
-  --namespace=all-chat \
-  --from-literal=jwt_secret='your-secret' \
-  --from-literal=database_user='allchat' \
-  --from-literal=database_password='password' \
-  --from-literal=twitch_client_id='...' \
-  --from-literal=twitch_client_secret='...' \
-  --from-literal=twitch_bot_username='...' \
-  --from-literal=twitch_bot_oauth='oauth:...'
-
-# Deploy PostgreSQL
-kubectl apply -f deployments/k8s/postgresql/
-
-# Deploy Redis
-kubectl apply -f deployments/k8s/redis/
-
-# Deploy application services
-kubectl apply -f deployments/k8s/auth-service/
-kubectl apply -f deployments/k8s/overlay-manager/
-kubectl apply -f deployments/k8s/emote-service/
-kubectl apply -f deployments/k8s/source-manager/
-kubectl apply -f deployments/k8s/twitch-listener/
-kubectl apply -f deployments/k8s/youtube-listener/
-kubectl apply -f deployments/k8s/message-processor/
-kubectl apply -f deployments/k8s/api-gateway/
-
-# Deploy Ingress
-kubectl apply -f deployments/k8s/ingress.yaml
-
-# Verify all pods are running
-kubectl get pods -n all-chat
-
-# Check logs
-kubectl logs -f deployment/api-gateway -n all-chat
+kubectl apply -k deployments/k8s/base           # everything on k3d
+kubectl apply -k deployments/k8s/overlays/tls   # optional TLS overlay
 ```
 
-### Update Deployment
+Differences from production, by design — these are local-dev manifests,
+not a scaled-down prod:
+
+- Single-node, no HA, no kured, no Keel, no ArgoCD sync. Postgres is a
+  plain Deployment under `base/postgres/deployment.yaml`, not CNPG.
+- `base/api-gateway/deployment.yaml` exposes api-gateway as
+  `type: LoadBalancer` on plain HTTP. The TLS overlay
+  (`overlays/tls/ingress.yaml`, `overlays/tls/cluster-issuer.yaml`) is
+  opt-in cert-manager + Let's Encrypt HTTP-01 and mirrors the old
+  ingress-nginx shape, not the Envoy Gateway shape prod uses today.
+- Images are pinned to `:main` via the `images:` block in
+  `base/kustomization.yaml`, not Keel-tracked digests.
+- `base/redis/secret.yaml` (empty-value reference manifest for Redis AUTH)
+  is deliberately not listed as a kustomize resource so it cannot
+  overwrite a real password (local audit finding M5).
+- Production's Cloudflare origins, Envoy HTTPRoutes, SOPS secrets and Keel
+  annotations do not exist here. `kubectl apply` of these files never
+  touches production.
+
+---
+
+## Operational snippets
+
+These target the **production** cluster (your normal kubectl context) and
+the `allchat` namespace. The ArgoCD app that owns the workloads is
+`all-chat` in the `argocd` namespace. Never `kubectl apply` anything from
+this repo's `deployments/` directory there.
 
 ```bash
-# Update image tag
-kubectl set image deployment/api-gateway api-gateway=allchat/api-gateway:v1.2.0 -n all-chat
+# What's deployed and how it's doing
+kubectl -n allchat get deployments,hpa,pdb,cronjobs
+kubectl -n allchat get pods -l app=<service-name>
+kubectl -n allchat logs deploy/<service-name> --tail=50
 
-# Or apply updated YAML
-kubectl apply -f deployments/k8s/api-gateway/deployment.yaml
+# Trigger a manual CronJob run
+kubectl create job --from=cronjob/retention-sweeper retention-sweeper-manual-$(date +%s) -n allchat
+kubectl create job --from=cronjob/key-rotator-weekly key-rotator-manual-$(date +%s) -n allchat
+kubectl create job --from=cronjob/backup-offsite-mirror backup-offsite-mirror-manual-$(date +%s) -n allchat
 
-# Watch rollout
-kubectl rollout status deployment/api-gateway -n all-chat
-```
+# Check ArgoCD state (changes land via Git, not manual apply)
+kubectl get application all-chat -n argocd -o yaml | yq '.status'
 
-### Scaling
+# Force a rollout without waiting for Keel's next poll (e.g. after fixing a
+# broken pod that is otherwise healthy)
+kubectl -n allchat rollout restart deployment/<service-name>
+kubectl -n allchat rollout status deployment/<service-name>
 
-```bash
-# Manual scaling
-kubectl scale deployment/message-processor --replicas=5 -n all-chat
-
-# View HPA status
-kubectl get hpa -n all-chat
-
-# Describe HPA
-kubectl describe hpa api-gateway-hpa -n all-chat
+# Production manifests (read-only from this repo's perspective)
+git clone git@github.com:caesarakalaeii/caesar-deployment.git
+cd caesar-deployment/apps/workloads/all-chat
 ```
 
 ---
 
 ## Summary
 
-This document provides comprehensive Kubernetes deployment specifications for All-Chat:
-
-1. **Cluster Architecture**: Multi-layer architecture with node groups
-2. **Deployments**: Complete YAML specs for all services
-3. **Service Networking**: ClusterIP and Headless services
-4. **Ingress**: NGINX Ingress with WebSocket support
-5. **ConfigMaps & Secrets**: Configuration management
-6. **Persistent Storage**: StatefulSets for PostgreSQL and Redis
-7. **Health Checks**: Liveness and readiness probes
-8. **Autoscaling**: HPA based on CPU/memory
-9. **Rolling Updates**: Zero-downtime deployments
-
-**Next Steps**:
-- [03-SCALING.md](./03-SCALING.md) - Detailed scaling strategies
-- [04-OBSERVABILITY.md](./04-OBSERVABILITY.md) - Monitoring and alerting setup
-- [05-SECURITY.md](./05-SECURITY.md) - Security hardening
+1. **Production** is ArgoCD GitOps out of the `caesar-deployment` repo; this
+   repo only builds images and holds local-dev manifests. Never `kubectl
+   apply` anything from here at prod.
+2. **Keel** turns image pushes into rollouts; merging to `main` or `beta`
+   is the deployment act.
+3. **Redis is Sentinel + HAProxy** (not a single replica), **Postgres is
+   CNPG** with Barman backups to Hetzner (Backblaze B2 copies paused),
+   and alert media is single-node MinIO behind `media.allch.at`.
+4. **Edge** is Envoy Gateway with per-app HTTPRoutes; TLS is
+   cert-manager Cloudflare DNS-01 wildcards; Cloudflare fronts the edge.
+5. Everything else above is named by file so the manifests themselves can
+   be checked — this doc deliberately does not duplicate values that drift.
 
 ---
 
-**Document Maintainers**: DevOps Team
-**Last Review**: 2025-11-11
+**Doc Maintainers**: All-Chat backend + caesar-deployment repo owners.
+**Last Review**: 2026-11-04

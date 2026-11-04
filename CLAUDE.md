@@ -14,7 +14,7 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 
 **Platform Status**:
 - ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Centrifugo or Pusher, whichever Kick picks; ADR-0077) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
-- 🚧 Beta only: Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Instagram (ADR-0062, Graph API live_comments polling, read-only). The listeners are deployed and the backend is shared, but the frontend offers these platforms only on `beta.allch.at` (`frontend/src/lib/platform-availability.ts`); allch.at hides them. Adding a source is still limited by the ADR-0008 `platform_*` gate (seeded `is_premium=TRUE`, migrations 091-094 and 096; beta testers are granted premium). The gate also honours `early_access` (ADR-0020, beta testers and ambassadors only): keep `platform_facebook` and `platform_instagram` on early access until Meta App Review passes, since until then only Meta app testers can connect. Release to production by removing the platform from `platform-availability.ts`, then flip its gate via the feature-gate admin endpoint to open it beyond premium.
+- 🚧 Beta only: Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Instagram (ADR-0062, Graph API live_comments polling, read-only). The listeners are deployed and the backend is shared, but the frontend offers these platforms only on `beta.allch.at` (`frontend/src/lib/platform-availability.ts`); allch.at hides them. The Facebook and Instagram listeners are inert until the Meta app credentials are wired into auth-service (and moderation-service for Facebook); see `docs/runbooks/platform-listener-deployment.md`. Adding a source is still limited by the ADR-0008 `platform_*` gate (seeded `is_premium=TRUE`, migrations 091-094 and 096; beta testers are granted premium). The gate also honours `early_access` (ADR-0020, beta testers and ambassadors only): keep `platform_facebook` and `platform_instagram` on early access until Meta App Review passes, since until then only Meta app testers can connect. Release to production by removing the platform from `platform-availability.ts`, then flip its gate via the feature-gate admin endpoint to open it beyond premium.
 - 🚧 Early access: Altstream (ADR-0082, official public SSE chat API, read-only). Offered on every host, but on allch.at only to early-access users (beta testers and ambassadors), via `EARLY_ACCESS_PLATFORMS` in `platform-availability.ts`; adding a source is limited by the `platform_altstream` gate, seeded `early_access=TRUE`, `is_premium=FALSE` (migration 117). The listener runs from `:main`. Release by removing `altstream` from `EARLY_ACCESS_PLATFORMS`, then turning `early_access` off on the gate in `/admin/features`.
 - ✅ Alerts overlays (ADR-0070, ADR-0075) are offered on every host; creating one is limited by the `alerts_overlay` premium gate.
 - 🚧 Beta only (feature): the chat commands editor `/commands` (ADR-0079). `BETA_ONLY_FEATURES` in `platform-availability.ts` hides its nav link, onboarding extras entry and `/upgrade` row outside `beta.allch.at`; the page itself works on any host, and the alerts editor offers the `chat_command` event type (command images, ADR-0080) only where the feature is. Its backend (message-processor, engagement-service, auth-service, overlay-manager, and the api-gateway for images) runs from `:main`. Release by removing `chatCommands` and `customChatBot` from `BETA_ONLY_FEATURES`, then turning `early_access` off on the `chat_commands` and `custom_chat_bot` gates.
@@ -83,7 +83,7 @@ cd frontend && npm run dev  # Start frontend
 ### Architecture & Design Decisions
 
 **Understand the system**:
-- [Architecture Overview](./docs/architecture/00-OVERVIEW.md) - High-level design, service map
+- [Architecture Overview](./docs/architecture/00-OVERVIEW.md) - Full-system diagram, service map
 - [Data Flow](./docs/architecture/01-DATA-FLOW.md) - Message processing pipeline
 - [Deployment](./docs/architecture/02-DEPLOYMENT.md) - Kubernetes architecture
 - [Scaling](./docs/architecture/03-SCALING.md) - Performance and scalability
@@ -123,6 +123,7 @@ Each service has a detailed README:
 - [facebook-listener](./services/facebook-listener/README.md) - Facebook Live comments via Graph API polling + moderation (ADR-0060)
 - [instagram-listener](./services/instagram-listener/README.md) - Instagram Live comments via Graph API `live_comments` polling, read-only (ADR-0062)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
+- [media-service](./services/media-service/README.md) - Alert-media registry: presigned uploads straight to MinIO, never serves bytes (ADR-0068, ADR-0071)
 - [alert-processor](./services/alert-processor/README.md) - Second `chat:raw` consumer (group `alert-processors`): routes alert event types (an allowlist, so the owner-only `mod_action` log and system warnings never pass) to alerts/goal/list overlays on `overlay:{id}:alerts`, persists `alert_events`, scores list leaderboards and pushes debounced `list_update` frames, counts bits/Super Chat goals and polls follower/subscriber goals of connected goal overlays (ADR-0068, ADR-0072)
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
@@ -176,7 +177,7 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 Fixes may still go to `main` through PRs.
 
-**Gap:** only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in any other service has no beta environment, so a human decides how to stage it.
+**Gap:** only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (facebook, goodgame, instagram, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in any other service has no beta environment, so a human decides how to stage it.
 
 On top of the cycle, a new user-facing feature is not "done" until all three of these release steps are covered:
 
@@ -190,11 +191,11 @@ On top of the cycle, a new user-facing feature is not "done" until all three of 
 
 ## Tech Stack
 
-**Backend**: Go 1.26+, Gin (HTTP), PostgreSQL 16 (pgx/v5), Redis 7 (go-redis/v9), Zap (logging)
+**Backend**: Go 1.26+, Gin (HTTP), PostgreSQL 17 in production, 16 in local compose (pgx/v5), Redis 7 (go-redis/v9), Zap (logging)
 
 **Frontend**: React 19+, Next.js 16+ (App Router), TypeScript, Tailwind CSS, Zustand
 
-**Infrastructure**: Kubernetes (CNPG for PostgreSQL), Docker Compose (local dev)
+**Infrastructure**: Kubernetes (K3s, ArgoCD GitOps from the `caesar-deployment` repo, CNPG for PostgreSQL), Docker Compose (local dev)
 
 **Key Libraries**:
 - `gempir/go-twitch-irc/v4` - Twitch IRC client
@@ -274,7 +275,7 @@ REDIS_HOST=localhost
 REDIS_PORT=6379
 ```
 
-**See**: `.env.example` for complete list. **Kubernetes**: Secrets managed via sealed-secrets.
+**See**: `.env.example` for complete list. **Kubernetes**: Secrets are SOPS-encrypted in the GitOps repo.
 
 ---
 

@@ -1,8 +1,8 @@
 # All-Chat: Security Architecture
 
-**Version:** 1.0
-**Last Updated:** 2025-11-11
-**Related Docs**: [Approved Architecture](./APPROVED_ARCHITECTURE.md), [Approved Architecture](./APPROVED_ARCHITECTURE.md)
+**Version:** 2.0
+**Last Updated:** 2026-11-04
+**Related Docs**: [Architecture Overview](./00-OVERVIEW.md), [Deployment](./02-DEPLOYMENT.md), [Security Audit Residuals](../security/RESIDUALS.md)
 
 ---
 
@@ -25,25 +25,22 @@
 ## Introduction
 
 All-Chat implements defense-in-depth security across multiple layers:
-- **Authentication**: OAuth 2.0 + JWT
-- **Authorization**: Role-based access control (RBAC)
-- **Data Protection**: Encryption at rest and in transit
-- **Network Security**: TLS, network policies, firewalls
-- **Secrets Management**: Kubernetes Secrets + external vaults
+- **Authentication**: OAuth 2.0 + cookie/JWT sessions (streamers, viewers, devices, personal access tokens)
+- **Authorization**: feature gates (`feature_gates`), premium/early-access middleware, resource ownership checks, delegated overlay moderators
+- **Data Protection**: AES-GCM token encryption at rest, TLS in transit, versioned key rotation
+- **Network Security**: default-deny ingress NetworkPolicies, Envoy Gateway w/ TLS via cert-manager, SSRF-safe outbound fetches
+- **Secrets Management**: encrypted Kubernetes Secrets (ksops/sops) in `caesar-deployment` (GitOps), no plain secrets committed
 
-### Security Principles
-
-1. **Least Privilege**: Grant minimal necessary permissions
-2. **Defense in Depth**: Multiple security layers
-3. **Zero Trust**: Verify every request
-4. **Encryption Everywhere**: Data at rest and in transit
-5. **Auditability**: Log all security events
+Known gaps and residual work are tracked in `docs/security/RESIDUALS.md` (cross-referenced from `docs/security/SECURITY_AUDIT_REPORT.md`); notably, service-to-service HMAC signing is implemented in `shared/signing/` but **not wired into any production service** — Kubernetes NetworkPolicies are the current isolation control.
 
 ---
 
 ## Authentication
 
-### Twitch OAuth 2.0 Flow
+### Session Flow (httpOnly cookies)
+
+Streamer login uses the same cookie-based flow the audit recommended (`shared/auth/cookie.go`):
+`httpOnly; Secure; SameSite=Lax` cookies carry the access JWT (Path=/) and the refresh JWT (Path=/api/v1/auth/). The auth-service `/exchange` endpoint sets both cookies, rotates them via `/refresh`, and `/logout` clears cookies and revokes the refresh token. CSRF defense is SameSite=Lax plus the shared `OriginCheck` middleware on every state-changing route; a `SameSite=Strict` variant is not used. Personal access tokens (Stream Deck / StreamController desktop plugins, ADR-0051) and paired device tokens (ADR-0049) are long-lived `Authorization: Bearer` credentials that resolve to the same request identity a session JWT populates — never a second authorization path.
 
 ```mermaid
 sequenceDiagram
@@ -55,108 +52,59 @@ sequenceDiagram
     participant DB as PostgreSQL
 
     User->>Frontend: Click "Login with Twitch"
-    Frontend->>Gateway: GET /api/v1/auth/twitch/login
-    Gateway->>Auth: GetAuthURL()
-    Auth-->>Gateway: https://id.twitch.tv/oauth2/authorize?...
-    Gateway-->>Frontend: Redirect URL
-    Frontend->>User: 302 Redirect to Twitch
-    User->>Twitch: Login & Authorize
-    Twitch->>Gateway: GET /api/v1/auth/twitch/callback?code=ABC123
-    Gateway->>Auth: ExchangeCodeForToken(code)
-    Auth->>Twitch: POST /oauth2/token<br/>{code, client_id, client_secret}
+    Frontend->>Gateway: OriginCheck'd /auth/twitch/login
+    Gateway->>Auth: Proxy
+    Auth-->>Gateway: 302 Twitch authorize URL (state cookie)
+    User->>Twitch: Login & authorize
+    Twitch-->>Auth: GET /auth/twitch/callback?code=...
+    Auth->>Twitch: POST /oauth2/token {code, client_id, client_secret}
     Twitch-->>Auth: {access_token, refresh_token, expires_in}
-    Auth->>Twitch: GET /helix/users<br/>Authorization: Bearer {access_token}
-    Twitch-->>Auth: {user profile data}
-    Auth->>DB: Upsert user (encrypt tokens)
-    Auth->>Auth: Generate JWT token
-    Auth-->>Gateway: {jwt, refresh_token, user}
-    Gateway-->>Frontend: 200 OK {jwt, user}
-    Frontend->>Frontend: Store JWT in localStorage
+    Auth->>Twitch: GET /helix/users (profile)
+    Auth->>DB: Upsert user, AES-GCM encrypt tokens (versioned kid)
+    Auth->>Auth: Generate JWT w/ kid (KeyChain)
+    Auth-->>Gateway: 200, sets httpOnly cookies
+    Gateway-->>Frontend: 200 {user} (no tokens in body)
 ```
 
-### JWT Token Structure
+### JWT Structure (KeyChain)
+
+JWTs are signed with HS256 secrets dispatched by `kid` header, with a legacy fallback secret for tokens issued before the versioned scheme (audit D-08). Issued by `shared/auth/jwt.go`:
 
 ```json
 {
   "header": {
     "alg": "HS256",
+    "kid": "v2",
     "typ": "JWT"
   },
   "payload": {
-    "sub": "user-uuid-123",               // Subject (user ID)
-    "twitch_id": "12345678",              // Twitch user ID
-    "username": "streamer123",            // Username
-    "roles": ["user"],                    // Roles (future: ["admin", "moderator"])
-    "iat": 1699999999,                    // Issued at (Unix timestamp)
-    "exp": 1700086399                     // Expires at (24 hours later)
-  },
-  "signature": "..."
+    "user_id": "uuid",
+    "twitch_id": "12345678",
+    "username": "streamer123",
+    "roles": ["user"],
+    "impersonated_by": "<admin user id, absent otherwise>",
+    "impersonated_user": "<target uuid, absent otherwise>",
+    "jti": "...",
+    "iat": 1762200000,
+    "exp": 1762286400
+  }
 }
 ```
 
-### JWT Generation
+`JWT_SECRET_V1` (and optional `JWT_SECRET` legacy fallback) is read at boot by `shared/auth.NewKeyChainFromEnv`. All sign/verify helpers exist in HMAC-with-kid and legacy plain-secret forms. Secrets and encryption keys are mounted from the `allchat-secrets` secret produced by ksops (see Secrets Management).
 
-```go
-// pkg/auth/jwt.go
-func GenerateJWT(userID, twitchID, username, secret string) (string, error) {
-    claims := jwt.MapClaims{
-        "sub":       userID,
-        "twitch_id": twitchID,
-        "username":  username,
-        "roles":     []string{"user"},
-        "iat":       time.Now().Unix(),
-        "exp":       time.Now().Add(24 * time.Hour).Unix(),
-    }
-
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString([]byte(secret))
-}
-```
+**Required minimum length**: each chain secret shorter than 32 bytes is rejected at boot (`ErrSecretTooShort`, `minSecretBytes = 32`), and a chain without any `<PREFIX>_V1` fails with `ErrNoVersionedJWTSecrets` (audit M3).
 
 ### JWT Validation Middleware
 
-```go
-// pkg/middleware/auth.go
-func JWTAuth(jwtSecret string) gin.HandlerFunc {
-    return func(c *gin.Context) {
-        authHeader := c.GetHeader("Authorization")
-        if authHeader == "" {
-            c.AbortWithStatusJSON(401, gin.H{"error": "missing authorization header"})
-            return
-        }
+`shared/middleware.JWTAuthWithRevocation(keyChain, redis)` is the standard middleware every production service that serves authenticated routes uses (api-gateway, auth-service, engagement-service, moderation-service, overlay-manager, payment-service, share-service, media-service). It
 
-        // Extract Bearer token
-        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+- selects the (kid) secret per-token via KeyChain's `KeyFunc`, falling back to the legacy secret for kid-less tokens;
+- rejects non-HMAC algorithms;
+- checks `blacklist:<token>` in Redis and fails **closed** (audit H2: token logout revocation now enforced everywhere);
+- populates `user_id`, `username`, `roles`, `is_admin`, and impersonation provenance (`GetEffectiveUserID`/`GetActualUserID`) into the request context.
 
-        // Parse and validate JWT
-        token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-            if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-                return nil, fmt.Errorf("unexpected signing method")
-            }
-            return []byte(jwtSecret), nil
-        })
-
-        if err != nil || !token.Valid {
-            c.AbortWithStatusJSON(401, gin.H{"error": "invalid token"})
-            return
-        }
-
-        // Extract claims
-        claims, ok := token.Claims.(jwt.MapClaims)
-        if !ok {
-            c.AbortWithStatusJSON(401, gin.H{"error": "invalid claims"})
-            return
-        }
-
-        // Set user context
-        c.Set("user_id", claims["sub"])
-        c.Set("username", claims["username"])
-        c.Set("roles", claims["roles"])
-
-        c.Next()
-    }
-}
-```
+A separate viewer keychain authenticates viewer (extension/overlay) JWTs via `ValidateViewerJWT` (`ViewerClaims`: `viewer_id`, `session_id`, `platform`, `platform_user_id`, `is_viewer`, `is_premium`, `is_admin`).
 
 ### Token Refresh Flow
 
@@ -165,67 +113,66 @@ sequenceDiagram
     participant Frontend
     participant Gateway as API Gateway
     participant Auth as Auth Service
-    participant DB as PostgreSQL
     participant Twitch as Twitch OAuth
+    participant DB as PostgreSQL
 
-    Frontend->>Gateway: POST /api/v1/auth/refresh<br/>Refresh-Token: xyz789
-    Gateway->>Auth: RefreshUserToken(refresh_token)
-    Auth->>DB: SELECT user WHERE id = ?
-    DB-->>Auth: User with encrypted refresh_token
-    Auth->>Auth: Decrypt refresh_token
-    Auth->>Twitch: POST /oauth2/token<br/>{grant_type: "refresh_token", refresh_token}
-    Twitch-->>Auth: {access_token, refresh_token, expires_in}
-    Auth->>DB: UPDATE user SET access_token, refresh_token, expires_at
-    Auth->>Auth: Generate new JWT
-    Auth-->>Gateway: {jwt, refresh_token}
-    Gateway-->>Frontend: 200 OK {jwt, refresh_token}
+    Frontend->>Gateway: POST /auth/refresh (OriginCheck, authRateLimiter)
+    Gateway->>Auth: Proxy with refresh cookie
+    Auth->>Auth: ValidateJWT(refresh cookie) via KeyChain
+    Auth->>DB: SELECT encrypted streamer tokens
+    Auth->>Auth: Decrypt access/refresh AES-GCM
+    Auth->>Twitch: POST /oauth2/token {grant_type:"refresh_token", ...}
+    Twitch-->>Auth: {new access/refresh}
+    Auth->>DB: UPDATE encrypted tokens
+    Auth->>Auth: Issue new kid-signed session JWT, rotate cookies
+    Gateway-->>Frontend: 200 (cookies set, body redacted of tokens)
 ```
+
+Key (V1) rotation: to grace, the old `JWT_SECRET` continues verifying until every issued access/refresh JWT that references it expires or is revoked; new JWTs carry the new `kid`.
 
 ---
 
 ## Authorization
 
-### Role-Based Access Control (RBAC)
+### Role-Based Access Control
 
-| Role | Permissions | Assigned To |
-|------|-------------|-------------|
-| **user** | Create overlays, manage own resources | All authenticated users |
-| **moderator** | Manage user reports, moderate content | Appointed by admins |
-| **admin** | Full system access, user management | Platform administrators |
+| Role | Value | Assigned To |
+|------|-------|-------------|
+| `user` | default (every signed-in streamer) | all authenticated users |
+| `admin` | elevated (admin UIs, user list, impersonation, feature-gate admin, data export) | platform administrators |
+
+`users.is_admin` is serialised straight into the JWT's `isAdmin` / `roles` (roles = `["user"]` plus `["admin"]` when admin); `shared/middleware.auth.IsAdminSession` checks it server-side. Auth-service exposes admin-only endpoints (impersonation, list-users, stats, viewerviewing, cosmetics, feature gates) behind `IsAdminSession` middleware. Admin-impersonation JWTs carry `ImpersonatedBy` and `ImpersonatedUser` claims; `GetEffectiveUserID` resolves the impersonated target so the real admin's ID remains in the audit log for every action. Routes refused under impersonation include `/auth/me` updates and token-disabling endpoints; see `services/auth-service/README.md` (4xx 403 comments).
+
+### Feature Gates (Premium / Early Access)
+
+`shared/middleware.RequirePremium(db, gates, featureKey)` and `RequireEarlyAccess(...)` enforce the `feature_gates` table (ADR-0008) on top of the JWT session. Gate cache **fails closed** (unknown key ⇒ premium required). Managed through the feature-gate admin endpoint in share-service.
 
 ### Resource Ownership
 
-```go
-// Check if user owns the overlay
-func (s *OverlayService) GetOverlay(ctx context.Context, overlayID string, userID string) (*domain.Overlay, error) {
-    overlay, err := s.repo.GetByID(ctx, overlayID)
-    if err != nil {
-        return nil, err
-    }
+Overlay ownership is enforced server-side in overlay-manager (owner of record's `UserID` handles every mutation). Additional ownership invariants:
 
-    // Authorization check
-    if overlay.UserID != userID {
-        return nil, ErrUnauthorized
-    }
-
-    return overlay, nil
-}
-```
+- **Delegated overlay moderators** (ADR-0048, migration 080): `overlay_moderators` grants write-access to specific moderator users, gated on the **overlay owner's** premium entitlement (`alerts`/`moderation` feature gates keyed on the overlay owner, not the caller). Moderator routes exist only on moderation-service (`/moderation/overlays/:id/...`); the acting platform credential is always the moderator's own OAuth token — never the owner's and never a shared bot — no fallback. Discord is the exception (platform-attested authority: moderation goes through the shared bot, and Discord's per-call re-check is All-Chat's live guild permission check with a 60-second fail-closed cache).
+- **Overlay ownership check** in `overlay-manager` handler: overlay `UserID != caller` ⇒ 403.
+- **Personal access tokens**: carry identical owner identity plus a *narrowed* scope set (`chat:write`, `engagement:write`); routes further require the specific scope via `RequireAPITokenScope`.
+- **Paired device tokens**: additionally overlaid by `RequireDeviceTokenOverlay`, which refuses a device token on an overlay it was not paired against (per-overlay binding from migration 088).
 
 ### API Endpoint Authorization
 
-| Endpoint | Auth Required | Authorization Check |
-|----------|---------------|---------------------|
-| `GET /auth/twitch/login` | No | N/A |
-| `GET /auth/twitch/callback` | No | N/A |
-| `POST /auth/refresh` | Yes (refresh token) | Token validity |
-| `GET /auth/me` | Yes (JWT) | Valid JWT |
-| `GET /overlays` | Yes (JWT) | User's own overlays |
-| `POST /overlays` | Yes (JWT) | N/A (creates for authenticated user) |
-| `GET /overlays/:id` | Yes (JWT) | Overlay belongs to user |
-| `PUT /overlays/:id` | Yes (JWT) | Overlay belongs to user |
-| `DELETE /overlays/:id` | Yes (JWT) | Overlay belongs to user |
-| `/ws/overlay/:id` | Yes (JWT in query param) | User owns overlay |
+| Endpoint | Auth Required | Check |
+|----------|---------------|-------|
+| `GET /auth/<platform>/login` | No | state cookie + OriginCheck |
+| `GET /auth/<platform>/callback` | No | code exchange |
+| `POST /auth/refresh` | Yes (refresh cookie) | authRateLimiter + OriginCheck |
+| `POST /auth/exchange` | No | OriginCheck, sets cookies |
+| `GET /auth/me` | Yes (JWT cookie) | blacklist-check |
+| `GET /overlays` | Yes (JWT/PAT) | resolver-filtered |
+| `POST /overlays` | Yes (JWT) | creates for authenticated user |
+| `GET /overlays/:id` | Yes (JWT) | owner (or delegated moderator for alerts/moderate subsets) |
+| `PUT /overlays/:id` | Yes (JWT) | owner |
+| `DELETE /overlays/:id` | Yes (JWT) | owner |
+| `/ws/overlay/:id` | Yes (subprotocol / ?token= / ambient cookie) | origin+token; cookie path additionally verifies overlay-owner and falls back to the anonymous OBS feed (see Token Handling) |
+| `/alerts/profiles` PUT | Yes (JWT) | owner, premium-gated (`alerts_editor`) |
+| `/moderation/...` | Yes (JWT) | owner or delegated moderator |
 
 ---
 
@@ -233,176 +180,55 @@ func (s *OverlayService) GetOverlay(ctx context.Context, overlayID string, userI
 
 ### Platform OAuth Strategies
 
-| Platform | OAuth Type | Client Type | Scope Required |
-|----------|------------|-------------|----------------|
-| **Twitch** | OAuth 2.0 | Confidential | `chat:read` (for IRC listener) |
-| **YouTube** | OAuth 2.0 | Confidential | `https://www.googleapis.com/auth/youtube.readonly` |
-| **Kick** | API Key (unofficial) | N/A | N/A (public chat) |
-| **TikTok** | OAuth 2.0 | Confidential | `user.info.basic`, `video.list` |
+| Platform | OAuth Type | Confidential? | Notes |
+|----------|-----------|---------------|-------|
+| **Twitch** | OAuth 2.0 auth code | yes | base login scopes; add-source adds `user:read:chat`, `user:bot`, `channel:bot`; chat send uses `user:write:chat` (never bundled into login/add-source); delegated moderation re-consents per action (`moderator:manage:chat_messages`, `moderator:manage:banned_users`, `clips:edit`) |
+| **YouTube** | OAuth 2.0 auth code | yes | installed-app + web flows; scopes recorded at consent, includes `youtube.force-ssl` for chat-send, `youtube.readonly`, `youtube.force-ssl` for moderator status |
+| **Kick** | OAuth 2.0 | yes | streamer identity flow requests only `user:read`; optional advanced-controls re-consent adds `chat:write` (send) and moderation scopes — `moderation:ban` (timeout/ban/unban) and `moderation:chat_message:manage` (single-message delete); see `oauth/kick.go` |
+| **TikTok** | none for viewing | no | no live-chat OAuth for read path; legacy `tiktok_oauth_tokens` kept but never refreshed/read |
+| **Discord** | OAuth 2.0 (bot + user) | yes | delegated moderation only; platform-attested authority |
+| **Facebook / Instagram** | Graph API OAuth | yes | Live comments polling; moderation write-path is FB-only; ADR-0060/0062 |
+| **Owncast / GoodGame / Picarto / Altstream** | none (URL / channel-key based) | no | no user credential is stored |
 
-### YouTube OAuth Flow
+### Token Storage (Versioned AES-GCM)
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant Gateway as API Gateway
-    participant Overlay as Overlay Manager
-    participant YouTube as YouTube OAuth
+Every OAuth provider token persists **encrypted with AES-256-GCM** (symmetric) in `*_oauth_tokens` tables using `shared/encryption`. Two variants coexist:
 
-    User->>Gateway: POST /overlays/:id/sources<br/>{platform: "youtube", channel_id: "UCxyz"}
-    Gateway->>Overlay: AddChatSource()
-    Overlay->>Overlay: Check if auth_required = true for YouTube
-    alt User has not authorized YouTube
-        Overlay-->>Gateway: 403 {error: "youtube_auth_required", auth_url: "..."}
-        Gateway-->>User: 403 + OAuth URL
-        User->>YouTube: Click OAuth URL, authorize
-        YouTube->>Gateway: GET /api/v1/auth/youtube/callback?code=ABC
-        Gateway->>Overlay: StoreYouTubeToken(user_id, code)
-        Overlay->>Overlay: Exchange code for token, store encrypted
-        User->>Gateway: Retry POST /overlays/:id/sources
-    end
-    Gateway->>Overlay: AddChatSource()
-    Overlay->>Overlay: User has valid YouTube token
-    Overlay-->>Gateway: 201 Created {source}
-```
+- **Legacy** pre-Phase-14 blobs: `base64(nonce(12B) || ct || tag(16B))` (`AESEncryptor`).
+- **Versioned (current)**: `base64([kid 1B][nonce 12B][ct][tag 16B])` (`shared/encryption/versioned.go`), selected by `TOKEN_ENCRYPTION_KEY_V1` (+ optional legacy `TOKEN_ENCRYPTION_KEY` fallback row).
 
-### Token Storage (Encrypted)
+**Key management workflow** (see `services/auth-service/cmd/key-rotator` and the `key-rotator-weekly` CronJob, Sundays 03:00 UTC in caesar-deployment):
 
-YouTube OAuth tokens are encrypted before they hit PostgreSQL via `shared/encryption.AESEncryptor`, the same helper that backs the Auth Service. The helper uses AES‑256 GCM with a random nonce per record and base64 encodes the payload that is ultimately stored in `youtube_oauth_tokens.access_token` and `.refresh_token`.
+1. `TOKEN_ENCRYPTION_KEY_V1` is set in `allchat-secrets` (encrypted via ksops/sops) and mounted into services that require token encryption (auth-service, token-refresh-service, overlay-manager, moderation-service, message-processor etc.).
+2. `key-rotator-weekly` sweeps ciphertext rows still encrypted under a non-current key (`current_kid`) and re-encrypts them with the primary. A table can be excluded via `WithSkipTable`.
+3. A one-shot manual Job (`key-rotator-job.yaml`, not registered in kustomization) can force a sweep against live rows; the docblock at the top of that file names its runbook-plan origin.
+4. A row whose decryption fails under every configured key is logged (row + metric incremented: `rows_skipped`) and left untouched, not overwritten — re-adding the previous key to the chain recovers it.
 
-**Key management workflow:**
-
-1. **Generate a key** (32 random bytes, base64 encoded for convenience):
-   ```bash
-   openssl rand -base64 32
-   ```
-2. **Store it in your secret manager** – for Kubernetes we keep it inside `all-chat/youtube-token-encryption` and mount it as the `YOUTUBE_TOKEN_ENCRYPTION_KEY` environment variable.
-3. **Configure the service** – the YouTube Listener refuses to boot without `YOUTUBE_TOKEN_ENCRYPTION_KEY`, parses the base64 string, and builds the encryptor at start-up.
-4. **Deploy the migration** – `migrations/006_youtube_token_encryption.sql` adds an `encryption_version` flag so we can track which rows are already re‑encrypted.
-5. **Backfill legacy rows** – run the purpose-built job from this repo once the secret is in place:
-   ```bash
-   cd services/youtube-listener
-   YOUTUBE_TOKEN_ENCRYPTION_KEY=$(cat /path/to/key) \
-   go run ./cmd/token_backfill
-   ```
-   The command reads every `encryption_version = 0` row, encrypts the plaintext tokens with the configured key, and writes them back with `encryption_version = 1`.
-6. **Rotation** – generate a new key, deploy it alongside the service, reset `encryption_version` to `0` for the rows you plan to rotate (or all rows), and rerun the backfill command so the ciphertext is recreated with the new secret.
-
-> ✅ **Reminder:** Never check the raw key into git. Only mount the base64 string through your secret store, then export `YOUTUBE_TOKEN_ENCRYPTION_KEY` for local runs using direnv or your shell profile.
+> **Reminder**: never check key material into git; only mount it via the secret store (`allchat-secrets`, ksops-generated). See `caesar-deployment/apps/workloads/all-chat/secrets/secret-generator.yaml`.
 
 ---
 
 ## API Security
 
-### Rate Limiting (Planned)
+### Rate Limiting
 
-```go
-// pkg/middleware/rate_limit.go
-type RateLimiter struct {
-    redis  *redis.Client
-    limit  int           // Max requests
-    window time.Duration // Time window
-}
+Shared limiter `shared/ratelimit` (Redis-based sliding window, key prefix configurable, BurstSize defaults to RequestsPerMinute).
 
-func (rl *RateLimiter) Limit() gin.HandlerFunc {
-    return func(c *gin.Context) {
-        userID := c.GetString("user_id")
-        key := fmt.Sprintf("rate_limit:%s", userID)
+- **api-gateway**: global limiter (default 300 req/min/IP/user, `RATE_LIMIT_PER_MINUTE`) plus a **stricter auth limiter** (default 20 req/min/IP, `AUTH_RATE_LIMIT_PER_MINUTE`) applied per-endpoint via `MiddlewareScoped` on `/auth/refresh`, `/auth/exchange`, and every login-style route (audit M7). The auth limiter **fails closed** on Redis outage (`AUTH_RATE_LIMIT_FAIL_CLOSED=true` default) so a Redis outage cannot silently disable the brute-force defence (audit #15).
+- **engagement-service** and **moderation-service** each run their own shared ratelimiter on state-changing routes.
+- Variance on the shared limiter can be set per-instance via the `Config`; there is no per-CDN tier desk and no public "free/pro/enterprise" tier table — tiers are product entitlements, not distinct limiter configs.
 
-        // Increment request count
-        count, err := rl.redis.Incr(c.Request.Context(), key).Result()
-        if err != nil {
-            c.AbortWithStatusJSON(500, gin.H{"error": "rate limit check failed"})
-            return
-        }
+### CORS
 
-        // Set expiry on first request
-        if count == 1 {
-            rl.redis.Expire(c.Request.Context(), key, rl.window)
-        }
+`shared/middleware.CORSMiddleware(CORSConfig)` drives the allowlist from `ENVIRONMENT`-specific defaults (prod: `https://allch.at`, `https://www.allch.at`) plus `CORS_ORIGINS`/`CORS_ORIGIN` overrides and a `BROWSER_EXTENSION_ID` chrome-extension entry. `Allow-Credentials: true` is the only mode; a list containing `*` alongside it is refused (audit H9). One shared matcher, `sharedmiddleware.OriginAllowed`, underlies CORS, `OriginCheck` (CSRF) and the WebSocket origin checks (audit M4 — formerly three divergent wildcard rules). WebSocket routes bypass the HTTP CORS middleware and enforce origins in the upgrader instead.
 
-        // Check limit
-        if count > int64(rl.limit) {
-            c.Header("X-RateLimit-Limit", strconv.Itoa(rl.limit))
-            c.Header("X-RateLimit-Remaining", "0")
-            c.Header("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(rl.window).Unix(), 10))
-            c.AbortWithStatusJSON(429, gin.H{"error": "rate limit exceeded"})
-            return
-        }
+`.env.example` ships localhost dev origins for `CORS_ORIGINS` (the api-gateway's own middleware reads singular `CORS_ORIGIN`); production pods get the list from the `allchat-config` ConfigMap: `https://allch.at,https://beta.allch.at` plus the two extension-allowlist entries served through the shared matcher.
 
-        c.Header("X-RateLimit-Limit", strconv.Itoa(rl.limit))
-        c.Header("X-RateLimit-Remaining", strconv.FormatInt(int64(rl.limit)-count, 10))
-        c.Next()
-    }
-}
-```
+### Control surface
 
-**Rate Limit Tiers**:
-| Endpoint | Free Tier | Pro Tier | Enterprise |
-|----------|-----------|----------|------------|
-| `/auth/*` | 10 req/min | 100 req/min | Unlimited |
-| `/overlays/*` | 60 req/min | 600 req/min | Unlimited |
-| `/emotes/*` | 120 req/min | 1200 req/min | Unlimited |
-
-### CORS Configuration
-
-```go
-// pkg/middleware/cors.go
-func CORS() gin.HandlerFunc {
-    return cors.New(cors.Config{
-        AllowOrigins:     []string{"https://allch.at", "https://*.allch.at"},
-        AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-        AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-        ExposeHeaders:    []string{"Content-Length", "X-RateLimit-Limit"},
-        AllowCredentials: true,
-        MaxAge:           12 * time.Hour,
-    })
-}
-```
-
-### Input Validation
-
-```go
-// Validate and sanitize user input
-func (h *OverlayHandler) HandleCreateOverlay(c *gin.Context) {
-    var req CreateOverlayRequest
-    if err := c.ShouldBindJSON(&req); err != nil {
-        c.JSON(400, gin.H{"error": "invalid request"})
-        return
-    }
-
-    // Validate name
-    if len(req.Name) < 1 || len(req.Name) > 100 {
-        c.JSON(400, gin.H{"error": "name must be 1-100 characters"})
-        return
-    }
-
-    // Sanitize HTML
-    req.Name = html.EscapeString(req.Name)
-    req.Description = html.EscapeString(req.Description)
-
-    // Proceed with service call
-    overlay, err := h.service.CreateOverlay(c.Request.Context(), req)
-    // ...
-}
-```
-
-### SQL Injection Prevention
-
-```go
-// ALWAYS use parameterized queries (pgx automatically handles this)
-func (r *PostgresOverlayRepository) GetByID(ctx context.Context, id string) (*domain.Overlay, error) {
-    var overlay domain.Overlay
-    err := r.pool.QueryRow(ctx,
-        "SELECT id, user_id, name, description, is_active, created_at, updated_at FROM overlays WHERE id = $1",
-        id, // Parameter (safe)
-    ).Scan(&overlay.ID, &overlay.UserID, &overlay.Name, &overlay.Description, &overlay.IsActive, &overlay.CreatedAt, &overlay.UpdatedAt)
-    return &overlay, err
-}
-
-// NEVER do this (vulnerable to SQL injection):
-// query := fmt.Sprintf("SELECT * FROM overlays WHERE id = '%s'", id)  // DANGEROUS!
-```
+- Rate limits (400, 429), premium/early-access, and state-changing CORS mismatches produce clear JSON errors.
+- Input validation is per-handler (gin binding → 400 on failure), not a global HTML-escaping middleware. The repository never string-interpolates user input into SQL; leftover text escaping is frontend-only and not relied upon for safety.
+- Parameterised SQL throughout via pgx (`$1`, `$2`, …); no `fmt.Sprintf` SQL anywhere in prod code (`services/.../repository/`). Parameterisation is the SQL-injection defense, not input sanitisation.
 
 ---
 
@@ -410,354 +236,180 @@ func (r *PostgresOverlayRepository) GetByID(ctx context.Context, id string) (*do
 
 ### Encryption at Rest
 
-| Data Type | Encryption Method | Key Management |
-|-----------|-------------------|----------------|
-| **OAuth Tokens** | AES-256-GCM | Kubernetes Secret (encryption key) |
-| **Discord relay webhook URLs** (`overlay_chat_sources.config.relay_webhook_url`, ADR-0091) | AES-256-GCM, same versioned key; never returned by the API | Kubernetes Secret (`TOKEN_ENCRYPTION_KEY_V<n>` on discord-listener) |
-| **User Passwords** | N/A (OAuth only, no passwords) | N/A |
-| **Database** | PostgreSQL TDE (Transparent Data Encryption) | Cloud KMS (AWS RDS encryption) |
-| **Redis** | Redis encryption at rest (cloud provider) | Cloud KMS |
-| **Backups** | Cloud-provider encryption | Cloud KMS |
+| Data | Encryption | Keys |
+|------|-----------|------|
+| OAuth tokens in `*_oauth_tokens` | AES-256-GCM, nonce-per-record, kid-prefixed (`shared/encryption`) | `TOKEN_ENCRYPTION_KEY_V1` (+ legacy fallback) in `allchat-secrets` |
+| Discord relay webhook URLs (`overlay_chat_sources.config.relay_webhook_url`, ADR-0091) | AES-256-GCM, same versioned key; never returned by the API | `TOKEN_ENCRYPTION_KEY_V<n>` on discord-listener |
+| PostgreSQL data files/WAL | Barman Cloud backup to Hetzner Object Storage (bucket versioning on); the Backblaze B2 copy is paused, so Hetzner is the only off-cluster copy; credentials placed via sops-encrypted `backup-credentials.enc.yaml` (own Secret, not `allchat-secrets`) | Barman |
+| Redis 7 (AOF) | not encrypted at rest; isolation is NetworkPolicy only | n/a |
+| MinIO media | S3 API on media.allch.at via the Envoy Gateway; bucket root credentials in `allchat-secrets` (ksops); object server on a single-tenant pod (in-namespace service, see `minio-service.yaml`) | MinIO/pod backend keys |
+| Audit/PII/logging | client IPs logged **truncated**: IPv4 last octet zeroed, IPv6 → /48 (`shared/middleware/ipanon.AnonymizeIP`) — applied in gateway logging, emote-service, overlay-manager YouTube handler. Edge (Envoy Gateway) additionally logs **no client IPs at all** to keep the Loki pipeline consistent with the privacy policy. | Anonymisation is the DSGVO data-minimisation control |
 
 ### Encryption in Transit
 
-- **External**: TLS 1.3 (Ingress → API Gateway)
-- **Internal**: TLS 1.2+ (Service-to-service, planned)
-- **Database**: TLS 1.2+ (App → PostgreSQL)
-- **Redis**: TLS 1.2+ (App → Redis, optional)
-
-```yaml
-# Ingress TLS configuration
-spec:
-  tls:
-    - hosts:
-        - api.allch.at
-      secretName: allchat-tls  # Let's Encrypt certificate
-```
+- **External**: HTTPS via Envoy Gateway (ADR-0083), TLS 1.2+ with `cert-manager` Let's Encrypt DNS-01 (Cloudflare). Front-end proxy (Cloudflare) terminates first hop; gateway terminates second hop. HSTS (max-age 1 y, includeSubDomains, preload), `X-Content-Type-Options`, `Referrer-Policy`, `X-Frame-Options` set by `shared/middleware.SecurityHeaders` on upstream services.
+- **Internal cluster**: plain HTTP on the ClusterIP network; Namespace NetworkPolicies (default-deny-ingress per-workload) is the isolation control. `shared/signing` (HMAC-SHA256 over method+path+query+service name+timestamp, constant-time compare — hardened per audit L2/M4/M5) is **implemented but not wired into any production service**; `grep shared/signing services/` = 0 prod imports. Documented deferral in `docs/security/RESIDUALS.md`.
+- **PostgreSQL**: CNPG certificates.
+- **Redis**: no TLS; network-isolated via NetworkPolicy (no Redis AUTH in prod today; see below).
 
 ### Data Retention
 
-| Data Type | Retention Period | Deletion Method |
-|-----------|------------------|-----------------|
-| **User Accounts** | Until user deletion request | Hard delete (GDPR compliance) |
-| **OAuth Tokens** | Until account deletion; legacy TikTok tokens, legacy Kick rows without `kick_user_id` and expired Instagram tokens 7 days after expiry | Cascade delete; retention-sweeper (ADR-0089) |
-| **Messages sent through All-Chat** (`viewer_message_history`) | 1 hour | retention-sweeper, every 15 minutes |
-| **YouTube quota audit log, alert events** | 30 days | retention-sweeper |
-| **Moderation actions** | 90 days | retention-sweeper |
-| **Abandoned device-link requests** | 1 hour after expiry | retention-sweeper |
-| **Logs** | 30 days | Automatic deletion (Loki retention) |
-| **Metrics** | 90 days | Automatic deletion (Prometheus retention) |
-| **Overlays** | Until user deletion | Cascade delete (FK constraint) |
+`services/auth-service/cmd/retention-sweeper` (ADR-0089) runs as a **15-minute CronJob** in caesar-deployment (`retention-sweeper-cronjob.yaml`, concurrencyPolicy=Forbid, backoffLimit=0). Policy, per ADR-0089:
+
+| Data | Retention | Mechanism |
+|------|-----------|-----------|
+| `viewer_message_history` | 1 hour | retention-sweeper |
+| `youtube_quota_audit_log`, `alert_events` | 30 days | retention-sweeper |
+| `moderation_actions` | 90 days | retention-sweeper |
+| `device_link_requests` | expired + 1 h, only if no token minted | retention-sweeper |
+| legacy/never-read OAuth creds (`tiktok_oauth_tokens`, legacy `kick_oauth_tokens` rows, expired `instagram_oauth_tokens`) | 7 days past expiry (per-table "dead" rule) | retention-sweeper |
+| other OAuth credential rows | until account delete (cascades from `users`) | FK cascade |
+| users / overlays | until `DELETE /auth/me` | hard delete, cascade |
+| logs | retained in Loki with its own retention policy (`apps/platform/allchat-monitoring`) | Loki retention |
+| metrics | Prometheus retention | kube-prometheus-stack |
+
+The sweeper batches deletions (`DELETE ... WHERE id IN (...) LIMIT $1 FOR UPDATE SKIP LOCKED`) with no locks held across transactions, is idempotent and safe to re-run and to run concurrently.
 
 ---
 
 ## Network Security
 
-### Kubernetes Network Policies
+### Kubernetes Network Policies (caesar-deployment)
 
-```yaml
-# deployments/k8s/network-policy.yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: api-gateway-policy
-  namespace: all-chat
-spec:
-  podSelector:
-    matchLabels:
-      app: api-gateway
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    - from:
-        - namespaceSelector:
-            matchLabels:
-              name: ingress-nginx
-      ports:
-        - protocol: TCP
-          port: 8080
-  egress:
-    # Allow to Auth Service
-    - to:
-        - podSelector:
-            matchLabels:
-              app: auth-service
-      ports:
-        - protocol: TCP
-          port: 8081
-    # Allow to Overlay Manager
-    - to:
-        - podSelector:
-            matchLabels:
-              app: overlay-service
-      ports:
-        - protocol: TCP
-          port: 8082
-    # Allow DNS
-    - to:
-        - namespaceSelector: {}
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
-        - protocol: UDP
-          port: 53
-```
+`apps/workloads/all-chat/network-policies.yaml` applies, per workload selector:
+- `default-deny-ingress` — namespace-wide rule that every workload's ingress rules build on. Egress is namespace-open except where noted.
+- Per-workload ingress selectors for api-gateway, auth-service, overlay-manager, share-service, moderation-service, message-processor, emote-service, listeners, source-manager, token-refresh-service, support-bot, discord-bot, youtube-quota-monitor, PostgreSQL (CNPG), MinIO (S3 API via media.allch.at through the Envoy gateway), redis / redis-haproxy / redis-nodes / sentinels, frontend, and the monitoring namespace's Prometheus-facing ports.
+- `redis-ha-networkpolicy.yaml` (HA path): ingress to `redis-node` from HAProxy/Sentinel/peer nodes only; `redis-haproxy` from all namespace pods; `redis-sentinel` from peers + HAProxy.
+- No default-deny-egress today: egress to Postgres/Redis/external APIs is unrestricted for most workloads (see note in network-policies.yaml — accepting per-service egress maturity is a documented residual risk).
 
-### Firewall Rules (Cloud Provider)
+### Firewall (cluster edge)
 
-```
-# AWS Security Group Rules
-Ingress:
-  - Port 443 (HTTPS) from 0.0.0.0/0
-  - Port 80 (HTTP, redirect to HTTPS) from 0.0.0.0/0
+The single public entry point is the Envoy Gateway `public` HTTPRoute on https (port 443), served through Cloudflare with cert-manager TLS (`allch.at` and `*.allch.at`). No legacy `Ingress`/nginx gateway remains in production.
 
-Egress:
-  - Port 443 (HTTPS) to 0.0.0.0/0 (external API calls)
-  - Port 80 (HTTP) to 0.0.0.0/0 (external API calls)
-  - Internal VPC traffic (all ports)
-```
+### SSRF control
+
+Outbound fetches of **user-chosen URLs** go through `shared/safehttp`: refuses every non-public IP (private ranges, CGNAT, link-local, protocol-assignment block, ULA, metadata endpoint) at dial time, after DNS resolution, and on every redirect hop, never via a proxy. Used by `{urlfetch}` in engagement-service chat commands (https:// port 443 only, ADR-0080) and Owncast instance-URL ingestion (ADR-0058). This is the application-level guard; no egress NetworkPolicy exists yet (ENG1 residual in RESIDUALS).
 
 ---
 
 ## Secrets Management
 
-### Kubernetes Secrets
+### Encrypted-Secrets in Git (ksops/sops)
 
-```bash
-# Create secrets manually
-kubectl create secret generic all-chat-secrets \
-  --from-literal=jwt_secret='your-secret-key' \
-  --from-literal=database_password='secure-password' \
-  --from-literal=twitch_client_secret='your-client-secret' \
-  --from-literal=encryption_key='your-32-byte-key' \
-  -n all-chat
-```
+Durable secrets live **encrypted** inside `caesar-deployment/apps/workloads/all-chat/secrets/*.enc.yaml` (sops-encrypted, sealed via the `ksops` kustomize generator, decrypted server-side by the ArgoCD ksops plugin). Values include `database-password`, `jwt-secret`/`jwt-secret-v1`, `service-jwt-secret`/`service-jwt-secret-v1`, `token-encryption-key-v1` (and legacy), MinIO root credentials, Hetzner HS ObjectStore + B2 keys, Twitch/Patreon/Meta/Google/Key/Kick/Discord API keys as needed. plaintext is never committed and shown only inside the cluster.
 
-### External Secrets Operator (Recommended)
+### In-Cluster Secret (allchat-secrets)
 
-```yaml
-# Use External Secrets Operator with AWS Secrets Manager
-apiVersion: external-secrets.io/v1beta1
-kind: SecretStore
-metadata:
-  name: aws-secrets-manager
-  namespace: all-chat
-spec:
-  provider:
-    aws:
-      service: SecretsManager
-      region: us-east-1
-      auth:
-        jwt:
-          serviceAccountRef:
-            name: all-chat-sa
----
-apiVersion: external-secrets.io/v1beta1
-kind: ExternalSecret
-metadata:
-  name: all-chat-secrets
-  namespace: all-chat
-spec:
-  refreshInterval: 1h
-  secretStoreRef:
-    name: aws-secrets-manager
-    kind: SecretStore
-  target:
-    name: all-chat-secrets
-    creationPolicy: Owner
-  data:
-    - secretKey: jwt_secret
-      remoteRef:
-        key: all-chat/jwt-secret
-    - secretKey: database_password
-      remoteRef:
-        key: all-chat/database-password
-```
+Generated by ksops at sync time; referenced via `secretKeyRef` in each Deployment. Rotation workflow:
 
-### Secret Rotation
+1. Re-seal `secrets/allchat-secret.enc.yaml` with the new value(s).
+2. ArgoCD syncs, the ksops plugin re-encrypts into `allchat-secrets`.
+3. Relevant Deployments restart on secret change (reloader); consumers pick it up.
+4. For token-encryption secrets the `key-rotator-weekly` CronJob (Sundays 03:00 UTC) sweeps `*_oauth_tokens` ciphertext columns and re-encrypts rows still under the legacy `TOKEN_ENCRYPTION_KEY` / `YOUTUBE_TOKEN_ENCRYPTION_KEY` with `TOKEN_ENCRYPTION_KEY_V1`. It is a `cmd/key-rotator` binary in the auth-service image and does **not** touch JWT secrets; JWT rotation is the operator resealing `jwt-secret-v1` plus the grace window of the previous secret in `JWT_SECRET`.
 
-```bash
-# Rotate JWT secret
-NEW_SECRET=$(openssl rand -base64 32)
-kubectl create secret generic all-chat-secrets-new \
-  --from-literal=jwt_secret=$NEW_SECRET \
-  --dry-run=client -o yaml | kubectl apply -f -
+### Revocation & logout
 
-# Update deployments to use new secret
-kubectl set env deployment/api-gateway --from=secret/all-chat-secrets-new -n all-chat
-
-# Graceful rollout
-kubectl rollout restart deployment/api-gateway -n all-chat
-```
+Refresh and access cookies (`access_token`, `refresh_token`) are revocable: `JWTAuthWithRevocation` blacklist checks fail-closed on Redis outage (H2). Logout clears both cookies and blacklists the session in Redis.
 
 ---
 
 ## Security Best Practices
 
-### 1. Principle of Least Privilege
+### Pod Security
 
-```yaml
-# Run containers as non-root user
-spec:
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 1000
-    fsGroup: 1000
-  containers:
-    - name: api-gateway
-      securityContext:
-        allowPrivilegeEscalation: false
-        readOnlyRootFilesystem: true
-        capabilities:
-          drop:
-            - ALL
-```
+Every workload in caesar-deployment carries a pod-level securityContext (audit H6 closed):
+`runAsNonRoot: true, runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, seccompProfile RuntimeDefault`; containers drop `ALL` capabilities, `allowPrivilegeEscalation: false`, and mount a writable `/tmp` emptyDir against `readOnlyRootFilesystem: true` (StatefulSets/containers needing scratch space opt out individually).
 
-### 2. Immutable Infrastructure
+### Image hygiene
 
-```yaml
-# Use specific image tags, not :latest
-spec:
-  containers:
-    - name: api-gateway
-      image: allchat/api-gateway:v1.2.3  # Specific version
-      imagePullPolicy: IfNotPresent
-```
+Images pin `ghcr.io/caesarakalaeii/allchat-*:main`, `alpine:3.24.3`, `redis:7.4.12-bookworm`, `postgres:16-alpine` etc. — mutable tags remain (audit M13 residual), mitigated by ArgoCD self-heal + Keel poll or upstream tag rotation. `dependabot-auto-merge.yml` plus a weekly `security-scan.yml` (govulncheck on every Go module, reachable-vulnerability gate, npm audit on the frontend/subprojects) continuously scan.
 
-### 3. Security Scanning
+### Body / read / WS limits
 
-```bash
-# Scan Docker images for vulnerabilities (CI/CD)
-docker scan allchat/api-gateway:v1.2.3
-trivy image allchat/api-gateway:v1.2.3
-```
+- HTTP request body capped by `shared/middleware.body_limit` in content-type-JSON routes.
+- WebSocket `SetReadLimit(MaxMessageSize)` is called on every gateway WS connection (audit H1 closed).
+- JWT validation middlewares reject anonymous tokens before any goroutine fan-out.
 
-### 4. Dependency Management
+### Data in transit (transport)
 
-```bash
-# Keep Go dependencies up to date
-go get -u ./...
-go mod tidy
-
-# Check for known vulnerabilities
-go list -json -m all | nancy sleuth
-govulncheck ./...
-```
-
-### 5. Secure Defaults
-
-```go
-// HTTP server timeouts
-srv := &http.Server{
-    Addr:           ":8080",
-    Handler:        router,
-    ReadTimeout:    10 * time.Second,
-    WriteTimeout:   30 * time.Second,
-    IdleTimeout:    120 * time.Second,
-    MaxHeaderBytes: 1 << 20, // 1 MB
-}
-```
+CSP is per-route at the frontend (Next.js), never widened globally — the alerts custom-code sandbox (ADR-0071) relies on the overlay page's existing `script-src 'self' 'unsafe-inline'` and an `<iframe sandbox="allow-scripts" srcdoc>` with opaque origin; the gateway never relays streamer custom code outside that sandbox. `frame-ancestors` is not set globally at the edge today (residual M10 remainder), but each overlay page sets appropriate directive via Next.js headers.
 
 ---
 
 ## Threat Model
 
-### Threat: Unauthorized Access to Overlays
-
-**Attack Vector**: User attempts to access another user's overlay
-**Mitigation**:
-- Authorization checks in Overlay Manager
-- JWT validation on API Gateway
-- Database-level foreign key constraints
-
 ### Threat: Token Theft
 
-**Attack Vector**: JWT or OAuth token stolen via XSS or man-in-the-middle
-**Mitigation**:
-- Short JWT expiry (24 hours)
-- HttpOnly cookies for frontend (planned)
-- TLS encryption in transit
-- Token refresh flow
+**Vector**: XSS, man-in-the-middle, or extension-origin exfiltration.
+**Mitigations**:
+- httpOnly cookies (`Secure; SameSite=Lax`) carry both JWTs — a successful XSS cannot read them; SameSite=Lax plus shared `OriginAllowed` OriginCheck provides CSRF defense (audit H3 closed).
+- Cookie-jar degradation rules on the owner overlay WS keep extensions from riding ambient cookies.
+- Strict first-party origin gate for cookie-authenticated WS, permissive-origin fallthrough only for token-path clients (audit #8 / M8 / I1).
+- OAuth codes never land in `#fragment`; streamer OAuth uses a short-lived `?code=` exchange through Redis (M1).
+- DevicePAT and paired-device plaintexts are never shown or persisted (`allchat_dev_` only travels the browser-linking loopback).
 
-### Threat: SQL Injection
+### Threat: Privilege Escalation via /internal Endpoints
 
-**Attack Vector**: Malicious input in API requests
-**Mitigation**:
-- Parameterized queries (pgx)
-- Input validation and sanitization
-- Web Application Firewall (WAF) (planned)
+**Vector**: an unauthenticated caller hitting auth-service `/internal/chat/announce` (`/internal/chat/bot-send`, `/internal/twitch/clip`) and acting as any streamer.
+**Mitigation**: those routes are registered **only** when `SERVICE_JWT_SECRET[(_V1)]` is set, and are enforced by `ServiceJWTAuth(serviceKeyChain, "engagement-service")` — an independent KeyChain from the user one. A wide internal surface (extra risk of service-JWT compromise turning into arbitrary-chat-send) is documented as residual risk ENG1 in `docs/security/RESIDUALS.md`.
 
-### Threat: DDoS Attack
+### Threat: DDoS / DoS
 
-**Attack Vector**: Overwhelming system with requests
-**Mitigation**:
-- Rate limiting per user
-- Cloud-provider DDoS protection (AWS Shield, Cloudflare)
-- HPA auto-scaling
-- Circuit breakers
+**Vector**: connection or CPU exhaustion.
+**Mitigations**: WS `SetReadLimit` (audit H1), auth limiter fail-closed (audit #15), gateway global rate limit, per-pod HPAs (api-gateway, kick-listener, twitch-listener, platform-listeners), PDBs, and Cloudflare-level protection at the edge.
 
-### Threat: Data Breach (Database)
+### Threat: DB Breach
 
-**Attack Vector**: Direct database access or SQL injection
-**Mitigation**:
-- Encrypted OAuth tokens at rest
-- PostgreSQL network isolation (private subnet)
-- Database access auditing
-- Regular security patches
+**Vector**: SQL injection, direct Postgres access, stolen backup.
+**Mitigations**: parameterised pgx queries everywhere; the CNPG NetworkPolicy restricts ingress to the allow-listed callers (plus the `cnpg-system` operator); every `*_oauth_tokens` column is AES-256-GCM under versioned keys; backups go to Hetzner Object Storage (versioned bucket), their creds sealed via sops; session JWTs are httpOnly cookies and expire.
+
+### Threat: SSRF via user-chosen URL
+
+**Vector**: `{urlfetch https://internal…}` or a hostile Owncast URL reaching metadata/private address space.
+**Mitigation**: `shared/safehttp` refuses every non-public dial target at dial time (post-DNS, per redirect hop) — plus https-only/443-only enforcement in `{urlfetch}`. No egress NetworkPolicy exists yet, so a new code path bypassing safehttp is the exposure (ENG1 residual).
 
 ---
 
 ## Compliance
 
-### GDPR Compliance
+### GDPR / CCPA
 
 | Requirement | Implementation |
 |-------------|----------------|
-| **Right to Access** | `GET /auth/me/data-export` (streamer) and `GET /auth/viewer/data-export` (viewer) return everything stored about the account as one JSON file, credentials excluded; "Download my data" on `/settings` and `/settings/viewer`. Contents: `services/auth-service/README.md` → Data export |
-| **Right to Deletion** | `DELETE /auth/me` deletes user + cascades |
-| **Data Portability** | Same JSON export as Right to Access |
-| **Consent** | OAuth authorization flow |
-| **Data Minimization** | Only store necessary user data |
-| **Encryption** | Tokens encrypted at rest, TLS in transit |
+| Right to Access | `GET /auth/me/data-export` (streamer) and `GET /auth/viewer/data-export` (viewer) section-structured JSON; "Download my data" cards on `/settings` and `/settings/viewer` (contents enumerated in `services/auth-service/README.md` → data export) |
+| Right to Deletion | `DELETE /auth/me` hard-cascades; retention-sweeper removes per-table quotas |
+| Data Portability | Same JSON export (attachment `Content-Disposition`) |
+| Consent | OAuth authorization flow; viewer consent / ToS stamps |
+| Data Minimisation | IP anonymisation (`shared/middleware/ipanon`), streaming meta not stored beyond overlay logs; edge logs no client addresses at all |
+| Encryption | AES-256-GCM tokens at rest, TLS via cert-manager at the edge |
 
-### CCPA Compliance
+CCPA "Right to Opt-Out" is the data-minimisation story (no analytics dump → nothing to opt out of).
 
-| Requirement | Implementation |
-|-------------|----------------|
-| **Right to Know** | `GET /auth/me/data-export`, `GET /auth/viewer/data-export` |
-| **Right to Delete** | `DELETE /auth/me` |
-| **Right to Opt-Out** | Analytics opt-out (planned) |
+### SOC 2 (future)
 
-### SOC 2 (Future)
-
-- Access control logs
-- Security incident response plan
-- Regular security audits
-- Vendor risk management
+- Continuous audit trail: moderation actions, impersonations, feature-gate changes.
+- Automated vulnerability scanning (`security-scan.yml`, dependabot).
+- Operational reviews (the ADR process and the `docs/security/` corpus).
 
 ---
 
 ## Summary
 
-This document provides comprehensive security architecture:
+Controls as implemented today (see `docs/security/RESIDUALS.md` for the deliberately deferred list):
 
-1. **Authentication**: OAuth 2.0 + JWT
-2. **Authorization**: RBAC + resource ownership
-3. **Multi-Platform OAuth**: Twitch, YouTube, Kick, TikTok
-4. **API Security**: Rate limiting, CORS, input validation
-5. **Data Protection**: Encryption at rest and in transit
-6. **Network Security**: Network policies, firewalls
-7. **Secrets Management**: Kubernetes Secrets + external vaults
-8. **Best Practices**: Least privilege, secure defaults
-9. **Threat Model**: Identified threats and mitigations
-10. **Compliance**: GDPR, CCPA
+1. **Authentication** — OAuth 2.0 + cookie/JWT (KeyChain, kid rotation), viewer tokens, paired-device and personal access tokens.
+2. **Authorization** — feature gates, premium/early-access middleware, ownership checks, delegated-moderator per-overlay grants (ADR-0048).
+3. **Multi-Platform OAuth** — Twitch/YouTube/Kick/Discord/Facebook/Instagram (+ no-auth read-only sources).
+4. **API Security** — per-service Redis-backed rate limiting (auth limiter fails closed), env-driven CORS/OriginCheck, request-body limits, WS read limits.
+5. **Data Protection** — AES-256-GCM token encryption with kid versions, retention-sweeper (ADR-0089), IP anonymisation, MinIO bucket via in-namespace service.
+6. **Network Security** — default-deny-ingress NetworkPolicies, Envoy Gateway TLS (ADR-0083), cert-manager, SafeHTTP SSRF guard.
+7. **Secrets Management** — ksops/sops encrypted Git secrets, `key-rotator-weekly` CronJob, multi-key chains for rotation.
+8. **Best Practices** — pod securityContext everywhere, image pinning at digest-ish tags, govulncheck + dependabot, body limits.
+9. **Tracked residuals** — `shared/signing` implemented-but-unwired (L2), `/internal/chat/*` breadth (ENG1), no default-deny-egress (ENG1), M2 refresh-token family revocation, OBS unauthenticated overlay socket (L13, accepted), `gorilla/websocket` pseudo-version pinning (S3).
 
-**Next Steps**:
-- [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) - Implementation plan
+**Next**: [Security Audit Residuals](../security/RESIDUALS.md), [Deployment](./02-DEPLOYMENT.md)
 
 ---
 
 **Document Maintainers**: Security Team
-**Last Review**: 2025-11-11
+**Last Review**: 2026-11-04

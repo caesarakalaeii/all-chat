@@ -251,7 +251,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Centrifugo/Pusher, TikTok WS, 
 
 - **Backend**: Go 1.26+, Gin framework, pgx/v5 (PostgreSQL), go-redis/v9, Zap logging
 - **Frontend**: React 19, Next.js 16 (App Router), TypeScript, Tailwind CSS, Zustand
-- **Database**: PostgreSQL 16
+- **Database**: PostgreSQL 17 in production, 16 in local compose
 - **Messaging**: Redis 7 (Streams + Pub/Sub)
 - **Infrastructure**: Docker Compose (local dev), Kubernetes + CloudNativePG (production)
 
