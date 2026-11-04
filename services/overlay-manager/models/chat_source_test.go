@@ -17,10 +17,43 @@
 package models
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 )
+
+// The relay webhook URL is a credential discord-listener provisions (ADR-0091): no API
+// response may carry it, whether the source is marshalled by value or by pointer.
+func TestChatSource_JSONNeverCarriesTheRelayWebhook(t *testing.T) {
+	source := ChatSource{
+		ID:       "source-1",
+		Platform: "discord",
+		Config: map[string]interface{}{
+			"guild_id":          "guild-1",
+			"relay_enabled":     true,
+			"relay_channel_id":  "chan-1",
+			"relay_webhook_url": "SECRET-ciphertext",
+		},
+	}
+
+	for name, v := range map[string]any{"value": source, "pointer": &source, "slice": []*ChatSource{&source}} {
+		body, err := json.Marshal(v)
+		if err != nil {
+			t.Fatalf("%s: marshal: %v", name, err)
+		}
+		if strings.Contains(string(body), "relay_webhook_url") || strings.Contains(string(body), "SECRET") {
+			t.Errorf("%s: response carries the relay webhook: %s", name, body)
+		}
+		if !strings.Contains(string(body), `"relay_channel_id":"chan-1"`) {
+			t.Errorf("%s: the rest of the config must still be sent: %s", name, body)
+		}
+	}
+	if source.Config["relay_webhook_url"] != "SECRET-ciphertext" {
+		t.Error("marshalling must not modify the stored config")
+	}
+}
 
 func TestChatSource_Validate(t *testing.T) {
 	tests := []struct {

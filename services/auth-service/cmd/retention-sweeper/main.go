@@ -132,6 +132,31 @@ func sweepTable(ctx context.Context, conn *pgx.Conn, r rule, o *options) (int64,
 	}
 }
 
+// connectBudget bounds how long the sweeper waits for its first connection. A new
+// pod's IP reaches the Postgres NetworkPolicy allow-set a moment after the pod
+// starts, so the first dial is refused; long-running services ride this out with
+// shared/database's startup retry, and a one-shot job has to as well.
+const connectBudget = time.Minute
+
+func connect(ctx context.Context, cfg *pgx.ConnConfig, logger *zap.Logger) (*pgx.Conn, error) {
+	ctx, cancel := context.WithTimeout(ctx, connectBudget)
+	defer cancel()
+	backoff := time.Second
+	for attempt := 1; ; attempt++ {
+		conn, err := pgx.ConnectConfig(ctx, cfg)
+		if err == nil {
+			return conn, nil
+		}
+		logger.Warn("database not reachable, retrying", zap.Int("attempt", attempt), zap.Duration("backoff", backoff), zap.Error(err))
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(backoff):
+		}
+		backoff = min(backoff*2, 10*time.Second)
+	}
+}
+
 func run(ctx context.Context, args []string, getenv func(string) string) int {
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -154,7 +179,7 @@ func run(ctx context.Context, args []string, getenv func(string) string) int {
 	cfg.RuntimeParams["application_name"] = "retention-sweeper"
 	// One connection, not a pool: the deletes run one after another, and the
 	// database has little connection headroom (ADR-0039).
-	conn, err := pgx.ConnectConfig(ctx, cfg)
+	conn, err := connect(ctx, cfg, logger)
 	if err != nil {
 		logger.Error("database connection failed", zap.Error(err))
 		return 1

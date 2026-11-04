@@ -366,10 +366,9 @@ describe('terms of service link text', () => {
 })
 
 describe('privacy policy headings', () => {
-  it('keeps the page title, the effective date and the metadata', () => {
+  it('keeps the page title and the metadata', () => {
     // &auml; in the source title.
     expect(t('legal.privacy.title')).toBe('Privacy Policy (Datenschutzerkl\u00E4rung)')
-    expect(t('legal.privacy.lastUpdated')).toBe('July 30, 2026')
     expect(t('metadata.privacy.title')).toBe('Privacy Policy')
     expect(t('metadata.privacy.description')).toBe(
       'Learn how All-Chat collects, processes, and protects your information.'
@@ -496,6 +495,9 @@ describe('privacy policy collection sections', () => {
     expect(t('legal.privacy.authProfileImages')).toBe('Profile images provided by the platform')
     expect(t('legal.privacy.authTokens')).toBe('Encrypted OAuth access and refresh tokens')
     expect(t('legal.privacy.authScopes')).toBe('Token scopes and expiration dates')
+    expect(t('legal.privacy.authTermsAcceptance')).toBe(
+      'Whether and when you accepted the current Terms of Service and this Privacy Policy'
+    )
   })
 
   it('keeps the chat data list and its retention sentence', () => {
@@ -598,10 +600,10 @@ describe('privacy policy usage, storage and sharing', () => {
     expect(t('legal.privacy.storageRedis')).toBe(
       'Redis for ephemeral sessions, message fan-out, and rate limiting'
     )
-    expect(t('legal.privacy.storageLocation', { country: 'Germany' })).toBe(
-      'All of the above runs on our own infrastructure on servers located in Germany (hosting provider: Hetzner Online GmbH)'
+    expect(t('legal.privacy.storageLocation', { country: 'Germany and Finland' })).toBe(
+      'All of the above runs on our own infrastructure on servers located in Germany and Finland (hosting provider: Hetzner Online GmbH; data centres in Falkenstein and Nuremberg, Germany, and Helsinki, Finland)'
     )
-    expect(t('legal.privacy.storageCountry')).toBe('Germany')
+    expect(t('legal.privacy.storageCountry')).toBe('Germany and Finland')
     expect(t('legal.privacy.safeguardsEncryption')).toBe(
       'OAuth tokens encrypted with AES-GCM before touching the database'
     )
@@ -825,8 +827,8 @@ describe('privacy policy retention, rights and the rest', () => {
     expect(t('legal.privacy.childrenBody')).toBe(
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it immediately.'
     )
-    expect(t('legal.privacy.transfersBody')).toBe(
-      'All-Chat itself is hosted on servers located in Germany (see Section\u00A04.1). However, when you use streaming platform integrations, data is transferred to servers operated by Twitch (Amazon, US), Google/YouTube (US), TikTok (various), and Kick (AU). If you connect a Patreon membership, data is exchanged with Patreon, Inc. (US). The GitHub API (theme marketplace) may also involve transfers to the US.'
+    expect(t('legal.privacy.transfersBody')).toMatch(
+      /^All-Chat itself is hosted on servers located in Germany and Finland, both within the EU \(see Section\u00A04\.1\)\./
     )
     expect(t('legal.privacy.transfersLegalBasis')).toBe(
       "Where a provider is certified under the EU\u2013US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded."

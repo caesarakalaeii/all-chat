@@ -524,6 +524,7 @@ func main() {
 		protected.GET("/me", legacyAuthHandler.HandleGetMe)
 		protected.GET("/me/data-export", legacyAuthHandler.HandleDataExport)
 		protected.PATCH("/me/onboarding", legacyAuthHandler.HandleUpdateOnboarding)
+		protected.POST("/me/tos-acceptance", legacyAuthHandler.HandleAcceptTos)
 
 		// Connected platforms. Session-only (the handler refuses a PAT); disconnecting is
 		// also refused while impersonating.

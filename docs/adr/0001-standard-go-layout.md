@@ -1,7 +1,8 @@
 # ADR-0001: Standard Go Layout (Not Hexagonal Architecture)
 
 **Date**: 2025-11-11
-**Status**: ✅ Accepted
+**Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: Architecture Team, LLM Development Lead
 
 ---
@@ -12,7 +13,7 @@ All-Chat is a microservices platform built with an **LLM-first development appro
 - LLMs can generate accurately (familiar patterns)
 - Minimizes boilerplate and abstraction layers
 - Supports testability through dependency injection
-- Scales to 8-13 microservices
+- Scales to a growing set of microservices
 
 **Initial Plan**: Hexagonal Architecture (ports/adapters pattern) was proposed for "clean architecture" benefits.
 
@@ -27,7 +28,7 @@ All-Chat is a microservices platform built with an **LLM-first development appro
 3. **Maintainability**: Code should be easy to understand for future developers
 4. **Testing**: Must support unit testing with dependency injection
 5. **Go Community Standards**: Align with common Go patterns and examples
-6. **Boilerplate Overhead**: Minimize repetitive code across 13 services
+6. **Boilerplate Overhead**: Minimize repetitive code across services
 
 ---
 
@@ -189,8 +190,7 @@ Define interfaces **only** where:
 
 1. **LLM Code Generation** (Primary Driver):
    - LLMs trained on thousands of Standard Go Layout examples
-   - 90%+ accuracy when generating code for standard patterns
-   - 60% accuracy with hexagonal (frequent interface wiring bugs)
+   - Fewer interface wiring bugs than the hexagonal pattern produced
 
 2. **Development Velocity**:
    - 60% less code to write/review/maintain
@@ -217,13 +217,11 @@ Define interfaces **only** where:
 
 ### Positive
 
-1. **Faster Development** (~60% less code):
-   - 13 services × ~3,000 lines/service = 39,000 lines saved
-   - Estimated 2-3 weeks faster to Phase 5
+1. **Faster Development** (~60% less code vs the hexagonal sketch):
+   - Fewer interface/adapter layers to write and review per service
 
 2. **Higher LLM Accuracy**:
-   - 90%+ code generation accuracy (vs 60% with hexagonal)
-   - Fewer manual bug fixes after generation
+   - Standard patterns dominate LLM training data; fewer manual fixes
 
 3. **Easier Onboarding**:
    - New developers recognize standard patterns
@@ -254,18 +252,38 @@ Define interfaces **only** where:
 
 ### Files Affected
 
-All services follow Standard Go Layout:
-- `services/auth-service/` ✅
-- `services/overlay-manager/` ✅
-- `services/api-gateway/` ✅
-- `services/emote-service/` ✅
-- `services/message-processor/` ✅
-- `services/twitch-listener/` ✅
-- `services/youtube-listener/` ✅
-- `services/kick-listener/` ✅
-- `services/tiktok-listener/` ✅
-- `services/source-manager/` ✅
-- `services/token-refresh-service/` ✅
+All services follow Standard Go Layout (the complete `services/` directory):
+- `services/alert-processor/`
+- `services/altstream-listener/`
+- `services/api-gateway/`
+- `services/auth-service/`
+- `services/discord-bot/`
+- `services/discord-listener/`
+- `services/emote-service/`
+- `services/engagement-service/`
+- `services/facebook-listener/`
+- `services/goodgame-listener/`
+- `services/instagram-listener/`
+- `services/kick-listener/`
+- `services/media-service/`
+- `services/message-processor/`
+- `services/moderation-service/`
+- `services/overlay-manager/`
+- `services/owncast-listener/`
+- `services/payment-service/`
+- `services/picarto-listener/`
+- `services/share-service/`
+- `services/source-manager/`
+- `services/support-bot/`
+- `services/tiktok-listener/`
+- `services/tiktok-relay/`
+- `services/tiktok-signer/`
+- `services/token-refresh-service/`
+- `services/twitch-eventsub-listener/`
+- `services/twitch-listener/`
+- `services/youtube-listener/`
+- `services/youtube-listener-innertube/`
+- `services/youtube-quota-monitor/`
 
 ### Migration
 
@@ -298,20 +316,22 @@ services/<service-name>/
 ### Dependency Injection Pattern
 
 ```go
-// cmd/main.go
+// cmd/main.go — illustrative wiring, following services/auth-service/cmd/main.go
 func main() {
-    logger := logger.InitLogger("auth-service")
-    db := database.MustConnect(os.Getenv("DATABASE_URL"))
-    redisClient := redis.MustConnect(os.Getenv("REDIS_URL"))
+    log := logger.NewLogger("auth-service", getEnvOrDefault("LOG_LEVEL", "info"))
+    db, err := database.NewPostgresPool(connString) // DATABASE_HOST/PORT/NAME/USER/PASSWORD
 
     // Inject dependencies via constructors
-    userRepo := repository.NewUserRepository(db)
-    authHandler := handlers.NewAuthHandler(userRepo, redisClient, logger)
+    userRepo := repository.NewUserRepository(db, tokenCipher)
+    platformAuthHandler := handlers.NewPlatformAuthHandlerV2(providers, userRepo, redisClient, log)
 
     // Register routes
-    router := gin.Default()
-    router.POST("/login", authHandler.Login)
-    router.Run(":8081")
+    router := gin.New()
+    router.POST("/login", platformAuthHandler.HandleLogin(oauth.PlatformTwitch))
+
+    // Start server in a goroutine and shut down on signal (25s grace deadline)
+    srv := &http.Server{Addr: ":" + getEnvOrDefault("PORT", "8081"), Handler: router}
+    ...
 }
 ```
 
@@ -323,7 +343,7 @@ No interfaces, no adapters, direct dependency injection. Testable by passing moc
 
 - **ADR-0004**: [No Hexagonal Architecture](./0004-no-hexagonal-architecture.md) - Detailed analysis of removing ports/adapters
 - **Architecture**: [00-OVERVIEW.md](../architecture/00-OVERVIEW.md) - System architecture
-- **Implementation**: [KUBERNETES_CONTROLLER_ANALYSIS.md](../phase-reports/KUBERNETES_CONTROLLER_ANALYSIS.md) - Historical analysis (archived)
+- **Historical**: [KUBERNETES_CONTROLLER_ANALYSIS.md](../phase-reports/KUBERNETES_CONTROLLER_ANALYSIS.md) - Kubernetes operator analysis from the same review cycle (archived)
 
 ---
 
@@ -362,8 +382,8 @@ No interfaces, no adapters, direct dependency injection. Testable by passing moc
 
 **Decision**: Use Standard Go project layout for all microservices, reject hexagonal architecture.
 
-**Reason**: 60% less boilerplate, 90%+ LLM generation accuracy, Go community standard, faster development.
+**Reason**: ~60% less boilerplate than the hexagonal sketch, accurate LLM generation, Go community standard, faster development.
 
 **Trade-off**: Less "clean architecture" purity, but pragmatic for LLM-first development approach.
 
-**Status**: ✅ Implemented across all 13 services, validated in production.
+**Status**: Implemented, all Go services use this layout, validated in production.

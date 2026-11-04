@@ -77,8 +77,8 @@ func (h *ChatSendHandler) HandleInternalAnnounce(c *gin.Context) {
 		requested[strings.ToLower(p)] = true
 	}
 	idsByPlatform := map[string]string{}
-	if requested["twitch"] && user.TwitchID != nil && *user.TwitchID != "" {
-		idsByPlatform["twitch"] = *user.TwitchID
+	if twitchID, ok := streamerTwitchBroadcasterID(user); requested["twitch"] && ok {
+		idsByPlatform["twitch"] = twitchID
 	}
 	if requested["kick"] && user.KickID != nil && *user.KickID != "" {
 		idsByPlatform["kick"] = *user.KickID

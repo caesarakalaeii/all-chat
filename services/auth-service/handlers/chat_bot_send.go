@@ -428,13 +428,9 @@ func (h *ChatSendHandler) sendBotTwitchMessage(ctx context.Context, acct *reposi
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		// A bot identity that lost its ability to speak surfaces the platform's
-		// classification; engagement renders the error_kind per command.
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return classifyPlatformStatus("twitch", resp.StatusCode, string(body))
-	}
-	return nil
+	// A bot identity that lost its ability to speak, or a message Twitch dropped,
+	// surfaces the platform's classification; engagement logs it per command.
+	return twitchSendError(resp)
 }
 
 // sendAllChatBotKickMessage sends to Kick chat as the All-Chat Bot: the message

@@ -49,7 +49,9 @@ export function External({ href, children }: { href: string; children: ReactNode
 
 export function Code({ children }: { children: ReactNode }) {
   return (
-    <code className="border-2 border-white bg-black px-1.5 py-0.5 text-[0.85em]">{children}</code>
+    <code className="border-2 border-lanes-fg-strong bg-lanes-panel px-1.5 py-0.5 text-[0.85em]">
+      {children}
+    </code>
   )
 }
 
@@ -57,7 +59,7 @@ export function Pre({ children, lang }: { children: string; lang?: CodeLang }) {
   // getTranslations, not useTranslations: Server Component (see FieldTable).
   const t = getTranslations()
   const className =
-    'my-4 overflow-x-auto border-2 border-white bg-black p-4 text-sm leading-relaxed'
+    'my-4 overflow-x-auto border-2 border-lanes-fg-strong bg-lanes-panel p-4 text-sm leading-relaxed'
   // role="tabpanel" makes the axe scrollable-region-focusable fix lint-clean:
   // with a widget role the region is keyboard-scrollable by design (the exact
   // situation tabIndex=0 exists for), so no-noninteractive-tabindex passes it
@@ -95,7 +97,7 @@ export function FieldTable({ rows }: { rows: readonly Field[] }) {
   // getTranslations, not useTranslations: these are Server Components.
   const t = getTranslations()
   return (
-    <div className="my-4 overflow-x-auto border-2 border-white">
+    <div className="my-4 overflow-x-auto border-2 border-lanes-fg-strong">
       <table className="w-full border-collapse text-left text-sm">
         <thead>
           <tr>
@@ -108,7 +110,7 @@ export function FieldTable({ rows }: { rows: readonly Field[] }) {
           {rows.map((r) => (
             <tr key={r.name} className="align-top">
               <td className="px-4 py-2">
-                <span className="text-white">{r.name}</span>
+                <span className="text-lanes-fg-strong">{r.name}</span>
               </td>
               <td className="text-dim px-4 py-2">{r.type}</td>
               <td className="text-sub px-4 py-2">{t(r.descKey)}</td>

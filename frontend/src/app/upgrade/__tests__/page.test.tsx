@@ -33,7 +33,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-// The rows for the beta-only overlay kinds and features, and for alerts, released to every host (lib/platform-availability.ts).
+// The rows for the beta-only overlay kinds and the early-access chat commands (hidden here: no user is
+// signed in), and for alerts, released to every host (lib/platform-availability.ts).
 const betaOnlyStems = ['goalOverlay', 'listOverlay', 'chatCommands'] as const
 const alertsStems = ['alertsOverlay', 'alertsEditor'] as const
 

@@ -67,6 +67,7 @@ func TestEntitlementApplyGrantsAndRevokes(t *testing.T) {
 	ctx := context.Background()
 
 	userID := insertUser(t, pool, "apply")
+	connectPatreon(t, pool, "user_id", userID, "pu-apply")
 	subRepo := repository.NewSubscriptionRepository(pool, zap.NewNop())
 	svc := entitlement.NewService(subRepo, premium.NewRecomputer(pool, zap.NewNop()), minCents, viewerMinCents, zap.NewNop())
 
@@ -228,6 +229,7 @@ func TestViewerEntitlementApplyGrantsAndRevokes(t *testing.T) {
 	ctx := context.Background()
 
 	viewerID := insertViewer(t, pool)
+	connectPatreon(t, pool, "viewer_id", viewerID, "pv-apply")
 	subRepo := repository.NewSubscriptionRepository(pool, zap.NewNop())
 	svc := entitlement.NewService(subRepo, premium.NewRecomputer(pool, zap.NewNop()), minCents, viewerMinCents, zap.NewNop())
 

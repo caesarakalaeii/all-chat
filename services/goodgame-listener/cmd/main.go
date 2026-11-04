@@ -427,7 +427,7 @@ func handleReconnections(
 			log.Info("Reconnected to GoodGame WebSocket successfully")
 			time.Sleep(2 * time.Second)
 			// The channel manager's 30s sync loop re-joins the recorded
-			// channels; the socket also replays resubscribeAll on welcome.
+			// channels; the socket also replays its joins on welcome.
 			log.Info("Re-syncing channels after reconnection")
 			if err := channelMgr.SyncNow(); err != nil {
 				log.Error("Channel re-sync after reconnect failed", zap.Error(err))

@@ -56,6 +56,11 @@ vi.mock('@/lib/api/engagement', () => ({
   startChatBotConnect: connect.startChatBotConnect,
 }))
 vi.mock('@/lib/api/auth', () => ({ authApi: auth }))
+const media = vi.hoisted(() => ({ uploadMedia: vi.fn() }))
+vi.mock('@/lib/api/media', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/api/media')>()),
+  uploadMedia: media.uploadMedia,
+}))
 vi.mock('@/lib/toast', () => ({ toastManager: { add: api.toastAdd } }))
 
 // The `?bot=` param drives the redirect toast; tests override per case.
@@ -86,6 +91,8 @@ function command(over: Partial<ChatCommand> = {}): ChatCommand {
     response: 'Join us: https://discord.gg/x',
     create_clip: false,
     image_url: '',
+    sound_url: '',
+    alert_text: '',
     min_role: 'everyone',
     cooldown_seconds: 5,
     enabled: true,
@@ -194,6 +201,34 @@ describe('Chat commands page', () => {
     expect(api.previewChatCommand).toHaveBeenCalledWith(
       expect.objectContaining({ image: (image as HTMLInputElement).value })
     )
+  })
+
+  it('gives a command its own alert sound and text', async () => {
+    const bark = 'https://media.allch.at/allchat-media/u/bark.mp3'
+    media.uploadMedia.mockResolvedValue(bark)
+    api.createChatCommand.mockImplementation(async (input) =>
+      command({ ...input, id: '44444444-4444-4444-4444-444444444444' })
+    )
+    render(<CommandsPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Random dog' }))
+    const dialog = await screen.findByRole('dialog')
+    const file = new File(['x'], 'bark.mp3', { type: 'audio/mpeg' })
+    const picker = dialog.querySelector<HTMLInputElement>('input[type="file"]')!
+    fireEvent.change(picker, { target: { files: [file] } })
+    await waitFor(() => expect(within(dialog).getByLabelText('Alert sound')).toHaveValue(bark))
+    expect(media.uploadMedia).toHaveBeenCalledWith(file, expect.anything(), expect.any(Function))
+
+    fireEvent.change(within(dialog).getByLabelText('Alert text'), {
+      target: { value: '{user} called the dog' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(api.createChatCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ sound_url: bark, alert_text: '{user} called the dog' })
+      )
+    )
+    expect(await screen.findByText('Alert')).toBeInTheDocument()
   })
 
   it('inserts a variable at the cursor', async () => {

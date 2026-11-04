@@ -40,6 +40,7 @@ import {
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { InfinityLogo } from '@/components/InfinityLogo'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Dialog } from '@/components/ui/dialog'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { useTranslations } from '@/lib/i18n'
@@ -174,6 +175,13 @@ function SidebarFooter({ onNavigate }: { onNavigate?: () => void }) {
         <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
         <span className="truncate">{t('admin.sidebar.backToApp')}</span>
       </Link>
+      <ThemeToggle
+        withLabel
+        className={cn(
+          buttonVariants({ variant: 'ghost', size: 'lg' }),
+          'w-full justify-start gap-3'
+        )}
+      />
       <Button
         type="button"
         onClick={handleLogout}

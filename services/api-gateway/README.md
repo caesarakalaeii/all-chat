@@ -166,12 +166,19 @@ Returns aggregated health status of all backend services.
 
 ### Auth Service Routes
 
+The most commonly used routes. The complete, authoritative list is the route
+registration in [`cmd/main.go`](./cmd/main.go).
+
 | Method | Path | Auth Required | Description |
 |--------|------|---------------|-------------|
 | GET | `/api/v1/auth/twitch/login` | No | Start Twitch OAuth flow |
 | GET | `/api/v1/auth/twitch/callback` | No | Twitch OAuth callback |
 | POST | `/api/v1/auth/refresh` | No | Refresh token |
 | GET | `/api/v1/auth/me` | Yes | Get current user |
+| DELETE | `/api/v1/auth/me` | Yes | Delete the account |
+| GET | `/api/v1/auth/me/data-export` | Yes | DSGVO Art. 15/20 data export |
+| PATCH | `/api/v1/auth/me/onboarding` | Yes | Finish or re-arm the first-run setup guide |
+| POST | `/api/v1/auth/me/tos-acceptance` | Yes | Accept the current Terms of Service and Privacy Policy |
 | GET | `/api/v1/auth/me/connections` | Yes | Platforms whose OAuth tokens the account holds (ADR-0090) |
 | DELETE | `/api/v1/auth/me/connections/:platform` | Yes | Disconnect a linked platform: delete and revoke its tokens (ADR-0090) |
 | POST | `/api/v1/auth/logout` | Yes | Logout |

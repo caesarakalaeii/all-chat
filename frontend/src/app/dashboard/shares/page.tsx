@@ -160,7 +160,10 @@ function ShareRequestsContent() {
           onValueChange={(value) => setFilter(value as 'pending' | 'history')}
           className="mb-6"
         >
-          <TabsList variant="line" className="w-full justify-start border-b border-white/20">
+          <TabsList
+            variant="line"
+            className="w-full justify-start border-b border-lanes-fg-strong/20"
+          >
             <TabsTrigger value="pending">
               {t('dashboard.shares.tabPending', { count: pendingCount })}
             </TabsTrigger>

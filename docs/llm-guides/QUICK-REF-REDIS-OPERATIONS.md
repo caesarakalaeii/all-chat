@@ -46,12 +46,12 @@ XREAD COUNT 10 STREAMS chat:raw 1706400000000-0
 XINFO GROUPS chat:raw
 
 # Output:
-# - name: message-processors
+# - name: message-processor
 # - consumers: 3
 # - pending: 42 (unacknowledged messages)
 
 # Check pending messages (lag)
-XPENDING chat:raw message-processors
+XPENDING chat:raw message-processor
 
 # Output:
 # 1) (integer) 42            # Total pending
@@ -60,14 +60,14 @@ XPENDING chat:raw message-processors
 # 4) Consumer breakdown
 
 # View specific pending messages
-XPENDING chat:raw message-processors - + 10
+XPENDING chat:raw message-processor - + 10
 ```
 
 ### Troubleshoot Consumer Lag
 
 ```bash
 # If lag >10,000 messages, check consumers
-XINFO CONSUMERS chat:raw message-processors
+XINFO CONSUMERS chat:raw message-processor
 
 # Output shows per-consumer stats:
 # - name: processor-1
@@ -75,7 +75,7 @@ XINFO CONSUMERS chat:raw message-processors
 # - idle: 300000 (5 minutes since last activity)
 
 # Claim stuck messages for another consumer
-XAUTOCLAIM chat:raw message-processors processor-2 300000 0-0 COUNT 100
+XAUTOCLAIM chat:raw message-processor processor-2 300000 0-0 COUNT 100
 ```
 
 ---
