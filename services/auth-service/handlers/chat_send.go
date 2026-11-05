@@ -95,10 +95,21 @@ const (
 	sendErrDropped      sendErrKind = "message_dropped" // platform accepted but did not deliver → 422
 )
 
-// streamerSendError carries a classified streamer-send failure.
+// streamerSendError carries a classified streamer-send failure. detail is the
+// platform's own human-readable explanation, when it gave one.
 type streamerSendError struct {
-	kind sendErrKind
-	msg  string
+	kind   sendErrKind
+	msg    string
+	detail string
+}
+
+// sendErrorDetail returns the platform's explanation carried by a send error, or "".
+func sendErrorDetail(err error) string {
+	var se *streamerSendError
+	if errors.As(err, &se) {
+		return se.detail
+	}
+	return ""
 }
 
 func (e *streamerSendError) Error() string { return e.msg }
@@ -108,13 +119,17 @@ func (e *streamerSendError) Error() string { return e.msg }
 // anything else ⇒ an upstream failure. Previously every platform error surfaced as a
 // raw 502, so the monitor could not tell "needs re-consent" from "platform hiccup".
 func classifyPlatformStatus(platform string, status int, body string) *streamerSendError {
+	var parsed struct {
+		Message string `json:"message"`
+	}
+	_ = json.Unmarshal([]byte(body), &parsed)
 	switch status {
 	case http.StatusUnauthorized:
-		return &streamerSendError{kind: sendErrReauth, msg: fmt.Sprintf("%s auth rejected (401): %s", platform, body)}
+		return &streamerSendError{kind: sendErrReauth, msg: fmt.Sprintf("%s auth rejected (401): %s", platform, body), detail: parsed.Message}
 	case http.StatusForbidden:
-		return &streamerSendError{kind: sendErrMissingScope, msg: fmt.Sprintf("%s missing send scope (403): %s", platform, body)}
+		return &streamerSendError{kind: sendErrMissingScope, msg: fmt.Sprintf("%s missing send scope (403): %s", platform, body), detail: parsed.Message}
 	default:
-		return &streamerSendError{kind: sendErrUpstream, msg: fmt.Sprintf("%s API error: status=%d body=%s", platform, status, body)}
+		return &streamerSendError{kind: sendErrUpstream, msg: fmt.Sprintf("%s API error: status=%d body=%s", platform, status, body), detail: parsed.Message}
 	}
 }
 
@@ -138,11 +153,11 @@ func twitchSendError(resp *http.Response) error {
 	if json.Unmarshal(body, &out) != nil || len(out.Data) == 0 || out.Data[0].IsSent {
 		return nil
 	}
-	reason := "no reason given"
+	reason, detail := "no reason given", ""
 	if d := out.Data[0].DropReason; d != nil {
-		reason = d.Code + ": " + d.Message
+		reason, detail = d.Code+": "+d.Message, d.Message
 	}
-	return &streamerSendError{kind: sendErrDropped, msg: "twitch dropped the message (" + reason + ")"}
+	return &streamerSendError{kind: sendErrDropped, msg: "twitch dropped the message (" + reason + ")", detail: detail}
 }
 
 // streamerSendHTTPResponse maps a send error to (HTTP status, JSON body) for the

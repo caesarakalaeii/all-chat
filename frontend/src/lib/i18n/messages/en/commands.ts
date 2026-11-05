@@ -62,6 +62,24 @@ export const commands = {
     moderator: 'Moderators and you',
     broadcaster: 'Only you',
   },
+  sendFailures: {
+    heading: 'Bot messages that did not arrive',
+    item: 'Last message in {platform} chat, {time}:',
+    dropped: '{platform} refused it.',
+    platformSays: '{platform} says: “{detail}”',
+    reauthBot:
+      'The All-Chat Bot lost its authorization there. Tell us on Discord so we can reconnect it, or switch the sender to your own account under Bot and sender.',
+    reauthCustom: 'Your bot account lost its authorization. Reconnect it under Bot and sender.',
+    reauthSelf: 'Your account lost its authorization. Sign out and sign in again.',
+    missingScope: 'A permission is missing. Grant it above.',
+    notConnected: 'No account that can post there is connected.',
+    offline: 'Your stream was not live.',
+    quota: 'The YouTube quota for today is used up.',
+    failed: 'It could not be sent. Try again later.',
+    modHint:
+      'Make the bot a moderator or VIP in your channel: chat restrictions like followers-only mode, slow mode or a required verified phone number do not apply to them.',
+    clears: 'This clears as soon as a message gets through.',
+  },
   status: {
     heading: 'Where commands can answer',
     twitchNoLogin: 'Twitch replies and clips need you to sign in with Twitch.',

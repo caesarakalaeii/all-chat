@@ -70,6 +70,9 @@ type BotSendResult struct {
 	Error    string `json:"error,omitempty"`
 	// ErrorKind mirrors the announce result's machine-readable classification.
 	ErrorKind string `json:"error_kind,omitempty"`
+	// Detail is the platform's own explanation, for the streamer (e.g. Twitch's
+	// drop reason "A verified phone number is required to chat in this channel.").
+	Detail string `json:"detail,omitempty"`
 }
 
 // botSendSender values reported to engagement-service.
@@ -256,7 +259,7 @@ func (h *ChatSendHandler) botSendOnePlatform(
 			zap.String("platform", platform), zap.String("sender", decision.sender),
 			zap.String("error_kind", string(kind)), zap.Error(sendErr))
 		return BotSendResult{Platform: platform, Success: false, Sender: decision.sender,
-			Error: string(kind), ErrorKind: string(kind)}
+			Error: string(kind), ErrorKind: string(kind), Detail: sendErrorDetail(sendErr)}
 	}
 	return BotSendResult{Platform: platform, Success: true, Sender: decision.sender}
 }
@@ -279,7 +282,7 @@ func (h *ChatSendHandler) botSendAsSelf(ctx context.Context, user *models.User, 
 	if sendErr != nil {
 		kind := sendResultErrorKind(sendErr)
 		return BotSendResult{Platform: platform, Success: false, Sender: botSenderSelf,
-			Error: string(kind), ErrorKind: string(kind)}
+			Error: string(kind), ErrorKind: string(kind), Detail: sendErrorDetail(sendErr)}
 	}
 	return BotSendResult{Platform: platform, Success: true, Sender: botSenderSelf}
 }

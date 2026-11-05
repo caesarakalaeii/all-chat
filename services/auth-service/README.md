@@ -519,7 +519,9 @@ Body: { "user_id": "uuid", "message": "...", "platforms": ["twitch","kick","yout
         "purpose": "command" | "timer" }
 → 200 { "success": true|false,
         "results": [{ "platform", "success", "sender": "allchat_bot"|"custom_bot"|"self",
-                      "error_kind" }] }
+                      "error_kind", "detail" }] }
+# detail: the platform's own explanation when it gave one (Twitch's drop reason,
+# or the message of a 401/403), for the streamer.
 ```
 
 The opt-in Twitch re-consent `GET /api/v1/auth/twitch/moderation/:overlay_id?actions=…`
