@@ -228,15 +228,10 @@ function ColorGradientCard({ claims }: { claims: ViewerJWTClaims }) {
   const [gradientError, setGradientError] = useState<string | null>(null)
 
   const handleSaveGradient = useCallback(async () => {
-    // Re-validate premium from localStorage JWT before sending PATCH
+    // The server checks premium against the database (a 403 lands below); the
+    // token's own is_premium is only the value at sign-in.
     const token = typeof window !== 'undefined' ? localStorage.getItem('viewer_jwt_token') : null
-    if (token) {
-      const latestClaims = decodeViewerJWT(token)
-      if (!latestClaims?.is_premium) {
-        setGradientError(t('settings.viewer.premiumRequired'))
-        return
-      }
-    } else {
+    if (!token) {
       setGradientError(t('settings.viewer.premiumRequired'))
       return
     }
@@ -1000,8 +995,21 @@ export default function ViewerSettingsPage() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     const token = localStorage.getItem('viewer_jwt_token')
+    const decoded = token ? decodeViewerJWT(token) : null
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time restore from localStorage; a render-time read would break hydration
-    setClaims(token ? decodeViewerJWT(token) : null)
+    setClaims(decoded)
+    if (!decoded) return
+    // The token's is_premium is a snapshot from sign-in and lives for a day; /me
+    // carries the current value, so an admin grant or a new subscription unlocks
+    // the premium cosmetics without signing in again.
+    viewerApi
+      .getMe()
+      .then(({ is_premium }) => {
+        if (typeof is_premium === 'boolean') setClaims((c) => c && { ...c, is_premium })
+      })
+      .catch(() => {
+        // Keep the token's value; the server still enforces premium on save.
+      })
   }, [])
 
   // Still hydrating

@@ -267,7 +267,8 @@ export const admin: LocaleNamespace<'admin'> = {
   },
   viewers: {
     heading: 'Zuschauerverwaltung',
-    intro: 'Zuschauer-Sitzungen durchsuchen, Aktivität ansehen und Bans sowie Premium verwalten',
+    intro:
+      'Zuschauer durchsuchen, auch Chatter, die sich nie angemeldet haben, Aktivität ansehen und Bans sowie Premium verwalten',
     totalMatching: '{count} Treffer',
     searchLabel: 'Suche',
     searchPlaceholder: 'Nutzername, Anzeigename oder Plattform-Nutzer-ID ...',
@@ -281,7 +282,7 @@ export const admin: LocaleNamespace<'admin'> = {
     premiumAny: 'Beliebig',
     premiumOnly: 'Premium',
     premiumFree: 'Kostenlos',
-    empty: 'Keine Zuschauer-Sitzungen entsprechen deiner Suche oder deinen Filtern.',
+    empty: 'Keine Zuschauer entsprechen deiner Suche oder deinen Filtern.',
     tableCaption: 'Zuschauer',
     columnViewer: 'Zuschauer',
     columnPlatform: 'Plattform',
@@ -294,6 +295,7 @@ export const admin: LocaleNamespace<'admin'> = {
     badgeActive: 'Aktiv',
     banReason: 'Grund: {reason}',
     sessionOnlyTitle: 'Nur Sitzungszuschauer (kein verknüpftes Konto)',
+    neverSignedIn: 'Nicht angemeldet',
     premiumBadge: 'Premium',
     freeBadge: 'Kostenlos',
     changePremiumPremiumLabel: 'Premium: Premium-Status von {username} ändern',

@@ -126,6 +126,14 @@ export const viewerApi = {
   },
 
   /**
+   * Record the viewer's acceptance of the Terms of Service and Privacy Policy
+   * (viewers.tos_accepted).
+   */
+  async acceptTos(): Promise<{ tos_accepted: boolean }> {
+    return viewerApiClient.post('/api/v1/auth/viewer/me/tos-acceptance', {})
+  },
+
+  /**
    * Logout viewer (invalidate token on server)
    */
   async logout(): Promise<void> {

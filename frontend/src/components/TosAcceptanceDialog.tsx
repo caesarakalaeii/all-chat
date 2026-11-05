@@ -21,20 +21,24 @@
 /**
  * Blocking post-login prompt to accept the Terms of Service and Privacy Policy.
  *
- * Server truth: users.tos_accepted (false = prompt shows). Accepting persists via
- * POST /api/v1/auth/me/tos-acceptance and refreshes the auth store. When the terms
- * change, resetting the column to false re-arms the prompt for everyone.
+ * Server truth: users.tos_accepted for a streamer and viewers.tos_accepted for a
+ * viewer signed in with a platform account (false = prompt shows). Accepting
+ * persists via POST /api/v1/auth/me/tos-acceptance or
+ * /api/v1/auth/viewer/me/tos-acceptance and refreshes the matching store. When the
+ * terms change, resetting both columns to false re-arms the prompt for everyone.
  *
  * Both documents open in a new tab so the user can read them without losing the
  * prompt. The legal pages themselves and the OBS overlay routes never show it.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { AlertDialog } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { authApi } from '@/lib/api/auth'
+import { viewerApi } from '@/lib/api/viewer'
 import { useAuthStore } from '@/lib/stores/auth-store'
+import { useViewerAuthStore } from '@/lib/stores/viewer-auth-store'
 import { useTranslations } from '@/lib/i18n'
 import { interpolateElements } from '@/lib/i18n/emphasise'
 
@@ -44,15 +48,22 @@ export default function TosAcceptanceDialog() {
   const t = useTranslations()
   const pathname = usePathname()
   const { user, isImpersonating, init, logout } = useAuthStore()
+  const { viewerInfo, init: viewerInit, viewerLogout } = useViewerAuthStore()
   const [agreed, setAgreed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [failed, setFailed] = useState(false)
 
+  // Nothing else loads the viewer store on page load (the viewer pages read the
+  // token directly), so this is what learns whether the viewer has accepted.
+  useEffect(() => {
+    void viewerInit()
+  }, [viewerInit])
+
   // Strict false: a backend without the field must not lock everyone out.
+  const streamerPending = user?.tos_accepted === false && !isImpersonating
+  const viewerPending = viewerInfo?.tos_accepted === false
   const open =
-    user?.tos_accepted === false &&
-    !isImpersonating &&
-    !EXEMPT_PREFIXES.some((p) => pathname?.startsWith(p))
+    (streamerPending || viewerPending) && !EXEMPT_PREFIXES.some((p) => pathname?.startsWith(p))
 
   if (!open) return null
 
@@ -60,12 +71,27 @@ export default function TosAcceptanceDialog() {
     setSaving(true)
     setFailed(false)
     try {
-      await authApi.acceptTos()
-      await init()
+      if (streamerPending) {
+        await authApi.acceptTos()
+        await init()
+      }
+      if (viewerPending) {
+        await viewerApi.acceptTos()
+        await viewerInit()
+      }
     } catch {
       setFailed(true)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleLogout = () => {
+    if (streamerPending) void logout()
+    if (viewerPending) {
+      // Same order as AppNav: the request keeps the token it read synchronously.
+      viewerApi.logout().catch(() => {})
+      viewerLogout()
     }
   }
 
@@ -119,7 +145,7 @@ export default function TosAcceptanceDialog() {
         )}
 
         <div className="mt-6 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => void logout()} disabled={saving}>
+          <Button variant="ghost" onClick={handleLogout} disabled={saving}>
             {t('legal.tosAcceptance.logout')}
           </Button>
           <Button onClick={handleAccept} disabled={!agreed || saving}>

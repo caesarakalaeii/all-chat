@@ -494,6 +494,41 @@ describe('Viewer Settings Page — Viewer Identity section', () => {
     })
   })
 
+  // The token's is_premium is the value at sign-in; an admin grant made afterwards
+  // reaches the page through /me, without signing in again.
+  it('Gradient tab unlocks when /me reports premium granted after sign-in', async () => {
+    const jwt = buildFakeJWT({
+      viewer_id: 'v-granted',
+      display_name: 'GrantedViewer',
+      platform: 'youtube',
+      is_premium: false,
+    })
+    stubLocalStorage({ viewer_jwt_token: jwt })
+    // Premium only for /me asked with this viewer's token.
+    mockFetch.mockImplementation((url: string, init?: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve(
+            url.endsWith('/api/v1/auth/viewer/me') &&
+              (init?.headers as Record<string, string>)?.Authorization === `Bearer ${jwt}`
+              ? { is_premium: true }
+              : {}
+          ),
+      })
+    )
+
+    render(<ViewerSettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /Gradient/i })).not.toHaveAttribute(
+        'aria-disabled',
+        'true'
+      )
+    })
+  })
+
   it('gradient save sends null name_color', async () => {
     const jwt = buildFakeJWT({
       viewer_id: 'v-premium',

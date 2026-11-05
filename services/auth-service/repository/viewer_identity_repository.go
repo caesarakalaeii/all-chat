@@ -56,8 +56,9 @@ func (r *ViewerIdentityRepository) GetOrCreateViewerByPlatform(ctx context.Conte
 	).Scan(&viewerID)
 
 	if err == nil {
-		// Found existing viewer
-		return viewerID, nil
+		// Found existing viewer — engagement-service creates identities for chatters
+		// who never signed in, so the session may not point at it yet.
+		return viewerID, r.linkSession(ctx, viewerID, platform, platformUserID)
 	}
 	if err != pgx.ErrNoRows {
 		return uuid.Nil, fmt.Errorf("failed to lookup viewer_platform_identity: %w", err)
@@ -91,15 +92,22 @@ func (r *ViewerIdentityRepository) GetOrCreateViewerByPlatform(ctx context.Conte
 	}
 
 	// Step 3d: backfill viewer_id on existing session rows for this platform user
-	_, err = r.db.Exec(ctx,
-		`UPDATE viewer_sessions SET viewer_id = $1 WHERE platform = $2 AND platform_user_id = $3`,
-		newViewerID, platform, platformUserID,
-	)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to update viewer_sessions viewer_id: %w", err)
-	}
+	return newViewerID, r.linkSession(ctx, newViewerID, platform, platformUserID)
+}
 
-	return newViewerID, nil
+// linkSession points the viewer session of (platform, platformUserID) at viewerID.
+// Every identity resolution routes through it: a session left on NULL, or on a
+// viewer the identity has since moved away from, hides the viewer's premium from
+// the admin view and keeps the linked-streamer inheritance from reaching them.
+func (r *ViewerIdentityRepository) linkSession(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) error {
+	if _, err := r.db.Exec(ctx,
+		`UPDATE viewer_sessions SET viewer_id = $1
+		 WHERE platform = $2 AND platform_user_id = $3 AND viewer_id IS DISTINCT FROM $1`,
+		viewerID, platform, platformUserID,
+	); err != nil {
+		return fmt.Errorf("failed to update viewer_sessions viewer_id: %w", err)
+	}
+	return nil
 }
 
 // GetViewerCosmetics returns the name_color for a viewer, or nil if not set.
@@ -258,7 +266,7 @@ func (r *ViewerIdentityRepository) LinkPlatformToViewer(ctx context.Context, vie
 	if err == nil {
 		// Row exists — idempotent if it already points to the right viewer.
 		if existingViewerID == viewerID {
-			return nil
+			return r.linkSession(ctx, viewerID, platform, platformUserID)
 		}
 		// The platform belongs to a different viewer. In the connect flow the
 		// user explicitly asked to link this platform to their current account,
@@ -270,7 +278,7 @@ func (r *ViewerIdentityRepository) LinkPlatformToViewer(ctx context.Context, vie
 		if updateErr != nil {
 			return fmt.Errorf("failed to re-link platform identity: %w", updateErr)
 		}
-		return nil
+		return r.linkSession(ctx, viewerID, platform, platformUserID)
 	}
 	if err != pgx.ErrNoRows {
 		return fmt.Errorf("failed to check existing platform identity: %w", err)
@@ -286,15 +294,7 @@ func (r *ViewerIdentityRepository) LinkPlatformToViewer(ctx context.Context, vie
 	}
 
 	// Backfill viewer_id on the viewer_sessions row for this platform user.
-	_, err = r.db.Exec(ctx,
-		`UPDATE viewer_sessions SET viewer_id = $1 WHERE platform = $2 AND platform_user_id = $3`,
-		viewerID, platform, platformUserID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update viewer_sessions viewer_id: %w", err)
-	}
-
-	return nil
+	return r.linkSession(ctx, viewerID, platform, platformUserID)
 }
 
 // LinkedPlatform represents a single platform linked to a viewer.
@@ -419,4 +419,33 @@ func (r *ViewerIdentityRepository) GetViewerIsPremium(ctx context.Context, viewe
 		return false, fmt.Errorf("failed to get viewer is_premium: %w", err)
 	}
 	return isPremium, nil
+}
+
+// GetViewerTosAccepted reports whether the viewer accepted the current Terms of
+// Service and Privacy Policy (migration 126). Returns ErrNotFound when no such
+// viewer exists.
+func (r *ViewerIdentityRepository) GetViewerTosAccepted(ctx context.Context, viewerID uuid.UUID) (bool, error) {
+	var accepted bool
+	err := r.db.QueryRow(ctx, `SELECT tos_accepted FROM viewers WHERE id = $1`, viewerID).Scan(&accepted)
+	if err == pgx.ErrNoRows {
+		return false, ErrNotFound
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to get viewer tos_accepted: %w", err)
+	}
+	return accepted, nil
+}
+
+// AcceptViewerTos records that the viewer accepted the current Terms of Service
+// and Privacy Policy. Returns ErrNotFound when no such viewer exists.
+func (r *ViewerIdentityRepository) AcceptViewerTos(ctx context.Context, viewerID uuid.UUID) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE viewers SET tos_accepted = TRUE, tos_accepted_at = NOW() WHERE id = $1`, viewerID)
+	if err != nil {
+		return fmt.Errorf("failed to record viewer terms acceptance: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

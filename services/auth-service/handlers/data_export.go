@@ -249,7 +249,8 @@ var streamerExportSections = []exportSection{
 
 var viewerExportSections = []exportSection{
 	{key: "profile", one: true, query: `
-		SELECT id, is_premium, premium_admin_override, premium_admin_override_expires_at, created_at
+		SELECT id, is_premium, premium_admin_override, premium_admin_override_expires_at,
+		       tos_accepted, tos_accepted_at, created_at
 		FROM viewers WHERE id = $1`},
 	{key: "platform_identities", query: `
 		SELECT platform, platform_user_id, created_at FROM viewer_platform_identities

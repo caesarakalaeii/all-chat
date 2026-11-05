@@ -40,6 +40,8 @@ type mockViewerIdentityRepo struct {
 	unlinkPlatform        func(ctx context.Context, viewerID uuid.UUID, platform string) ([]repository.RemovedToken, error)
 	migratePlatformUserID func(ctx context.Context, platform, oldID, newID string) error
 	eraseViewer           func(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) ([]repository.LinkedPlatform, error)
+	getTosAccepted        func(ctx context.Context, viewerID uuid.UUID) (bool, error)
+	acceptTos             func(ctx context.Context, viewerID uuid.UUID) error
 }
 
 func (m *mockViewerIdentityRepo) EraseViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) ([]repository.LinkedPlatform, error) {
@@ -47,6 +49,20 @@ func (m *mockViewerIdentityRepo) EraseViewer(ctx context.Context, viewerID uuid.
 		return m.eraseViewer(ctx, viewerID, platform, platformUserID)
 	}
 	return nil, nil
+}
+
+func (m *mockViewerIdentityRepo) GetViewerTosAccepted(ctx context.Context, viewerID uuid.UUID) (bool, error) {
+	if m.getTosAccepted != nil {
+		return m.getTosAccepted(ctx, viewerID)
+	}
+	return true, nil
+}
+
+func (m *mockViewerIdentityRepo) AcceptViewerTos(ctx context.Context, viewerID uuid.UUID) error {
+	if m.acceptTos != nil {
+		return m.acceptTos(ctx, viewerID)
+	}
+	return nil
 }
 
 func (m *mockViewerIdentityRepo) GetOrCreateViewerByPlatform(ctx context.Context, platform, platformUserID string) (uuid.UUID, error) {

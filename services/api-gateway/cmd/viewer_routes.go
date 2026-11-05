@@ -25,6 +25,7 @@ import (
 // /api/v1 group; auth-service re-validates the viewer token.
 func registerViewerRoutes(api *gin.RouterGroup, forward gin.HandlerFunc) {
 	api.GET("/auth/viewer/me", forward)
+	api.POST("/auth/viewer/me/tos-acceptance", forward) // post-login Terms of Service acceptance
 	// Erase the viewer's own data (ADR-0088). No AuthCookieForward: the viewer token is
 	// the bearer, and a streamer cookie forwarded as X-Access-Token is another login.
 	api.DELETE("/auth/viewer/me", forward)
@@ -38,4 +39,15 @@ func registerViewerRoutes(api *gin.RouterGroup, forward gin.HandlerFunc) {
 	api.GET("/auth/viewer/linked-platforms", forward)
 	api.DELETE("/auth/viewer/linked-platforms/:platform", forward)
 	api.GET("/auth/viewer/data-export", forward) // DSGVO Art. 15/20 for viewers
+}
+
+// registerAdminViewerRoutes wires the admin Viewers page (-> auth-service
+// /admin/viewers/*, ADR-0034). Ban and activity act on a session, premium on the
+// durable viewer, which may have no session at all.
+func registerAdminViewerRoutes(admin *gin.RouterGroup, forward gin.HandlerFunc) {
+	admin.GET("/viewers", forward)
+	admin.GET("/viewers/:session_id/activity", forward)
+	admin.POST("/viewers/:session_id/ban", forward)
+	admin.POST("/viewers/:session_id/unban", forward)
+	admin.POST("/viewers/identities/:viewer_id/premium", forward)
 }

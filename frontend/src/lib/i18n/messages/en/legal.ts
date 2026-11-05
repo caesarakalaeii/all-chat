@@ -675,9 +675,10 @@ export const legal = {
     operatorHint:
       'If you are the operator: mount a ConfigMap containing your Impressum HTML to {path} or set the {variable} environment variable. See the deployment documentation for details.',
   },
-  // The blocking post-login prompt shown while users.tos_accepted is false:
-  // for new accounts on their first login and for everyone after a reset when
-  // the terms change, so the copy fits both. Both documents are links the user
+  // The blocking post-login prompt shown while users.tos_accepted (streamers) or
+  // viewers.tos_accepted (viewers) is false: for new accounts on their first
+  // login and for everyone after a reset when the terms change, so the copy fits
+  // both. Both documents are links the user
   // can open (new tab) before accepting.
   tosAcceptance: {
     title: 'Terms of Service and Privacy Policy',

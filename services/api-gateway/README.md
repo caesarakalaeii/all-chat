@@ -181,6 +181,8 @@ registration in [`cmd/main.go`](./cmd/main.go).
 | POST | `/api/v1/auth/me/tos-acceptance` | Yes | Accept the current Terms of Service and Privacy Policy |
 | GET | `/api/v1/auth/me/connections` | Yes | Platforms whose OAuth tokens the account holds (ADR-0090) |
 | DELETE | `/api/v1/auth/me/connections/:platform` | Yes | Disconnect a linked platform: delete and revoke its tokens (ADR-0090) |
+| GET | `/api/v1/auth/viewer/me` | Viewer | Current viewer, with current premium and terms acceptance |
+| POST | `/api/v1/auth/viewer/me/tos-acceptance` | Viewer | Accept the Terms of Service and Privacy Policy as a viewer |
 | POST | `/api/v1/auth/logout` | Yes | Logout |
 
 ### Overlay Manager Routes

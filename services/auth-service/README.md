@@ -335,6 +335,47 @@ Viewer unlink (`DELETE /viewer/linked-platforms/:platform`) also deletes the unl
 platform's `viewer_sessions` rows, as signing out does, and revokes their tokens with the
 viewer OAuth client.
 
+### Viewer Profile
+
+Viewers sign in with a platform account (`/api/v1/auth/viewer/{twitch,youtube,kick}/login`),
+not an All-Chat account. Their premium and terms acceptance live on the durable
+`viewers` row, which `viewer_sessions.viewer_id` points at.
+
+```bash
+# Current viewer session. is_premium is the current viewers.is_premium, not the
+# value baked into the viewer JWT at sign-in (FreshViewerPremium re-reads it on every
+# /viewer/* request, so an admin grant or a lapse takes effect at once).
+# tos_accepted false = the Terms of Service prompt is shown.
+GET /api/v1/auth/viewer/me
+Authorization: Bearer <viewer-jwt>
+
+# Accept the current Terms of Service and Privacy Policy as a viewer (sets
+# viewers.tos_accepted = TRUE and stamps tos_accepted_at). Migration 126 starts every
+# viewer at FALSE, existing ones included, so each is asked once; re-arm with
+# `UPDATE viewers SET tos_accepted = FALSE;` when the terms change.
+POST /api/v1/auth/viewer/me/tos-acceptance
+Authorization: Bearer <viewer-jwt>
+→ Returns: { "tos_accepted": true }
+```
+
+### Admin: viewers (ADR-0034)
+
+```bash
+# One row per platform account: viewer sessions full-outer-joined with viewer
+# identities, so an identity with no session (a chatter engagement-service created for
+# the points economy, or a viewer who logged out) is listed too, with session_id null.
+GET /admin/viewers?q=&platform=&is_banned=&is_premium=&limit=&offset=
+
+# Ban, unban and activity act on a session.
+GET  /admin/viewers/:session_id/activity
+POST /admin/viewers/:session_id/ban        Body: { "reason": "..." }
+POST /admin/viewers/:session_id/unban
+
+# Premium acts on the durable viewer (404 when it does not exist). duration_seconds
+# is optional and makes the grant time-limited (ADR-0027).
+POST /admin/viewers/identities/:viewer_id/premium   Body: { "is_premium": true, "duration_seconds": 2592000 }
+```
+
 ### Data export (DSGVO Art. 15/20)
 
 ```bash

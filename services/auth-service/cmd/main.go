@@ -661,9 +661,10 @@ func main() {
 
 	// Viewer protected routes (require viewer JWT)
 	viewerProtected := router.Group("/viewer")
-	viewerProtected.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient))
+	viewerProtected.Use(middleware.JWTAuthWithRevocation(userKeyChain, redisClient), handlers.FreshViewerPremium(viewerIdentityRepo))
 	{
 		viewerProtected.GET("/me", viewerAuthHandler.HandleMe)
+		viewerProtected.POST("/me/tos-acceptance", viewerAuthHandler.HandleAcceptTos)
 		viewerProtected.POST("/logout", viewerAuthHandler.HandleLogout)
 		viewerProtected.DELETE("/me", viewerAuthHandler.HandleDeleteViewer) // erase own viewer data (ADR-0088)
 		viewerProtected.POST("/chat/send", chatSendHandler.HandleSendMessage)
@@ -696,7 +697,7 @@ func main() {
 		admin.GET("/viewers/:session_id/activity", adminViewerHandler.HandleGetViewerActivity)
 		admin.POST("/viewers/:session_id/ban", adminViewerHandler.HandleBanViewer)
 		admin.POST("/viewers/:session_id/unban", adminViewerHandler.HandleUnbanViewer)
-		admin.POST("/viewers/:session_id/premium", adminViewerHandler.HandleSetViewerPremium)
+		admin.POST("/viewers/identities/:viewer_id/premium", adminViewerHandler.HandleSetViewerPremium)
 
 		// Cosmetic catalog management (frames and flairs)
 		admin.GET("/cosmetics/frames", adminCosmeticsHandler.HandleListFrames)

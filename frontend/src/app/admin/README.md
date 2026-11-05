@@ -74,12 +74,16 @@ by channel/overlay/owner. Each channel resolves to its public platform page via
 
 ### Viewers (`/admin/viewers`, ADR-0034)
 
+One row per platform account, including identities that have no sign-in session
+(chatters engagement-service created for the points economy, and viewers who
+logged out); those show "Not signed in" in place of the session actions.
 Server-side search, platform/status/premium filters, and pagination with a
 correct full-dataset total. Each row shows the avatar, platform badge, platform
 user id, and a link to the viewer's platform profile. An **Activity** dialog
 surfaces cross-streamer context (total messages, last seen, and the
 streamers/overlays the viewer chats in) from the per-session aggregate over
-`viewer_message_history`. Ban/unban and grant/revoke premium are inline.
+`viewer_message_history`. Ban/unban act on the session; grant/revoke premium act
+on the durable viewer, so a viewer without a session can be granted too.
 
 ### Cosmetics / Features / Maintenance / Localization
 
@@ -102,7 +106,7 @@ stored channel identifier into a link to the real platform page:
 ## Backend endpoints
 
 - overlay-manager: `GET /api/v1/admin/overlays` (`q`/`ids`), `/admin/sources` (`q`/`platform`/`status`/`user`), `/admin/overlays/active`, `/admin/overlays/:id/sources`, `/admin/user-overlays/:id` — overlay/source responses include `owner_username`/`owner_display_name` (joined from `users`) and `channel_handle`.
-- auth-service: `GET /api/v1/admin/users` (`q`/`filter`, plus per-tab `counts`), `/admin/viewers` (`q`/`is_banned`/`is_premium`/`platform`), `/admin/viewers/:session_id/activity`, `/admin/stats`, plus ban/unban/premium/beta mutations and impersonation.
+- auth-service: `GET /api/v1/admin/users` (`q`/`filter`, plus per-tab `counts`), `/admin/viewers` (`q`/`is_banned`/`is_premium`/`platform`), `/admin/viewers/:session_id/activity`, `/admin/stats`, plus ban/unban (`/admin/viewers/:session_id/…`), viewer premium (`/admin/viewers/identities/:viewer_id/premium`), user premium/beta mutations and impersonation.
 - Every admin list endpoint (users, overlays, sources, viewers) pages with `limit` (default 50, at most 100) and `offset` and answers `{ <items>: [...], total, limit, offset }` (ADR-0086).
 - share-service: admin feature gates; localization review (`GET /admin/localization/locales/requests`, `/review`, `/progress`, `/export/:code`; `POST /admin/localization/locales/:code/review`, `/review/:locale/:keyHash`).
 

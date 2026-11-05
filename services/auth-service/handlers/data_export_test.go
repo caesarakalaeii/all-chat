@@ -314,8 +314,12 @@ func TestHandleViewerDataExport_CoversEverythingStoredAboutTheViewer(t *testing.
 
 func assertViewerSections(t *testing.T, viewer map[string]any) {
 	t.Helper()
-	if profile, _ := viewer["profile"].(map[string]any); profile["id"] != exViewer {
+	profile, _ := viewer["profile"].(map[string]any)
+	if profile["id"] != exViewer {
 		t.Errorf("profile = %v, want viewer %s", viewer["profile"], exViewer)
+	}
+	if _, ok := profile["tos_accepted"]; !ok {
+		t.Errorf("profile = %v, want the viewer's terms acceptance", profile)
 	}
 	if cosmetics, _ := viewer["cosmetics"].(map[string]any); cosmetics["name_color"] != "#ff0000" {
 		t.Errorf("cosmetics = %v", viewer["cosmetics"])
