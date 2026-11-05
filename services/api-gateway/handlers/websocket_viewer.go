@@ -212,7 +212,10 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 		return
 	}
 
-	// Add connection to manager (but mark it as viewer connection)
+	// Add connection to manager (but mark it as viewer connection). Live frames
+	// are held until the connect burst is out, so none can overtake the
+	// connected frame or the replay.
+	wsConn.HoldLive()
 	h.wsManager.AddConnection(context.Background(), wsConn)
 
 	// Start the pumps BEFORE the connect burst so writePump drains the send
@@ -272,6 +275,7 @@ func (h *ViewerWebSocketHandler) HandleViewerChatConnection(c *gin.Context) {
 			}
 		}
 	}
+	wsConn.ReleaseLive()
 
 	h.logger.Info("Viewer WebSocket connection established",
 		zap.String("overlay_id", overlayID),
