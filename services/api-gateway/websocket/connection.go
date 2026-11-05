@@ -67,6 +67,12 @@ type Connection struct {
 	isOwner       bool
 	authenticated bool
 	onAuth        AuthCallback
+	// holding is set for the connect burst: the socket is already in the pool
+	// (so nothing published during the replay fetch is lost), but live frames
+	// must not overtake the connected frame or the replay. Send parks them in
+	// held until ReleaseLive flushes them in arrival order.
+	holding bool
+	held    [][]byte
 }
 
 // NewConnection creates a new WebSocket connection for overlay owners
@@ -141,6 +147,21 @@ func (c *Connection) Send(message []byte) bool {
 		return false
 	}
 
+	if c.holding {
+		// Bounded like the send channel: a client that cannot take the burst
+		// would not keep up with live traffic either.
+		if len(c.held) >= cap(c.send) {
+			c.logger.Warn("Held live frames overflowed during connect burst, closing connection",
+				zap.String("overlay_id", c.overlayID),
+				zap.String("user_id", c.userID),
+			)
+			c.close()
+			return false
+		}
+		c.held = append(c.held, message)
+		return true
+	}
+
 	select {
 	case c.send <- message:
 		return true
@@ -190,6 +211,39 @@ func (c *Connection) SendBlocking(message []byte) bool {
 		)
 		c.Close()
 		return false
+	}
+}
+
+// HoldLive makes Send park frames instead of enqueueing them, until ReleaseLive.
+// Call it before the connection joins the pool, so no live broadcast can reach
+// the client ahead of the connect burst.
+func (c *Connection) HoldLive() {
+	c.mu.Lock()
+	c.holding = true
+	c.mu.Unlock()
+}
+
+// ReleaseLive flushes the frames held since HoldLive, in arrival order, then
+// lets Send enqueue directly again. Frames that arrive during the flush are
+// held too and go out after it, so order is kept across the handover.
+func (c *Connection) ReleaseLive() {
+	for {
+		c.mu.Lock()
+		if c.closed || len(c.held) == 0 {
+			c.holding = false
+			c.held = nil
+			c.mu.Unlock()
+			return
+		}
+		batch := c.held
+		c.held = nil
+		c.mu.Unlock()
+
+		for _, message := range batch {
+			if !c.SendBlocking(message) {
+				return
+			}
+		}
 	}
 }
 
