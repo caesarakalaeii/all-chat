@@ -384,6 +384,13 @@ func (sm *SubscriptionManager) SubscribeToPredictionEnd(ctx context.Context, bro
 	return sm.Subscribe(ctx, "channel.prediction.end", broadcasterID, "1")
 }
 
+// SubscribeToAdBreakBegin creates a channel.ad_break.begin v1 subscription, which fires for both
+// Ads Manager-scheduled and manually run ad breaks. Requires the broadcaster's channel:read:ads grant
+// (the ?actions=ads opt-in); a scope error means the owner has not opted in and is non-fatal.
+func (sm *SubscriptionManager) SubscribeToAdBreakBegin(ctx context.Context, broadcasterID string) (string, error) {
+	return sm.Subscribe(ctx, "channel.ad_break.begin", broadcasterID, "1")
+}
+
 // SubscribeToChatMessages creates a channel.chat.message subscription for reading chat.
 //
 // For own-channel reading the broadcaster authorizes their own channel, so the condition

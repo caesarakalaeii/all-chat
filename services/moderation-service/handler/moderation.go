@@ -109,6 +109,21 @@ func (NoModLogChecker) ModLogGranted(context.Context, string, string) (bool, err
 	return false, nil
 }
 
+// AdBreaksChecker reports whether the overlay owner's broadcaster Twitch credential already
+// holds the ad break opt-in scope (channel:read:ads). Implemented by tokens.TwitchScopeChecker;
+// NoAdBreaksChecker is the default, with the same keep-offering semantics as NoModLogChecker.
+type AdBreaksChecker interface {
+	AdBreaksGranted(ctx context.Context, userID, channelID string) (bool, error)
+}
+
+// NoAdBreaksChecker reports the grant as absent for every owner.
+type NoAdBreaksChecker struct{}
+
+// AdBreaksGranted always reports false.
+func (NoAdBreaksChecker) AdBreaksGranted(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
 // Dispatcher performs the real platform moderation call. It owns token resolution,
 // scope pre-checks, and token refresh; the handler stays platform-agnostic. A
 // platform with no client wired yet reports DispatchDryRun (the handler then only
@@ -157,6 +172,7 @@ type Handler struct {
 	scopes     ScopeChecker
 	send       SendChecker
 	modLog     ModLogChecker
+	adBreaks   AdBreaksChecker
 	dispatch   Dispatcher
 	gate       FeatureGate
 	rediscover RediscoverPublisher // optional; nil = YouTube rediscovery unavailable
@@ -168,7 +184,7 @@ type Handler struct {
 func New(repo Authorizer, pub DeletionEmitter, rec Recorder, scopes ScopeChecker, dispatch Dispatcher, logger *zap.Logger) *Handler {
 	return &Handler{
 		repo: repo, pub: pub, audit: rec, scopes: scopes, send: NoSendChecker{},
-		modLog: NoModLogChecker{}, dispatch: dispatch, gate: OpenGate{}, logger: logger,
+		modLog: NoModLogChecker{}, adBreaks: NoAdBreaksChecker{}, dispatch: dispatch, gate: OpenGate{}, logger: logger,
 	}
 }
 
@@ -183,6 +199,10 @@ func (h *Handler) SetSendChecker(s SendChecker) { h.send = s }
 // SetModLogChecker overrides the mod-log grant checker (defaults to NoModLogChecker, which
 // reports no grant). Call once at startup before serving.
 func (h *Handler) SetModLogChecker(m ModLogChecker) { h.modLog = m }
+
+// SetAdBreaksChecker overrides the ad break grant checker (defaults to NoAdBreaksChecker, which
+// reports no grant). Call once at startup before serving.
+func (h *Handler) SetAdBreaksChecker(a AdBreaksChecker) { h.adBreaks = a }
 
 // notAuthorizedMsg is used for BOTH "you have no role on this overlay" and "this overlay does
 // not exist", so the two are indistinguishable to a caller probing overlay ids.
@@ -411,7 +431,8 @@ func (h *Handler) HandleCapabilities(c *gin.Context) {
 		Sources:     make([]models.SourceCapability, 0, len(sources)),
 	}
 	if access.IsOwner() {
-		caps.ModLogGranted = h.modLogGrantedFor(ctx, cl.userID, sources)
+		caps.ModLogGranted = h.ownerTwitchGrant(ctx, cl.userID, sources, "mod-log", h.modLog.ModLogGranted)
+		caps.AdBreaksGranted = h.ownerTwitchGrant(ctx, cl.userID, sources, "ad-break", h.adBreaks.AdBreaksGranted)
 	} else {
 		// Only a grant has an action set; an owner's authority is not enumerable this way.
 		caps.DelegatedActions = models.IntersectActions(models.DelegatableActions, access.Actions)
@@ -426,27 +447,28 @@ func (h *Handler) HandleCapabilities(c *gin.Context) {
 	c.JSON(http.StatusOK, caps)
 }
 
-// modLogGrantedFor answers whether the OWNER has already completed the Twitch mod-log opt-in,
-// which is what lets the monitor stop offering it (#815). Owner-only by construction: the
-// caller decides that before asking, because the scopes sit on the broadcaster credential and
-// auth-service refuses to delegate them.
+// ownerTwitchGrant answers whether the OWNER has already completed a Twitch opt-in (the mod log,
+// #815, or ad breaks), which is what lets the monitor stop offering it. Owner-only by
+// construction: the caller decides that before asking, because these scopes sit on the
+// broadcaster credential and auth-service refuses to delegate them.
 //
 // "Any Twitch source" rather than "every Twitch source": the opt-in re-consents the owner's own
 // Twitch grant, so a second Twitch source they do not broadcast can never be covered by it and
 // re-offering the consent would not change that. A lookup failure is logged and counts as not
 // granted, keeping the CTA visible.
-func (h *Handler) modLogGrantedFor(ctx context.Context, userID string, sources []repository.Source) bool {
+func (h *Handler) ownerTwitchGrant(ctx context.Context, userID string, sources []repository.Source, optIn string,
+	granted func(ctx context.Context, userID, channelID string) (bool, error)) bool {
 	for _, s := range sources {
 		if s.Platform != "twitch" {
 			continue
 		}
-		granted, err := h.modLog.ModLogGranted(ctx, userID, s.ChannelID)
+		ok, err := granted(ctx, userID, s.ChannelID)
 		if err != nil {
-			h.logger.Warn("capabilities: mod-log scope check failed; treating the opt-in as not granted",
+			h.logger.Warn("capabilities: "+optIn+" scope check failed; treating the opt-in as not granted",
 				zap.String("channel_id", s.ChannelID), zap.Error(err))
 			continue
 		}
-		if granted {
+		if ok {
 			return true
 		}
 	}

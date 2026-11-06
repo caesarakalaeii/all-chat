@@ -2,6 +2,7 @@
 
 **Date**: 2026-08-23
 **Status**: Accepted
+**Revised**: 2026-11-06
 **Deciders**: caesarakalaeii
 
 ---
@@ -142,7 +143,9 @@ Two consequences follow, and both were the point:
 - The frontend matches **one** string. `classifyEnvelope`
   (`frontend/src/core/overlayStreamCore.ts`) routes `mod_action` to the
   moderation log instead of the feed, and the api-gateway's owner-only gate keys on
-  the same single string.
+  the same single string. (`isOwnerOnlyFrame` in `services/api-gateway/cmd/main.go`
+  since also admits `ad_break`, a streamer cue rather than confidential content; see
+  the [Twitch ad breaks guide](../features/twitch-ad-breaks.md).)
 
 The classifier gives `mod_action` tier `low` with duration **0**
 (`services/message-processor/classifier/tier.go`): duration 0 is how "produce no

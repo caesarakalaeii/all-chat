@@ -423,6 +423,17 @@ export function OnboardingChecklist({
                   </span>
                   <p className="text-xs text-text-sub">{t('onboarding.extras.flairsBody')}</p>
                 </li>
+                <li>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.adBreaksTitle')}
+                  </span>
+                  {/* Listed here but NOT in app/upgrade/page.tsx: that list is specifically
+                      the PREMIUM tour, and the twitch_ad_breaks gate is seeded free
+                      because a notice in the owner's own activity feed uses no shared
+                      resource. If the gate is ever flipped to premium, move this entry
+                      into the /upgrade list and keep the two in sync per the note above. */}
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.adBreaksBody')}</p>
+                </li>
                 {isKindAvailable('alerts') && (
                   <li>
                     <span className="font-medium text-text">

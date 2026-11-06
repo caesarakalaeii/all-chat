@@ -579,7 +579,20 @@ func main() {
 
 		// Opt-in moderation re-consent (ADR-0017): requests only the moderation scopes
 		// for the ?actions= being enabled, on top of the existing grant. Twitch + Kick.
-		protected.GET("/twitch/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformTwitch))
+		// The Twitch leg is gated per action like bot-connect is per flavor: "ads" (ad
+		// break notices) has its own gate, every other action is ungated here.
+		requireAdBreaksPremium := middleware.RequirePremium(db, gateCache, featuregates.GateTwitchAdBreaks, log)
+		gateTwitchReconsent := func(c *gin.Context) {
+			// Parsed like the handler's splitActions (trimmed), so " ads" cannot reach the
+			// scope mapper while slipping past this check.
+			for _, a := range strings.Split(c.Query("actions"), ",") {
+				if strings.TrimSpace(a) == "ads" {
+					requireAdBreaksPremium(c)
+					return
+				}
+			}
+		}
+		protected.GET("/twitch/moderation/:overlay_id", gateTwitchReconsent, platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformTwitch))
 		protected.GET("/kick/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformKick))
 		protected.GET("/youtube/moderation/:overlay_id", platformAuthHandlerV2.HandleEnableModeration(oauth.PlatformYouTube))
 

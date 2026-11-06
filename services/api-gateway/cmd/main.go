@@ -1098,12 +1098,18 @@ func main() {
 // the owner-only gate off.
 const modActionEventType = "mod_action"
 
-// isModerationFrame reports whether a unified-message event type identifies a
-// moderation/AutoMod frame. Such frames may carry the full text AutoMod withheld
-// from chat, so they are broadcast only to verified owner sockets and never
-// written to the replay buffer.
-func isModerationFrame(eventType string) bool {
-	return eventType == modActionEventType
+// adBreakEventType is a Twitch ad break starting. Nothing in it is confidential,
+// but it is a cue for the streamer: an anonymous OBS source would render it on
+// stream, and a replay of it to a reconnecting monitor would announce an ad
+// break that ended long ago.
+const adBreakEventType = "ad_break"
+
+// isOwnerOnlyFrame reports whether a unified-message event type is delivered only
+// to verified owner sockets and never written to the replay buffer: moderation and
+// AutoMod frames (which may carry the full text AutoMod withheld from chat) and ad
+// breaks.
+func isOwnerOnlyFrame(eventType string) bool {
+	return eventType == modActionEventType || eventType == adBreakEventType
 }
 
 // overlayBroadcastFilter decides who may receive a frame published on the
@@ -1119,7 +1125,7 @@ func isModerationFrame(eventType string) bool {
 func overlayBroadcastFilter(eventType string, msgType models.WSMessageType) wsconn.BroadcastFilter {
 	return wsconn.BroadcastFilter{
 		EngagementFrame: msgType == models.WSMessageTypePollUpdate || msgType == models.WSMessageTypePredictionUpdate,
-		OwnerOnly:       isModerationFrame(eventType),
+		OwnerOnly:       isOwnerOnlyFrame(eventType),
 	}
 }
 
@@ -1134,13 +1140,14 @@ func overlayBroadcastFilter(eventType string, msgType models.WSMessageType) wsco
 // they are ephemeral refetch signals that clients re-hydrate over HTTP on
 // reconnect. They must never enter the chat replay buffer.
 //
-// Moderation/AutoMod frames are excluded for a security reason: the buffer is
-// replayed to EVERY socket on connect, including anonymous OBS ones, so
-// buffering a held message would leak the exact text the owner-only broadcast
-// just protected — and leak it later, out of context, which is worse.
-func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOverlayID string, liveConnCount int, isModFrame bool) bool {
+// Owner-only frames are excluded. For moderation/AutoMod frames the reason is
+// security: the buffer is replayed to EVERY socket on connect, including
+// anonymous OBS ones, so buffering a held message would leak the exact text the
+// owner-only broadcast just protected — and leak it later, out of context, which
+// is worse. Ad breaks are stale by the time anything replays them.
+func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOverlayID string, liveConnCount int, isOwnerOnly bool) bool {
 	return liveConnCount == 0 &&
-		!isModFrame &&
+		!isOwnerOnly &&
 		overlayID != testStreamOverlayID &&
 		msgType != models.WSMessageTypePollUpdate &&
 		msgType != models.WSMessageTypePredictionUpdate

@@ -157,6 +157,10 @@ func mapEventTypeToColumn(platform, eventType string) string {
 		case "mod_action":
 			// A moderator's own audit log is not toggleable — see columnAlwaysEnabled.
 			return columnAlwaysEnabled
+		case "ad_break":
+			// Owner-only cue in the monitor, already opt-in through the channel:read:ads consent;
+			// a second per-overlay toggle would only be a way to miss it — see columnAlwaysEnabled.
+			return columnAlwaysEnabled
 		default:
 			// Unknown Twitch event, group under subs for now
 			if strings.Contains(normalized, "sub") || strings.Contains(normalized, "gift") {

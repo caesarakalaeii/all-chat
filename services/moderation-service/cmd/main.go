@@ -127,6 +127,8 @@ func main() {
 	// source is wired below: with no credential to read, capabilities report the grant as absent
 	// and the CTA stays on screen.
 	var modLogChecker handler.ModLogChecker = handler.NoModLogChecker{}
+	// adBreaksChecker does the same for the Twitch ad break opt-in (channel:read:ads).
+	var adBreaksChecker handler.AdBreaksChecker = handler.NoAdBreaksChecker{}
 	// sendCheckers parallels scopeCheckers: the same per-platform checker instances
 	// also report the chat-send capability (can_send) for the monitor view's send bar.
 	sendCheckers := map[string]handler.SendChecker{}
@@ -156,6 +158,7 @@ func main() {
 		// asking whether the nine mod-log scopes are all present rather than which actions the
 		// scopes allow. Twitch-only, so there is no per-platform map to route through.
 		modLogChecker = twitchScopes
+		adBreaksChecker = twitchScopes
 		log.Info("Twitch moderation enabled (real Helix calls, owner + delegated moderator)")
 	}
 
@@ -239,6 +242,8 @@ func main() {
 	modHandler.SetSendChecker(handler.MultiSendChecker(sendCheckers))
 	// Wire the mod-log grant checker so capabilities report mod_log_granted for the owner.
 	modHandler.SetModLogChecker(modLogChecker)
+	// Wire the ad break grant checker so capabilities report ad_breaks_granted for the owner.
+	modHandler.SetAdBreaksChecker(adBreaksChecker)
 	// Wire the YouTube stream re-discovery publisher (owner-triggered recovery from /view).
 	modHandler.SetRediscoverPublisher(publisher.NewRediscoverPublisher(redisClient, log))
 

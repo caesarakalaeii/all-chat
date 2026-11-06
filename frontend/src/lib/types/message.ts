@@ -50,6 +50,8 @@ export type EventType =
   | 'prime_paid_upgrade'
   | 'pay_it_forward'
   | 'twitch_notice'
+  // Twitch ad break start (channel.ad_break.begin), owner-only opt-in notice
+  | 'ad_break'
   // Twitch moderation log (channel.moderate) and AutoMod holds
   // (automod.message.hold / automod.message.update), carried as one event type.
   | 'mod_action'

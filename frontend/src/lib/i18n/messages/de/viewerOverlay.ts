@@ -455,6 +455,12 @@ export const viewerOverlay: LocaleNamespace<'viewerOverlay'> = {
       'Zeige Twitch-Moderationsaktionen und AutoMod-Halte in diesem Aktivitäts-Feed. Twitch verlangt eine AutoMod-\u201eVerwalten\u201c-Berechtigung, um uns gehaltene Nachrichten überhaupt zu schicken \u2014 All-Chat liest sie nur; Freigabe-/Ablehnen-Buttons gibt es noch nicht.',
     enableModLog: 'Moderations- & AutoMod-Events anzeigen',
 
+    // Die Einwilligung gewährt nur channel:read:ads (ein Lesezugriff), deshalb benennt
+    // der Text den Nutzen statt des Scopes.
+    adBreaksOptIn:
+      'Erhalte eine Meldung in diesem Aktivitäts-Feed, wenn eine Twitch-Werbepause startet – geplant oder von Hand gestartet –, damit du dein Spiel pausieren kannst.',
+    enableAdBreaks: 'Werbepausen anzeigen',
+
     reauthOwner:
       'Deine {platform}-Moderationsberechtigung ist abgelaufen oder wurde nie erteilt \u2014 autorisiere neu, um weiter aus deinem Overlay zu moderieren.',
     reauthModerator:
