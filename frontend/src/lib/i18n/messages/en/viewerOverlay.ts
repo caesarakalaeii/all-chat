@@ -496,6 +496,12 @@ export const viewerOverlay = {
       'Show Twitch moderation actions and AutoMod holds in this activity feed. Twitch requires an AutoMod \u201cmanage\u201d permission to send us held messages at all \u2014 All-Chat only reads them; there are no approve/deny buttons yet.',
     enableModLog: 'Show moderation & AutoMod events',
 
+    // The consent grants only channel:read:ads (a read), so the copy spells out the
+    // benefit — knowing the moment a break starts — rather than the scope.
+    adBreaksOptIn:
+      'Get a notice in this activity feed when a Twitch ad break starts, scheduled or started by hand, so you can pause what you are playing.',
+    enableAdBreaks: 'Show ad breaks',
+
     // Two role variants: a moderator sent down the streamer's re-consent path
     // half-succeeds and then 404s, so each is told to re-authorize in its own
     // place.

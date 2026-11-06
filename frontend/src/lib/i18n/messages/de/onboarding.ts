@@ -79,6 +79,9 @@ export const onboarding: LocaleNamespace<'onboarding'> = {
     bubbleColorsTitle: 'Unterschiedlich farbige Sprechblasen',
     bubbleColorsBody:
       'Gib jeder Plattform ihre eigene Blasenfarbe oder Spiele eine Palette über den Chat hinweg durch, unter Blasenfarben in Darstellung. Kostenlos.',
+    adBreaksTitle: 'Twitch-Werbepausen-Meldungen',
+    adBreaksBody:
+      'Das Panel „Aktivität & Events“ im Monitor zeigt, wann eine Twitch-Werbepause startet – geplant oder von Hand –, damit du pausieren kannst. Aktivieren über das Banner im Monitor. Kostenlos.',
     alertsOverlayTitle: 'Alert-Overlays',
     alertsOverlayBody:
       'Zeige Abos, Bits, Raids, Super Chats und TikTok-Geschenke als eigene OBS-Quelle im Stream, mit Test-Button zum Ausrichten.',

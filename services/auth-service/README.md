@@ -525,9 +525,11 @@ Body: { "user_id": "uuid", "message": "...", "platforms": ["twitch","kick","yout
 ```
 
 The opt-in Twitch re-consent `GET /api/v1/auth/twitch/moderation/:overlay_id?actions=…`
-accepts `delete`, `timeout`, `ban`, `unban`, `engagement`, `modlog` and `clip`
-(`clips:edit`), and always folds in `user:write:chat`. `&return=commands` sends the
-user back to `/commands` instead of the overlay monitor.
+accepts `delete`, `timeout`, `ban`, `unban`, `engagement`, `modlog`, `clip`
+(`clips:edit`) and `ads` (`channel:read:ads`, ad break notices in the monitor), and
+always folds in `user:write:chat`. A request carrying `ads` must clear the
+`twitch_ad_breaks` feature gate (`RequirePremium`; seeded free by migration 127).
+`&return=commands` sends the user back to `/commands` instead of the overlay monitor.
 
 ### Chat bots (ADR-0081)
 

@@ -171,6 +171,13 @@ const (
 	// feature ships to beta testers first. The All-Chat Bot itself (the default
 	// sender) is admin-managed and NOT gated by this — it is product, not upsell.
 	GateCustomChatBot = "custom_chat_bot"
+
+	// GateTwitchAdBreaks gates opting a channel into Twitch ad break notices in the
+	// monitor (the channel:read:ads consent), mounted by auth-service on the Twitch
+	// re-consent when ?actions= carries "ads". Seeded is_premium=FALSE (migration 127):
+	// it ships open and exists so it can be narrowed without a deploy. A flip stops new
+	// grants only; channels that already granted keep their notices.
+	GateTwitchAdBreaks = "twitch_ad_breaks"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate

@@ -16,7 +16,7 @@ All require a user JWT (forwarded by the gateway; re-validated here). Mounted un
 
 | Method | Path | Body |
 |---|---|---|
-| `GET`  | `/overlays/:id/capabilities` | — → `{ role, is_owner, enabled, can_moderate, delegated_actions?, mod_log_granted, sources: [{platform, channel_id, channel_name, moderatable, reason?, actions[]}] }` |
+| `GET`  | `/overlays/:id/capabilities` | — → `{ role, is_owner, enabled, can_moderate, delegated_actions?, mod_log_granted, ad_breaks_granted, sources: [{platform, channel_id, channel_name, moderatable, reason?, actions[]}] }` |
 | `POST` | `/overlays/:id/delete`  | `{ platform, channel_id, native_message_id, target_uuid }` |
 | `POST` | `/overlays/:id/timeout` | `{ platform, channel_id, target_user_id, target_username, duration_seconds, reason? }` |
 | `POST` | `/overlays/:id/ban`     | `{ platform, channel_id, target_user_id, target_username, reason? }` |
@@ -49,6 +49,9 @@ only for an owner; a moderator gets false, because those scopes sit on the broad
 auth-service refuses to delegate them. A partial grant is false too — a credential one scope short
 cannot create the EventSub subscriptions — as is any lookup that could not read the credential, since
 false is what keeps the opt-in reachable.
+
+`ad_breaks_granted` is the same flag for the Twitch ad break opt-in: true only for an owner whose
+Twitch credential holds `channel:read:ads`, with the same false-when-unsure rule.
 
 A caller with **no role** and an overlay that **does not exist** produce a byte-identical body, so this
 endpoint is not an overlay-existence oracle either.

@@ -92,6 +92,9 @@ export const onboarding = {
     bubbleColorsTitle: 'Differently-coloured bubbles',
     bubbleColorsBody:
       'Give each platform its own bubble colour, or cycle a palette down the feed, under Bubble colors in Appearance. Free.',
+    adBreaksTitle: 'Twitch ad break notices',
+    adBreaksBody:
+      'The monitor’s Activity & Events shows when a Twitch ad break starts, scheduled or manual, so you can pause. Turn it on from the banner in the monitor. Free.',
     alertsOverlayTitle: 'Alert overlays',
     alertsOverlayBody:
       'Pop up subs, bits, raids, Super Chats and TikTok gifts on stream as their own OBS source, with a test button to line them up.',

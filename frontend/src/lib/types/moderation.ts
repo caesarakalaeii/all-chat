@@ -127,6 +127,14 @@ export interface ModerationCapabilities {
    * the opt-in visible.
    */
   mod_log_granted?: boolean
+  /**
+   * Whether the OWNER's Twitch credential already holds the `channel:read:ads` scope the
+   * ad-break opt-in grants, so the monitor can stop offering a consent that is done.
+   *
+   * Same semantics as `mod_log_granted`: only `true` means granted; `false` or absent
+   * keep the opt-in visible.
+   */
+  ad_breaks_granted?: boolean
   sources: SourceCapability[]
 }
 

@@ -90,6 +90,19 @@ func (c *TwitchScopeChecker) ModLogGranted(ctx context.Context, userID, channelI
 	return models.ModLogGranted(cred.GrantedScopes), nil
 }
 
+// AdBreaksGranted reports whether the owner's Twitch credential for this channel holds the
+// ad break opt-in scope. A missing credential yields false, mirroring ModLogGranted.
+func (c *TwitchScopeChecker) AdBreaksGranted(ctx context.Context, userID, channelID string) (bool, error) {
+	cred, err := c.src.Resolve(ctx, userID, channelID)
+	if errors.Is(err, ErrNoCredential) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return models.AdBreaksGranted(cred.GrantedScopes), nil
+}
+
 // facebookCredentialResolver is the subset of FacebookSource the scope checker needs.
 type facebookCredentialResolver interface {
 	Resolve(ctx context.Context, userID, channelID string) (*FacebookCredential, error)

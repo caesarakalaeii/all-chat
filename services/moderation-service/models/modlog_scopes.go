@@ -53,3 +53,14 @@ func ModLogGranted(scopes []string) bool {
 	}
 	return true
 }
+
+// AdBreaksTwitchScope is the one scope the ad break opt-in grants, for the
+// channel.ad_break.begin subscription. Copied from the "ads" entry of
+// twitchModerationScopesByAction in services/auth-service/oauth/twitch.go, for the same
+// reason ModLogTwitchScopes is.
+const AdBreaksTwitchScope = "channel:read:ads"
+
+// AdBreaksGranted reports whether a Twitch token's granted scopes cover the ad break opt-in.
+func AdBreaksGranted(scopes []string) bool {
+	return scopesContain(scopes, AdBreaksTwitchScope)
+}

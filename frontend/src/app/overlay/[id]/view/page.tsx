@@ -104,6 +104,7 @@ import { createSoundPlayer, type SoundPlayer, type SoundSettings } from '@/lib/u
 
 import { DEFAULT_DOCK_TAB, isDockMode, loadDockTab, saveDockTab, type DockTab } from './dockMode'
 import { shouldOfferModLogOptIn } from './modLogOptIn'
+import { shouldOfferAdBreaksOptIn } from './adBreaksOptIn'
 import {
   DEFAULT_VIEW_LAYOUT,
   LAYOUT_CONFIG,
@@ -414,6 +415,21 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   const enableModLog = useCallback(async () => {
     try {
       window.location.href = await moderationApi.getTwitchModLogConsentUrl(id)
+    } catch {
+      toastManager.add({
+        title: t('viewerOverlay.monitor.twitchConsentStartFailed'),
+        type: 'error',
+      })
+    }
+  }, [id, t])
+
+  // Opt-in for Twitch ad-break notices (channel.ad_break.begin), a separate read-only
+  // grant from the moderation write-path: it adds `channel:read:ads` to the owner's
+  // credential so the monitor's activity feed can surface when a break (scheduled or
+  // manual) starts. Owner-only — it is the broadcaster's credential to re-consent.
+  const enableAdBreaks = useCallback(async () => {
+    try {
+      window.location.href = await moderationApi.getTwitchAdBreaksConsentUrl(id)
     } catch {
       toastManager.add({
         title: t('viewerOverlay.monitor.twitchConsentStartFailed'),
@@ -900,6 +916,11 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     hasTwitchSource,
     modLogGranted: capabilities?.mod_log_granted,
   })
+  const showAdBreaksOptIn = shouldOfferAdBreaksOptIn({
+    isOwner,
+    hasTwitchSource,
+    adBreaksGranted: capabilities?.ad_breaks_granted,
+  })
   const noticeCount =
     Number(showStillReconnecting) +
     Number(replayTruncated) +
@@ -909,6 +930,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
     Number(showDiscordLink) +
     missingScopeNotices.length +
     Number(showModLogOptIn) +
+    Number(showAdBreaksOptIn) +
     Number(reauthPrompt !== null)
 
   // Every notice the wide view would stack, unchanged. The dock renders the same
@@ -1071,6 +1093,25 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
             className="h-auto p-0 font-medium"
           >
             {t('viewerOverlay.monitor.enableModLog')}
+          </Button>
+        </div>
+      )}
+
+      {/* Twitch ad-break opt-in: one scope (channel:read:ads) buys a notice in
+          Activity & Events the moment a break starts, so a game can be paused in
+          time. Copy names the benefit because the consent itself grants only a
+          read, which is easy to mistake for moderation access. */}
+      {showAdBreaksOptIn && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-2 px-4 py-2 text-xs text-text-sub">
+          <Info className="h-3.5 w-3.5 shrink-0 text-text-dim" />
+          <span>{t('viewerOverlay.monitor.adBreaksOptIn')}</span>
+          <Button
+            type="button"
+            onClick={() => void enableAdBreaks()}
+            variant="link"
+            className="h-auto p-0 font-medium"
+          >
+            {t('viewerOverlay.monitor.enableAdBreaks')}
           </Button>
         </div>
       )}

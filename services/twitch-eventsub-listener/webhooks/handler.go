@@ -530,6 +530,8 @@ func (h *Handler) routeEvent(ctx context.Context, subscriptionType string, event
 		return h.handleAutoModHold(ctx, eventData)
 	case "automod.message.update":
 		return h.handleAutoModUpdate(ctx, eventData)
+	case "channel.ad_break.begin":
+		return h.handleAdBreakBegin(ctx, eventData)
 	case "stream.offline":
 		return h.handleStreamOffline(ctx, eventData)
 	case "stream.online":
@@ -830,6 +832,62 @@ func (h *Handler) handleRaid(ctx context.Context, eventData json.RawMessage) err
 	}
 
 	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// adBreakEventType is the event type of a Twitch ad break. The api-gateway delivers it to the
+// overlay owner's authenticated sockets only: it is a cue for the streamer, not for the audience.
+const adBreakEventType = "ad_break"
+
+// handleAdBreakBegin processes channel.ad_break.begin: a mid-roll ad break, whether Ads Manager
+// scheduled it or someone ran it by hand.
+func (h *Handler) handleAdBreakBegin(ctx context.Context, eventData json.RawMessage) error {
+	var event eventsub.AdBreakBeginEvent
+	if err := json.Unmarshal(eventData, &event); err != nil {
+		return fmt.Errorf("failed to unmarshal channel.ad_break.begin: %w", err)
+	}
+	rawMsg := buildAdBreak(&event, time.Now().UTC())
+	if rawMsg == nil {
+		return nil
+	}
+	return h.publisher.Publish(ctx, rawMsg)
+}
+
+// buildAdBreak converts an ad break into an ad_break RawChatMessage. Nil when the broadcaster login
+// is absent, because without it the event cannot be routed to any overlay. requester_login is set
+// only for a manual break: Twitch fills the requester fields on scheduled breaks too, and naming the
+// broadcaster there would read as if they had started it.
+func buildAdBreak(e *eventsub.AdBreakBeginEvent, now time.Time) *models.RawChatMessage {
+	channel := strings.ToLower(e.BroadcasterUserLogin)
+	if channel == "" {
+		return nil
+	}
+	startedAt := e.StartedAt.UTC()
+	if e.StartedAt.IsZero() {
+		startedAt = now
+	}
+	automatic := bool(e.IsAutomatic)
+	eventData := map[string]interface{}{
+		"duration_seconds": int(e.DurationSeconds),
+		"is_automatic":     automatic,
+		"started_at":       startedAt.Format(time.RFC3339),
+	}
+	text := "Automatic ad break"
+	if !automatic {
+		text = "Ad break started"
+		if requester := strings.ToLower(e.RequesterUserLogin); requester != "" {
+			eventData["requester_login"] = requester
+			text = "Ad break started by " + requester
+		}
+	}
+	return &models.RawChatMessage{
+		MessageID: uuid.New().String(),
+		Platform:  "twitch",
+		ChannelID: channel,
+		Text:      text,
+		Timestamp: startedAt,
+		EventType: adBreakEventType,
+		EventData: eventData,
+	}
 }
 
 // handleCheer processes bits/cheer events

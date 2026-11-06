@@ -174,6 +174,12 @@ describe('moderator-side endpoints', () => {
     expect(client.get).toHaveBeenCalledWith('/api/v1/auth/twitch/moderation/ov-1?actions=modlog')
     expect(url).toBe('https://id.twitch.tv/authorize?modlog')
   })
+  it('requests the ad-breaks consent with actions=ads', async () => {
+    client.get.mockResolvedValue({ auth_url: 'https://id.twitch.tv/authorize?ads' })
+    const url = await moderationApi.getTwitchAdBreaksConsentUrl('ov-1')
+    expect(client.get).toHaveBeenCalledWith('/api/v1/auth/twitch/moderation/ov-1?actions=ads')
+    expect(url).toBe('https://id.twitch.tv/authorize?ads')
+  })
 })
 
 // The three action-failure codes (ADR-0048) differ in WHO can fix them, which is the only reason
