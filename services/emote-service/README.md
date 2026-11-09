@@ -69,6 +69,10 @@ curl "http://localhost:8083/emotes/channel/xqc?platform=twitch&user_id=123456"
 }
 ```
 
+A 7TV emote with the `ZeroWidth` flag (overlay emotes meant to sit on top of the
+previous emote) also carries `"zero_width": true`. The field is omitted for every
+other emote.
+
 #### GET `/emotes/7tv/:channel`
 **Description**: Fetch 7TV emotes only (includes channel-specific emotes + global emotes)
 

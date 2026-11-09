@@ -28,6 +28,48 @@ type PositionedEmote = {
   code: string
   provider: string
   key: string
+  zeroWidth: boolean
+}
+
+/** An emote image plus the zero-width (7TV overlay) emotes drawn on top of it. */
+type EmoteStack = {
+  base: PositionedEmote & { url: string }
+  overlays: PositionedEmote[]
+}
+
+function emoteImage(emote: PositionedEmote & { url: string }, className: string) {
+  return (
+    <Image
+      key={emote.key}
+      src={emote.url}
+      alt=""
+      title={`${emote.code} (${emote.provider})`}
+      width={28}
+      height={28}
+      className={className}
+    />
+  )
+}
+
+function renderStack({ base, overlays }: EmoteStack): React.ReactNode {
+  if (overlays.length === 0) {
+    return emoteImage(base, 'mx-[0.2em] inline-block h-[1.4em] w-auto align-text-bottom')
+  }
+  // The base sets the box; overlays are centred on it and may overhang it, like
+  // 7TV's own renderer, so a wide overlay does not push the text apart.
+  return (
+    <span key={`${base.key}-stack`} className="relative mx-[0.2em] inline-block align-text-bottom">
+      {emoteImage(base, 'block h-[1.4em] w-auto')}
+      {overlays.map((overlay) =>
+        overlay.url
+          ? emoteImage(
+              { ...overlay, url: overlay.url },
+              'absolute top-0 left-1/2 h-full w-auto max-w-none -translate-x-1/2'
+            )
+          : null
+      )}
+    </span>
+  )
 }
 
 export function renderMessageContent(message: ChatMessage): React.ReactNode {
@@ -62,6 +104,7 @@ export function renderMessageContent(message: ChatMessage): React.ReactNode {
         code: emote.code,
         provider: emote.provider,
         key: `${emote.code}-${emoteIndex}-${occurrenceIndex}-${start}`,
+        zeroWidth: emote.zero_width === true,
       })
     })
   })
@@ -72,7 +115,10 @@ export function renderMessageContent(message: ChatMessage): React.ReactNode {
 
   positioned.sort((a, b) => a.start - b.start)
 
-  const nodes: React.ReactNode[] = []
+  const parts: (React.ReactNode | EmoteStack)[] = []
+  // The stack a following zero-width emote attaches to; anything else in between
+  // (text, an emote without an image) ends it.
+  let openStack: EmoteStack | null = null
   let cursor = 0
 
   positioned.forEach((emote, index) => {
@@ -80,36 +126,39 @@ export function renderMessageContent(message: ChatMessage): React.ReactNode {
       return
     }
 
-    if (emote.start > cursor) {
-      nodes.push(<span key={`text-${index}-${cursor}`}>{text.slice(cursor, emote.start)}</span>)
+    const gap = text.slice(cursor, emote.start)
+    if (emote.zeroWidth && emote.url && openStack && gap.trim() === '') {
+      openStack.overlays.push(emote)
+      cursor = emote.end + 1
+      return
+    }
+
+    if (gap) {
+      parts.push(<span key={`text-${index}-${cursor}`}>{gap}</span>)
     }
 
     if (!emote.url) {
-      nodes.push(
+      parts.push(
         <span key={`${emote.key}-text`} className="mx-[0.2em]">
           {text.slice(emote.start, emote.end + 1)}
         </span>
       )
+      openStack = null
     } else {
-      nodes.push(
-        <Image
-          key={emote.key}
-          src={emote.url}
-          alt=""
-          title={`${emote.code} (${emote.provider})`}
-          width={28}
-          height={28}
-          className="mx-[0.2em] inline-block h-[1.4em] w-auto align-text-bottom"
-        />
-      )
+      openStack = { base: { ...emote, url: emote.url }, overlays: [] }
+      parts.push(openStack)
     }
 
     cursor = emote.end + 1
   })
 
   if (cursor < text.length) {
-    nodes.push(<span key={`text-tail-${cursor}`}>{text.slice(cursor)}</span>)
+    parts.push(<span key={`text-tail-${cursor}`}>{text.slice(cursor)}</span>)
   }
 
-  return nodes
+  return parts.map((part) => (isEmoteStack(part) ? renderStack(part) : part))
+}
+
+function isEmoteStack(part: React.ReactNode | EmoteStack): part is EmoteStack {
+  return typeof part === 'object' && part !== null && 'base' in part && 'overlays' in part
 }

@@ -107,7 +107,8 @@ type Emote struct {
 	Code      string  `json:"code"`
 	Provider  string  `json:"provider"`
 	URL       string  `json:"url"`
-	Positions [][]int `json:"positions"` // [[start, end], [start, end]]
+	Positions [][]int `json:"positions"`            // [[start, end], [start, end]]
+	ZeroWidth bool    `json:"zero_width,omitempty"` // 7TV overlay emote: drawn on top of the emote before it
 }
 
 // Attachment is a renderable image/GIF/video shared in a chat message (Discord
