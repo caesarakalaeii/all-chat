@@ -291,6 +291,11 @@ export const viewerOverlay: LocaleNamespace<'viewerOverlay'> = {
     no: 'nein',
     filtersNote: 'Filter dienen nur zur Übersicht; diese Ansicht zeigt alle Nachrichten.',
 
+    twitchOptIns: 'Twitch-Freigaben',
+    optInAdBreaks: 'Werbepausen-Meldungen',
+    optInModLog: 'Moderations- & AutoMod-Events',
+    optInEnable: 'Aktivieren',
+
     eventTwitchSubs: 'Twitch-Subs',
     eventTwitchResubs: 'Twitch-Resubs',
     eventTwitchGiftSubs: 'Twitch-Geschenk-Subs',

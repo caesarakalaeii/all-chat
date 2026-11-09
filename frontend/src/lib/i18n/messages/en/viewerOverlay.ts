@@ -313,6 +313,13 @@ export const viewerOverlay = {
     no: 'no',
     filtersNote: 'Filters are shown for reference; this view displays all messages.',
 
+    // Twitch consents that turn events on without a per-overlay toggle; only the
+    // overlay owner sees them, in the Configured Events card.
+    twitchOptIns: 'Twitch opt-ins',
+    optInAdBreaks: 'Ad break notices',
+    optInModLog: 'Moderation & AutoMod events',
+    optInEnable: 'Enable',
+
     // Worded differently from the overlay editor's event names in
     // overlayEditor.*, so they are their own keys rather than shared.
     eventTwitchSubs: 'Twitch Subs',

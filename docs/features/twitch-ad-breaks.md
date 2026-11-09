@@ -49,6 +49,12 @@ unioned with the scopes already granted for Twitch, so the new token is a supers
 stored grant. `channel:read:ads` is in `preservableScopes`, so a later plain login cannot
 drop it.
 
+The **Details** panel lists the opt-in too, under **Configured Events → Twitch
+opt-ins** (same owner and Twitch-source condition): **Ad break notices** with a check
+mark once `ad_breaks_granted` is true, or an **Enable** button that starts the same
+consent. Ad breaks have no per-overlay event toggle, so this row is the only place
+that shows they are on once the banner is gone.
+
 The grant is owner-only: `ads` is not in `delegatableActions`, so a delegated moderator's
 consent can never request it, and moderators do not see the banner.
 
