@@ -20,6 +20,7 @@ import { Check, Minus } from 'lucide-react'
 import clsx from 'clsx'
 
 import { PlatformGlyph } from '@/components/overlay/PlatformGlyph'
+import { Button } from '@/components/ui/button'
 import type { SourceInfo } from '@/components/PlatformStatusIndicators'
 import { sourceKey } from '@/core/overlayStreamCore'
 import { useTranslations } from '@/lib/i18n'
@@ -66,6 +67,20 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   )
 }
 
+/**
+ * The owner's Twitch consents that turn on events no per-overlay toggle covers: the
+ * grant itself is the opt-in (event_filter.go: columnAlwaysEnabled), so without these
+ * rows the card cannot say whether ad breaks or the mod log are on.
+ */
+export interface TwitchOptIns {
+  /** `ad_breaks_granted` from capabilities; anything but `true` offers the consent. */
+  adBreaksGranted: boolean | undefined
+  /** `mod_log_granted` from capabilities, same rule. */
+  modLogGranted: boolean | undefined
+  onEnableAdBreaks: () => void
+  onEnableModLog: () => void
+}
+
 interface ObservabilitySummaryProps {
   config: PublicOverlayConfig | null
   sources: Map<string, SourceInfo>
@@ -73,6 +88,8 @@ interface ObservabilitySummaryProps {
   activeChannels: Set<string>
   eventSettings: EventSettings | null
   observedEventTypes: Set<string>
+  /** Only for the overlay owner of an overlay with a Twitch source; omitted otherwise. */
+  twitchOptIns?: TwitchOptIns
 }
 
 /** Read-only overview of how the overlay is configured: sources, enabled events, emotes, filters. */
@@ -82,6 +99,7 @@ export function ObservabilitySummary({
   activeChannels,
   eventSettings,
   observedEventTypes,
+  twitchOptIns,
 }: ObservabilitySummaryProps) {
   const t = useTranslations()
   const filter = config?.filter_settings ?? {}
@@ -151,6 +169,49 @@ export function ObservabilitySummary({
           <p className="text-sm text-text-dim">
             {t('viewerOverlay.observability.eventsUnavailable')}
           </p>
+        )}
+        {twitchOptIns && (
+          <div className="mt-3 border-t border-border pt-2">
+            <h4 className="mb-1 text-[11px] font-semibold tracking-wide text-text-sub uppercase">
+              {t('viewerOverlay.observability.twitchOptIns')}
+            </h4>
+            <ul className="space-y-0.5">
+              {[
+                {
+                  key: 'ad-breaks',
+                  label: t('viewerOverlay.observability.optInAdBreaks'),
+                  on: twitchOptIns.adBreaksGranted === true,
+                  enable: twitchOptIns.onEnableAdBreaks,
+                },
+                {
+                  key: 'mod-log',
+                  label: t('viewerOverlay.observability.optInModLog'),
+                  on: twitchOptIns.modLogGranted === true,
+                  enable: twitchOptIns.onEnableModLog,
+                },
+              ].map(({ key, label, on, enable }) => (
+                <li key={key} className="flex items-center gap-1.5 text-xs">
+                  {on ? (
+                    <Check className="h-3 w-3 shrink-0 text-kick" />
+                  ) : (
+                    <Minus className="h-3 w-3 shrink-0 text-text-dim" />
+                  )}
+                  <span className={on ? 'text-text' : 'text-text-dim'}>{label}</span>
+                  {!on && (
+                    <Button
+                      type="button"
+                      onClick={enable}
+                      variant="link"
+                      className="ml-auto h-auto p-0 text-xs font-medium"
+                      aria-label={`${t('viewerOverlay.observability.optInEnable')}: ${label}`}
+                    >
+                      {t('viewerOverlay.observability.optInEnable')}
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </Card>
 

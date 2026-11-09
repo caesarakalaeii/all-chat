@@ -1197,6 +1197,16 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
           activeChannels={activeChannels}
           eventSettings={eventSettings}
           observedEventTypes={observedEventTypes}
+          twitchOptIns={
+            isOwner && hasTwitchSource
+              ? {
+                  adBreaksGranted: capabilities?.ad_breaks_granted,
+                  modLogGranted: capabilities?.mod_log_granted,
+                  onEnableAdBreaks: () => void enableAdBreaks(),
+                  onEnableModLog: () => void enableModLog(),
+                }
+              : undefined
+          }
         />
       )}
 

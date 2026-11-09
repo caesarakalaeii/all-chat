@@ -18,11 +18,11 @@
 
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest'
-import { render, screen, cleanup } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { SourceInfo } from '@/components/PlatformStatusIndicators'
-import { ObservabilitySummary } from '@/components/overlay/ObservabilitySummary'
+import { ObservabilitySummary, type TwitchOptIns } from '@/components/overlay/ObservabilitySummary'
 import type { EventSettings, PublicOverlayConfig } from '@/lib/types/overlay'
 
 afterEach(() => cleanup())
@@ -190,5 +190,62 @@ describe('ObservabilitySummary', () => {
     )
     const row = screen.getByText('Say hi filter').parentElement
     expect(row).toHaveTextContent('yes')
+  })
+
+  describe('Twitch opt-ins', () => {
+    function renderOptIns(optIns: Partial<TwitchOptIns>) {
+      const full: TwitchOptIns = {
+        adBreaksGranted: false,
+        modLogGranted: false,
+        onEnableAdBreaks: vi.fn(),
+        onEnableModLog: vi.fn(),
+        ...optIns,
+      }
+      render(
+        <ObservabilitySummary
+          config={config}
+          sources={sources}
+          activeChannels={new Set()}
+          eventSettings={eventSettings()}
+          observedEventTypes={new Set()}
+          twitchOptIns={full}
+        />
+      )
+      return full
+    }
+
+    it('offers Enable for an opt-in that is not granted, and starts that consent', () => {
+      const optIns = renderOptIns({ adBreaksGranted: false, modLogGranted: true })
+      fireEvent.click(screen.getByRole('button', { name: 'Enable: Ad break notices' }))
+      expect(optIns.onEnableAdBreaks).toHaveBeenCalledOnce()
+      expect(optIns.onEnableModLog).not.toHaveBeenCalled()
+      expect(
+        screen.queryByRole('button', { name: 'Enable: Moderation & AutoMod events' })
+      ).not.toBeInTheDocument()
+    })
+
+    it('shows a granted opt-in as on, without an Enable button', () => {
+      renderOptIns({ adBreaksGranted: true, modLogGranted: true })
+      expect(screen.getByText('Ad break notices')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /^Enable/ })).not.toBeInTheDocument()
+    })
+
+    it('treats an unknown grant as not granted', () => {
+      renderOptIns({ adBreaksGranted: undefined })
+      expect(screen.getByRole('button', { name: 'Enable: Ad break notices' })).toBeInTheDocument()
+    })
+
+    it('shows no opt-ins when the caller passes none (not the owner, or no Twitch source)', () => {
+      render(
+        <ObservabilitySummary
+          config={config}
+          sources={sources}
+          activeChannels={new Set()}
+          eventSettings={eventSettings()}
+          observedEventTypes={new Set()}
+        />
+      )
+      expect(screen.queryByText('Twitch opt-ins')).not.toBeInTheDocument()
+    })
   })
 })
