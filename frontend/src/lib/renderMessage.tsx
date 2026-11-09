@@ -117,7 +117,7 @@ export function renderMessageContent(message: ChatMessage): React.ReactNode {
 
   const parts: (React.ReactNode | EmoteStack)[] = []
   // The stack a following zero-width emote attaches to; anything else in between
-  // (text, a text-only emote) ends it.
+  // (text, an emote without an image) ends it.
   let openStack: EmoteStack | null = null
   let cursor = 0
 
