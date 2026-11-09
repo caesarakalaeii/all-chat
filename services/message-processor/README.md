@@ -466,6 +466,11 @@ content_type?, width?, height?, thumb_url?, spoiler?, filename? }`. GIFs arrive 
 `<a:name:id>`) are parsed by the Discord normalizer into the `emotes` array with
 `provider: "discord"`.
 
+An emote may carry `zero_width: true` (omitted otherwise). Only 7TV sets it, from
+the emote's `ZeroWidth` flag (`1 << 8`). The overlay draws such an emote on top of
+the emote right before it, when only whitespace separates them; with nothing to
+attach to it renders as an ordinary emote.
+
 Twitch chat GIFs (ADR-0037) ride the same `attachments` array: the Twitch
 normalizer parses the `gifs` tag (`start-end|gif_id|url`, populated from the
 EventSub `gif` fragment or the native IRC tag) into `type: "image"` attachments

@@ -156,6 +156,35 @@ func TestEnrichAddsEmotesForLaterOccurrences(t *testing.T) {
 	}
 }
 
+// The zero-width flag must survive the emote-service response, the cache shape and
+// the enriched message, or the overlay draws 7TV overlay emotes beside their base.
+func TestEnrichKeepsZeroWidthFlag(t *testing.T) {
+	client := &mockEmoteServiceClient{
+		emotes: []EmoteServiceEmote{
+			{Code: "KEKW", Provider: "7tv", URL: "https://cdn.7tv.app/emote/1/1x.webp"},
+			{Code: "PUNCH", Provider: "7tv", URL: "https://cdn.7tv.app/emote/2/1x.webp", ZeroWidth: true},
+		},
+	}
+
+	enricher := NewEnricher(client, nil, zap.NewNop())
+	msg := &models.UnifiedChatMessage{
+		ChannelID: "channel-123",
+		Message:   models.MessageInfo{Text: "KEKW PUNCH", Emotes: []models.Emote{}},
+	}
+
+	if err := enricher.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	got := map[string]bool{}
+	for _, emote := range msg.Message.Emotes {
+		got[emote.Code] = emote.ZeroWidth
+	}
+	if !got["PUNCH"] || got["KEKW"] {
+		t.Fatalf("expected only PUNCH zero-width, got %v", got)
+	}
+}
+
 func TestEnrichPrefersTwitchRoomID(t *testing.T) {
 	client := &mockEmoteServiceClient{
 		emotes: []EmoteServiceEmote{

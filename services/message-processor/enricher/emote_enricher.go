@@ -41,9 +41,10 @@ type EmoteServiceClient interface {
 
 // EmoteServiceEmote represents an emote from the Emote Service
 type EmoteServiceEmote struct {
-	Code     string `json:"code"`
-	URL      string `json:"url"`
-	Provider string `json:"provider"`
+	Code      string `json:"code"`
+	URL       string `json:"url"`
+	Provider  string `json:"provider"`
+	ZeroWidth bool   `json:"zero_width,omitempty"`
 }
 
 // EmoteServiceResponse is the response from Emote Service
@@ -265,6 +266,7 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 					Provider:  emote.Provider,
 					URL:       emote.URL,
 					Positions: [][]int{position},
+					ZeroWidth: emote.ZeroWidth,
 				})
 			}
 		}
@@ -471,9 +473,10 @@ func convertToCached(emotes []EmoteServiceEmote) []cache.CachedEmote {
 	converted := make([]cache.CachedEmote, 0, len(emotes))
 	for _, emote := range emotes {
 		converted = append(converted, cache.CachedEmote{
-			Code:     emote.Code,
-			Provider: emote.Provider,
-			URL:      emote.URL,
+			Code:      emote.Code,
+			Provider:  emote.Provider,
+			URL:       emote.URL,
+			ZeroWidth: emote.ZeroWidth,
 		})
 	}
 	return converted

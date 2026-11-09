@@ -206,6 +206,8 @@ export interface Emote {
   provider: 'twitch' | '7tv' | 'bttv' | 'ffz' | 'youtube' | 'discord' | 'tiktok' | 'altstream'
   url: string
   positions: number[][]
+  /** 7TV overlay emote: drawn on top of the emote before it, not beside it. */
+  zero_width?: boolean
 }
 
 /**
