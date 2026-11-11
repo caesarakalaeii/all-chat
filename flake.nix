@@ -47,10 +47,10 @@
         #
         # 1.26.5 satisfies every module the verbs walk: all 22 go.mod files
         # under services/ and shared/ declare `go 1.25.6` or newer. The Go
-        # service Dockerfiles are less uniform -- they range from
-        # golang:1.25-alpine to golang:1.27.0-alpine -- and CI's actions/setup-go
-        # pins 1.25.13. GOTOOLCHAIN below is what keeps that spread honest
-        # instead of silently downloading a fourth Go.
+        # service Dockerfiles (golang:1.27.4-alpine) and CI's actions/setup-go
+        # (1.27.4) build on a newer Go than this shell. GOTOOLCHAIN below is
+        # what keeps that spread honest instead of silently downloading a
+        # third Go.
         pkgs.go_1_26
         pkgs.gopls
         # CONTRIBUTING.md asks for `golangci-lint run` before a PR. It is NOT
