@@ -114,7 +114,7 @@ Handler-level tests run against in-memory mocks of the registry and object-store
 or Postgres needed:
 
 ```sh
-GOTOOLCHAIN=go1.27.3 go test ./...
+GOTOOLCHAIN=go1.27.4 go test ./...
 ```
 
 The orphan sweep also has an integration test against a real Postgres with the migrations
