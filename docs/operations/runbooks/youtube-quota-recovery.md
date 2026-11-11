@@ -13,8 +13,8 @@
 
 ```bash
 # Check quota status
-kubectl exec -n allchat deployment/youtube-listener -- \
-  wget -qO- http://localhost:8086/quota/status | jq .global
+kubectl port-forward -n allchat deployment/youtube-listener 8086:8086 >/dev/null &
+sleep 1; curl -s http://localhost:8086/quota/status | jq .global; kill $!
 
 # Expected if exhausted:
 # {
@@ -56,8 +56,9 @@ TZ='America/Los_Angeles' date
 **Monitor**:
 ```bash
 # Watch quota status (wait for midnight PT)
-watch 'kubectl exec -n allchat deployment/youtube-listener -- \
-  wget -qO- http://localhost:8086/quota/status | jq .global.state'
+kubectl port-forward -n allchat deployment/youtube-listener 8086:8086 >/dev/null &
+watch 'curl -s http://localhost:8086/quota/status | jq .global.state'
+kill $!   # stop the port-forward when done watching
 
 # After midnight, should change: DEPLETED → HEALTHY
 ```

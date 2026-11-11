@@ -100,8 +100,9 @@ kubectl --context default get jobs -n allchat -l app=key-rotator
 # No stuck jobs in Unknown state; no recent failure counts
 
 # 5. Verify current kid (what key is active for new encryptions)
-kubectl --context default exec -n allchat deploy/auth-service -- \
-  printenv | grep TOKEN_ENCRYPTION_KEY_V | sort
+kubectl --context default get deploy auth-service -n allchat \
+  -o jsonpath='{range .spec.template.spec.containers[?(@.name=="auth-service")].env[*]}{.name}{"\n"}{end}' \
+  | grep TOKEN_ENCRYPTION_KEY_V | sort
 # If TOKEN_ENCRYPTION_KEY_V1 is listed, current kid is 0x01.
 # The next rotation will add V2 (kid 0x02).
 ```
@@ -149,11 +150,12 @@ other consumers, and keep an old key mounted until it has run with the new one:
 
 ```bash
 # Check what V<n> keys are currently mounted
-kubectl --context default exec -n allchat deploy/auth-service -- \
-  printenv | grep 'TOKEN_ENCRYPTION_KEY_V' | sort
+kubectl --context default get deploy auth-service -n allchat \
+  -o jsonpath='{range .spec.template.spec.containers[?(@.name=="auth-service")].env[*]}{.name}{"\n"}{end}' \
+  | grep 'TOKEN_ENCRYPTION_KEY_V' | sort
 
 # Typical output after Phase 14 ships for the first time:
-#   TOKEN_ENCRYPTION_KEY_V1=<value>
+#   TOKEN_ENCRYPTION_KEY_V1
 # => current kid is V1 (byte 0x01); next will be V2 (byte 0x02)
 
 CURRENT_VERSION=1   # adjust if further rotations have already happened
@@ -289,8 +291,8 @@ done
 3. **Validate:**
    ```bash
    kubectl --context default rollout status deployment/auth-service -n allchat --timeout=5m
-   kubectl --context default exec -n allchat deploy/auth-service -- \
-     wget -qO- http://localhost:8081/health/ready
+   kubectl --context default port-forward -n allchat deploy/auth-service 8081:8081 >/dev/null &
+   sleep 1; curl -s http://localhost:8081/health/ready; kill $!
    # Expected: HTTP 200 with {"db":"ok","redis":"ok"}
    ```
 
@@ -321,9 +323,10 @@ before retiring the V<n> kid — active sessions use V<n> tokens that remain val
 ### Step 1 — Determine current latest kid
 
 ```bash
-kubectl --context default exec -n allchat deploy/auth-service -- \
-  printenv | grep 'JWT_SECRET_V' | sort
-# Expected post-Phase-14: JWT_SECRET_V1=<value>
+kubectl --context default get deploy auth-service -n allchat \
+  -o jsonpath='{range .spec.template.spec.containers[?(@.name=="auth-service")].env[*]}{.name}{"\n"}{end}' \
+  | grep 'JWT_SECRET_V' | sort
+# Expected post-Phase-14: JWT_SECRET_V1
 # Next rotation: add JWT_SECRET_V2
 
 CURRENT_VERSION=1
@@ -488,8 +491,9 @@ of the rollout completing. No user sessions are affected.
 
 ```bash
 # Confirm SERVICE_JWT_SECRET TTL is indeed 15 minutes:
-kubectl --context default exec -n allchat deploy/source-manager -- \
-  printenv | grep -i JWT_TTL || echo "TTL not in env — hardcoded 15m in shared/auth"
+kubectl --context default get deploy source-manager -n allchat \
+  -o jsonpath='{range .spec.template.spec.containers[?(@.name=="source-manager")].env[*]}{.name}{"\n"}{end}' \
+  | grep -i JWT_TTL || echo "TTL not in env — hardcoded 15m in shared/auth"
 ```
 
 ### Step 6 — Retire V<n>
@@ -522,8 +526,10 @@ second rotation.
    kubectl --context default logs -n allchat deploy/source-manager --tail=100 \
      | grep -i "ServiceJWTAuth\|jwt.*invalid\|jwt.*error" || echo "No service JWT errors"
    # Check a listener can reach source-manager:
-   kubectl --context default exec -n allchat deploy/twitch-listener -- \
-     wget -qO- http://source-manager:8083/health/ready
+   # Service images are distroless (ADR-0092): run wget from a debug container in the listener pod
+   POD=$(kubectl --context default get pods -n allchat -l app=twitch-listener -o jsonpath='{.items[0].metadata.name}')
+   kubectl --context default debug -n allchat "$POD" -i --image=busybox:1.37 --profile=restricted -- \
+     wget -qO- http://source-manager:8088/health/ready
    ```
 
 ---
@@ -618,8 +624,8 @@ After each mutation step, run the service-specific health check:
 
 ```bash
 # auth-service
-kubectl --context default exec -n allchat deploy/auth-service -- \
-  wget -qO- http://localhost:8081/health/ready
+kubectl --context default port-forward -n allchat deploy/auth-service 8081:8081 >/dev/null &
+sleep 1; curl -s http://localhost:8081/health/ready; kill $!
 
 # api-gateway (readiness via K8s)
 kubectl --context default get pods -n allchat -l app=api-gateway \

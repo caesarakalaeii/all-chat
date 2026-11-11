@@ -360,7 +360,8 @@ kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus -c prometheus | 
 
 **Check 3**: Test metrics endpoint directly
 ```bash
-kubectl exec -n allchat deploy/twitch-listener -- curl localhost:8085/metrics
+kubectl port-forward -n allchat deploy/twitch-listener 8085:8085 >/dev/null &
+sleep 1; curl -s http://localhost:8085/metrics; kill $!
 ```
 
 ### Dashboards Not Loading
