@@ -752,7 +752,9 @@ TEST_DATABASE_URL=postgres://user@localhost:5432/postgres go test ./handlers -ru
 kubectl logs -n allchat deployment/auth-service | grep "OAuth exchange failed"
 
 # Verify credentials
-kubectl exec -n allchat deployment/auth-service -- env | grep CLIENT
+kubectl get deploy auth-service -n allchat \
+  -o jsonpath='{range .spec.template.spec.containers[?(@.name=="auth-service")].env[*]}{.name}{"\n"}{end}' \
+  | grep CLIENT
 
 # Test OAuth provider reachability
 curl https://id.twitch.tv/oauth2/token  # Should return 400 (missing params), not timeout

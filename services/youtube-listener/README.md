@@ -439,8 +439,8 @@ docker run -d \
 
 **Check current status:**
 ```bash
-kubectl exec -n allchat youtube-listener-<pod> -- \
-  wget -qO- http://localhost:8086/quota/status | jq .
+kubectl port-forward -n allchat pod/youtube-listener-<pod> 8086:8086 >/dev/null &
+sleep 1; curl -s http://localhost:8086/quota/status | jq .; kill $!
 ```
 
 **Common causes:**

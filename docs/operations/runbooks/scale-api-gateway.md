@@ -71,7 +71,8 @@ kubectl get pods -n allchat -l app=api-gateway
 # Check connections distributed
 for pod in $(kubectl get pods -n allchat -l app=api-gateway -o name); do
   echo "$pod:"
-  kubectl exec -n allchat $pod -- wget -qO- http://localhost:8080/metrics | grep gateway_websocket_connections_active
+  kubectl port-forward -n allchat $pod 8080:8080 >/dev/null &
+  sleep 1; curl -s http://localhost:8080/metrics | grep gateway_websocket_connections_active; kill $!
 done
 ```
 

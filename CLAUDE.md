@@ -224,6 +224,7 @@ services/<service-name>/
 - Dependency injection for testability
 - Graceful shutdown (25s timeout)
 - Health checks: `/health/live` (always 200), `/health/ready` (checks DB + Redis)
+- Runtime image: `gcr.io/distroless/static-debian13`, so no shell in the pod: debug with `kubectl port-forward` or `kubectl debug --target`, never `kubectl exec -- sh` (ADR-0092)
 
 ---
 

@@ -993,6 +993,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0092: Distroless runtime images
+
+**Status**: ✅ Accepted
+**Date**: 2026-11-11
+**Problem**: Every Go service ran on `alpine:3.24` and the frontend and discord-bot on `node:*-alpine`, which ship busybox, a shell and `apk` that no service uses at runtime but an attacker with code execution could.
+**Decision**: Go services run on `gcr.io/distroless/static-debian13` (all builds are already `CGO_ENABLED=0`); the frontend runs on `gcr.io/distroless/nodejs26-debian13` and builds on `node:26-trixie-slim` so its native packages (sharp) match the runtime's glibc; discord-bot installs on `node:22-trixie-slim` and runs on `gcr.io/distroless/nodejs22-debian13`. Images use numeric `USER 1000:1000` (frontend `1001:1001`), the UIDs the manifests pin. Docker `HEALTHCHECK`s (busybox `wget`, ignored by Kubernetes) are gone, and support-bot fetches `kubectl` in its build stage. The migrations image (a `psql` shell script) and the Debian-based tiktok images are not converted.
+**Impact**: No shell in the converted images, so `kubectl exec <pod> -- sh|wget|printenv` stops working; the runbooks use `kubectl port-forward`, the deployment spec, or `kubectl debug --target` instead. youtube-listener-innertube's `preStop` uses the native `sleep` action (caesar-deployment #179), which must deploy first.
+**→ Read**: [0092-distroless-runtime-images.md](./0092-distroless-runtime-images.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

@@ -16,15 +16,9 @@ RUN go mod download
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/media-service ./cmd
 
-# Runtime stage
-FROM alpine:3.24
-
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates tzdata
-
-# Create non-root user
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+# Runtime stage: distroless static (ADR-0092). No shell or package manager;
+# ships CA certificates and tzdata. UID 1000 matches runAsUser in the k8s manifests.
+FROM gcr.io/distroless/static-debian13
 
 WORKDIR /app
 
@@ -32,18 +26,11 @@ WORKDIR /app
 COPY --from=builder /app/media-service .
 COPY LICENSE ./LICENSE
 
-# Change ownership
-RUN chown -R appuser:appuser /app
-
 # Switch to non-root user
-USER appuser
+USER 1000:1000
 
 # Expose port
 EXPOSE 8094
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8094/health/live || exit 1
 
 # Run the binary
 CMD ["./media-service"]

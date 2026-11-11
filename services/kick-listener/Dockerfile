@@ -16,11 +16,9 @@ RUN go mod download
 # Build
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/kick-listener ./cmd
 
-# Runtime stage
-FROM alpine:3.24
-
-# Install CA certificates for HTTPS
-RUN apk --no-cache add ca-certificates tzdata
+# Runtime stage: distroless static (ADR-0092). No shell or package manager;
+# ships CA certificates and tzdata. UID 1000 matches runAsUser in the k8s manifests.
+FROM gcr.io/distroless/static-debian13
 
 WORKDIR /app
 
@@ -28,19 +26,9 @@ WORKDIR /app
 COPY --from=builder /app/kick-listener .
 COPY LICENSE ./LICENSE
 
-# Create non-root user
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser && \
-    chown -R appuser:appuser /app
-
-USER appuser
+USER 1000:1000
 
 # Expose health check port
 EXPOSE 8089
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8089/health/live \
-    && wget --no-verbose --tries=1 --spider http://localhost:8089/health/ready || exit 1
 
 CMD ["./kick-listener"]

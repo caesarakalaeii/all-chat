@@ -182,8 +182,8 @@ push to `beta`).
 
    ```bash
    # /health/ready returns 200 (Redis reachable)
-   kubectl --context default exec -n allchat deploy/picarto-listener -- \
-     wget -qO- http://localhost:8097/health/ready
+   kubectl --context default port-forward -n allchat deploy/picarto-listener 8097:8097 >/dev/null &
+   sleep 1; curl -s http://localhost:8097/health/ready; kill $!
 
    # no CrashLoop; restartCount stable at 0
    kubectl --context default get pods -n allchat -l platform=picarto

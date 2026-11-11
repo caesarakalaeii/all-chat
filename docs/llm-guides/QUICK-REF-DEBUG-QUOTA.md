@@ -14,9 +14,9 @@
 # From local development
 curl http://localhost:8086/quota/status | jq .
 
-# From Kubernetes pod
-kubectl exec -n allchat deployment/youtube-listener -- \
-  wget -qO- http://localhost:8086/quota/status | jq .
+# From Kubernetes
+kubectl port-forward -n allchat deployment/youtube-listener 8086:8086 >/dev/null &
+sleep 1; curl -s http://localhost:8086/quota/status | jq .; kill $!
 ```
 
 **Expected Response:**
@@ -375,8 +375,8 @@ curl http://localhost:8086/status
 ### Check Quota Status
 ```bash
 # Current status (formatted)
-kubectl exec -n allchat deployment/youtube-listener -- \
-  wget -qO- http://localhost:8086/quota/status | jq .
+kubectl port-forward -n allchat deployment/youtube-listener 8086:8086 >/dev/null &
+sleep 1; curl -s http://localhost:8086/quota/status | jq .; kill $!
 
 # Quota history (last 7 days)
 curl http://localhost:8086/quota/history?days=7 | jq .
@@ -493,8 +493,8 @@ kubectl rollout restart deployment/youtube-listener -n allchat
 kubectl rollout status deployment/youtube-listener -n allchat
 
 # Verify quota state after restart
-kubectl exec -n allchat deployment/youtube-listener -- \
-  wget -qO- http://localhost:8086/quota/status | jq .global
+kubectl port-forward -n allchat deployment/youtube-listener 8086:8086 >/dev/null &
+sleep 1; curl -s http://localhost:8086/quota/status | jq .global; kill $!
 ```
 
 ### Procedure 3: Scale Down to Reduce Quota Usage
@@ -504,8 +504,9 @@ kubectl exec -n allchat deployment/youtube-listener -- \
 kubectl scale deployment/youtube-listener --replicas=1 -n allchat
 
 # Monitor quota usage
-watch 'kubectl exec -n allchat deployment/youtube-listener -- \
-  wget -qO- http://localhost:8086/quota/status | jq .global.percentage'
+kubectl port-forward -n allchat deployment/youtube-listener 8086:8086 >/dev/null &
+watch 'curl -s http://localhost:8086/quota/status | jq .global.percentage'
+kill $!   # stop the port-forward when done watching
 
 # Scale back up when quota allows
 kubectl scale deployment/youtube-listener --replicas=2 -n allchat

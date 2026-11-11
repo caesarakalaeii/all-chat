@@ -40,11 +40,12 @@ kubectl logs -n allchat -l app=twitch-listener --tail=100
 ### Execute Commands in Pod
 
 ```bash
-# Shell access
-kubectl exec -n allchat <pod-name> -it -- /bin/sh
+# Shell access (service images are distroless, no shell: ADR-0092; attach a debug container)
+kubectl debug -n allchat <pod-name> -it --image=busybox:1.37 --target=<container-name> --profile=restricted -- sh
 
 # One-off command
-kubectl exec -n allchat <pod-name> -- wget -qO- http://localhost:8080/health/ready
+kubectl port-forward -n allchat pod/<pod-name> 8080:8080 >/dev/null &
+sleep 1; curl -s http://localhost:8080/health/ready; kill $!
 ```
 
 ---
