@@ -17,8 +17,14 @@
  */
 
 import type { ReactElement } from 'react'
+import clsx from 'clsx'
 
+import { AltstreamIcon } from '@/components/icons/AltstreamIcon'
 import { useTranslations, type TFunction } from '@/lib/i18n'
+
+// GoodGame has no official monogram; the GG the icon's SVG draws is a brand
+// mark, not copy, so it stays out of the catalog.
+const GOODGAME_GLYPH = 'GG'
 
 /**
  * The single per-platform SVG switch, factored out so both the single-glyph
@@ -73,14 +79,91 @@ function platformSvg(t: TFunction, platform: string, className: string): ReactEl
           />
         </svg>
       )
+    case 'owncast':
+      // Owncast mark: a broadcast wave over a dot (simple functional glyph,
+      // not the trademarked owl).
+      return (
+        <svg viewBox="0 0 24 24" className={className} aria-label={t('common.platforms.owncast')}>
+          <circle cx="12" cy="17" r="2.5" fill="#9B7FF5" />
+          <path
+            fill="none"
+            stroke="#9B7FF5"
+            strokeWidth="2"
+            strokeLinecap="round"
+            d="M7.8 12.8a6 6 0 0 1 8.4 0M5 10a10 10 0 0 1 14 0"
+          />
+        </svg>
+      )
+    case 'goodgame':
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          className={className}
+          aria-label={t('common.platforms.goodgame')}
+          style={{ imageRendering: 'pixelated' }}
+        >
+          <text
+            x="12"
+            y="17"
+            fontSize="11"
+            fontWeight="bold"
+            fill="#7FA3D1"
+            textAnchor="middle"
+            fontFamily="monospace"
+          >
+            {GOODGAME_GLYPH}
+          </text>
+        </svg>
+      )
+    case 'picarto':
+      // Picarto mark: the artist's palette circle (functional glyph).
+      return (
+        <svg viewBox="0 0 24 24" className={className} aria-label={t('common.platforms.picarto')}>
+          <circle cx="12" cy="12" r="9" fill="#27B756" />
+          <circle cx="9" cy="9" r="1.4" fill="#FFFFFF" />
+          <circle cx="15" cy="9" r="1.4" fill="#FFFFFF" />
+          <circle cx="8" cy="14" r="1.4" fill="#FFFFFF" />
+          <circle cx="14.5" cy="15" r="1.4" fill="#FFFFFF" />
+        </svg>
+      )
+    case 'facebook':
+      return (
+        <svg viewBox="0 0 24 24" className={className} aria-label={t('common.platforms.facebook')}>
+          <path
+            fill="#3B93F5"
+            d="M12 2a10 10 0 1 0-1.6 19.9v-7h-2.5V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.4h-1.2c-1.2 0-1.6.8-1.6 1.6V12h2.7l-.4 2.9h-2.3v7A10 10 0 0 0 12 2z"
+          />
+        </svg>
+      )
+    case 'instagram':
+      // Instagram mark: camera outline (functional glyph, no brand path).
+      return (
+        <svg viewBox="0 0 24 24" className={className} aria-label={t('common.platforms.instagram')}>
+          <rect
+            x="3.5"
+            y="3.5"
+            width="17"
+            height="17"
+            rx="5"
+            fill="none"
+            stroke="#ED6FA4"
+            strokeWidth="2"
+          />
+          <circle cx="12" cy="12" r="4" fill="none" stroke="#ED6FA4" strokeWidth="2" />
+          <circle cx="17.2" cy="6.8" r="1.2" fill="#ED6FA4" />
+        </svg>
+      )
+    case 'altstream':
+      return <AltstreamIcon className={clsx(className, 'text-altstream')} />
     default:
       return null
   }
 }
 
 /**
- * Small platform brand glyph for the observability view. Uses official brand
- * colors so the platform is identifiable at a glance regardless of theme.
+ * Small platform brand glyph, the one platform icon for the monitor, the OBS
+ * overlay and the preview embed. Uses official brand colors so the platform is
+ * identifiable at a glance regardless of theme.
  */
 export function PlatformGlyph({
   platform,
