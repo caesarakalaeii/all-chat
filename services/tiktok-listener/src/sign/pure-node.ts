@@ -43,7 +43,8 @@
  *    a per-pod rolling-hour connect budget paces flap storms. Per-pod, not
  *    per-room: the session's flag budget is shared by all rooms and all
  *    pods leasing it. A sign that gets no lease never dials, so it gives
- *    its slot back: a signer outage must not drain the budget.
+ *    its slot back: a signer outage must not drain the budget. Refused
+ *    rooms queue, each for its own freeing slot (takeConnectSlot).
  *  - The lane-pin pre-sign re-enters sign() with a fixed
  *    `userAgent: 'ws-pin'` marker; it is a local cache hit, not a WS dial,
  *    and never consumes connect budget.
@@ -69,6 +70,12 @@ interface SessionLeaseResponse {
 
 /** Keys the connector appends to the WS URL itself (lib-YL2P_UWg.js:1831-1838). */
 const CONNECTOR_APPENDED_WS_KEYS = new Set(['compress', 'room_id', 'internal_ext', 'cursor']);
+
+/**
+ * How long a freed connect slot stays held for the queued room it was
+ * promised to: the live poller's 30s tick plus the live-status pre-check.
+ */
+const CONNECT_QUEUE_HOLD_MS = 90_000;
 
 export interface PureNodeSignerOptions {
   /** Base URL of the tiktok-signer service, no trailing slash. */
@@ -110,6 +117,8 @@ export class PureNodeSigner implements WebcastSigner {
   private inFlight: Promise<void> | undefined;
   private readonly leaseFetchHours: number[] = [];
   private readonly wsConnectHours: number[] = [];
+  /** Rooms refused a connect slot → when the slot promised to them frees. */
+  private readonly connectQueue = new Map<string, number>();
 
   constructor(options: PureNodeSignerOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -129,18 +138,7 @@ export class PureNodeSigner implements WebcastSigner {
     // connect budget — it is not a WS dial.
     const isPreSign = request.userAgent === 'ws-pin';
     const now = Date.now();
-    if (!isPreSign) {
-      this.pruneWindow(this.wsConnectHours, now);
-      if (this.wsConnectHours.length >= this.maxWsConnectsPerHour) {
-        throw new SignatureFailure(
-          this.name,
-          'WS connect budget exhausted: too many connects this hour (rate limiting self-imposed)',
-          undefined,
-          Math.max(0, this.wsConnectHours[0]! + 3_600_000 - now)
-        );
-      }
-      this.wsConnectHours.push(now);
-    }
+    if (!isPreSign) this.takeConnectSlot(request.roomId, now);
 
     try {
       const lease = await this.currentLease();
@@ -154,6 +152,44 @@ export class PureNodeSigner implements WebcastSigner {
       }
       throw error;
     }
+  }
+
+  /**
+   * Take a WS-connect slot, or refuse and queue the room for its own slot.
+   *
+   * Every refused room is told when a slot frees that no room ahead of it
+   * is promised, and a slot that frees for a queued room is held for it
+   * until CONNECT_QUEUE_HOLD_MS after that time. Told to retry when the
+   * oldest slot slid, every refused room came back together, one connected
+   * and the rest were refused again, slot after slot (prod 2026-11-12: 37
+   * of a day's 59 refusals were rooms already parked).
+   */
+  private takeConnectSlot(roomId: string, now: number): void {
+    this.pruneWindow(this.wsConnectHours, now);
+    this.connectQueue.delete(roomId);
+    let held = 0;
+    for (const [room, slotAt] of this.connectQueue) {
+      if (slotAt < now - CONNECT_QUEUE_HOLD_MS) this.connectQueue.delete(room); // never came back
+      else if (slotAt <= now) held++;
+    }
+    const free = this.maxWsConnectsPerHour - this.wsConnectHours.length;
+    if (free > held) {
+      this.wsConnectHours.push(now);
+      return;
+    }
+    // Every connect, made or promised, frees its slot an hour later; the
+    // rooms already queued take the earliest of those in turn.
+    const slotsFreeAt = [...this.wsConnectHours, ...this.connectQueue.values()]
+      .map((t) => t + 3_600_000)
+      .sort((a, b) => a - b);
+    const slotAt = slotsFreeAt[this.connectQueue.size - free]!;
+    this.connectQueue.set(roomId, slotAt);
+    throw new SignatureFailure(
+      this.name,
+      'WS connect budget exhausted: too many connects this hour (rate limiting self-imposed)',
+      undefined,
+      slotAt - now
+    );
   }
 
   /**

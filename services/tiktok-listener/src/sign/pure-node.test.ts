@@ -309,6 +309,46 @@ describe('PureNodeSigner WS-connect budget', () => {
     }
     await expect(signer.sign(signRequest({ roomId: 'over' }))).rejects.toThrow(/WS connect budget exhausted/);
   });
+
+  it('refused rooms queue for distinct slots instead of all waking on the oldest one', async () => {
+    // Prod 2026-11-12: 7 rooms refused together were all told to retry when
+    // the oldest slot slid, one connected and six were refused again, every
+    // slot, so 37 of 59 refusals in a day were rooms already parked.
+    vi.useFakeTimers();
+    try {
+      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 2 });
+      const start = Date.now();
+      const refusalOf = async (roomId: string) =>
+        signer.sign(signRequest({ roomId })).then(
+          () => undefined,
+          (error: SignatureFailure) => error.retryAfterMs
+        );
+
+      await signer.sign(signRequest({ roomId: 'a' }));
+      vi.setSystemTime(start + 10 * 60_000);
+      await signer.sign(signRequest({ roomId: 'b' }));
+      vi.setSystemTime(start + 20 * 60_000);
+      // c waits for a's slot (+60m), d for b's (+70m).
+      expect(await refusalOf('c')).toBe(40 * 60_000);
+      expect(await refusalOf('d')).toBe(50 * 60_000);
+
+      // a's slot frees at +60m but is held for c: a new room is refused,
+      // queued behind d on the slot c's connect will free.
+      vi.setSystemTime(start + 60 * 60_000);
+      expect(await refusalOf('e')).toBe(60 * 60_000);
+      vi.setSystemTime(start + 60 * 60_000 + 30_000);
+      expect(await refusalOf('c')).toBeUndefined();
+
+      // d never comes back (went offline): its slot is held for the
+      // grace period, then anyone may take it.
+      vi.setSystemTime(start + 70 * 60_000 + 30_000);
+      expect(await refusalOf('f')).toBeGreaterThan(0);
+      vi.setSystemTime(start + 72 * 60_000);
+      expect(await refusalOf('f')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('PureNodeSigner budget refusal classification', () => {
