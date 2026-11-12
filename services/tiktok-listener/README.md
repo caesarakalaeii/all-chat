@@ -282,8 +282,9 @@ sum(rate(tiktok_sign_attempts_total{signer="self",outcome="success",load_bearing
 sum(rate(tiktok_sign_attempts_total{reason="rate_limit"}[5m]))
 
 # How often are we refusing ourselves on the pure-node hourly budgets
-# (WS connects, leases)? A refused room is parked until the window
-# slides — this is capacity signal, not an external fault.
+# (WS connects, leases)? A room refused a WS connect is queued for its
+# own freeing slot, held for it when it frees, so one refusal is one
+# room waiting — this is capacity signal, not an external fault.
 sum(rate(tiktok_sign_attempts_total{reason="budget"}[5m]))
 ```
 
