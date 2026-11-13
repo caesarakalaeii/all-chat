@@ -83,7 +83,11 @@ export interface UseOverlayStreamOptions {
   passive?: boolean
   /** Enriched, deduped regular chat message (no event, or a non-deletion event). */
   onChat?: (message: ChatMessage) => void
-  /** Enriched TikTok like-aggregate update (no dedup — may repeat by aggregation_id). */
+  /**
+   * Enriched `message_update` (no dedup — may repeat). A TikTok like aggregate
+   * (matched by aggregation_id) or a chat message whose media arrived late
+   * (Discord link preview, matched by id).
+   */
   onMessageUpdate?: (message: ChatMessage) => void
   /** A deletion to apply. `source` is 'replay' for reconnect-buffered deletions, 'live' otherwise. */
   onDeletion?: (deletion: DeletionMetadata, source: 'replay' | 'live') => void

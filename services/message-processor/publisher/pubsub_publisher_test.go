@@ -56,6 +56,38 @@ func TestPubSubPublisher_PublishSucceeds(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// A chat message republished with late media must reach the updates channel so the
+// gateway delivers it as message_update (replace the row) rather than a new chat row.
+func TestPubSubPublisher_ChatUpdateRoutesToUpdatesChannel(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	ctx := context.Background()
+	subClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer subClient.Close()
+	sub := subClient.Subscribe(ctx, "overlay:overlay-123", "overlay:overlay-123:updates")
+	defer sub.Close()
+	for range 2 { // wait for both subscription confirmations
+		_, err := sub.Receive(ctx)
+		require.NoError(t, err)
+	}
+	msgs := sub.Channel()
+
+	p := newTestPublisher(t, mr)
+	require.NoError(t, p.Publish(ctx, "overlay-123", &models.UnifiedChatMessage{
+		ID: "msg-1", Platform: "discord", IsUpdate: true,
+	}))
+	require.NoError(t, p.Publish(ctx, "overlay-123", &models.UnifiedChatMessage{
+		ID: "msg-2", Platform: "discord",
+	}))
+
+	first := <-msgs
+	second := <-msgs
+	assert.Equal(t, "overlay:overlay-123:updates", first.Channel)
+	assert.Equal(t, "overlay:overlay-123", second.Channel)
+}
+
 func TestPubSubPublisher_PublishToMultiple_IsolatesFailures(t *testing.T) {
 	mr, err := miniredis.Run()
 	require.NoError(t, err)

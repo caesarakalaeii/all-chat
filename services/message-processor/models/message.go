@@ -39,6 +39,12 @@ type RawChatMessage struct {
 	// Event support (backwards compatible - omitted for chat messages)
 	EventType   string                 `json:"event_type,omitempty"`   // "subscription", "raid", "gift", "like_aggregate", etc.
 	EventData   map[string]interface{} `json:"event_data,omitempty"`   // Platform-specific event payload
+
+	// IsUpdate marks a chat message republished under an id the overlay already
+	// shows, because its media arrived late (Discord adds link previews such as
+	// Tenor GIFs in a MESSAGE_UPDATE). It replaces that row on the overlay and
+	// never re-runs per-message side effects (stats, commands, send-to-all).
+	IsUpdate bool `json:"is_update,omitempty"`
 }
 
 // UnifiedChatMessage represents the normalized, enriched message published to Pub/Sub
@@ -60,6 +66,10 @@ type UnifiedChatMessage struct {
 
 	// Event support (nil for chat messages)
 	Event       *EventInfo             `json:"event,omitempty"`
+
+	// IsUpdate is RawChatMessage.IsUpdate carried to the publisher, which routes
+	// the message to the overlay's updates channel. Not part of the wire format.
+	IsUpdate bool `json:"-"`
 }
 
 // UserInfo contains information about the message author

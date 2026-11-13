@@ -356,9 +356,11 @@ func main() {
 		// Send-to-all detection (once per raw message): if this is a streamer's own
 		// message echoed back after a "send to all", auth-service pre-registered it so
 		// the N platform echoes collapse into one combined-pill message. Only chat
-		// messages participate — events never fan out this way.
+		// messages participate — events never fan out this way. An update (late media
+		// for a row already on the overlay) skips this and the text-health metric: the
+		// original message already went through both.
 		var sendAllGroup *sendall.Registration
-		if rawMsg.EventType == "" || rawMsg.EventType == "chat" {
+		if !rawMsg.IsUpdate && (rawMsg.EventType == "" || rawMsg.EventType == "chat") {
 			if reg, lookupErr := deduplicator.LookupSendAllGroup(ctx, rawMsg.Platform, rawMsg.UserID, rawMsg.Text); lookupErr != nil {
 				log.Debug("send-to-all lookup failed, treating as ordinary message", zap.Error(lookupErr))
 			} else {
@@ -687,6 +689,8 @@ func main() {
 			}
 
 		publish:
+			unified.IsUpdate = rawMsg.IsUpdate
+
 			// Streamer send-to-all: collapse the per-platform echoes into one combined
 			// message. Reuse the shared group id (so all echoes share an id), attach the
 			// full platform set for the combined pill, and publish at most once per
@@ -716,16 +720,22 @@ func main() {
 				platformMsgID = rawMsg.MessageID
 			}
 
-			isDup, dedupErr := deduplicator.IsDuplicateForOverlay(
-				ctx,
-				overlay.OverlayID,
-				rawMsg.Platform,
-				rawMsg.ChannelID,
-				platformMsgID,
-				rawMsg.UserID,
-				rawMsg.Text,
-				rawMsg.Timestamp,
-			)
+			// An update reuses the id of a message this overlay already received, so
+			// it would always be flagged; it replaces that row rather than adding one.
+			var isDup bool
+			var dedupErr error
+			if !rawMsg.IsUpdate {
+				isDup, dedupErr = deduplicator.IsDuplicateForOverlay(
+					ctx,
+					overlay.OverlayID,
+					rawMsg.Platform,
+					rawMsg.ChannelID,
+					platformMsgID,
+					rawMsg.UserID,
+					rawMsg.Text,
+					rawMsg.Timestamp,
+				)
+			}
 
 			if dedupErr != nil {
 				log.Warn("Deduplication check failed, processing message anyway",
@@ -794,7 +804,7 @@ func main() {
 		// Placed after the overlay loop so multi-overlay fanout counts as one message.
 		// Uses daily buckets (chat:stats:daily:{platform}:{YYYY-MM-DD}) so the
 		// API can sum the last 7 days for a stable rolling window.
-		if publishedToAnyOverlay {
+		if publishedToAnyOverlay && !rawMsg.IsUpdate {
 			day := time.Now().UTC().Format("2006-01-02")
 			statsKey := "chat:stats:daily:" + rawMsg.Platform + ":" + day
 			// Same increment as the weekly buckets, but for the all-time counter

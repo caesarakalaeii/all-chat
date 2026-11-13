@@ -28,7 +28,7 @@ import {
   isPinnedToLiveEdge,
   matchesUserFilter,
   mergeAutoModResolution,
-  mergeByAgg,
+  mergeUpdate,
   mergeDeletionPair,
   partitionItems,
   shouldAutoScroll,
@@ -766,23 +766,39 @@ describe('applyModerationMark', () => {
   })
 })
 
-describe('mergeByAgg', () => {
-  it('appends and caps when there is no aggregation id', () => {
-    const prev = [item('m1'), item('m2')]
-    const next = mergeByAgg(prev, item('m3'), 2)
-    expect(next.map((i) => i.id)).toEqual(['m2', 'm3'])
+describe('mergeUpdate', () => {
+  it('replaces the row with the same id, keeping its moderation mark', () => {
+    const moderated = { ...item('m1'), _moderated: { kind: 'delete' as const } }
+    const prev = [moderated, item('m2')]
+    const updated = {
+      ...item('m1'),
+      message: {
+        text: 'gif',
+        emotes: [],
+        attachments: [{ type: 'video' as const, url: 'https://x/a.mp4' }],
+      },
+    }
+    const next = mergeUpdate(prev, updated, 10)
+    expect(next).toHaveLength(2)
+    expect(next[0].message.attachments).toHaveLength(1)
+    expect(next[0]._moderated?.kind).toBe('delete')
+  })
+
+  it('drops an id update whose row is gone instead of re-adding it', () => {
+    const prev = [item('m1')]
+    expect(mergeUpdate(prev, item('gone'), 10)).toBe(prev)
   })
 
   it('appends when the aggregation id is not yet present', () => {
     const prev = [item('m1', { eventType: 'like_aggregate', aggId: 'A' })]
-    const next = mergeByAgg(prev, item('m2', { eventType: 'like_aggregate', aggId: 'B' }), 10)
+    const next = mergeUpdate(prev, item('m2', { eventType: 'like_aggregate', aggId: 'B' }), 10)
     expect(next).toHaveLength(2)
   })
 
   it('replaces in place when the aggregation id matches (length unchanged)', () => {
     const prev = [item('x', { eventType: 'like_aggregate', aggId: 'A' }), item('m1')]
     const updated = item('x2', { eventType: 'like_aggregate', aggId: 'A' })
-    const next = mergeByAgg(prev, updated, 2)
+    const next = mergeUpdate(prev, updated, 2)
     expect(next).toHaveLength(2)
     expect(next[0].id).toBe('x2')
     expect(next[1].id).toBe('m1')

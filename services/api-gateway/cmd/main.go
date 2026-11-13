@@ -283,7 +283,8 @@ func main() {
 
 		// Determine message type based on channel
 		// Main channel: overlay:{id} -> regular messages/events
-		// Update channel: overlay:{id}:updates -> TikTok like aggregate updates
+		// Update channel: overlay:{id}:updates -> TikTok like aggregate updates and
+		// chat messages whose media arrived late (Discord link previews)
 		msgType := models.WSMessageTypeChatMessage
 		switch {
 		case strings.HasSuffix(channel, ":updates"):

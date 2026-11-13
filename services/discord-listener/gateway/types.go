@@ -108,7 +108,8 @@ type InvalidSessionData struct {
 	Resumable bool `json:"d"`
 }
 
-// MessageCreateData is the payload for the MESSAGE_CREATE dispatch event
+// MessageCreateData is the payload for the MESSAGE_CREATE dispatch event. MESSAGE_UPDATE
+// carries the same full message object, so it is decoded into this type too.
 type MessageCreateData struct {
 	ID          string              `json:"id"`
 	ChannelID   string              `json:"channel_id"`
@@ -120,6 +121,10 @@ type MessageCreateData struct {
 	Mentions    []DiscordUser       `json:"mentions"`
 	Attachments []DiscordAttachment `json:"attachments"`
 	Embeds      []DiscordEmbed      `json:"embeds"`
+
+	// EditedTimestamp is nil unless the author edited the message. Discord adding a
+	// link preview after the fact is a MESSAGE_UPDATE that leaves it nil.
+	EditedTimestamp *string `json:"edited_timestamp"`
 }
 
 // DiscordAttachment is an uploaded file attached to a message (image, GIF, video, ...).
@@ -137,7 +142,8 @@ type DiscordAttachment struct {
 
 // DiscordEmbed is a rich embed or auto-generated link preview. Tenor/Giphy links
 // arrive as embeds of type "gifv" (an mp4 that loops); pasted image links arrive
-// as type "image". Only media-bearing embeds are surfaced downstream.
+// as type "image" with the media in thumbnail. Only media-bearing embeds are
+// surfaced downstream.
 type DiscordEmbed struct {
 	Type      string             `json:"type"` // "image", "gifv", "video", "link", "rich", ...
 	URL       string             `json:"url"`

@@ -55,6 +55,9 @@ func (c *StreamConsumer) forwardEngagementCommand(raw *models.RawChatMessage) {
 	if raw.EventType != "" && raw.EventType != "chat_message" {
 		return // only real chat messages carry vote/wager commands
 	}
+	if raw.IsUpdate {
+		return // the original message was already forwarded; a second copy would vote or fire a command twice
+	}
 	if !looksLikeCommand(raw.Text) && !c.hasChatCommands(raw.Platform, raw.ChannelID) {
 		return // fast in-process reject — no Redis call, no channel op, for ordinary chat
 	}

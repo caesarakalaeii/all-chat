@@ -210,6 +210,29 @@ describe('overlay fade regression', () => {
     expect(screen.queryByText('first')).not.toBeInTheDocument()
   })
 
+  it('replaces a row by id on a late-media update and never re-adds a row that is gone', async () => {
+    render(<OBSOverlayPage params={resolvedParams('test')} />)
+    await act(async () => {})
+    onChat()(chatMessage('m1', 'https://tenor.com/view/dance'))
+    await act(async () => {})
+
+    // Discord attaches the GIF in a MESSAGE_UPDATE under the same id.
+    streamOptions.onMessageUpdate?.(chatMessage('m1', 'with gif'))
+    await act(async () => {})
+    expect(screen.queryByText('https://tenor.com/view/dance')).not.toBeInTheDocument()
+    expect(screen.getAllByText('with gif')).toHaveLength(1)
+
+    // Once the row expired (or a moderator removed it), a late update must not
+    // bring it back.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(11_000)
+    })
+    expect(screen.queryByText('with gif')).not.toBeInTheDocument()
+    streamOptions.onMessageUpdate?.(chatMessage('m1', 'with gif'))
+    await act(async () => {})
+    expect(screen.queryByText('with gif')).not.toBeInTheDocument()
+  })
+
   it('does not mass-expire the visible feed when fade is re-enabled mid-session', async () => {
     const { rerender } = render(<OBSOverlayPage params={resolvedParams('test')} />)
     await act(async () => {})
