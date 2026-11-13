@@ -356,8 +356,11 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           )
         }
         if (index === -1) {
-          // Original message already faded away, treat as new
-          return [...prev, updatedMessage].slice(-maxMessagesRef.current)
+          // An aggregate whose original already faded away is shown as new. An
+          // id-matched update (late Discord media) for a row that is gone is
+          // dropped: the row was deleted or expired, and re-adding it would bring
+          // back a message a moderator removed.
+          return aggregationId ? [...prev, updatedMessage].slice(-maxMessagesRef.current) : prev
         }
         // Update existing message in place
         const updated = [...prev]

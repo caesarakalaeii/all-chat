@@ -466,6 +466,14 @@ content_type?, width?, height?, thumb_url?, spoiler?, filename? }`. GIFs arrive 
 `<a:name:id>`) are parsed by the Discord normalizer into the `emotes` array with
 `provider: "discord"`.
 
+Discord adds link previews (a GIF picked from the GIF picker is a Tenor link,
+a pasted image link) after the message was sent, in a `MESSAGE_UPDATE`. The
+discord-listener republishes that message once, under the same `message_id`
+with `is_update: true`, and the processor routes it to `overlay:{id}:updates`
+(delivered as `message_update`) so the overlay replaces the link-only row.
+An update skips per-overlay dedup, send-to-all detection, the stats counters and
+the engagement/chat-command forward, all of which already ran for the original.
+
 An emote may carry `zero_width: true` (omitted otherwise). Only 7TV sets it, from
 the emote's `ZeroWidth` flag (`1 << 8`). The overlay draws such an emote on top of
 the emote right before it, when only whitespace separates them; with nothing to

@@ -307,6 +307,17 @@ func (c *GatewayClient) Connect(ctx context.Context) error {
 				}
 			}
 
+			if payload.T != nil && *payload.T == "MESSAGE_UPDATE" {
+				var msg MessageCreateData
+				if err := json.Unmarshal(payload.D, &msg); err != nil {
+					c.log.Warn("Failed to parse MESSAGE_UPDATE", zap.Error(err))
+					continue
+				}
+				if err := c.HandleMessageUpdate(ctx, msg); err != nil {
+					return err
+				}
+			}
+
 			if payload.T != nil && *payload.T == "MESSAGE_DELETE" {
 			var del MessageDeleteData
 			if err := json.Unmarshal(payload.D, &del); err != nil {
@@ -485,6 +496,24 @@ func (c *GatewayClient) IsStale() bool {
 //     which indicates the MESSAGE_CONTENT privileged intent is not enabled.
 //   - Valid messages are enriched with tags and published to Redis Streams.
 func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCreateData) error {
+	return c.handleMessage(ctx, msg, false)
+}
+
+// HandleMessageUpdate processes a MESSAGE_UPDATE dispatch event. Only the update
+// in which Discord attaches a link preview's media (a Tenor/Giphy GIF picked from
+// the GIF picker, a pasted image link) is forwarded: the original MESSAGE_CREATE
+// carried just the URL text. It is republished under the same message id, marked
+// is_update, so the overlay replaces the row instead of adding one. Author edits
+// (edited_timestamp set) and updates without embed media are ignored; text edits
+// are not reflected on the overlay.
+func (c *GatewayClient) HandleMessageUpdate(ctx context.Context, msg MessageCreateData) error {
+	if msg.EditedTimestamp != nil || msg.Author.ID == "" || !hasEmbedMedia(msg) {
+		return nil
+	}
+	return c.handleMessage(ctx, msg, true)
+}
+
+func (c *GatewayClient) handleMessage(ctx context.Context, msg MessageCreateData, isUpdate bool) error {
 	if msg.Author.Bot {
 		if c.log != nil {
 			c.log.Debug("Bot message filtered",
@@ -529,7 +558,7 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 	firstSeen := c.firstMessageSeen
 	c.mu.Unlock()
 
-	if !firstSeen {
+	if !firstSeen && !isUpdate {
 		// An image/GIF-only message legitimately has empty content, so only treat
 		// empty content as an intent problem when there is no attachment or embed
 		// either — otherwise a media-only first message is misread as a disabled
@@ -603,8 +632,12 @@ func (c *GatewayClient) HandleMessageCreate(ctx context.Context, msg MessageCrea
 		rawMsg["attachments"] = attachments
 	}
 
-	// Record message received (passed all filters, about to publish)
-	metrics.IncMessageReceived(msg.GuildID, msg.ChannelID)
+	if isUpdate {
+		rawMsg["is_update"] = true
+	} else {
+		// Record message received (passed all filters, about to publish)
+		metrics.IncMessageReceived(msg.GuildID, msg.ChannelID)
+	}
 
 	if err := c.publisher.Publish(ctx, rawMsg); err != nil {
 		metrics.IncMessagePublished("error")

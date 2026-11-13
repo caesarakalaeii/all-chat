@@ -2,14 +2,14 @@
 
 **Date**: 2026-10-01
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation; alert media now backed up off-cluster; the consumer passes only alert event types, so the owner-only moderation log never reaches alert overlays)
+**Revised**: 2026-11-13 (`overlay:{id}:updates` also carries Discord messages republished with late link-preview media); 2026-11-03 (brought in line with the current implementation; alert media now backed up off-cluster; the consumer passes only alert event types, so the owner-only moderation log never reaches alert overlays)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
 
 All-Chat's overlays are chat renderers: the message-processor normalizes `chat:raw` stream
 entries and delivers them to `overlay:{id}` (with `overlay:{id}:updates` for TikTok like
-aggregates). Streamers also want to *celebrate*
+aggregates and for Discord messages whose link-preview media arrived late). Streamers also want to *celebrate*
 platform events — a Twitch sub or cheer, a YouTube Super Chat, a TikTok gift — as on-screen
 alerts, goal bars, and top-supporter lists, optionally with their own attached media (sounds,
 images, GIFs, short clips).

@@ -90,7 +90,7 @@ import {
   deletionSignature,
   isAudienceEvent,
   mergeAutoModResolution,
-  mergeByAgg,
+  mergeUpdate,
   mergeDeletionPair,
   partitionItems,
   toModActionEntry,
@@ -205,7 +205,7 @@ export default function OverlayMonitorView({ params }: { params: Promise<{ id: s
   }, [])
 
   const onMessageUpdate = useCallback((message: ChatMessage) => {
-    setItems((prev) => mergeByAgg(prev, message, MAX_ITEMS))
+    setItems((prev) => mergeUpdate(prev, message, MAX_ITEMS))
   }, [])
 
   const onDeletion = useCallback((deletion: DeletionMetadata, source: 'replay' | 'live') => {

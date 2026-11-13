@@ -166,6 +166,22 @@ func TestBuildRawAttachments_ImageEmbed(t *testing.T) {
 	assert.Equal(t, "https://media.discordapp.net/ext/pic.png", got[0].URL)
 }
 
+// A pasted image link arrives with its media in thumbnail and no image object.
+func TestBuildRawAttachments_ImageEmbedThumbnailOnly(t *testing.T) {
+	msg := MessageCreateData{
+		Embeds: []DiscordEmbed{{
+			Type:      "image",
+			URL:       "https://example.com/dance.gif",
+			Thumbnail: &DiscordEmbedMedia{URL: "https://example.com/dance.gif", ProxyURL: "https://media.discordapp.net/ext/dance.gif", Width: 320, Height: 240},
+		}},
+	}
+	got := buildRawAttachments(msg)
+	require.Len(t, got, 1)
+	assert.Equal(t, "image", got[0].Type)
+	assert.Equal(t, "https://media.discordapp.net/ext/dance.gif", got[0].URL)
+	assert.Equal(t, 320, got[0].Width)
+}
+
 func TestBuildRawAttachments_IgnoresNonMediaEmbeds(t *testing.T) {
 	msg := MessageCreateData{
 		Embeds: []DiscordEmbed{
