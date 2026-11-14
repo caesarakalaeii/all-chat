@@ -513,8 +513,10 @@ type fakeStreamDiscovery struct {
 	mu        sync.Mutex
 	calls     []string
 	liveVideo string
-	notLive   map[string]bool
-	onCall    func(call string)
+	// companionVideo is returned after liveVideo unless the companion mode is "off".
+	companionVideo string
+	notLive        map[string]bool
+	onCall         func(call string)
 }
 
 func (f *fakeStreamDiscovery) record(call string) {
@@ -539,14 +541,18 @@ func (f *fakeStreamDiscovery) setNotLive(videoID string, notLive bool) {
 	f.notLive[videoID] = notLive
 }
 
-func (f *fakeStreamDiscovery) DiscoverLiveStream(_ context.Context, _, _, _ string) (string, error) {
+func (f *fakeStreamDiscovery) DiscoverLiveStreams(_ context.Context, _, _, _, companionMode string) ([]string, error) {
 	f.record("browse")
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.liveVideo == "" {
-		return "", errors.New("channel offline")
+		return nil, errors.New("channel offline")
 	}
-	return f.liveVideo, nil
+	ids := []string{f.liveVideo}
+	if f.companionVideo != "" && companionMode != innertube.CompanionOff {
+		ids = append(ids, f.companionVideo)
+	}
+	return ids, nil
 }
 
 func (f *fakeStreamDiscovery) DiscoverAllLiveStreams(_ context.Context, _, _ string) ([]string, error) {
@@ -1038,4 +1044,98 @@ func TestSyncSources_PinChangeToPolledVideoKeepsPoller(t *testing.T) {
 	mapping, err := m.repository.GetChannelVideoMapping(ctx, channelID)
 	require.NoError(t, err)
 	assert.Equal(t, pin, mapping)
+}
+
+func isCompanion(m *Manager, videoID string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	s, ok := m.activeStreams[videoID]
+	return ok && s.Companion
+}
+
+func TestDiscoveryLoop_StartsVerticalCompanion(t *testing.T) {
+	m, fake := newPinTestManager(t, nil)
+	fake.liveVideo = "landscape01"
+	fake.companionVideo = "vertical001"
+	state, ctx, _ := reserveDiscovery(t, m, "UCdual", "")
+
+	runDiscoveryLoop(m, ctx, state)
+
+	assert.Equal(t, []string{"landscape01", "vertical001"}, polledVideos(m, "UCdual"))
+	assert.False(t, isCompanion(m, "landscape01"))
+	assert.True(t, isCompanion(m, "vertical001"),
+		"the companion must be marked so it never owns the channel's stream-state")
+	mapping, err := m.repository.GetChannelVideoMapping(context.Background(), "UCdual")
+	require.NoError(t, err)
+	assert.Equal(t, "landscape01", mapping, "the channel cache must stay on the main stream")
+}
+
+func TestDiscoveryLoop_CompanionOffPollsMainOnly(t *testing.T) {
+	m, fake := newPinTestManager(t, nil)
+	fake.liveVideo = "landscape01"
+	fake.companionVideo = "vertical001"
+	state, ctx, _ := reserveDiscovery(t, m, "UCdual", "")
+	state.VerticalCompanion = innertube.CompanionOff
+
+	runDiscoveryLoop(m, ctx, state)
+
+	assert.Equal(t, []string{"landscape01"}, polledVideos(m, "UCdual"))
+}
+
+func TestSyncSources_CompanionProbe(t *testing.T) {
+	const channelID = "UCdual"
+	setup := func(t *testing.T, mode, polled string) (*Manager, *fakeStreamDiscovery) {
+		sm, smClient := newFakeSourceManager(t)
+		sm.set(&sourcemanager.ActiveSource{ID: "a", OverlayID: "overlay-1", ChannelID: channelID, VerticalCompanion: mode, IsActive: true})
+		m, fake := newPinTestManager(t, smClient)
+		injectRunningPoller(m, channelID, polled)
+		return m, fake
+	}
+
+	t.Run("vertical stream that went live later is merged, then the probe is throttled", func(t *testing.T) {
+		m, fake := setup(t, "", "landscape01")
+		fake.liveVideo = "landscape01"
+		fake.companionVideo = "vertical001"
+
+		m.syncSources(context.Background())
+		require.Eventually(t, func() bool { return len(polledVideos(m, channelID)) == 2 }, 5*time.Second, 10*time.Millisecond)
+		assert.True(t, isCompanion(m, "vertical001"))
+
+		m.syncSources(context.Background())
+		m.wg.Wait()
+		assert.Equal(t, []string{"browse", "continuation:vertical001"}, fake.Calls(),
+			"a second sync within the probe interval must not browse again")
+	})
+
+	t.Run("main stream that came back next to a polled companion is started as main", func(t *testing.T) {
+		m, fake := setup(t, "", "vertical001")
+		fake.liveVideo = "landscape02"
+		fake.companionVideo = "vertical001"
+
+		m.syncSources(context.Background())
+		require.Eventually(t, func() bool { return len(polledVideos(m, channelID)) == 2 }, 5*time.Second, 10*time.Millisecond)
+		assert.False(t, isCompanion(m, "landscape02"))
+	})
+
+	t.Run("selection that moved away from the polled stream changes nothing", func(t *testing.T) {
+		m, fake := setup(t, "", "otherVid001")
+		fake.liveVideo = "landscape01"
+		fake.companionVideo = "vertical001"
+
+		m.syncSources(context.Background())
+		m.wg.Wait()
+		assert.Equal(t, []string{"otherVid001"}, polledVideos(m, channelID),
+			"starting the new selection would merge two unrelated streams")
+	})
+
+	t.Run("off never probes", func(t *testing.T) {
+		m, fake := setup(t, innertube.CompanionOff, "landscape01")
+		fake.liveVideo = "landscape01"
+		fake.companionVideo = "vertical001"
+
+		m.syncSources(context.Background())
+		m.wg.Wait()
+		assert.Empty(t, fake.Calls())
+		assert.Equal(t, []string{"landscape01"}, polledVideos(m, channelID))
+	})
 }

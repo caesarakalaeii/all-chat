@@ -153,37 +153,11 @@ func (d *Discovery) browseLiveCandidates(ctx context.Context, channelID string) 
 // "connected but empty". The main stream is the most-watched one.
 // matchTerm is only used with "title_match" strategy.
 func (d *Discovery) DiscoverLiveStream(ctx context.Context, channelID, strategy, matchTerm string) (string, error) {
-	if strategy == "" {
-		strategy = StrategyMostViewers
-	}
-
-	d.logger.Info("discovering live stream",
-		zap.String("channel_id", channelID),
-		zap.String("strategy", strategy),
-	)
-
-	candidates, err := d.browseLiveCandidates(ctx, channelID)
+	videoIDs, err := d.DiscoverLiveStreams(ctx, channelID, strategy, matchTerm, CompanionOff)
 	if err != nil {
 		return "", err
 	}
-	if len(candidates) == 0 {
-		return "", fmt.Errorf("no live stream found for channel %s", channelID)
-	}
-
-	selected, err := SelectStream(candidates, strategy, matchTerm)
-	if err != nil {
-		return "", fmt.Errorf("stream selection failed for channel %s: %w", channelID, err)
-	}
-
-	d.logger.Info("discovered live stream",
-		zap.String("channel_id", channelID),
-		zap.String("video_id", selected.VideoID),
-		zap.String("title", selected.Title),
-		zap.Int("viewer_count", selected.ViewerCount),
-		zap.Int("candidates", len(candidates)),
-		zap.String("strategy", strategy),
-	)
-	return selected.VideoID, nil
+	return videoIDs[0], nil
 }
 
 // DiscoverAllLiveStreams discovers all live video IDs for a given channel.
@@ -237,6 +211,12 @@ func (d *Discovery) DiscoverAllLiveStreams(ctx context.Context, channelID, title
 func SelectStream(candidates []LiveStreamCandidate, strategy, matchTerm string) (LiveStreamCandidate, error) {
 	if len(candidates) == 0 {
 		return LiveStreamCandidate{}, fmt.Errorf("no candidates")
+	}
+
+	// Only an explicit title match may land on a vertical-looking broadcast; every other
+	// strategy is after the main stream, and its vertical twin is a companion instead.
+	if strategy != StrategyTitleMatch {
+		candidates = preferLandscape(candidates)
 	}
 
 	switch strategy {
