@@ -214,6 +214,9 @@ Body: { "config": { ... } }
 #   official_api — true hands the channel to youtube-listener (premium gate
 #                  youtube_official_api): 403 when not premium, 409 when the caller has no
 #                  YouTube connection for the channel. Turning it off is never checked.
+#   vertical_companion — "", "on" or "off": merge the channel's simultaneous vertical
+#                  broadcast (see youtube-listener-innertube README). 400 for any other
+#                  value. Free, never gated.
 # Discord keys (ADR-0048, ADR-0091):
 #   relay_enabled / relay_channel_id — the relay target, validated like the source's channel.
 #   relay_webhook_url — server-owned: discord-listener provisions it and stores it encrypted.

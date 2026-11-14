@@ -282,6 +282,9 @@ export interface ChatSource {
 export type StreamSelectionStrategy =
   'first_found' | 'most_viewers' | 'fewest_viewers' | 'title_match' | 'title_match_all' | 'all'
 
+/** "" merges a broadcast titled as vertical, "on" any second broadcast, "off" none. */
+export type VerticalCompanionMode = '' | 'on' | 'off'
+
 export interface YouTubeSourceConfig {
   stream_select?: StreamSelectionStrategy
   stream_match?: string
@@ -289,6 +292,8 @@ export interface YouTubeSourceConfig {
   stream_id?: string
   /** Premium opt-in: read this owned channel through the YouTube Data API. */
   official_api?: boolean
+  /** Free: merge the channel's simultaneous vertical broadcast. Absent means "". */
+  vertical_companion?: VerticalCompanionMode
   [key: string]: unknown
 }
 

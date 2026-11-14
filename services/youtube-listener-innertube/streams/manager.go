@@ -51,12 +51,14 @@ type Source struct {
 	StreamSelect  string // Stream selection strategy (e.g. "most_viewers")
 	StreamMatch   string // Match term for title_match strategy
 	PinnedVideoID string // config.stream_id: a video polled directly, e.g. an unlisted stream
+	// VerticalCompanion is config.vertical_companion: innertube.CompanionAuto/On/Off.
+	VerticalCompanion string
 }
 
 // streamDiscovery is the part of *innertube.Discovery the manager drives. It is an
 // interface so discovery and pin handling can be exercised without YouTube.
 type streamDiscovery interface {
-	DiscoverLiveStream(ctx context.Context, channelID, strategy, matchTerm string) (string, error)
+	DiscoverLiveStreams(ctx context.Context, channelID, strategy, matchTerm, companionMode string) ([]string, error)
 	DiscoverAllLiveStreams(ctx context.Context, channelID, titleFilter string) ([]string, error)
 	poller.ContinuationRefresher
 }
@@ -72,19 +74,24 @@ type Stream struct {
 	// and published to the youtube:stream:state cache for auth-service / moderation-service.
 	// Empty until resolution completes (or if no resolver is configured).
 	LiveChatID string
+	// Companion marks the extra vertical broadcast merged next to the channel's main
+	// stream. The channel's stream-state (streamer sends, moderation) belongs to the main
+	// stream, so a companion never writes or clears it.
+	Companion bool
 }
 
 // DiscoveryState tracks ongoing discovery attempts for a channel
 type DiscoveryState struct {
-	ChannelID        string
-	OverlayID        string
-	StreamSelect     string // Stream selection strategy
-	StreamMatch      string // Match term for title_match
-	PinnedVideoID    string // Tried before the channel browse on every attempt
-	StartedAt        time.Time
-	Attempts         int
-	CancelFunc       context.CancelFunc
-	ResetBackoffChan chan struct{} // Signal to reset backoff when other platforms go live
+	ChannelID         string
+	OverlayID         string
+	StreamSelect      string // Stream selection strategy
+	StreamMatch       string // Match term for title_match
+	PinnedVideoID     string // Tried before the channel browse on every attempt
+	VerticalCompanion string // innertube.CompanionAuto/On/Off
+	StartedAt         time.Time
+	Attempts          int
+	CancelFunc        context.CancelFunc
+	ResetBackoffChan  chan struct{} // Signal to reset backoff when other platforms go live
 }
 
 // Manager manages active YouTube streams and coordinates with source-manager
@@ -126,6 +133,8 @@ type Manager struct {
 	pins map[string]string
 	// pinProbedAt throttles probing a pin while the channel polls another video.
 	pinProbedAt map[string]time.Time
+	// companionProbedAt throttles looking for a vertical companion while polling.
+	companionProbedAt map[string]time.Time
 
 	// jitter overrides the discovery start spread; nil = random 0-5s.
 	jitter func() time.Duration
@@ -191,6 +200,7 @@ func NewManager(
 		channelConnectedOverlays: make(map[string]map[string]struct{}),
 		pins:                     make(map[string]string),
 		pinProbedAt:              make(map[string]time.Time),
+		companionProbedAt:        make(map[string]time.Time),
 		gaveUpDiscovery:          make(map[string]bool),
 		demandStopTimers:         make(map[string]*time.Timer),
 		stopChan:                 make(chan struct{}),
@@ -281,6 +291,8 @@ type DiscoveryOpts struct {
 	StreamSelect  string // Stream selection strategy (e.g. "most_viewers")
 	StreamMatch   string // Match term for title_match strategy
 	PinnedVideoID string // Video tried before the channel browse
+	// VerticalCompanion is innertube.CompanionAuto/On/Off.
+	VerticalCompanion string
 }
 
 // startAsyncDiscovery starts background discovery for a channel
@@ -298,15 +310,16 @@ func (m *Manager) startAsyncDiscovery(channelID, overlayID string, opts Discover
 	// 8+ concurrent loops scraping the same offline channel.
 	discoveryCtx, cancel := context.WithCancel(context.Background())
 	state := &DiscoveryState{
-		ChannelID:        channelID,
-		OverlayID:        overlayID,
-		StreamSelect:     streamSelect,
-		StreamMatch:      streamMatch,
-		PinnedVideoID:    opts.PinnedVideoID,
-		StartedAt:        time.Now(),
-		Attempts:         0,
-		CancelFunc:       cancel,
-		ResetBackoffChan: make(chan struct{}, 1), // Buffered to prevent blocking
+		ChannelID:         channelID,
+		OverlayID:         overlayID,
+		StreamSelect:      streamSelect,
+		StreamMatch:       streamMatch,
+		PinnedVideoID:     opts.PinnedVideoID,
+		VerticalCompanion: opts.VerticalCompanion,
+		StartedAt:         time.Now(),
+		Attempts:          0,
+		CancelFunc:        cancel,
+		ResetBackoffChan:  make(chan struct{}, 1), // Buffered to prevent blocking
 	}
 
 	m.mu.Lock()
@@ -546,8 +559,9 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			}
 		} else {
 			// Single-stream strategies
-			videoID, err := m.discovery.DiscoverLiveStream(ctx, state.ChannelID, state.StreamSelect, state.StreamMatch)
+			videoIDs, err := m.discovery.DiscoverLiveStreams(ctx, state.ChannelID, state.StreamSelect, state.StreamMatch, state.VerticalCompanion)
 			if err == nil {
+				videoID := videoIDs[0]
 				m.logger.Info("Discovery successful",
 					zap.String("channel_id", state.ChannelID),
 					zap.String("video_id", videoID),
@@ -582,6 +596,9 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 					discoveryErr = err
 					// Fall through to backoff and retry the whole discovery+poller process
 				} else {
+					for _, companionID := range videoIDs[1:] {
+						m.startCompanionPoller(ctx, state.ChannelID, companionID, state.OverlayID)
+					}
 					m.cleanupDiscoveryState(state)
 					return
 				}
@@ -762,6 +779,31 @@ func (m *Manager) subscribeToPlatformEvents(ctx context.Context, state *Discover
 // startPoller starts a poller for a discovered stream
 // Claims leadership via LeadershipCoordinator before starting
 func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID string) error {
+	return m.startStreamPoller(ctx, channelID, videoID, overlayID, false)
+}
+
+// startCompanionPoller polls a channel's vertical companion broadcast next to its main
+// stream. It is best-effort: a failure only costs the companion's chat, so it is logged
+// and the main stream carries on. The channel→video cache stays on the main stream.
+func (m *Manager) startCompanionPoller(ctx context.Context, channelID, videoID, overlayID string) {
+	err := m.startStreamPoller(ctx, channelID, videoID, overlayID, true)
+	switch {
+	case err == nil:
+		m.logger.Info("Polling vertical companion stream",
+			zap.String("channel_id", channelID),
+			zap.String("video_id", videoID),
+		)
+	case errors.Is(err, errLeadershipHeld):
+	default:
+		m.logger.Warn("Failed to start vertical companion poller",
+			zap.String("channel_id", channelID),
+			zap.String("video_id", videoID),
+			zap.Error(err),
+		)
+	}
+}
+
+func (m *Manager) startStreamPoller(ctx context.Context, channelID, videoID, overlayID string, companion bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -863,6 +905,7 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 		OverlayID:    overlayID,
 		Continuation: initialContinuation,
 		StartedAt:    time.Now(),
+		Companion:    companion,
 	}
 	m.activeStreams[videoID] = stream
 	m.pollers[videoID] = p
@@ -881,7 +924,7 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 	// Resolve and cache the official activeLiveChatId so auth-service (streamer chat send)
 	// and moderation-service can target this channel's live chat. Done off the hot path:
 	// it is network I/O and must not run under m.mu, which this function holds.
-	if m.liveChatResolver != nil {
+	if m.liveChatResolver != nil && !companion {
 		go m.resolveAndCacheLiveChat(channelID, videoID, overlayID)
 	}
 
@@ -913,7 +956,7 @@ func (m *Manager) startPoller(ctx context.Context, channelID, videoID, overlayID
 
 		// Stream ended — drop the live-chat-id cache now so a streamer send no longer
 		// targets a dead chat (the heartbeat TTL would otherwise expire it within ~2m).
-		if selfTerminated {
+		if selfTerminated && !companion {
 			if err := m.repository.DeleteStreamState(context.Background(), channelID); err != nil {
 				m.logger.Warn("Failed to clear stream state on self-termination",
 					zap.String("channel_id", channelID),
@@ -1424,6 +1467,8 @@ func (m *Manager) syncSources(ctx context.Context) {
 		StreamSelect  string
 		StreamMatch   string
 		PinnedVideoID string
+		// VerticalCompanion follows the earliest source, like the strategy.
+		VerticalCompanion string
 	}
 
 	// Group sources by channel to handle multiple overlays for same channel
@@ -1433,8 +1478,9 @@ func (m *Manager) syncSources(ctx context.Context) {
 			info, exists := channelOverlays[source.ChannelID]
 			if !exists {
 				info = &channelSourceInfo{
-					StreamSelect: source.StreamSelect,
-					StreamMatch:  source.StreamMatch,
+					StreamSelect:      source.StreamSelect,
+					StreamMatch:       source.StreamMatch,
+					VerticalCompanion: source.VerticalCompanion,
 				}
 				channelOverlays[source.ChannelID] = info
 			}
@@ -1468,9 +1514,10 @@ func (m *Manager) syncSources(ctx context.Context) {
 	// For each channel, ensure we have a poller or discovery in progress
 	for channelID, info := range channelOverlays {
 		opts := DiscoveryOpts{
-			StreamSelect:  info.StreamSelect,
-			StreamMatch:   info.StreamMatch,
-			PinnedVideoID: info.PinnedVideoID,
+			StreamSelect:      info.StreamSelect,
+			StreamMatch:       info.StreamMatch,
+			PinnedVideoID:     info.PinnedVideoID,
+			VerticalCompanion: info.VerticalCompanion,
 		}
 
 		m.mu.Lock()
@@ -1506,6 +1553,8 @@ func (m *Manager) syncSources(ctx context.Context) {
 		if isPolling {
 			if info.PinnedVideoID != "" && !pinPolled {
 				m.probePin(ctx, channelID, info.OverlayIDs[0], opts)
+			} else if info.PinnedVideoID == "" && len(polled) == 1 && wantsCompanion(opts) {
+				m.probeCompanion(ctx, channelID, info.OverlayIDs[0], polled[0], opts)
 			}
 			// Heartbeat: keep ocs.is_active = true in the DB while we are actively polling.
 			// This ensures (a) new overlay sources added while the poller is already running
@@ -1665,6 +1714,66 @@ func (m *Manager) probePin(ctx context.Context, channelID, overlayID string, opt
 		)
 		m.stopChannel(channelID, true)
 		m.startAsyncDiscovery(channelID, overlayID, opts)
+	}()
+}
+
+// companionProbeInterval bounds how often a channel polling a single stream browses
+// for a vertical companion that went live after it: one browse per channel per
+// interval. Dual-format broadcasts usually start together and are found by the first
+// discovery; this catches the one started a few minutes later.
+const companionProbeInterval = 3 * time.Minute
+
+// wantsCompanion reports whether a channel's config can merge a vertical companion:
+// not when turned off, and not under a multi-stream strategy, which already polls
+// every broadcast.
+func wantsCompanion(opts DiscoveryOpts) bool {
+	return opts.VerticalCompanion != innertube.CompanionOff && !innertube.IsMultiStreamStrategy(opts.StreamSelect)
+}
+
+// probeCompanion re-runs single-stream discovery, off the sync path, for a channel
+// that polls exactly one stream. When the polled stream is the selected main stream, the
+// companion is started; when it is the selected companion (the main stream started
+// later or restarted), the main stream is started so it owns the stream-state.
+func (m *Manager) probeCompanion(ctx context.Context, channelID, overlayID, polled string, opts DiscoveryOpts) {
+	m.mu.Lock()
+	if last, ok := m.companionProbedAt[channelID]; ok && time.Since(last) < companionProbeInterval {
+		m.mu.Unlock()
+		return
+	}
+	m.companionProbedAt[channelID] = time.Now()
+	m.mu.Unlock()
+
+	m.wg.Add(1)
+	go func() {
+		defer m.wg.Done()
+		videoIDs, err := m.discovery.DiscoverLiveStreams(ctx, channelID, opts.StreamSelect, opts.StreamMatch, opts.VerticalCompanion)
+		if err != nil {
+			m.logger.Debug("Companion probe found no live streams",
+				zap.String("channel_id", channelID),
+				zap.Error(err),
+			)
+			return
+		}
+		// Act only when the polled stream is part of the selection. Otherwise the selection
+		// moved to another broadcast (viewer counts shift between two landscape streams),
+		// and starting it would merge two unrelated streams: keep today's behaviour.
+		if !slices.Contains(videoIDs, polled) || len(videoIDs) < 2 || m.channelClaimed(channelID) {
+			return
+		}
+		if videoIDs[0] == polled {
+			for _, videoID := range videoIDs[1:] {
+				m.startCompanionPoller(ctx, channelID, videoID, overlayID)
+			}
+			return
+		}
+		// The polled stream is the companion; its main stream is new or came back.
+		if err := m.startPoller(ctx, channelID, videoIDs[0], overlayID); err != nil && !errors.Is(err, errLeadershipHeld) {
+			m.logger.Warn("Companion probe failed to start main stream poller",
+				zap.String("channel_id", channelID),
+				zap.String("video_id", videoIDs[0]),
+				zap.Error(err),
+			)
+		}
 	}()
 }
 

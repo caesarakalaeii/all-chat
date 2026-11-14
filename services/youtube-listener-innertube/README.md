@@ -82,6 +82,39 @@ source's channel). source-manager serves it as `stream_id`.
 - A channel that fell back to another video while the pin was not live yet re-checks
   the pin at most once a minute and moves onto it once it is pollable.
 
+### Vertical companion streams (landscape + vertical at once)
+
+Streaming landscape and vertical at the same time gives a channel two separate
+broadcasts, each with its own chat. Single-stream strategies poll one of them, so the
+other chat used to be lost. A YouTube source's `config.vertical_companion` (free, unlike
+`stream_select`; overlay-manager validates it) merges the second one as a *companion*:
+
+| Value | Behaviour |
+|-------|-----------|
+| absent / `""` (default) | merge a second live broadcast whose title looks vertical |
+| `on` | merge one second live broadcast whatever its title (most-watched, vertical-looking first) |
+| `off` | never merge |
+
+- YouTube does not mark which broadcast is vertical: the browse, `/next`, `/player` and
+  `reel_item_watch` responses of both broadcasts are indistinguishable (checked
+  2026-11-14 on a live dual-format channel, same title and thumbnail). The title is the
+  only signal: `innertube.LooksVertical` matches Vertical/Portrait/Hochformat/PION,
+  `#shortslive`, `#verticallive`. A missed marker is what `on` is for.
+- Every strategy except `title_match` also skips vertical-looking titles when choosing
+  the main stream; before, `most_viewers` sometimes picked the vertical broadcast and the
+  landscape chat was the one that went missing.
+- A companion poller never writes or clears `youtube:stream:state:{ch}` and never moves
+  the channel's video mapping: streamer sends and moderation stay on the main stream.
+  Subscriber alerts run once per channel either way.
+- A channel polling one stream re-runs selection at most every 3 minutes
+  (`companionProbeInterval`) to catch a companion that went live later, or a main
+  stream that came back next to a running companion. If the polled stream is no
+  longer part of the selection, the probe changes nothing, so two unrelated landscape
+  streams are never merged.
+- Multi-stream strategies (`all`, `title_match_all`, premium) already poll every
+  broadcast and ignore the setting. The official-API listener (`youtube-listener`)
+  does not merge companions.
+
 ### Channels claimed by the official-API listener
 
 A channel in premium official-API mode is served by `youtube-listener` (ADR-0065), which

@@ -197,3 +197,21 @@ func TestStreamSelectionGate_AddSourceNonPremiumRefused(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
 	assert.False(t, created)
 }
+
+// Merging the channel's vertical broadcast is free: a non-premium caller can turn it on
+// without the stream_selection gate being consulted.
+func TestVerticalCompanion_FreeAndValidated(t *testing.T) {
+	for _, mode := range []string{"", "on", "off"} {
+		gate := &fakeStreamSelectionGate{allowed: false}
+		res := patchStreamSelection(t, gate, nil, map[string]interface{}{"vertical_companion": mode})
+		assert.Equal(t, http.StatusOK, res.code, "mode %q", mode)
+		assert.True(t, res.updated, "mode %q", mode)
+		assert.Equal(t, 0, gate.calls, "mode %q must not hit the premium gate", mode)
+		assert.Equal(t, mode, res.saved["vertical_companion"], "mode %q must be stored", mode)
+	}
+	for _, bad := range []interface{}{"always", true, 1} {
+		res := patchStreamSelection(t, &fakeStreamSelectionGate{allowed: true}, nil, map[string]interface{}{"vertical_companion": bad})
+		assert.Equal(t, http.StatusBadRequest, res.code, "value %v", bad)
+		assert.False(t, res.updated, "value %v", bad)
+	}
+}

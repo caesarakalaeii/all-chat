@@ -285,6 +285,26 @@ type streamSelectionGate interface {
 	Allowed(ctx context.Context, userID string) (bool, error)
 }
 
+// validateVerticalCompanion checks a YouTube source's vertical_companion: absent, "",
+// "on" or "off". It merges the channel's simultaneous vertical broadcast into the
+// overlay and is deliberately free, unlike stream_select: it is the expected behaviour
+// for a streamer who streams landscape and vertical at once, not a premium extra. The
+// premium "all" strategy still covers following any number of independent broadcasts.
+// Returns a client error message, or "" when valid.
+func validateVerticalCompanion(config map[string]interface{}) string {
+	raw, present := config["vertical_companion"]
+	if !present {
+		return ""
+	}
+	if raw == nil {
+		return ""
+	}
+	if v, ok := raw.(string); ok && (v == "" || v == "on" || v == "off") {
+		return ""
+	}
+	return "vertical_companion must be \"\", \"on\" or \"off\""
+}
+
 // SetStreamSelectionGate wires the stream_selection premium check. Unset (direct struct
 // construction) reads as open, like the platform gate.
 func (h *SourcesHandler) SetStreamSelectionGate(g streamSelectionGate) {
@@ -1027,6 +1047,10 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	}
 
 	if req.Platform == "youtube" {
+		if msg := validateVerticalCompanion(req.Config); msg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			return
+		}
 		if status, body := h.checkStreamSelection(c.Request.Context(), userID.(string), nil, req.Config); status != 0 {
 			c.JSON(status, body)
 			return
@@ -1232,6 +1256,10 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 	}
 
 	if source.Platform == "youtube" {
+		if msg := validateVerticalCompanion(req.Config); msg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			return
+		}
 		if status, body := h.checkStreamSelection(c.Request.Context(), userID.(string), source.Config, req.Config); status != 0 {
 			c.JSON(status, body)
 			return

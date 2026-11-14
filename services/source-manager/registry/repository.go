@@ -50,6 +50,7 @@ func (r *Repository) GetActiveSources(ctx context.Context, platform string) ([]*
 			COALESCE(ocs.config->>'stream_id', '') as stream_id,
 			COALESCE(ocs.config->>'stream_select', '') as stream_select,
 			COALESCE(ocs.config->>'stream_match', '') as stream_match,
+			COALESCE(ocs.config->>'vertical_companion', '') as vertical_companion,
 			o.is_active,
 			ocs.created_at,
 			ocs.updated_at
@@ -84,6 +85,7 @@ func (r *Repository) GetActiveSources(ctx context.Context, platform string) ([]*
 			&source.StreamID,
 			&source.StreamSelect,
 			&source.StreamMatch,
+			&source.VerticalCompanion,
 			&source.IsActive,
 			&source.CreatedAt,
 			&source.UpdatedAt,
@@ -118,6 +120,7 @@ func (r *Repository) GetAllActiveSources(ctx context.Context) ([]*models.ActiveS
 			COALESCE(ocs.config->>'stream_id', '') as stream_id,
 			COALESCE(ocs.config->>'stream_select', '') as stream_select,
 			COALESCE(ocs.config->>'stream_match', '') as stream_match,
+			COALESCE(ocs.config->>'vertical_companion', '') as vertical_companion,
 			o.is_active,
 			ocs.created_at,
 			ocs.updated_at
@@ -148,6 +151,7 @@ func (r *Repository) GetAllActiveSources(ctx context.Context) ([]*models.ActiveS
 			&source.StreamID,
 			&source.StreamSelect,
 			&source.StreamMatch,
+			&source.VerticalCompanion,
 			&source.IsActive,
 			&source.CreatedAt,
 			&source.UpdatedAt,
@@ -186,6 +190,7 @@ func (r *Repository) GetSourcesForOverlays(ctx context.Context, overlayIDs []str
 			COALESCE(ocs.config->>'stream_id', '') as stream_id,
 			COALESCE(ocs.config->>'stream_select', '') as stream_select,
 			COALESCE(ocs.config->>'stream_match', '') as stream_match,
+			COALESCE(ocs.config->>'vertical_companion', '') as vertical_companion,
 			o.is_active,
 			ocs.created_at,
 			ocs.updated_at
@@ -220,6 +225,7 @@ func (r *Repository) GetSourcesForOverlays(ctx context.Context, overlayIDs []str
 			&source.StreamID,
 			&source.StreamSelect,
 			&source.StreamMatch,
+			&source.VerticalCompanion,
 			&source.IsActive,
 			&source.CreatedAt,
 			&source.UpdatedAt,
