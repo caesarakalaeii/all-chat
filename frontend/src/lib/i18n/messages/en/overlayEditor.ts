@@ -415,6 +415,17 @@ export const overlayEditor = {
       'Your premium has ended, so this channel is read without the official API until you upgrade again. You can still switch it off.',
     saveFailed: 'Could not change the official API setting. Please try again.',
   },
+  // Merging a channel's simultaneous vertical (Shorts) broadcast into the overlay.
+  verticalCompanion: {
+    label: 'Merge my vertical stream',
+    description:
+      'Streaming landscape and vertical at the same time gives your channel two broadcasts with separate chats. All-Chat merges the vertical one into this overlay when its title says so (Vertical, Portrait, #shortslive).',
+    unmarkedLabel: 'My vertical title has no such word',
+    unmarkedDescription:
+      'Merge a second live broadcast on this channel even when its title does not say it is vertical.',
+    multiStreamNote: 'Your stream selection already follows every live broadcast on this channel.',
+    saveFailed: 'Could not change the vertical stream setting. Please try again.',
+  },
   // Relaying All-Chat messages back out to a Discord channel.
   relay: {
     loopFilter: 'Loop filter: active — Discord messages are never relayed back to Discord.',
@@ -1095,6 +1106,7 @@ export const overlayEditor = {
     streamLinkCleared: 'Stream link cleared',
     officialApiEnabled: 'Official YouTube API switched on',
     officialApiDisabled: 'Official YouTube API switched off',
+    verticalCompanionSaved: 'Vertical stream setting saved',
     relaySaved: 'Relay settings saved',
     relaySaveFailed: 'Failed to save relay settings',
     engagementSaved: 'Engagement settings saved',

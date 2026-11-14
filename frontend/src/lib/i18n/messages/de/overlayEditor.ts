@@ -361,6 +361,17 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     saveFailed:
       'Die Einstellung der offiziellen API konnte nicht geändert werden. Bitte versuch es erneut.',
   },
+  verticalCompanion: {
+    label: 'Meinen Hochformat-Stream zusammenführen',
+    description:
+      'Wenn du gleichzeitig im Quer- und Hochformat streamst, hat dein Kanal zwei Übertragungen mit getrennten Chats. All-Chat führt die Hochformat-Übertragung in dieses Overlay zusammen, wenn ihr Titel das sagt (Vertical, Portrait, Hochformat, #shortslive).',
+    unmarkedLabel: 'Mein Hochformat-Titel enthält kein solches Wort',
+    unmarkedDescription:
+      'Eine zweite Live-Übertragung auf diesem Kanal auch dann zusammenführen, wenn ihr Titel nicht sagt, dass sie im Hochformat ist.',
+    multiStreamNote: 'Deine Stream-Auswahl folgt bereits jeder Live-Übertragung auf diesem Kanal.',
+    saveFailed:
+      'Die Einstellung für den Hochformat-Stream konnte nicht geändert werden. Bitte versuch es erneut.',
+  },
   relay: {
     loopFilter:
       'Schleifenfilter: aktiv — Discord-Nachrichten werden nie zurück an Discord weitergeleitet.',
@@ -977,6 +988,7 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     streamLinkCleared: 'Stream-Link entfernt',
     officialApiEnabled: 'Offizielle YouTube-API aktiviert',
     officialApiDisabled: 'Offizielle YouTube-API deaktiviert',
+    verticalCompanionSaved: 'Einstellung für den Hochformat-Stream gespeichert',
     relaySaved: 'Relay-Einstellungen gespeichert',
     relaySaveFailed: 'Relay-Einstellungen konnten nicht gespeichert werden',
     engagementSaved: 'Engagement-Einstellungen gespeichert',

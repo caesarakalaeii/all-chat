@@ -103,6 +103,7 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { YouTubeOfficialApiToggle } from '@/components/overlay/YouTubeOfficialApiToggle'
 import { YouTubeStreamLinkField } from '@/components/overlay/YouTubeStreamLinkField'
+import { YouTubeVerticalCompanionToggle } from '@/components/overlay/YouTubeVerticalCompanionToggle'
 import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge'
 import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal'
 import { cn } from '@/lib/utils'
@@ -735,6 +736,10 @@ function StreamSelectionPanel({
         >
           {saving ? 'Saving…' : 'Save'}
         </Button>
+
+        <Separator />
+
+        <YouTubeVerticalCompanionToggle source={source} overlayId={overlayId} onSaved={onSaved} />
 
         <Separator />
 
