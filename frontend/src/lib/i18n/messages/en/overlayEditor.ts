@@ -419,10 +419,10 @@ export const overlayEditor = {
   verticalCompanion: {
     label: 'Merge my vertical stream',
     description:
-      'Streaming landscape and vertical at the same time gives your channel two broadcasts with separate chats. All-Chat merges the vertical one into this overlay when its title says so (Vertical, Portrait, #shortslive).',
-    unmarkedLabel: 'My vertical title has no such word',
+      'Streaming landscape and vertical at the same time gives your channel two broadcasts with separate chats. All-Chat merges the vertical one into this overlay when it has the same title as your main stream or its title says so (Vertical, Portrait, #shortslive).',
+    unmarkedLabel: 'My vertical stream has a different title',
     unmarkedDescription:
-      'Merge a second live broadcast on this channel even when its title does not say it is vertical.',
+      'Merge a second live broadcast on this channel even when its title neither matches your main stream nor says it is vertical.',
     multiStreamNote: 'Your stream selection already follows every live broadcast on this channel.',
     saveFailed: 'Could not change the vertical stream setting. Please try again.',
   },

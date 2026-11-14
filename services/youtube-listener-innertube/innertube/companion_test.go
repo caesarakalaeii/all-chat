@@ -62,10 +62,30 @@ func TestSelectStreamPrefersLandscape(t *testing.T) {
 	}
 }
 
+func TestSameBroadcastTitle(t *testing.T) {
+	for _, tt := range []struct {
+		a, b string
+		want bool
+	}{
+		{"Proviamo Sniper Elite 4!", "Proviamo Sniper Elite 4! - Vertical", true}, // live sample 2026-11-14
+		{"Planet Zoo 2 (EP5)", "Planet Zoo 2 (EP5) (Portrait)", true},
+		{"Just chatting 🔴", "just chatting", true},
+		{"Fortnite with viewers", "Fortnite with viewers", true},
+		{"PIRATE TOKEN DEV HOUR LIVE SOON #fortnite", "PIRATE SHOP DEV HOUR SOON #fortnite", false},
+		{"Lofi hip hop radio", "Synthwave radio", false},
+		{"🔴", "🔴", false}, // nothing left to compare
+	} {
+		if got := SameBroadcastTitle(tt.a, tt.b); got != tt.want {
+			t.Errorf("SameBroadcastTitle(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
 func TestSelectCompanion(t *testing.T) {
 	main := LiveStreamCandidate{VideoID: "land", Title: "Planet Zoo", ViewerCount: 50}
 	vertical := LiveStreamCandidate{VideoID: "vert", Title: "Planet Zoo (Portrait)", ViewerCount: 5}
 	unmarked := LiveStreamCandidate{VideoID: "other", Title: "Lofi beats 24/7", ViewerCount: 900}
+	twin := LiveStreamCandidate{VideoID: "twin", Title: "Planet Zoo", ViewerCount: 3}
 
 	tests := []struct {
 		name       string
@@ -78,6 +98,8 @@ func TestSelectCompanion(t *testing.T) {
 		{"auto prefers the vertical one among several", []LiveStreamCandidate{main, unmarked, vertical}, CompanionAuto, "vert"},
 		{"on merges an unmarked second stream", []LiveStreamCandidate{main, unmarked}, CompanionOn, "other"},
 		{"on still prefers a vertical-looking stream", []LiveStreamCandidate{main, unmarked, vertical}, CompanionOn, "vert"},
+		{"auto merges a same-title stream without any marker", []LiveStreamCandidate{main, unmarked, twin}, CompanionAuto, "twin"},
+		{"a same-title stream beats a merely vertical-looking one", []LiveStreamCandidate{main, twin, {VideoID: "v2", Title: "Other game (Portrait)", ViewerCount: 99}}, CompanionAuto, "twin"},
 		{"off never merges", []LiveStreamCandidate{main, vertical}, CompanionOff, ""},
 		{"no second stream", []LiveStreamCandidate{main}, CompanionOn, ""},
 	}
