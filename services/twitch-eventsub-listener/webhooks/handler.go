@@ -731,14 +731,21 @@ func (h *Handler) handleSubscribe(ctx context.Context, eventData json.RawMessage
 	if err := json.Unmarshal(eventData, &event); err != nil {
 		return err
 	}
+	return h.publisher.Publish(ctx, buildSubscribe(&event, messageID))
+}
 
-	rawMsg := &models.RawChatMessage{
+// buildSubscribe maps channel.subscribe to a "subscription" event. Text stays empty:
+// channel.subscribe carries no chatter message, and the overlay renders Text as the
+// chatter's own words beside the "Tier 1" value pill. The old synthetic
+// "Subscribed at 1000" showed up there as "Tier 1Subscribed at 1000", and on alerts
+// overlays it replaced the profile's text template.
+func buildSubscribe(event *eventsub.SubscribeEvent, messageID string) *models.RawChatMessage {
+	return &models.RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "twitch",
 		ChannelID: event.BroadcasterUserLogin,
 		UserID:    event.UserID,
 		Username:  event.UserLogin,
-		Text:      fmt.Sprintf("Subscribed at %s", event.Tier),
 		Timestamp: time.Now(),
 		EventType: "subscription",
 		EventData: map[string]interface{}{
@@ -748,8 +755,6 @@ func (h *Handler) handleSubscribe(ctx context.Context, eventData json.RawMessage
 			"eventsub_message_id": messageID,
 		},
 	}
-
-	return h.publisher.Publish(ctx, rawMsg)
 }
 
 // handleSubscriptionGift processes gift subscription events
@@ -758,14 +763,19 @@ func (h *Handler) handleSubscriptionGift(ctx context.Context, eventData json.Raw
 	if err := json.Unmarshal(eventData, &event); err != nil {
 		return err
 	}
+	return h.publisher.Publish(ctx, buildSubscriptionGift(&event, messageID))
+}
 
-	rawMsg := &models.RawChatMessage{
+// buildSubscriptionGift maps channel.subscription.gift to a "mystery_gift" event. Text
+// stays empty for the same reason as buildSubscribe: the normalizer already puts the
+// count in the value pill ("1 gift subs"), so "Gifted 1 subs" only repeated it.
+func buildSubscriptionGift(event *eventsub.SubscriptionGiftEvent, messageID string) *models.RawChatMessage {
+	return &models.RawChatMessage{
 		MessageID: uuid.New().String(),
 		Platform:  "twitch",
 		ChannelID: event.BroadcasterUserLogin,
 		UserID:    event.UserID,
 		Username:  event.UserLogin,
-		Text:      fmt.Sprintf("Gifted %d subs", event.Total),
 		Timestamp: time.Now(),
 		EventType: "mystery_gift",
 		EventData: map[string]interface{}{
@@ -776,8 +786,6 @@ func (h *Handler) handleSubscriptionGift(ctx context.Context, eventData json.Raw
 			"eventsub_message_id": messageID,
 		},
 	}
-
-	return h.publisher.Publish(ctx, rawMsg)
 }
 
 // handleResubscription processes resub messages
