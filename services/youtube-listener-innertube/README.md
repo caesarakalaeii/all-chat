@@ -91,15 +91,19 @@ other chat used to be lost. A YouTube source's `config.vertical_companion` (free
 
 | Value | Behaviour |
 |-------|-----------|
-| absent / `""` (default) | merge a second live broadcast whose title looks vertical |
-| `on` | merge one second live broadcast whatever its title (most-watched, vertical-looking first) |
+| absent / `""` (default) | merge a second live broadcast with the main stream's title (vertical markers ignored) or a vertical-looking title |
+| `on` | merge one second live broadcast whatever its title (same title first, then vertical-looking, then most-watched) |
 | `off` | never merge |
 
 - YouTube does not mark which broadcast is vertical: the browse, `/next`, `/player` and
   `reel_item_watch` responses of both broadcasts are indistinguishable (checked
-  2026-11-14 on a live dual-format channel, same title and thumbnail). The title is the
-  only signal: `innertube.LooksVertical` matches Vertical/Portrait/Hochformat/PION,
-  `#shortslive`, `#verticallive`. A missed marker is what `on` is for.
+  2026-11-14 on a live dual-format channel, same thumbnail). The title is the only
+  signal, read two ways. Strongest: `innertube.SameBroadcastTitle`, the main stream's
+  title once markers, case and punctuation are dropped. Dual-format setups reuse the
+  title or append a marker ("Proviamo Sniper Elite 4!" next to "… 4! - Vertical").
+  Then `innertube.LooksVertical`, which matches Vertical/Portrait/Hochformat/PION,
+  `#shortslive`, `#verticallive` for a vertical stream titled differently. A
+  differently titled stream without a marker is what `on` is for.
 - Every strategy except `title_match` also skips vertical-looking titles when choosing
   the main stream; before, `most_viewers` sometimes picked the vertical broadcast and the
   landscape chat was the one that went missing.

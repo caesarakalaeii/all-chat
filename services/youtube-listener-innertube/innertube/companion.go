@@ -20,6 +20,8 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
+	"unicode"
 
 	"go.uber.org/zap"
 )
@@ -32,8 +34,9 @@ import (
 // merged next to the selected stream. It is free (unlike the premium "all" strategy,
 // which follows any number of independent broadcasts, e.g. 24/7 music channels).
 const (
-	// CompanionAuto merges a second live broadcast only when its title looks vertical.
-	// It is the default (empty config value).
+	// CompanionAuto merges a second live broadcast only when its title is the main
+	// stream's title (ignoring vertical markers) or looks vertical. It is the default
+	// (empty config value).
 	CompanionAuto = ""
 	// CompanionOn merges one second live broadcast whatever its title says, for
 	// streamers whose vertical title carries no marker.
@@ -58,6 +61,28 @@ func LooksVertical(title string) bool {
 	return verticalTitleMarker.MatchString(title)
 }
 
+// broadcastTitleKey reduces a title to what identifies the broadcast: vertical markers
+// removed, case and everything but letters and digits dropped. Dual-format setups either
+// reuse the title or append a marker ("Proviamo Sniper Elite 4!" next to
+// "Proviamo Sniper Elite 4! - Vertical"), so both reduce to the same key.
+func broadcastTitleKey(title string) string {
+	stripped := verticalTitleMarker.ReplaceAllString(strings.ToLower(title), " ")
+	var b strings.Builder
+	for _, r := range stripped {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// SameBroadcastTitle reports whether two broadcasts carry the same title once vertical
+// markers are ignored: the strongest sign that one is the other's vertical twin.
+func SameBroadcastTitle(a, b string) bool {
+	ka := broadcastTitleKey(a)
+	return ka != "" && ka == broadcastTitleKey(b)
+}
+
 // preferLandscape drops vertical-looking candidates as long as at least one other
 // candidate remains. Without it "most viewers" sometimes picked the vertical broadcast
 // as the main stream, and the landscape chat was the one that went missing.
@@ -74,25 +99,30 @@ func preferLandscape(candidates []LiveStreamCandidate) []LiveStreamCandidate {
 	return landscape
 }
 
-// SelectCompanion picks the broadcast to merge next to main, or reports false.
-// Vertical-looking titles win; with mode "on" any other live broadcast qualifies.
-// Among several qualifying broadcasts the most-watched one is taken.
+// SelectCompanion picks the broadcast to merge next to main, or reports false. In order:
+// a broadcast with main's title (ignoring vertical markers), then a vertical-looking
+// title, then, with mode "on" only, any other live broadcast. Ties go to the
+// most-watched one.
 func SelectCompanion(candidates []LiveStreamCandidate, main LiveStreamCandidate, mode string) (LiveStreamCandidate, bool) {
 	if mode == CompanionOff {
 		return LiveStreamCandidate{}, false
 	}
-	var vertical, other []LiveStreamCandidate
+	var sameTitle, vertical, other []LiveStreamCandidate
 	for _, c := range candidates {
-		if c.VideoID == main.VideoID {
-			continue
-		}
-		if LooksVertical(c.Title) {
+		switch {
+		case c.VideoID == main.VideoID:
+		case SameBroadcastTitle(c.Title, main.Title):
+			sameTitle = append(sameTitle, c)
+		case LooksVertical(c.Title):
 			vertical = append(vertical, c)
-		} else {
+		default:
 			other = append(other, c)
 		}
 	}
-	pool := vertical
+	pool := sameTitle
+	if len(pool) == 0 {
+		pool = vertical
+	}
 	if len(pool) == 0 && mode == CompanionOn {
 		pool = other
 	}

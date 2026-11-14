@@ -364,10 +364,10 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
   verticalCompanion: {
     label: 'Meinen Hochformat-Stream zusammenführen',
     description:
-      'Wenn du gleichzeitig im Quer- und Hochformat streamst, hat dein Kanal zwei Übertragungen mit getrennten Chats. All-Chat führt die Hochformat-Übertragung in dieses Overlay zusammen, wenn ihr Titel das sagt (Vertical, Portrait, Hochformat, #shortslive).',
-    unmarkedLabel: 'Mein Hochformat-Titel enthält kein solches Wort',
+      'Wenn du gleichzeitig im Quer- und Hochformat streamst, hat dein Kanal zwei Übertragungen mit getrennten Chats. All-Chat führt die Hochformat-Übertragung in dieses Overlay zusammen, wenn sie denselben Titel wie dein Haupt-Stream hat oder ihr Titel das sagt (Vertical, Portrait, Hochformat, #shortslive).',
+    unmarkedLabel: 'Mein Hochformat-Stream hat einen anderen Titel',
     unmarkedDescription:
-      'Eine zweite Live-Übertragung auf diesem Kanal auch dann zusammenführen, wenn ihr Titel nicht sagt, dass sie im Hochformat ist.',
+      'Eine zweite Live-Übertragung auf diesem Kanal auch dann zusammenführen, wenn ihr Titel weder zu deinem Haupt-Stream passt noch sagt, dass sie im Hochformat ist.',
     multiStreamNote: 'Deine Stream-Auswahl folgt bereits jeder Live-Übertragung auf diesem Kanal.',
     saveFailed:
       'Die Einstellung für den Hochformat-Stream konnte nicht geändert werden. Bitte versuch es erneut.',
