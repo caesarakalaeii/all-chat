@@ -15,8 +15,9 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // Command support-bot is the All-Chat Discord support/admin agent. It answers codebase
-// and operational questions over Claude (Anthropic Messages API) or an OpenAI-compatible
-// gateway, with two code-enforced access modes: SUPPORT
+// and operational questions over the Claude Code CLI (subscription OAuth), Claude via
+// the Anthropic Messages API, or an OpenAI-compatible gateway, with two code-enforced
+// access modes: SUPPORT
 // (read-only, output redacted) for everyone and ADMIN (GitHub write: branch+PR+review)
 // for an allow-list of maintainer Discord UIDs. Cluster access is read-only in both
 // modes; database writes and secret reads are never exposed.
@@ -120,15 +121,35 @@ func main() {
 		Log:              log,
 	}
 
+	// Claude Code on the subscription: the CLI runs its own loop and calls the
+	// registry over a localhost MCP endpoint scoped to each requester's mode.
+	var cc *agent.ClaudeCode
+	if cfg.ClaudeCodeOAuthToken != "" {
+		var err error
+		cc, err = agent.NewClaudeCode(agent.ClaudeCodeConfig{
+			Bin:      cfg.ClaudeCodeBin,
+			Token:    cfg.ClaudeCodeOAuthToken,
+			Model:    cfg.ClaudeCodeModel,
+			MaxTurns: cfg.MaxIterations,
+			Home:     cfg.ClaudeCodeHome,
+			Log:      log,
+		}, reg)
+		if err != nil {
+			log.Fatal("failed to start the Claude Code runner", zap.Error(err))
+		}
+		defer func() { _ = cc.Close() }()
+	}
+
 	bot, err := discord.New(discord.Deps{
-		Config:   cfg,
-		Policy:   policy,
-		Registry: reg,
-		LLM:      llmClient,
-		Memory:   memRepo,
-		Redactor: redactor,
-		AgentCfg: agentCfg,
-		Log:      log,
+		Config:     cfg,
+		Policy:     policy,
+		Registry:   reg,
+		LLM:        llmClient,
+		ClaudeCode: cc,
+		Memory:     memRepo,
+		Redactor:   redactor,
+		AgentCfg:   agentCfg,
+		Log:        log,
 	})
 	if err != nil {
 		log.Fatal("failed to build Discord bot", zap.Error(err))
@@ -199,11 +220,16 @@ func startHealthServer(cfg *config.Config, dbPool *pgxpool.Pool, log *zap.Logger
 	return srv
 }
 
-// buildLLM picks the model backend: Claude when ANTHROPIC_API_KEY is set, otherwise
+// buildLLM picks the model backend. With CLAUDE_CODE_OAUTH_TOKEN set the Claude Code
+// runner answers instead (built in main once the registry exists), so no client is
+// built. Otherwise: Claude when ANTHROPIC_API_KEY is set, else
 // the OpenAI-compatible gateway, whose model id is resolved at boot (a pin that is
 // no longer served falls back to discovery). It returns the client, the model id,
 // the per-reply token ceiling, and a loggable name for the target.
 func buildLLM(cfg *config.Config, log *zap.Logger) (llm.ChatClient, string, int, string) {
+	if cfg.ClaudeCodeOAuthToken != "" {
+		return nil, cfg.ClaudeCodeModel, 0, "claude-code"
+	}
 	if cfg.AnthropicAPIKey != "" {
 		return llm.NewAnthropic(llm.AnthropicConfig{
 			APIKey:     cfg.AnthropicAPIKey,

@@ -2,6 +2,7 @@
 
 **Date**: 2026-11-11
 **Status**: Accepted
+**Revised**: 2026-11-15
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -51,7 +52,11 @@ Chosen option: **3, distroless**, on Debian 13 (trixie).
   it ships except the binary.
 - **support-bot** downloads `kubectl` in the build stage and copies it to
   `/usr/local/bin/kubectl`. Its tools call `exec.Command("kubectl", ...)` directly, with no
-  shell, and distroless puts `/usr/local/bin` on `PATH`.
+  shell, and distroless puts `/usr/local/bin` on `PATH`. Since
+  [ADR-0093](./0093-support-bot-on-claude-hands-fixes-to-caterpillar.md) it also ships the
+  pinned Claude Code binary (`/usr/local/bin/claude`), which links against glibc, so
+  support-bot is the one Go service on `gcr.io/distroless/cc-debian13` instead of
+  `static-debian13`. Still no shell or package manager.
 - **frontend**: the runtime stage is `gcr.io/distroless/nodejs26-debian13` with
   `CMD ["server.js"]`. Its build stages move from `node:26-alpine` to `node:26-trixie-slim`.
   The Next.js standalone output ships native packages (sharp) installed for the build
