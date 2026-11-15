@@ -183,3 +183,64 @@ func TestSyntheticHitDoesNotRecordMetrics(t *testing.T) {
 		t.Fatalf("synthetic cache hit must still enrich, got %#v", msg.Message.Emotes)
 	}
 }
+
+// Synthetic users (overlay-editor mocks, and the test stream's random
+// test-<n> IDs) have no personal emotes on any provider, so their lookups must
+// share the channel-level cache entry. Keyed per user, every random ID cached
+// its own copy of the full channel set: on 2026-11-15 that was ~12k entries,
+// ~1.7 GB of the 2 GB Redis, evicting real users' cache.
+func TestSyntheticMessagesUseChannelCacheKey(t *testing.T) {
+	for _, meta := range []map[string]interface{}{
+		{"test_stream": true, "twitch_channel_hint": "caesarlp"},
+		{"mock": true},
+	} {
+		store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
+		e := NewEnricher(client, store, zap.NewNop())
+
+		msg := &models.UnifiedChatMessage{
+			Platform:  "twitch",
+			ChannelID: "caesarlp",
+			User:      models.UserInfo{ID: "test-501299"},
+			Message:   models.MessageInfo{Text: "KEKW"},
+			Metadata:  meta,
+		}
+		if err := e.Enrich(context.Background(), msg); err != nil {
+			t.Fatalf("Enrich returned error: %v", err)
+		}
+
+		if store.userCalls != 0 {
+			t.Errorf("%v: synthetic message used %d per-user cache calls, want 0", meta, store.userCalls)
+		}
+		if store.setCalls != 1 {
+			t.Errorf("%v: synthetic message must still fill the channel cache, got %d sets", meta, store.setCalls)
+		}
+		if client.lastUserID != "" {
+			t.Errorf("%v: synthetic message sent user %q to the emote service, want none", meta, client.lastUserID)
+		}
+		if len(msg.Message.Emotes) != 1 {
+			t.Errorf("%v: synthetic message must still enrich, got %#v", meta, msg.Message.Emotes)
+		}
+	}
+}
+
+// Real users can carry personal (7TV) emotes, so they keep per-user keys.
+func TestRealMessageUsesPerUserCacheKey(t *testing.T) {
+	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+	client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	msg := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "caesarlp",
+		User:      models.UserInfo{ID: "real-user"},
+		Message:   models.MessageInfo{Text: "KEKW"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+	if store.userCalls != 2 || client.lastUserID != "real-user" {
+		t.Fatalf("real message: userCalls=%d lastUserID=%q, want 2 and %q", store.userCalls, client.lastUserID, "real-user")
+	}
+}
