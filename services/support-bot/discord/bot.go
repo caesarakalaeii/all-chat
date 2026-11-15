@@ -58,10 +58,12 @@ type Deps struct {
 	Policy   *access.Policy
 	Registry *tool.Registry
 	LLM      llm.ChatClient
-	Memory   *memory.Repository
-	Redactor *redact.Redactor
-	AgentCfg agent.Config
-	Log      *zap.Logger
+	// ClaudeCode, when set, answers instead of the in-process loop and LLM.
+	ClaudeCode *agent.ClaudeCode
+	Memory     *memory.Repository
+	Redactor   *redact.Redactor
+	AgentCfg   agent.Config
+	Log        *zap.Logger
 }
 
 // Bot is the Discord adapter.
@@ -71,6 +73,7 @@ type Bot struct {
 	policy   *access.Policy
 	reg      *tool.Registry
 	llm      llm.ChatClient
+	cc       *agent.ClaudeCode
 	mem      *memory.Repository
 	redactor *redact.Redactor
 	spam     *moderation.SpamDetector
@@ -96,6 +99,7 @@ func New(d Deps) (*Bot, error) {
 		policy:   d.Policy,
 		reg:      d.Registry,
 		llm:      d.LLM,
+		cc:       d.ClaudeCode,
 		mem:      d.Memory,
 		redactor: d.Redactor,
 		spam:     moderation.NewSpamDetector(moderation.Options{}),
@@ -406,6 +410,9 @@ func (b *Bot) runAgentCtx(ctx context.Context, mode access.Mode, uid, channelID 
 		zap.String("mode", mode.String()),
 		zap.String("discord_uid", uid),
 		zap.Int("transcript_len", len(messages)))
+	if b.cc != nil {
+		return b.cc.Run(ctx, tctx, messages)
+	}
 	return agent.Run(ctx, b.agentCfg, b.llm, b.reg, tctx, messages)
 }
 
