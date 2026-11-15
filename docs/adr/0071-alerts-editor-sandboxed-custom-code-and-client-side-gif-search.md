@@ -1,8 +1,8 @@
-# ADR-0071: The Alerts Editor — Premium Saving, Sandboxed Custom Code Under the Page CSP, and Client-Side KLIPY Search
+# ADR-0071: The Alerts Editor — Free Editing With Premium Uploads, Sandboxed Custom Code Under the Page CSP, and Client-Side KLIPY Search
 
 **Date**: 2026-10-16
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-15 (editing, custom code and GIF search are free; only uploads stay premium, via the `media_upload` gate)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
@@ -40,13 +40,21 @@ Four questions needed an answer:
 
 ### Tiering
 
-1. **Keep saving premium (chosen).** The defaults are the free preset library;
-   test alerts are free. Without premium the editor is read-only, and the
-   standard upgrade link sits on it and on the custom-code section.
+1. **Keep saving premium (chosen 2026-10-16, replaced by option 3 on
+   2026-11-15).** The defaults are the free preset library; test alerts are
+   free. Without premium the editor was read-only, and the standard upgrade
+   link sat on it and on the custom-code section.
 2. Make preset editing free and gate only the custom-code columns
    server-side. That reverses ADR-0070 and migration 107, which no record
-   asked for. The alerts overlay kind is itself premium (`alerts_overlay`,
-   migration 108), so a free tier could not create the overlay it would edit.
+   asked for. The alerts overlay kind was itself premium then (`alerts_overlay`,
+   migration 108), so a free tier could not have created the overlay it edits.
+3. **Open the editor, keep uploads premium (chosen 2026-11-15).** The
+   `alerts_overlay` and `alerts_editor` gates were opened to everyone in the
+   admin feature-gates UI, so creating an alerts overlay, saving profiles,
+   custom code and KLIPY search are free. Uploading your own files takes
+   object storage and stays premium through a gate of its own,
+   `media_upload` (migration 128), which media-service mounts with
+   `RequirePremium` on `POST /api/v1/media/presign` only.
 
 ### Isolation of custom code
 
@@ -71,9 +79,13 @@ c. Run user JS in the page with a JS-level sandbox (e.g. a realm shim). Weaker
 
 ## Decision Outcome
 
-- **Tiering: option 1.** `alerts_editor` keeps gating the PUT. The frontend
-  reads `users.is_premium` like the other premium toggles do. A gate flipped
-  free needs a public gate probe (the same caveat as `creatableOverlayKinds`).
+- **Tiering: option 3.** `alerts_editor` still gates the PUT, now free, so
+  it can be narrowed again without a deploy. The editor is fully editable for
+  everyone; `MediaField` reads `users.is_premium` from the auth store and,
+  without premium, disables its upload button next to the standard upgrade
+  link (the server answers 403 either way). The frontend does not read gate
+  state: a gate flipped back to premium needs a frontend change or a public
+  gate probe (the same caveat as `creatableOverlayKinds`).
 - **Custom code: option (a).** Migration 109 adds `custom_html`, `custom_css`
   and `custom_js` (TEXT, default `''`, idempotent) to `alert_profiles`.
   `shared/alerts` caps each field at 64 KiB and validates nothing else: the
@@ -103,10 +115,10 @@ c. Run user JS in the page with a JS-level sandbox (e.g. a realm shim). Weaker
   `hd` (fallback `md`) GIF URL as returned. It shows the `sm` rendition in the
   grid, keeps result order, and shows "Powered by KLIPY". The key is fetched
   at runtime from the frontend's `GET /klipy-config` route, which reads
-  `KLIPY_API_KEY` from the cluster secret (ADR-0073) and returns it only to a
-  signed-in user with premium or beta access (ADR-0074). Without a key,
-  or on any failure, the picker says "search unavailable". Pasting a URL and
-  uploading still work. The existing CSP already admits `api.klipy.com`
+  `KLIPY_API_KEY` from the cluster secret (ADR-0073) and returns it to any
+  signed-in user (ADR-0074). Without a key, or on any failure, the picker
+  says "search unavailable". Pasting a URL still works, and so does uploading
+  for premium users. The existing CSP already admits `api.klipy.com`
   (`connect-src https:`) and KLIPY's media hosts (`img-src https:`).
 - **Media upload made reachable.** Three defects meant no browser upload could
   ever have succeeded (`media_objects` was empty in production):
@@ -144,8 +156,9 @@ c. Run user JS in the page with a JS-level sandbox (e.g. a realm shim). Weaker
   rebuild (ADR-0073).
 - Every alert frame carries its profile's custom code (up to 3 × 64 KiB). That
   is acceptable at alert rates.
-- A streamer who loses premium keeps their saved custom code rendering. The
-  gate protects writes, not reads, as with every other saved premium setting.
+- A streamer who loses premium keeps their uploaded files playing. The
+  `media_upload` gate protects new uploads, not existing objects, and list
+  and delete stay open so they can still clean up.
 
 ## Implementation
 
@@ -156,6 +169,9 @@ c. Run user JS in the page with a JS-level sandbox (e.g. a realm shim). Weaker
   `models/service_config.go` (media route).
 - `services/media-service/storage/storage.go` (public-host presigner,
   `MINIO_REGION`).
+- Upload gate: `migrations/128_media_upload_feature_gate.sql` (+ down),
+  `GateMediaUpload` in `shared/featuregates/cache.go`, mounted on presign in
+  `services/media-service/cmd/routes.go`.
 - Frontend: `components/overlays/AlertsEditor.tsx`, `alertSandbox.ts`,
   `AlertBox.tsx` (`CustomCodeAlert`), `lib/klipy.ts`, `lib/api/media.ts`,
   `app/overlays/[id]/preview/alerts/page.tsx`, `components/editor/sectionRegistry.ts`

@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-23
 **Status**: Accepted
-**Revised**: 2026-11-04 (a Twitch send dropped with `is_sent=false` is a failure; undelivered posts are shown in the editor)
+**Revised**: 2026-11-15 (released: `chat_commands` is open to everyone and `custom_chat_bot` is premium without early access)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -88,7 +88,8 @@ across engagement-service replicas without a live/offline signal.
   template, optional `interval_minutes` (5 to 1440), optional `min_messages`
   (1 to 10000), at least one of them required, plus `last_fired_at`,
   `lines_at_last_fire` and `fire_count`. At most 20 per streamer.
-- Feature gate `custom_chat_bot`, seeded `is_premium=TRUE, early_access=TRUE`.
+- Feature gate `custom_chat_bot`, seeded `is_premium=TRUE, early_access=TRUE`;
+  `early_access` was turned off on 2026-11-15, so it is premium on every host.
   Timer and sender-setting writes use the existing `chat_commands` gate.
 
 ### Sending
@@ -163,8 +164,8 @@ an admin and exists for Twitch and YouTube only. The admin page is
   posts into Twitch and Kick chat while the stream is offline. Setting a
   minimum message count avoids that, and the editor says so.
 - **Staging.** auth-service and engagement-service run from `:main` only, so the
-  feature reaches beta.allch.at once its backend is on main. It stays behind the
-  `chat_commands` early-access gate; `/commands` is offered to early-access
-  users on every host.
+  feature reached beta.allch.at once its backend was on main. It was released
+  on 2026-11-15: the `chat_commands` gate is open to everyone and `/commands`
+  is offered on every host.
 - **Supersedes in part.** ADR-0079's "a reply is posted from the streamer's own
   account" and "timers are left out" no longer hold; its body says so.

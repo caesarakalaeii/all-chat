@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-17
 **Status**: Accepted
+**Revised**: 2026-11-15 (the alerts editor is free, so every signed-in user gets the key; the premium check and its 403 are gone)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
@@ -15,8 +16,9 @@ question is which browsers.
 
 ## Decision Drivers
 
-- Only users who can open the alerts editor need the key: signed in, with
-  premium or beta access (the `alerts_editor` gate is premium, ADR-0070).
+- Only users who can open the alerts editor need the key: since 2026-11-15
+  that is every signed-in user (the `alerts_editor` gate is free, ADR-0070,
+  ADR-0071). Until then it was users with premium or beta access.
 - The dashboard authenticates with the `access_token` httpOnly cookie
   (same-origin), which the gateway turns into a bearer token
   (`CookieToBearer`) and validates against the JWT key chain plus revocation.
@@ -27,8 +29,8 @@ question is which browsers.
 
 1. **Forward the caller's credentials to the gateway's
    `GET /api/v1/auth/me` (chosen).** The gateway validates the token,
-   revocation included, and returns the user with `is_premium` and
-   `is_beta_tester`.
+   revocation included. (It also returns `is_premium` and
+   `is_beta_tester`, which the route checked while the editor was premium.)
 2. Verify the JWT in the route. This needs the JWT key chain in the frontend
    pod (a new secret there) and still has no premium state.
 3. Ship the key only in pages that already require login. The editor is a
@@ -43,9 +45,11 @@ timeout), and answers:
 
 - `401 {apiKey: ""}` without credentials, when the gateway rejects them, or
   when the check fails for any other reason (fail closed);
-- `403 {apiKey: ""}` for a user who has neither `is_premium` nor
-  `is_beta_tester`;
-- `200 {apiKey}` otherwise, with an empty key when `KLIPY_API_KEY` is unset.
+- `200 {apiKey}` for any signed-in user, with an empty key when
+  `KLIPY_API_KEY` is unset.
+
+The route answered `403` to users without premium or beta access until the
+editor became free on 2026-11-15.
 
 Every answer has `Cache-Control: private, no-store` and
 `Vary: Cookie, Authorization`, so no CDN or ingress cache replays one user's
@@ -59,8 +63,8 @@ NetworkPolicies admit ingress from the two frontend deployments.
 
 ### Consequences
 
-- Anonymous callers and free users cannot read the key from All-Chat. An
-  entitled user can still read it from the search URLs their own browser
+- Anonymous callers cannot read the key from All-Chat. A signed-in user can
+  still read it from the search URLs their own browser
   sends; that is inherent to browser-side calls, and KLIPY's partner panel
   limits its use.
 - Each picker load costs one `/auth/me` call. The gateway's global rate
@@ -74,4 +78,4 @@ NetworkPolicies admit ingress from the two frontend deployments.
 
 - ADR-0073: runtime key delivery; this record restricts who receives it.
 - ADR-0071: browser-side KLIPY search.
-- ADR-0070 / ADR-0008: the `alerts_editor` premium gate.
+- ADR-0070 / ADR-0008: the `alerts_editor` gate (free since 2026-11-15).
