@@ -55,3 +55,11 @@ func TestBuildSystemPrompt_UnderstandsBeforeActing(t *testing.T) {
 		}
 	}
 }
+
+// UI how-to answers should show the screen, not only describe it.
+func TestBuildSystemPrompt_ShowsScreensForUIQuestions(t *testing.T) {
+	p := BuildSystemPrompt(access.ModeSupport, nil, false)
+	if !strings.Contains(p, "send_image") {
+		t.Error("prompt does not tell the bot to attach screenshots for UI questions")
+	}
+}

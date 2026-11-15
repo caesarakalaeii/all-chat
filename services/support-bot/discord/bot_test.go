@@ -81,7 +81,7 @@ func newTestBot(t *testing.T, client llm.ChatClient) *Bot {
 // reply, not as an unknown fault (the failure #818 fixed for the old TS bot).
 func TestAnswerReportsTimeoutAsTimeout(t *testing.T) {
 	b := newTestBot(t, &failingClient{err: context.DeadlineExceeded})
-	got := b.answer(nil, "1", "c", "why did the bot die?", nil)
+	got, _ := b.answer(nil, "1", "c", "why did the bot die?", nil)
 	if !strings.Contains(got, "6m") {
 		t.Fatalf("expected timeout reply naming the limit, got: %q", got)
 	}
@@ -92,7 +92,7 @@ func TestAnswerReportsTimeoutAsTimeout(t *testing.T) {
 
 func TestAnswerGenericErrorKeepsGenericReply(t *testing.T) {
 	b := newTestBot(t, &failingClient{err: context.Canceled})
-	got := b.answer(nil, "1", "c", "question", nil)
+	got, _ := b.answer(nil, "1", "c", "question", nil)
 	if !strings.Contains(got, "something went wrong") {
 		t.Fatalf("expected generic error reply, got: %q", got)
 	}
@@ -102,7 +102,7 @@ func TestAnswerGenericErrorKeepsGenericReply(t *testing.T) {
 // queue reply and the busy queue holds the transcript for the worker to resume.
 func TestAnswerParksBusyRequest(t *testing.T) {
 	b := newTestBot(t, &failingClient{err: &llm.APIError{Kind: llm.KindBusy, Status: 429, Message: "busy"}})
-	got := b.answer(nil, "1", "c", "question", nil)
+	got, _ := b.answer(nil, "1", "c", "question", nil)
 	if !strings.Contains(got, "queued") {
 		t.Fatalf("expected the queued reply, got: %q", got)
 	}

@@ -37,6 +37,8 @@ type Deps struct {
 	GrafanaPromDS  string
 	GrafanaLogTail time.Duration
 	Memory         *memory.Repository
+	// ScreenshotDir holds the frontend's visual baselines (send_image); empty = off.
+	ScreenshotDir string
 }
 
 // RegisterAll registers every support-bot tool into the registry. Read-only tools are
@@ -59,5 +61,8 @@ func RegisterAll(reg *tool.Registry, d Deps) {
 	}
 	if d.Memory != nil {
 		reg.Register(NewMemoryTool(d.Memory))
+	}
+	if it := NewImageTool(d.ScreenshotDir); d.ScreenshotDir != "" && len(it.screens()) > 0 {
+		reg.Register(it)
 	}
 }

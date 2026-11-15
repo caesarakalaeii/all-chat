@@ -125,7 +125,8 @@ func (ccEchoTool) Def() tool.ToolDef {
 func (ccEchoTool) Invoke(_ context.Context, _ *tool.ToolCtx, args json.RawMessage) (tool.ToolOutput, error) {
 	var p struct{ Text string }
 	_ = json.Unmarshal(args, &p)
-	return tool.ToolOutput{Content: p.Text, Effect: &tool.ToolEffect{Tool: "echo", Kind: "test", Summary: "echoed"}}, nil
+	return tool.ToolOutput{Content: p.Text, Effect: &tool.ToolEffect{Tool: "echo", Kind: "test", Summary: "echoed"},
+		Attachment: &tool.Attachment{Name: "echo.png", Path: "/x/echo.png"}}, nil
 }
 
 // ccAdminTool must never be listed or callable in a SUPPORT session.
@@ -183,6 +184,9 @@ func TestClaudeCodeRun_ServesModeScopedToolsAndCollectsEffects(t *testing.T) {
 	}
 	if len(res.Effects) != 1 || res.Effects[0].Summary != "echoed" {
 		t.Errorf("effects = %+v", res.Effects)
+	}
+	if len(res.Attachments) != 1 || res.Attachments[0].Name != "echo.png" {
+		t.Errorf("attachments = %+v", res.Attachments)
 	}
 
 	admin, err := cc.Run(context.Background(), &tool.ToolCtx{Mode: access.ModeAdmin}, supportTranscript())
