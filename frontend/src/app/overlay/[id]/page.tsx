@@ -639,12 +639,17 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [config, id, handleTTSFallback])
 
-  // Auto-scroll to bottom when new messages arrive.
+  // Auto-scroll to bottom when new messages arrive, and again whenever an
+  // image or video inside the feed finishes loading (wired as the list's
+  // onLoad/onLoadedMetadata below). An attachment's <img> takes no space until
+  // it has loaded, so the scroll on arrival stops short of it; without the
+  // second pass the loaded media grew the row past the canvas and `body`'s
+  // `overflow: hidden` clipped it until the next message arrived.
   //
   // A short bottom-anchored feed has nothing to scroll, so skip the call. Once
   // it overflows, the `mt-auto` has collapsed to 0 and the feed is a plain
   // scrolling list again — so scroll, exactly as before.
-  useEffect(() => {
+  const scrollToNewest = useCallback(() => {
     // "Overflows" has to mean "the page scrolls", which is why this measures the
     // wrapper and not the list. The wrapper is `min-h-screen p-4`, so the canvas
     // the list actually gets is the viewport MINUS 32px of padding, and the
@@ -671,7 +676,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
     // edge, which keeps a transient mid-animation measurement from moving a feed
     // that is already showing its newest row.
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [messages, feedLayout])
+  }, [feedLayout])
+  useEffect(() => {
+    scrollToNewest()
+  }, [messages, scrollToNewest])
 
   // Auto-remove messages once their own display duration elapses. Each row's
   // expiry is anchored to its arrival time (arrivalTimesRef), so a reschedule
@@ -891,6 +899,10 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
           messageAnimation && 'msg-anim-container'
         )}
         style={{ textShadow: 'var(--chat-text-shadow, none)', ...containerStyle }}
+        // React propagates media load events, so these fire for every
+        // descendant <img>/<video>: see scrollToNewest.
+        onLoad={scrollToNewest}
+        onLoadedMetadata={scrollToNewest}
       >
         {feedLayout.sentinelPosition === 'start' && (
           <div ref={messagesEndRef} className="scroll-anchor" />
