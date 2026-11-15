@@ -28,7 +28,11 @@
  * the PR instead of the beta.
  *
  * Scope: chrome routes only (landing, dashboard, settings, upgrade, docs),
- * plus landing, dashboard and settings again in the light theme (ADR-0087).
+ * plus landing, dashboard and settings again in the light theme (ADR-0087),
+ * plus the support screens: the overlay editor (default, Sources, OBS help),
+ * new overlay, chat commands (list and editor dialog) and the alerts editor.
+ * The support bot attaches these to answers (send_image, ADR-0093), so they
+ * double as user-facing guide images: keep them free of test-only chrome.
  * Overlay surfaces (src/app/overlay/**, embed, ThemePreview) are
  * user-themable broadcast art with their own contrast floor
  * (theme-contrast.spec.ts) and are deliberately NOT baselined here — they
@@ -135,11 +139,10 @@ async function stubEmotes(page: Page) {
   )
 }
 
-// The Next dev-server indicator (bottom-left "N Issues" pill) appears
-// whenever an unmocked request errors in the dev proxy, which depends on
-// timing, not on the page under test. It is dev-only chrome, so it is
-// hidden in every shot instead of being baselined.
-const HIDE_DEV_CHROME = 'nextjs-portal { display: none !important; }'
+// The Next dev-server indicator ("N" badge, "N Issues" pill) is off for test
+// runs: playwright.config.ts starts the dev server with PLAYWRIGHT_DEV_SERVER=1 and
+// next.config.js sets devIndicators: false. A style tag cannot do it: the overlay
+// editor's preview is a sandboxed iframe of the app with its own indicator.
 
 /**
  * Wait for the page's rendered pixels to stop moving. Real pages keep
@@ -180,7 +183,6 @@ async function expectBaseline(
   options: { fullPage?: boolean } = {}
 ) {
   const fullPage = options.fullPage ?? false
-  await page.addStyleTag({ content: HIDE_DEV_CHROME })
   for (const viewport of WIDTHS) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height })
     await anchor()
@@ -341,5 +343,183 @@ test.describe('visual baselines (light theme)', () => {
       },
       { fullPage: true }
     )
+  })
+})
+
+// Screens the support bot shows users (`send_image`, services/support-bot/tools/image.go):
+// the pages people ask "where is X" about. They are app chrome like the routes above,
+// so the same rules apply: mocked API, anchor before the shot, pixels must settle.
+const CONFIG = {
+  id: 'config-1',
+  overlay_id: OVERLAY.id,
+  display_settings: {},
+  filter_settings: {},
+  visual_settings: {},
+  enable_7tv: true,
+  enable_bttv: false,
+  enable_ffz: false,
+  theme_id: null,
+  custom_css: '',
+}
+
+const EDITOR_API = {
+  [`**/api/v1/overlays/${OVERLAY.id}`]: OVERLAY,
+  [`**/api/v1/overlays/${OVERLAY.id}/sources`]: SOURCES,
+  [`**/api/v1/overlays/${OVERLAY.id}/config`]: CONFIG,
+  // Unmocked, it 404s and the editor logs the error, which puts Next's dev "1 Issue"
+  // pill into the shot.
+  [`**/api/v1/overlays/${OVERLAY.id}/tts-config`]: { has_elevenlabs_config: false },
+  '**/api/v1/shares/accepted': [],
+  '**/api/v1/auth/guilds': [],
+}
+
+const COMMANDS_API = {
+  '**/api/v1/engagement/chat-commands': {
+    commands: [
+      {
+        id: 'cmd-1',
+        kind: 'keyword',
+        trigger: 'clip that',
+        response: 'Clipped! {clip}',
+        create_clip: true,
+        min_role: 'subscriber',
+        cooldown_seconds: 30,
+        enabled: true,
+        use_count: 3,
+      },
+    ],
+    status: {
+      is_premium: false,
+      twitch_connected: true,
+      twitch_can_send: true,
+      twitch_can_clip: false,
+      consent_overlay_id: OVERLAY.id,
+    },
+  },
+}
+
+/**
+ * The editors' live preview opens an overlay websocket. Unanswered, it shows a
+ * reconnecting state that keeps changing; a socket that says "connected" and stays
+ * quiet is the steady state a user sees with no chat going.
+ */
+async function stubOverlaySocket(page: Page) {
+  await page.context().routeWebSocket('**/ws/**', (ws) => {
+    ws.send(JSON.stringify({ type: 'connected', data: { overlay_id: OVERLAY.id } }))
+  })
+}
+
+async function openEditor(page: Page) {
+  await mockAuthedApi(page, EDITOR_API)
+  await stubOverlaySocket(page)
+  await page.goto(`/overlays/${OVERLAY.id}`)
+  await expect(page.getByText(OVERLAY.name).first()).toBeVisible({ timeout: 20_000 })
+}
+
+test.describe('visual baselines (support screens)', () => {
+  test.beforeEach(async ({ page }) => prepare(page, 'dark'))
+
+  test('overlay editor', async ({ page }) => {
+    await openEditor(page)
+    await expectBaseline(page, 'overlay-editor', async () => {
+      await expect(page.getByText(OVERLAY.name).first()).toBeVisible()
+    })
+  })
+
+  test('overlay editor sources', async ({ page }) => {
+    await openEditor(page)
+    await page
+      .getByRole('navigation', { name: 'Overlay settings' })
+      .getByRole('button', { name: 'Sources' })
+      .click()
+    await expectBaseline(page, 'overlay-editor-sources', async () => {
+      // At 375 the panel stacks under the header; show the sources, not the header.
+      const heading = page.getByRole('heading', { name: 'Sources', level: 2 })
+      await heading.scrollIntoViewIfNeeded()
+      await expect(page.getByText('somechannel').first()).toBeVisible({ timeout: 20_000 })
+    })
+  })
+
+  // "How do I add this to OBS?": the step most new users never finish.
+  test('overlay editor obs help', async ({ page }) => {
+    await openEditor(page)
+    await page.getByRole('button', { name: 'How do I add this to OBS?' }).click()
+    await expectBaseline(page, 'overlay-editor-obs-help', async () => {
+      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20_000 })
+    })
+  })
+
+  test('new overlay', async ({ page }) => {
+    await mockAuthedApi(page, { '**/api/v1/overlays': [OVERLAY] })
+    await page.goto('/overlays/new')
+    await expectBaseline(
+      page,
+      'overlay-new',
+      async () => {
+        await expect(page.getByRole('main')).toBeVisible({ timeout: 20_000 })
+      },
+      { fullPage: true }
+    )
+  })
+
+  test('chat commands', async ({ page }) => {
+    await mockAuthedApi(page, COMMANDS_API)
+    await page.goto('/commands')
+    await expectBaseline(
+      page,
+      'commands',
+      async () => {
+        await expect(page.getByRole('heading', { name: 'Chat commands', level: 1 })).toBeVisible({
+          timeout: 20_000,
+        })
+      },
+      { fullPage: true }
+    )
+  })
+
+  test('chat command editor', async ({ page }) => {
+    await mockAuthedApi(page, {
+      ...COMMANDS_API,
+      '**/api/v1/engagement/chat-commands/preview': { output: 'Hello Visual', errors: [] },
+    })
+    await page.goto('/commands')
+    await page.getByRole('button', { name: 'Greeting' }).click()
+    await expectBaseline(page, 'commands-editor', async () => {
+      await expect(page.getByRole('dialog')).toBeVisible({ timeout: 20_000 })
+    })
+  })
+
+  test('alerts editor', async ({ page }) => {
+    const alerts = { ...OVERLAY, name: 'Alert box', overlay_type: 'alerts' }
+    const profiles = ['all', 'subscription', 'bits'].map((event_type) => ({
+      event_type,
+      text_template: event_type === 'all' ? '' : '{username} just subscribed!',
+      sound_url: '',
+      image_url: '',
+      duration_ms: 4000,
+      volume: 100,
+      enabled: true,
+      sort_after: 0,
+      custom_html: '',
+      custom_css: '',
+      custom_js: '',
+    }))
+    await mockAuthedApi(page, {
+      [`**/api/v1/overlays/${OVERLAY.id}`]: alerts,
+      [`**/api/v1/overlays/${OVERLAY.id}/sources`]: [],
+      [`**/api/v1/overlays/${OVERLAY.id}/config`]: CONFIG,
+      [`**/api/v1/overlays/${OVERLAY.id}/tts-config`]: { has_elevenlabs_config: false },
+      [`**/api/v1/overlays/public/${OVERLAY.id}/config`]: {
+        overlay_type: 'alerts',
+        display_settings: {},
+        sources: [],
+      },
+      [`**/api/v1/overlays/${OVERLAY.id}/alerts/profiles`]: { profiles, saved: [] },
+    })
+    await stubOverlaySocket(page)
+    await page.goto(`/overlays/${OVERLAY.id}`)
+    await expectBaseline(page, 'alerts-editor', async () => {
+      await expect(page.getByLabel('Image or GIF')).toBeVisible({ timeout: 30_000 })
+    })
   })
 })
