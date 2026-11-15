@@ -833,7 +833,7 @@ describe('privacy policy copy', () => {
 describe('terms of service copy', () => {
   it('keeps every terms of service string whole', () => {
     expect(t('legal.terms.title')).toBe('Terms of Service (Nutzungsbedingungen)')
-    expect(t('legal.terms.lastUpdated')).toBe('November 4, 2026')
+    expect(t('legal.terms.lastUpdated')).toBe('November 15, 2026')
     expect(t('legal.terms.acceptanceHeading')).toBe('1. Acceptance of Terms')
     expect(t('legal.terms.acceptanceBody')).toBe(
       'By accessing or using All-Chat you agree to these Terms of Service and our {privacy}. If you disagree with any part, you should discontinue use immediately.'
@@ -841,7 +841,7 @@ describe('terms of service copy', () => {
     expect(t('legal.terms.privacyLinkText')).toBe('Privacy Policy')
     expect(t('legal.terms.descriptionHeading')).toBe('2. Description of Service')
     expect(t('legal.terms.descriptionBody')).toBe(
-      'All-Chat combines live chat and events from Twitch, YouTube, Kick, TikTok and Discord, and in beta or early access from Owncast, GoodGame, Picarto, Altstream and Facebook, into overlays you show on your stream: chat, alerts and credit rolls, and on beta.allch.at also goals and lists. It also lets you send chat messages, moderate across platforms, run polls, predictions and a points game, have chat read aloud, and connect the browser extension, desktop plugins and API tokens. On beta.allch.at it also runs chat commands, custom bots and timers. You broadcast overlays via OBS or any browser source.'
+      'All-Chat combines live chat and events from Twitch, YouTube, Kick, TikTok and Discord, and in beta or early access from Owncast, GoodGame, Picarto, Altstream and Facebook, into overlays you show on your stream: chat, alerts and credit rolls, and on beta.allch.at also goals and lists. It also lets you send chat messages, moderate across platforms, run polls, predictions and a points game, have chat read aloud, and connect the browser extension, desktop plugins and API tokens. It also runs chat commands, custom bots and timers. You broadcast overlays via OBS or any browser source.'
     )
     expect(t('legal.terms.accountsHeading')).toBe('3. Accounts & Authentication')
     expect(t('legal.terms.accountsIntro')).toBe(

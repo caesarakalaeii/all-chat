@@ -445,21 +445,18 @@ export const marketing: LocaleNamespace<'marketing'> = {
     sharedChatTitle: 'Shared Chat',
     sharedChatBody:
       'Kombiniere mehrere Channels zu einem geteilten Gespräch über deine Overlays hinweg.',
-    alertsOverlayTitle: 'Alert-Overlays',
-    alertsOverlayBody:
-      'Zeige Abos, Bits, Raids, Super Chats und TikTok-Geschenke als eigene OBS-Quelle im Stream, mit Test-Button zum Ausrichten.',
-    alertsEditorTitle: 'Eigener Alert-Editor',
-    alertsEditorBody:
-      'Gib jedem Alert eigenen Text, ein GIF und einen Sound, suche GIFs direkt im Editor oder schreibe eigenes HTML, CSS und JavaScript dafür.',
+    mediaUploadsTitle: 'Eigene Medien hochladen',
+    mediaUploadsBody:
+      'Lade eigene Bilder, GIFs und Sounds für deine Alerts und Befehls-Alerts hoch. Links einfügen und GIFs suchen bleibt kostenlos.',
     goalOverlayTitle: 'Ziel-Overlays',
     goalOverlayBody:
       'Ein Fortschrittsbalken für ein Follower-, Abonnenten-, Bits- oder Super-Chat-Ziel, der sich live auf dem Stream füllt.',
     listOverlayTitle: 'Bestenlisten-Overlays',
     listOverlayBody:
       'Zeig deine Top-Cheerer, -Verschenker oder -Super-Chatter der letzten 30 Tage auf dem Stream, aktualisiert bei jedem neuen.',
-    chatCommandsTitle: 'Chat-Befehle',
-    chatCommandsBody:
-      'Eigene !Befehle und Stichwörter für jeden Chat: antworte als du selbst, clippe deinen Twitch-Stream auf Zuruf, zeige einen eigenen Alert (Bild, Sound, Text) auf deinem Alert-Overlay und nutze Variablen, Web-Abfragen oder JavaScript in Antworten. Antworten im YouTube-Chat sind Premium.',
+    youtubeCommandRepliesTitle: 'Befehlsantworten im YouTube-Chat',
+    youtubeCommandRepliesBody:
+      'Deine Chat-Befehle und Timer antworten auch im YouTube-Chat, nicht nur auf Twitch und Kick.',
     customChatBotTitle: 'Dein eigener Chat-Bot',
     customChatBotBody:
       'Verbinde dein eigenes Bot-Konto auf Twitch, Kick oder YouTube, und jede Befehlsantwort und jeder Timer geht unter dem Namen deines Bots raus statt unter deinem.',

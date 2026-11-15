@@ -41,22 +41,6 @@ const BETA_ONLY_OVERLAY_KINDS: Partial<Record<OverlayType, true>> = {
   list: true,
 }
 
-/**
- * App features (not platforms or overlay kinds) offered on every host, but
- * outside beta.allch.at only to early-access users, like EARLY_ACCESS_PLATFORMS.
- * Elsewhere the feature loses its nav link, onboarding extras entry, /upgrade
- * row and the chat_command alert type (ADR-0079), while its page still works
- * for anyone who opens the URL. The feature's gate (`chat_commands`,
- * `custom_chat_bot`) enforces the same server-side. Release by removing the
- * feature here, then turning early_access off on its gate in /admin/features.
- */
-export type EarlyAccessFeature = 'chatCommands' | 'customChatBot'
-
-const EARLY_ACCESS_FEATURES: Partial<Record<EarlyAccessFeature, true>> = {
-  chatCommands: true,
-  customChatBot: true,
-}
-
 const BETA_HOST = 'beta.allch.at'
 
 const noopSubscribe = () => () => {}
@@ -94,11 +78,4 @@ export function usePlatformAvailable(): (platform: string) => boolean {
 export function useOverlayKindAvailable(): (kind: OverlayType) => boolean {
   const onBeta = useOnBetaHost()
   return (kind) => onBeta || BETA_ONLY_OVERLAY_KINDS[kind] !== true
-}
-
-/** Returns a predicate telling whether an app feature may be offered to this user here. */
-export function useFeatureAvailable(): (feature: EarlyAccessFeature) => boolean {
-  const onBeta = useOnBetaHost()
-  const earlyAccess = useEarlyAccess()
-  return (feature) => onBeta || earlyAccess || EARLY_ACCESS_FEATURES[feature] !== true
 }

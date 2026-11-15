@@ -55,7 +55,7 @@ describe('creatableOverlayKinds', () => {
     expect(creatableOverlayKinds(true)).toEqual(['chat', 'alerts', 'goal', 'list'])
   })
 
-  it('offers only chat without premium: alerts, goal and list are gated', () => {
-    expect(creatableOverlayKinds(false)).toEqual(['chat'])
+  it('offers chat and alerts without premium: goal and list are gated', () => {
+    expect(creatableOverlayKinds(false)).toEqual(['chat', 'alerts'])
   })
 })

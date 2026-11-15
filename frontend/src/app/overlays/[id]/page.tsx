@@ -3691,9 +3691,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {shownSection === 'goal' && <GoalEditor overlayId={id} />}
                   {shownSection === 'list' && <ListEditor overlayId={id} />}
 
-                  {shownSection === 'alerts' && (
-                    <AlertsEditor overlayId={id} isPremium={user?.is_premium ?? false} />
-                  )}
+                  {shownSection === 'alerts' && <AlertsEditor overlayId={id} />}
 
                   {shownSection === 'theme' && (
                     <div>
