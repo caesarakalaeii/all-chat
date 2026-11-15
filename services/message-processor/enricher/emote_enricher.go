@@ -232,8 +232,16 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	// request logs and testgen counters instead.
 	synthetic := isSynthetic(msg.Metadata)
 
+	// Synthetic users have no personal emotes on any provider, so they share the
+	// channel-level cache entry. Keyed per user, the test stream's random
+	// test-<n> IDs each cached a full channel set and filled Redis (2026-11-15).
+	userID := msg.User.ID
+	if synthetic {
+		userID = ""
+	}
+
 	// Fetch emotes for the channel (with user context if available)
-	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID, twitchChannel, seventvSetID, synthetic)
+	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, userID, twitchChannel, seventvSetID, synthetic)
 	if err != nil {
 		// Don't fail the message if emote enrichment fails
 		e.logger.Warn("Failed to fetch emotes, skipping enrichment",
