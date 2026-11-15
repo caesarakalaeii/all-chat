@@ -275,7 +275,6 @@ export function CommandEditor({
               label={t('commands.editor.soundLabel')}
               value={form.sound_url}
               onChange={(url) => set('sound_url', url)}
-              locked={false}
               inherits={false}
             />
             <div className="flex flex-col gap-1">

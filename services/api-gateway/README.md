@@ -203,13 +203,13 @@ All overlay routes require JWT authentication.
 | PUT | `/api/v1/overlays/:id/sources/:source_id` | Update chat source |
 | DELETE | `/api/v1/overlays/:id/sources/:source_id` | Remove chat source |
 | GET | `/api/v1/overlays/:id/alerts/profiles` | Alert profiles, merged over defaults |
-| PUT | `/api/v1/overlays/:id/alerts/profiles` | Save alert profiles (premium, `alerts_editor`) |
+| PUT | `/api/v1/overlays/:id/alerts/profiles` | Save alert profiles (`alerts_editor` gate, free) |
 | POST | `/api/v1/overlays/:id/alerts/test` | Publish a test alert |
 | GET/PUT | `/api/v1/overlays/:id/goal` | Goal overlay config (ADR-0072) |
 | GET/PUT | `/api/v1/overlays/:id/list` | List overlay config (ADR-0072) |
 | GET | `/api/v1/overlays/public/:id/goal` | Public: goal state for the OBS renderer |
 | GET | `/api/v1/overlays/:id/list/top` | Public: leaderboard top-N for the OBS renderer |
-| * | `/api/v1/media/*` | media-service: presigned alert-media uploads (`MEDIA_SERVICE_URL`, ADR-0071) |
+| * | `/api/v1/media/*` | media-service: presigned alert-media uploads, presign premium via `media_upload` (`MEDIA_SERVICE_URL`, ADR-0071) |
 
 ### Emote Service Routes
 

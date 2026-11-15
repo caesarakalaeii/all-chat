@@ -698,9 +698,7 @@ export const overlayEditor = {
     customHtmlLabel: 'HTML',
     customCssLabel: 'CSS',
     customJsLabel: 'JavaScript',
-    customLocked: 'Custom alert code is a Premium feature.',
-    lockedBody:
-      'Editing alerts is a Premium feature. Your overlay uses the built-in alerts, and test alerts stay free.',
+    uploadLocked: 'Uploading your own files is a Premium feature.',
     save: 'Save alerts',
     saving: 'Saving...',
     saved: 'Alerts saved',

@@ -163,7 +163,7 @@ test('creates an image command and previews the image it shows on stream', async
     expect.objectContaining({ trigger: '!dog', image_url: expect.stringContaining('urlfetch') })
   )
   const row = page.getByRole('listitem').filter({ hasText: '!dog' })
-  await expect(row.getByText('Image', { exact: true })).toBeVisible()
+  await expect(row.getByText('Alert', { exact: true })).toBeVisible()
 })
 
 test('has no horizontal scroll at phone width, with the editor open', async ({ page }) => {

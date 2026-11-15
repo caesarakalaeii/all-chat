@@ -178,6 +178,14 @@ const (
 	// it ships open and exists so it can be narrowed without a deploy. A flip stops new
 	// grants only; channels that already granted keep their notices.
 	GateTwitchAdBreaks = "twitch_ad_breaks"
+
+	// GateMediaUpload gates uploading your own images, GIFs and sounds
+	// (POST /api/v1/media/presign, mounted by media-service, ADR-0088). Seeded
+	// is_premium=TRUE (migration 128): uploads take object storage, so they stay
+	// premium while alerts and chat commands themselves are free. Pasting a URL,
+	// the built-in presets and KLIPY GIF search need no upload. Listing and
+	// deleting your own uploads are never gated.
+	GateMediaUpload = "media_upload"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate

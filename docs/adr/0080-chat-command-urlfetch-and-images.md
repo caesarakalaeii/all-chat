@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-22
 **Status**: Accepted
-**Revised**: 2026-11-04 (each command carries its own alert sound and text, migration 123)
+**Revised**: 2026-11-15 (chat commands and alerts overlays are free; uploading a sound is premium via `media_upload`)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -160,9 +160,8 @@ overlay cannot do that.
   - `{amount}` is the trigger.
   - `{count}` is the use count.
   - `{message}` is the reply, or what the chatter typed when there is no reply.
-- **Visibility.** The alerts editor offers the `chat_command` event type only
-  where the chat commands feature is available: every host for early-access
-  users, and beta.allch.at for everyone (`EARLY_ACCESS_FEATURES`).
+- **Visibility.** The alerts editor offers the `chat_command` event type on
+  every host, like the chat commands feature itself.
 
 ## Consequences
 
@@ -170,9 +169,10 @@ overlay cannot do that.
   fetch-heavy command adds up to about 9 s to its reply. Abuse complaints would
   name our IP. The User-Agent identifies the feature, and per-command cooldowns
   plus the preview rate limit bound the volume.
-- **Images need an alerts overlay.** Creating one is behind the
-  `alerts_overlay` premium gate (migration 108), so for most accounts images
-  are effectively premium today.
+- **Images need an alerts overlay.** Creating one is free since the
+  `alerts_overlay` gate (migration 108) was opened on 2026-11-15. Uploading a
+  sound (or any file) is premium through the `media_upload` gate (migration
+  128, ADR-0071); pasting a URL is free.
 - **The guard is in code.** Any new code that dials a user-chosen URL must use
   `shared/safehttp`. overlay-manager's Owncast name lookup
   (`SourcesHandler.httpClient`) is never set in production, so it never

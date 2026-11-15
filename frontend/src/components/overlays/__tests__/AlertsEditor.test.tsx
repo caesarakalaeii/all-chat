@@ -23,7 +23,9 @@ import path from 'node:path'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { useAuthStore } from '@/lib/stores/auth-store'
 import { ALERT_EVENT_TYPES, type EditableAlertProfile } from '@/lib/types/alert'
+import type { User } from '@/lib/types/auth'
 
 const getAlertProfiles = vi.fn()
 const saveAlertProfiles = vi.fn()
@@ -84,6 +86,7 @@ async function pickEventType(label: string) {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  useAuthStore.setState({ user: null })
 })
 
 describe('validateAlertProfile', () => {
@@ -117,7 +120,7 @@ describe('validateAlertProfile', () => {
 
 describe('AlertsEditor', () => {
   it('saves only the changed profile, custom code included', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     await pickEventType('Subscription')
     const template = await screen.findByLabelText('Alert text')
 
@@ -139,7 +142,7 @@ describe('AlertsEditor', () => {
   })
 
   it('blocks a save with an invalid field and says why', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.change(await screen.findByLabelText('Image or GIF'), {
       target: { value: 'not a url' },
     })
@@ -152,7 +155,7 @@ describe('AlertsEditor', () => {
   })
 
   it('shows the placeholder help', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     await pickEventType('Subscription')
     await screen.findByLabelText('Alert text')
     for (const token of ['{username}', '{amount}', '{count}', '{message}']) {
@@ -160,15 +163,34 @@ describe('AlertsEditor', () => {
     }
   })
 
-  it('locks editing and custom code behind the upgrade link without premium', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium={false} />)
-    expect(await screen.findByLabelText('Image or GIF')).toBeDisabled()
-    expect(screen.getByText('Custom alert code is a Premium feature.')).toBeInTheDocument()
-    expect(screen.queryByLabelText('JavaScript')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save alerts' })).toBeDisabled()
+  it('edits, saves custom code and searches GIFs without premium; only uploads are locked', async () => {
+    render(<AlertsEditor overlayId="ov1" />)
+    expect(await screen.findByLabelText('Image or GIF')).toBeEnabled()
+    expect(screen.getByLabelText('JavaScript')).toBeEnabled()
+    expect(screen.getByLabelText('Search GIFs')).toBeInTheDocument()
+    for (const upload of screen.getAllByRole('button', { name: 'Upload file' })) {
+      expect(upload).toBeDisabled()
+    }
+    expect(screen.getAllByText('Uploading your own files is a Premium feature.')).toHaveLength(2)
     const links = screen.getAllByRole('link', { name: 'Upgrade to Premium' })
     expect(links.length).toBeGreaterThan(0)
     links.forEach((l) => expect(l).toHaveAttribute('href', '/upgrade'))
+
+    fireEvent.change(screen.getByLabelText('Image or GIF'), {
+      target: { value: 'https://static.klipy.com/hd.gif' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save alerts' }))
+    await waitFor(() => expect(saveAlertProfiles).toHaveBeenCalledTimes(1))
+  })
+
+  it('offers uploads to premium users', async () => {
+    useAuthStore.setState({ user: { is_premium: true } as User })
+    render(<AlertsEditor overlayId="ov1" />)
+    await screen.findByLabelText('Image or GIF')
+    for (const upload of screen.getAllByRole('button', { name: 'Upload file' })) {
+      expect(upload).toBeEnabled()
+    }
+    expect(screen.queryByRole('link', { name: 'Upgrade to Premium' })).not.toBeInTheDocument()
   })
 
   it('picks a KLIPY GIF into the image field', async () => {
@@ -180,7 +202,7 @@ describe('AlertsEditor', () => {
         url: 'https://static.klipy.com/hd.gif',
       },
     ])
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.change(await screen.findByLabelText('Search GIFs'), { target: { value: 'party' } })
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
 
@@ -191,7 +213,7 @@ describe('AlertsEditor', () => {
 
   it('degrades to "search unavailable" when KLIPY fails', async () => {
     searchKlipyGifs.mockRejectedValue(new Error('klipy: no api key'))
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.change(await screen.findByLabelText('Search GIFs'), { target: { value: 'party' } })
     fireEvent.click(screen.getByRole('button', { name: 'Search' }))
     expect(await screen.findByText(/GIF search is unavailable/)).toBeInTheDocument()
@@ -199,20 +221,20 @@ describe('AlertsEditor', () => {
 
   it('offers a retry when the profiles fail to load', async () => {
     getAlertProfiles.mockRejectedValueOnce(new Error('down'))
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Try again' }))
     expect(await screen.findByLabelText('Image or GIF')).toBeInTheDocument()
   })
 
   it('opens on the All events style, which has no text of its own', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     expect(await screen.findByLabelText('Event type')).toHaveTextContent('All events')
     expect(screen.getByText(/Applies to every event/)).toBeInTheDocument()
     expect(screen.queryByLabelText('Alert text')).not.toBeInTheDocument()
   })
 
   it('one GIF on All events is one save, not one per event type', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.change(await screen.findByLabelText('Image or GIF'), {
       target: { value: 'https://static.klipy.com/hd.gif' },
     })
@@ -230,7 +252,7 @@ describe('AlertsEditor', () => {
       profiles: [{ ...allEvents(), duration_ms: 8000, volume: 40 }, base('subscription')],
       saved: ['all'],
     })
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     await pickEventType('Subscription')
     expect(screen.getByText(/Uses the All events style/)).toBeInTheDocument()
     expect(screen.getByLabelText('Duration (seconds)')).toHaveValue(8)
@@ -246,7 +268,7 @@ describe('AlertsEditor', () => {
   })
 
   it('saves unsaved changes before sending the test, so the test shows them', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.change(await screen.findByLabelText('Image or GIF'), {
       target: { value: 'https://static.klipy.com/hd.gif' },
     })
@@ -262,7 +284,7 @@ describe('AlertsEditor', () => {
   })
 
   it('tests the event type being edited', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     await pickEventType('Bits')
     fireEvent.click(screen.getByRole('button', { name: 'Send test alert' }))
     await waitFor(() => expect(sendTestAlert).toHaveBeenCalledWith('ov1', 'bits'))
@@ -271,7 +293,7 @@ describe('AlertsEditor', () => {
 
   it('does not send the test when the save fails', async () => {
     saveAlertProfiles.mockRejectedValue(new Error('boom'))
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.change(await screen.findByLabelText('Image or GIF'), {
       target: { value: 'https://static.klipy.com/hd.gif' },
     })
@@ -283,7 +305,7 @@ describe('AlertsEditor', () => {
   })
 
   it('sends free test alerts without premium', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium={false} />)
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Send test alert' }))
     await waitFor(() => expect(sendTestAlert).toHaveBeenCalledWith('ov1', 'subscription'))
     expect(saveAlertProfiles).not.toHaveBeenCalled()
@@ -291,7 +313,7 @@ describe('AlertsEditor', () => {
 
   it('reports a failed test send', async () => {
     sendTestAlert.mockRejectedValue(new Error('boom'))
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.click(await screen.findByRole('button', { name: 'Send test alert' }))
     await waitFor(() =>
       expect(toast).toHaveBeenCalledWith(
@@ -307,7 +329,7 @@ describe('AlertsEditor', () => {
       profiles: [base('subscription'), base('bits')],
       saved: [],
     })
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+    render(<AlertsEditor overlayId="ov1" />)
     expect(await screen.findByLabelText('Alert text')).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Event type' })).toHaveTextContent('Subscription')
     expect(screen.queryByText(/Uses the All events style/)).not.toBeInTheDocument()
@@ -315,20 +337,10 @@ describe('AlertsEditor', () => {
     expect(screen.queryByRole('option', { name: /All events/ })).not.toBeInTheDocument()
   })
 
-  it('offers the chat command alert only where chat commands are available', async () => {
-    render(<AlertsEditor overlayId="ov1" isPremium />)
-    fireEvent.click(await screen.findByRole('combobox', { name: 'Event type' }))
-    expect(await screen.findByRole('option', { name: /^Bits/ })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /^Chat command/ })).not.toBeInTheDocument()
-    cleanup()
-
-    const host = vi
-      .spyOn(window, 'location', 'get')
-      .mockReturnValue({ ...window.location, hostname: 'beta.allch.at' })
-    render(<AlertsEditor overlayId="ov1" isPremium />)
+  it('offers the chat command alert on every host', async () => {
+    render(<AlertsEditor overlayId="ov1" />)
     fireEvent.click(await screen.findByRole('combobox', { name: 'Event type' }))
     expect(await screen.findByRole('option', { name: /^Chat command/ })).toBeInTheDocument()
-    host.mockRestore()
   })
 
   it('offers exactly the event types shared/alerts knows', () => {

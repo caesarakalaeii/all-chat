@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-16
 **Status**: Accepted
+**Revised**: 2026-11-15 (the `alerts_editor` gate is open to everyone; ADR-0071 has the tiering)
 **Deciders**: All-Chat Platform Team
 
 ## Context and Problem Statement
@@ -88,7 +89,9 @@ c. The client fetches profiles. That means a second fetch and stale profiles
   free. `PUT alerts/profiles` is an all-or-nothing bulk upsert. It returns 400
   unless `overlay_type = 'alerts'` or when an event type is unknown or duplicated.
   It is gated by `RequirePremium("alerts_editor")`, a gate seeded
-  `is_premium=TRUE` by migration 107. `POST alerts/test` takes `{event_type}`,
+  `is_premium=TRUE` by migration 107 and opened to everyone in the admin
+  feature-gates UI on 2026-11-15 (ADR-0071 records the tiering; uploads stay
+  premium through `media_upload`). `POST alerts/test` takes `{event_type}`,
   publishes a synthetic envelope with a fresh `alert_id` straight to
   `overlay:{id}:alerts`, and is free.
 

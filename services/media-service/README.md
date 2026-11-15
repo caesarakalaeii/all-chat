@@ -13,7 +13,12 @@ only path through this service.
 ## Endpoints
 
 All require a user JWT; `user_id` is resolved from the token, never from the request. Mounted under
-`/api/v1/media`:
+`/api/v1/media`. Presign also requires premium: it sits behind `RequirePremium` on the `media_upload`
+feature gate (ADR-0008, seeded `is_premium=TRUE` by migration 128), so a user without premium gets a
+**403**. Alerts overlays, the alerts editor and chat commands are free; uploading your own files is
+the premium part. List and delete are never gated, so a user whose premium lapsed can still clean up.
+The gate state comes from a `FeatureGateCache` the service starts at boot (Redis invalidation when
+Redis is up, periodic database reload otherwise), so an admin flip needs no redeploy.
 
 | Method | Path | Description |
 |---|---|---|
@@ -72,6 +77,7 @@ written before the upload URL is handed out.
   like the youtube-listener-innertube optional subscribers), health stays green, and routes come
   back when MinIO is deployed (issue #948, bucket `allchat-media`).
 - **502** when MinIO itself fails to presign — no registry row is left behind.
+- **403** on presign for a user without premium while the `media_upload` gate requires it.
 - **404** on delete of a key that is not the caller's (indistinguishable from one that never
   existed — not a 403, which would be an existence oracle for other users' keys).
 

@@ -75,12 +75,14 @@ describe('GET /klipy-config', () => {
     await expectDenied(await GET(req({ cookie: 'access_token=jwt' })), 401)
   })
 
-  it('403 for a signed-in user without premium or beta access', async () => {
+  it('returns the key to any signed-in user: GIF search in the alerts editor is free', async () => {
     vi.stubGlobal('fetch', me(200, { id: 'u1', is_premium: false, is_beta_tester: false }))
-    await expectDenied(await GET(req({ cookie: 'access_token=jwt' })), 403)
+    const res = await GET(req({ cookie: 'access_token=jwt' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ apiKey: KEY })
   })
 
-  it('returns the key to a premium user, forwarding only their credentials', async () => {
+  it("forwards only the caller's credentials to the session check", async () => {
     const fetchMock = me(200, { is_premium: true })
     vi.stubGlobal('fetch', fetchMock)
     const res = await GET(req({ cookie: 'access_token=jwt', 'x-other': 'no' }))
@@ -91,8 +93,8 @@ describe('GET /klipy-config', () => {
     expect(init.headers).toEqual({ cookie: 'access_token=jwt' })
   })
 
-  it('returns the key to a beta tester, and accepts a bearer token', async () => {
-    const fetchMock = me(200, { is_premium: false, is_beta_tester: true })
+  it('accepts a bearer token', async () => {
+    const fetchMock = me(200, { id: 'u1' })
     vi.stubGlobal('fetch', fetchMock)
     const res = await GET(req({ authorization: 'Bearer jwt' }))
     expect(await res.json()).toEqual({ apiKey: KEY })

@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-21
 **Status**: Accepted
-**Revised**: 2026-11-04 (editor offered to early-access users on every host)
+**Revised**: 2026-11-15 (released to everyone: the `chat_commands` gate is open and `/commands` is offered on every host)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -175,13 +175,15 @@ message text so streamers can debug without firing in chat.
 ### Gating and release
 
 - **Feature gate.** `chat_commands` (ADR-0008) gates create and update: it was
-  seeded `early_access=TRUE`, `is_premium=FALSE` (migration 113), so it serves
-  beta testers and ambassadors first and opens to every account when an admin
-  turns `early_access` off. Delete is never gated.
+  seeded `early_access=TRUE`, `is_premium=FALSE` (migration 113), so it served
+  beta testers and ambassadors first. An admin turned `early_access` off on
+  2026-11-15, so it is open to every account, free. Delete is never gated.
+  Replies in YouTube chat stay premium, checked per send.
   (`services/engagement-service/cmd/main.go:277-283`)
-- **Editor.** The editor is `/commands`. Outside beta.allch.at it is offered
-  only to early-access users, via `EARLY_ACCESS_FEATURES` in
-  `platform-availability.ts`, matching the gate.
+- **Editor.** The editor is `/commands`, linked from the top bar for every
+  signed-in streamer on every host. (Until 2026-11-15 the frontend offered it
+  outside beta.allch.at only to early-access users, through an
+  `EARLY_ACCESS_FEATURES` list that was deleted once it was empty.)
 
 ### Compared with the bots
 

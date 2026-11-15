@@ -29,18 +29,20 @@ import (
 // registerMediaRoutes wires the /api/v1/media route group. All routes are
 // JWT-authenticated; user_id comes from the token, never from the request.
 // Anonymous reads of media go straight to MinIO (media.allch.at), never
-// through this service.
+// through this service. requireUpload (the media_upload premium gate) guards
+// presign only: listing and deleting your own uploads stays open, so a user
+// whose premium lapsed can still clean up.
 //
 // Kept out of main() so the security wiring is testable: routes_test.go drives
 // this function over HTTP and fails if either guard is dropped. The handler
 // tests inject user_id in a parallel router, so without this seam an unguarded
 // router builds, vets and tests green — the defect the review council found
 // by deleting the auth guard.
-func registerMediaRoutes(router *gin.Engine, keyChain *sharedauth.KeyChain, redisClient redis.UniversalClient, mediaHandler *handlers.MediaHandler) {
+func registerMediaRoutes(router *gin.Engine, keyChain *sharedauth.KeyChain, redisClient redis.UniversalClient, mediaHandler *handlers.MediaHandler, requireUpload gin.HandlerFunc) {
 	api := router.Group("/api/v1")
 	api.Use(middleware.JWTAuthWithRevocation(keyChain, usableRedisClient(redisClient)))
 	media := api.Group("/media", mediaHandler.RequireStore)
-	media.POST("/presign", mediaHandler.Presign)
+	media.POST("/presign", requireUpload, mediaHandler.Presign)
 	media.GET("", mediaHandler.List)
 	media.DELETE("/*object_key", mediaHandler.Delete)
 }
