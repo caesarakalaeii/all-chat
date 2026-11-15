@@ -519,18 +519,46 @@ func (b *Bot) fetchHistory(s *discordgo.Session, channelID string) []string {
 	if err != nil {
 		return nil
 	}
-	// ChannelMessages returns newest-first; reverse to chronological.
-	out := make([]string, 0, len(msgs))
-	for i := len(msgs) - 1; i >= 0; i-- {
-		msg := msgs[i]
-		if msg.Author == nil || strings.TrimSpace(msg.Content) == "" {
-			continue
+	return threadHistory(b.starterMessage(s, channelID), msgs)
+}
+
+// starterMessage returns the message a thread was started from, or nil. A thread
+// started from a message shares that message's ID, and the message itself lives in
+// the parent channel, so ChannelMessages on the thread never returns it.
+func (b *Bot) starterMessage(s *discordgo.Session, threadID string) *discordgo.Message {
+	ch, err := s.State.Channel(threadID)
+	if err != nil || ch == nil {
+		if ch, err = s.Channel(threadID); err != nil {
+			return nil
+		}
+	}
+	if ch.ParentID == "" {
+		return nil
+	}
+	msg, err := s.ChannelMessage(ch.ParentID, threadID)
+	if err != nil {
+		return nil
+	}
+	return msg
+}
+
+// threadHistory renders a thread as chronological "[name]: text" lines, starting with
+// the message the thread was started from. msgs is newest-first, as Discord returns it.
+func threadHistory(starter *discordgo.Message, msgs []*discordgo.Message) []string {
+	out := make([]string, 0, len(msgs)+1)
+	add := func(msg *discordgo.Message) {
+		if msg == nil || msg.Author == nil || strings.TrimSpace(msg.Content) == "" {
+			return
 		}
 		name := msg.Author.Username
 		if msg.Author.Bot {
 			name = "Bot"
 		}
 		out = append(out, "["+name+"]: "+msg.Content)
+	}
+	add(starter)
+	for i := len(msgs) - 1; i >= 0; i-- {
+		add(msgs[i])
 	}
 	return out
 }
