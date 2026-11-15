@@ -32,6 +32,7 @@ type mockEmoteServiceClient struct {
 	emotes      []EmoteServiceEmote
 	err         error
 	lastChannel string
+	lastUserID  string
 	calls       int
 }
 
@@ -49,6 +50,7 @@ func (m *mockEmoteServiceClient) GetEmotesForChannel(ctx context.Context, channe
 func (m *mockEmoteServiceClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string) ([]EmoteServiceEmote, error) {
 	m.mu.Lock()
 	m.lastChannel = channel
+	m.lastUserID = userID
 	m.calls++
 	m.mu.Unlock()
 	if m.err != nil {
@@ -70,6 +72,8 @@ type mockEmoteCacheStore struct {
 	getStale bool
 	setCalls int
 	setData  []cache.CachedEmote
+	// userCalls counts GetEntryWithUser/SetWithUser, i.e. per-user cache keys.
+	userCalls int
 }
 
 func (m *mockEmoteCacheStore) GetEntry(ctx context.Context, channel string) (cache.Entry, error) {
@@ -92,6 +96,9 @@ func (m *mockEmoteCacheStore) Delete(ctx context.Context, channel string) error 
 }
 
 func (m *mockEmoteCacheStore) GetEntryWithUser(ctx context.Context, channel, userID string) (cache.Entry, error) {
+	m.mu.Lock()
+	m.userCalls++
+	m.mu.Unlock()
 	if m.getErr != nil {
 		return cache.Entry{}, m.getErr
 	}
@@ -101,6 +108,7 @@ func (m *mockEmoteCacheStore) GetEntryWithUser(ctx context.Context, channel, use
 func (m *mockEmoteCacheStore) SetWithUser(ctx context.Context, channel, userID string, emotes []cache.CachedEmote) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.userCalls++
 	m.setCalls++
 	m.setData = emotes
 	return nil
