@@ -31,6 +31,7 @@ import (
 	"github.com/caesar/all-chat/services/media-service/storage"
 	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/tracing"
@@ -105,6 +106,7 @@ func main() {
 	// The degraded path leaves authRedis a true nil interface, which the
 	// middleware skips.
 	var authRedis redis.UniversalClient
+	var gateRedis *redis.Client
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379")),
 		Password: getEnv("REDIS_PASSWORD", ""),
@@ -115,6 +117,7 @@ func main() {
 	} else {
 		log.Info("Connected to Redis")
 		authRedis = redisClient
+		gateRedis = redisClient
 		defer redisClient.Close()
 	}
 
@@ -188,7 +191,15 @@ func main() {
 
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	registerMediaRoutes(router, userKeyChain, authRedis, mediaHandler)
+	// Without Redis the cache still loads from the database and polls; it only
+	// loses instant invalidation on an admin flip.
+	gateCache := featuregates.NewFeatureGateCache(dbPool, gateRedis, log)
+	if err := gateCache.Start(context.Background()); err != nil {
+		log.Fatal("Failed to start feature gate cache", zap.Error(err))
+	}
+	requireUpload := middleware.RequirePremium(dbPool, gateCache, featuregates.GateMediaUpload, log)
+
+	registerMediaRoutes(router, userKeyChain, authRedis, mediaHandler, requireUpload)
 
 	srv := &http.Server{
 		Addr:         ":" + config.Port,
