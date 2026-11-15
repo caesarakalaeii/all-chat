@@ -49,8 +49,15 @@ type ToolEffect struct {
 
 // ToolOutput is what a Tool.Invoke returns on success.
 type ToolOutput struct {
-	Content string      // raw tool output (pre-redaction, pre-wrapping)
-	Effect  *ToolEffect // non-nil only for side-effecting tools
+	Content    string      // raw tool output (pre-redaction, pre-wrapping)
+	Effect     *ToolEffect // non-nil only for side-effecting tools
+	Attachment *Attachment // a file to send with the answer; not a side effect
+}
+
+// Attachment is a local file delivered alongside the final answer (send_image).
+type Attachment struct {
+	Name string // filename shown in Discord
+	Path string // absolute path on the pod
 }
 
 // ToolCtx carries the trusted, immutable-per-request context into tool execution.

@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -106,6 +107,7 @@ func main() {
 		GrafanaPromDS:  cfg.GrafanaPromDS,
 		GrafanaLogTail: cfg.GrafanaLogTail,
 		Memory:         memRepo,
+		ScreenshotDir:  filepath.Join(cfg.AllChatRepoPath, tools.ScreenshotDir),
 	})
 
 	policy := access.NewPolicy(cfg.AdminDiscordIDs)
