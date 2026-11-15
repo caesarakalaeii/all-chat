@@ -35,3 +35,23 @@ func TestBuildSystemPrompt_TellsBothModesHowToFileAgentTasks(t *testing.T) {
 		}
 	}
 }
+
+// The bot must understand a report before it answers or files anything: ask the
+// reporter what only they know, play back its understanding, and get it confirmed
+// before an agent task goes to Caterpillar.
+func TestBuildSystemPrompt_UnderstandsBeforeActing(t *testing.T) {
+	for _, mode := range []access.Mode{access.ModeSupport, access.ModeAdmin} {
+		p := BuildSystemPrompt(mode, nil, false)
+		for _, want := range []string{
+			"UNDERSTAND THE PROBLEM FIRST",
+			"clarifying questions",
+			"what they see",
+			"confirm",
+			"Do not file an agent task until",
+		} {
+			if !strings.Contains(p, want) {
+				t.Errorf("mode %v: prompt does not mention %q", mode, want)
+			}
+		}
+	}
+}

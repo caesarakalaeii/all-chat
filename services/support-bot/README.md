@@ -68,8 +68,16 @@ and is replayed verbatim, because Claude's thinking blocks are bound to the conv
 that produced them. Requests use prompt caching, `output_config.effort` and server-side
 refusal fallbacks; a refusal still ends with a visible answer.
 
+**Understanding first**: the system prompt makes the bot gather what only the reporter
+knows (what they see vs. expected, which platform and overlay, since when, what they tried)
+and, when that is missing or ambiguous, reply with its reading of the problem and at most
+three clarifying questions instead of guessing. The user answers in the thread; follow-ups
+get the thread history, including the message the thread was started from (it lives in
+the parent channel, so `fetchHistory` fetches it separately).
+
 **Fixing things (Caterpillar)**: when the bot confirms a bug or a small, scoped improvement,
-it searches for an existing issue (`search_issues`), then files one that follows
+and the reporter has confirmed the bot's summary of it in the thread (a maintainer can
+waive that by asking explicitly), it searches for an existing issue (`search_issues`), then files one that follows
 `.github/ISSUE_TEMPLATE/agent_task.md` with `agent_task=true`. The tool refuses a body
 without a fenced `agent` block carrying `acceptance` commands, and labels the issue `agent`
 (+ `bot-proposed`). Caterpillar claims it, implements it, and merges the PR once its review

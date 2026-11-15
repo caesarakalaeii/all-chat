@@ -17,9 +17,12 @@
 package discord
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 func TestSerialQueuesFIFO(t *testing.T) {
@@ -84,5 +87,31 @@ func TestChunkMessage(t *testing.T) {
 		if len([]rune(c)) > discordMaxMessage {
 			t.Fatalf("chunk %d exceeds %d runes", i, discordMaxMessage)
 		}
+	}
+}
+
+// A thread the bot starts from an @mention has the user's report as its starter
+// message, which lives in the parent channel; follow-ups must still see it, or the
+// bot loses the original question the moment the user answers a clarifying one.
+func TestThreadHistoryIncludesStarterMessage(t *testing.T) {
+	user := &discordgo.User{Username: "streamer"}
+	bot := &discordgo.User{Username: "allchat-bot", Bot: true}
+	starter := &discordgo.Message{Author: user, Content: "my kick chat stopped showing"}
+	newestFirst := []*discordgo.Message{
+		{Author: user, Content: "yes, since yesterday"},
+		{Author: bot, Content: "Which overlay, and since when?"},
+		{Author: user, Content: "   "},
+	}
+	got := threadHistory(starter, newestFirst)
+	want := []string{
+		"[streamer]: my kick chat stopped showing",
+		"[Bot]: Which overlay, and since when?",
+		"[streamer]: yes, since yesterday",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("history =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if h := threadHistory(nil, newestFirst); len(h) != 2 || h[0] != "[Bot]: Which overlay, and since when?" {
+		t.Errorf("without a starter message: %v", h)
 	}
 }
