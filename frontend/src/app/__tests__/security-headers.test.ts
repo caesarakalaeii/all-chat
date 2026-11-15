@@ -133,3 +133,29 @@ describe('next.config framing policy', () => {
     }
   })
 })
+
+// React's development build needs eval() for its debugging features and logs an
+// error without it (which also puts Next's "1 Issue" pill into every dev render,
+// including the visual baselines). Production must never allow it.
+describe('script-src unsafe-eval', () => {
+  async function scriptSrc(nodeEnv: string): Promise<string> {
+    const prev = process.env.NODE_ENV
+    ;(process.env as Record<string, string>).NODE_ENV = nodeEnv
+    try {
+      const csp = (await rules())
+        .flatMap((r) => r.headers)
+        .find((h) => h.key === 'Content-Security-Policy')!.value
+      return csp.split(';').find((d) => d.trim().startsWith('script-src'))!
+    } finally {
+      ;(process.env as Record<string, string>).NODE_ENV = prev!
+    }
+  }
+
+  it('is absent in production', async () => {
+    expect(await scriptSrc('production')).not.toContain("'unsafe-eval'")
+  })
+
+  it('is allowed in development', async () => {
+    expect(await scriptSrc('development')).toContain("'unsafe-eval'")
+  })
+})
