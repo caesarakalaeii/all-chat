@@ -49,9 +49,14 @@ type Client struct {
 // New builds a client. token may be empty (read-only unauthenticated), though the
 // support-bot always supplies one.
 func New(token string, log *zap.Logger) *Client {
+	return NewWithBase(token, apiBase, log)
+}
+
+// NewWithBase builds a client against another API root (tests).
+func NewWithBase(token, base string, log *zap.Logger) *Client {
 	return &Client{
 		token: token,
-		base:  apiBase,
+		base:  strings.TrimRight(base, "/"),
 		http: &http.Client{
 			Timeout:       20 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
@@ -67,12 +72,18 @@ type User struct {
 
 // Issue is an issue or PR (GitHub models PRs as issues for comments).
 type Issue struct {
-	Number  int    `json:"number"`
-	Title   string `json:"title"`
-	Body    string `json:"body"`
-	State   string `json:"state"`
-	HTMLURL string `json:"html_url"`
-	User    User   `json:"user"`
+	Number  int     `json:"number"`
+	Title   string  `json:"title"`
+	Body    string  `json:"body"`
+	State   string  `json:"state"`
+	HTMLURL string  `json:"html_url"`
+	User    User    `json:"user"`
+	Labels  []Label `json:"labels"`
+}
+
+// Label is an issue label (only the name is used).
+type Label struct {
+	Name string `json:"name"`
 }
 
 // Comment is a created issue/PR comment.
@@ -166,6 +177,19 @@ func (c *Client) CreateIssue(ctx context.Context, owner, repo, title, body strin
 	}
 	out := &Issue{}
 	return out, json.Unmarshal(raw, out)
+}
+
+// SearchIssues runs a GitHub issue search (q uses GitHub search syntax) and returns
+// at most 10 matches.
+func (c *Client) SearchIssues(ctx context.Context, q string) ([]Issue, error) {
+	raw, err := c.do(ctx, http.MethodGet, "/search/issues?per_page=10&q="+url.QueryEscape(q), nil)
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Items []Issue `json:"items"`
+	}
+	return out.Items, json.Unmarshal(raw, &out)
 }
 
 // CreateComment posts a comment on an issue or PR.

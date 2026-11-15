@@ -15,8 +15,8 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // Command support-bot is the All-Chat Discord support/admin agent. It answers codebase
-// and operational questions over a locally hosted OpenAI-compatible LLM (replacing the
-// former Claude-Code-CLI workaround), with two code-enforced access modes: SUPPORT
+// and operational questions over Claude (Anthropic Messages API) or an OpenAI-compatible
+// gateway, with two code-enforced access modes: SUPPORT
 // (read-only, output redacted) for everyone and ADMIN (GitHub write: branch+PR+review)
 // for an allow-list of maintainer Discord UIDs. Cluster access is read-only in both
 // modes; database writes and secret reads are never exposed.
@@ -62,21 +62,11 @@ func main() {
 	if cfg.DiscordToken == "" {
 		log.Fatal("DISCORD_BOT_TOKEN must be set")
 	}
-	// The model id is resolved at boot: a pin that is no longer served falls
-	// back to discovery, so an upstream model swap needs no manifest edit.
-	// Fatal only when nothing usable can be resolved at all.
-	resolvedModel, err := llm.DiscoverModel(context.Background(), llm.Config{
-		BaseURL: cfg.LLMBaseURL,
-		APIKey:  cfg.LLMAPIKey,
-		Model:   cfg.LLMModel,
-	}, log)
-	if err != nil {
-		log.Fatal("no usable LLM model", zap.Error(err))
-	}
+	llmClient, model, maxTokens, llmTarget := buildLLM(cfg, log)
 
 	log.Info("starting support-bot",
-		zap.String("llm_base_url", cfg.LLMBaseURL),
-		zap.String("llm_model", resolvedModel),
+		zap.String("llm", llmTarget),
+		zap.String("llm_model", model),
 		zap.Int("admin_uids", len(cfg.AdminDiscordIDs)),
 		zap.Bool("grafana", cfg.GrafanaEnabled()),
 		zap.Strings("repos", cfg.RepoPaths()),
@@ -90,17 +80,6 @@ func main() {
 	var memRepo *memory.Repository
 	if dbPool != nil {
 		memRepo = memory.NewRepository(dbPool)
-	}
-
-	// Local LLM client.
-	llmClient, err := llm.New(llm.Config{
-		BaseURL:        cfg.LLMBaseURL,
-		APIKey:         cfg.LLMAPIKey,
-		Model:          resolvedModel,
-		RequestTimeout: 90 * time.Second,
-	}, log)
-	if err != nil {
-		log.Fatal("failed to build LLM client", zap.Error(err))
 	}
 
 	// Optional backends.
@@ -131,8 +110,8 @@ func main() {
 	policy := access.NewPolicy(cfg.AdminDiscordIDs)
 	redactor := redact.NewRedactor()
 	agentCfg := agent.Config{
-		Model:            resolvedModel,
-		MaxTokens:        cfg.LLMMaxTokens,
+		Model:            model,
+		MaxTokens:        maxTokens,
 		MaxIterations:    cfg.MaxIterations,
 		PerCallTimeout:   cfg.PerCallTimeout,
 		MaxParallelTools: cfg.MaxParallelTool,
@@ -218,4 +197,38 @@ func startHealthServer(cfg *config.Config, dbPool *pgxpool.Pool, log *zap.Logger
 		}
 	}()
 	return srv
+}
+
+// buildLLM picks the model backend: Claude when ANTHROPIC_API_KEY is set, otherwise
+// the OpenAI-compatible gateway, whose model id is resolved at boot (a pin that is
+// no longer served falls back to discovery). It returns the client, the model id,
+// the per-reply token ceiling, and a loggable name for the target.
+func buildLLM(cfg *config.Config, log *zap.Logger) (llm.ChatClient, string, int, string) {
+	if cfg.AnthropicAPIKey != "" {
+		return llm.NewAnthropic(llm.AnthropicConfig{
+			APIKey:     cfg.AnthropicAPIKey,
+			Model:      cfg.AnthropicModel,
+			Effort:     cfg.AnthropicEffort,
+			MaxRetries: 3,
+		}), cfg.AnthropicModel, cfg.AnthropicMaxTokens, "anthropic"
+	}
+
+	model, err := llm.DiscoverModel(context.Background(), llm.Config{
+		BaseURL: cfg.LLMBaseURL,
+		APIKey:  cfg.LLMAPIKey,
+		Model:   cfg.LLMModel,
+	}, log)
+	if err != nil {
+		log.Fatal("no usable LLM model", zap.Error(err))
+	}
+	client, err := llm.New(llm.Config{
+		BaseURL:        cfg.LLMBaseURL,
+		APIKey:         cfg.LLMAPIKey,
+		Model:          model,
+		RequestTimeout: 90 * time.Second,
+	}, log)
+	if err != nil {
+		log.Fatal("failed to build LLM client", zap.Error(err))
+	}
+	return client, model, cfg.LLMMaxTokens, cfg.LLMBaseURL
 }

@@ -88,20 +88,50 @@ type githubParams struct {
 	Number int    `json:"number,omitempty"`
 	Title  string `json:"title,omitempty"`
 	Body   string `json:"body,omitempty"`
+	Query  string `json:"query,omitempty"`
+	// AgentTask labels the new issue `agent`, which hands it to Caterpillar, the
+	// autonomous coding agent that implements, reviews and merges it.
+	AgentTask bool `json:"agent_task,omitempty"`
+}
+
+// agentLabel is the label Caterpillar claims issues by (its ingestLabel).
+const agentLabel = "agent"
+
+// checkAgentBlock enforces the part of Caterpillar's intake contract that can be
+// checked locally: an agent task needs a fenced `agent` block with acceptance
+// commands, or Caterpillar rejects it with a comment and nothing gets fixed.
+func checkAgentBlock(body string) error {
+	start := strings.Index(body, "```agent")
+	if start < 0 {
+		return fmt.Errorf("agent_task issues need a fenced ```agent block (repos + acceptance) as in .github/ISSUE_TEMPLATE/agent_task.md")
+	}
+	block := body[start+len("```agent"):]
+	if end := strings.Index(block, "```"); end >= 0 {
+		block = block[:end]
+	}
+	if !strings.Contains(block, "acceptance:") {
+		return fmt.Errorf("the ```agent block needs an acceptance: list of commands that must exit 0")
+	}
+	return nil
 }
 
 func (t *GitHubTool) Def() tool.ToolDef {
 	return tool.ToolDef{
 		Name: "github",
 		Description: "Read and triage GitHub issues/PRs. action is one of: get_issue (read an issue or PR by number), " +
+			"search_issues (find existing issues; query uses GitHub search syntax, e.g. 'is:open kick reconnect'), " +
 			"comment (post a comment), create_issue (file a new issue). repo is 'all-chat' or 'all-chat-extension'. " +
+			"Set agent_task=true on create_issue to hand a code fix to Caterpillar, the autonomous coding agent: " +
+			"the body must follow .github/ISSUE_TEMPLATE/agent_task.md including its fenced agent block. " +
 			"These do not modify code.",
 		Parameters: json.RawMessage(`{"type":"object","properties":{` +
-			`"action":{"type":"string","enum":["get_issue","comment","create_issue"]},` +
+			`"action":{"type":"string","enum":["get_issue","search_issues","comment","create_issue"]},` +
 			`"repo":{"type":"string","enum":["all-chat","all-chat-extension"]},` +
 			`"number":{"type":"integer","description":"issue or PR number (get_issue, comment)"},` +
 			`"title":{"type":"string","description":"issue title (create_issue)"},` +
-			`"body":{"type":"string","description":"markdown body (comment, create_issue)"}},` +
+			`"body":{"type":"string","description":"markdown body (comment, create_issue)"},` +
+			`"query":{"type":"string","description":"search terms (search_issues)"},` +
+			`"agent_task":{"type":"boolean","description":"create_issue: label it for Caterpillar to implement"}},` +
 			`"required":["action","repo"]}`),
 	}
 }
@@ -130,6 +160,26 @@ func (t *GitHubTool) Invoke(ctx context.Context, tctx *tool.ToolCtx, args json.R
 		return tool.ToolOutput{Content: fmt.Sprintf(
 			"#%d [%s] %s\nby %s\n%s\n\n%s",
 			iss.Number, iss.State, iss.Title, iss.User.Login, iss.HTMLURL, body)}, nil
+	case "search_issues":
+		if strings.TrimSpace(p.Query) == "" {
+			return tool.ToolOutput{}, fmt.Errorf("search_issues requires a query")
+		}
+		items, err := t.client.SearchIssues(ctx, fmt.Sprintf("repo:%s/%s %s", t.owner, p.Repo, p.Query))
+		if err != nil {
+			return tool.ToolOutput{}, err
+		}
+		if len(items) == 0 {
+			return tool.ToolOutput{Content: "no matching issues"}, nil
+		}
+		var b strings.Builder
+		for _, it := range items {
+			var names []string
+			for _, l := range it.Labels {
+				names = append(names, l.Name)
+			}
+			fmt.Fprintf(&b, "#%d [%s] %s %s labels=%s\n", it.Number, it.State, it.Title, it.HTMLURL, strings.Join(names, ","))
+		}
+		return tool.ToolOutput{Content: b.String()}, nil
 	case "comment":
 		if p.Number <= 0 || strings.TrimSpace(p.Body) == "" {
 			return tool.ToolOutput{}, fmt.Errorf("comment requires number and body")
@@ -150,14 +200,23 @@ func (t *GitHubTool) Invoke(ctx context.Context, tctx *tool.ToolCtx, args json.R
 		if err := ghsafe.ValidateParam("title", p.Title, true); err != nil {
 			return tool.ToolOutput{}, err
 		}
+		labels := []string{"bot-proposed", "needs-review"}
+		opened := "opened issue: "
+		if p.AgentTask {
+			if err := checkAgentBlock(p.Body); err != nil {
+				return tool.ToolOutput{}, err
+			}
+			labels = []string{"bot-proposed", agentLabel}
+			opened = "opened agent task (Caterpillar will pick it up via the agent label): "
+		}
 		iss, err := t.client.CreateIssue(ctx, t.owner, p.Repo,
-			redactBody(tctx, p.Title), redactBody(tctx, p.Body), []string{"bot-proposed", "needs-review"})
+			redactBody(tctx, p.Title), redactBody(tctx, p.Body), labels)
 		if err != nil {
 			return tool.ToolOutput{}, err
 		}
 		ref := fmt.Sprintf("%s#%d", p.Repo, iss.Number)
 		return tool.ToolOutput{
-			Content: "opened issue: " + iss.HTMLURL,
+			Content: opened + iss.HTMLURL,
 			Effect:  &tool.ToolEffect{Tool: "github", Kind: "issue", URL: iss.HTMLURL, Ref: ref, Summary: "opened issue " + ref},
 		}, nil
 	default:

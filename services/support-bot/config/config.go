@@ -15,8 +15,8 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // Package config loads the support-bot runtime configuration from the environment.
-// It replaces the former Claude-Code-CLI bot's config: the LLM is now a locally
-// hosted OpenAI-compatible endpoint (LOCAL_LLM_*), and admin access is gated by an
+// The LLM is Claude over the Anthropic Messages API when ANTHROPIC_API_KEY is set,
+// otherwise an OpenAI-compatible endpoint (LOCAL_LLM_*); admin access is gated by an
 // explicit Discord UID allow-list (SUPPORT_BOT_ADMIN_DISCORD_IDS) rather than being
 // a single fixed tool set.
 package config
@@ -55,6 +55,12 @@ type Config struct {
 	LLMModel     string
 	LLMAPIKey    string // optional; many local servers need none
 	LLMMaxTokens int
+
+	// Claude (Anthropic Messages API). A set key selects it over LOCAL_LLM_*.
+	AnthropicAPIKey    string
+	AnthropicModel     string
+	AnthropicEffort    string
+	AnthropicMaxTokens int
 
 	GitHubToken    string
 	GitHubOwner    string
@@ -116,6 +122,11 @@ func Load() *Config {
 		LLMModel:     getEnv("LOCAL_LLM_MODEL", ""),
 		LLMAPIKey:    getEnv("LOCAL_LLM_API_KEY", ""),
 		LLMMaxTokens: getEnvInt("LOCAL_LLM_MAX_TOKENS", 2048),
+
+		AnthropicAPIKey:    getEnv("ANTHROPIC_API_KEY", ""),
+		AnthropicModel:     getEnv("ANTHROPIC_MODEL", "claude-opus-5-5"),
+		AnthropicEffort:    getEnv("ANTHROPIC_EFFORT", "medium"),
+		AnthropicMaxTokens: getEnvInt("ANTHROPIC_MAX_TOKENS", 16000),
 
 		GitHubToken:    getEnv("GITHUB_TOKEN", ""),
 		GitHubOwner:    getEnv("GITHUB_OWNER", "caesarakalaeii"),
