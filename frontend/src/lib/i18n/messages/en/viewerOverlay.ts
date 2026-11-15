@@ -612,7 +612,7 @@ export const viewerOverlay = {
     listenerDeprecated: 'The legacy Twitch chat connection is being retired.',
     listenerRemedy: '\u2192 Re-add your Twitch source to switch to the new EventSub connection',
   },
-  // The sandboxed frame a premium custom-code alert renders in (ADR-0071).
+  // The sandboxed frame a custom-code alert renders in (ADR-0071).
   customAlertFrameTitle: 'Custom alert',
   // The goal bar overlay (ADR-0072). goalTitles name the goal when the streamer
   // gave it no title.

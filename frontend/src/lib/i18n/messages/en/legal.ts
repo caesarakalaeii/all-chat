@@ -547,7 +547,7 @@ export const legal = {
   // are contractual statements, and a reworded term is a different term.
   terms: {
     title: 'Terms of Service (Nutzungsbedingungen)',
-    lastUpdated: 'November 4, 2026',
+    lastUpdated: 'November 15, 2026',
     acceptanceHeading: '1. Acceptance of Terms',
     // The <Link> to the privacy policy sits mid-sentence, so the sentence is
     // whole with the link text as a param. Same shape throughout this section.
@@ -556,7 +556,7 @@ export const legal = {
     privacyLinkText: 'Privacy Policy',
     descriptionHeading: '2. Description of Service',
     descriptionBody:
-      'All-Chat combines live chat and events from Twitch, YouTube, Kick, TikTok and Discord, and in beta or early access from Owncast, GoodGame, Picarto, Altstream and Facebook, into overlays you show on your stream: chat, alerts and credit rolls, and on beta.allch.at also goals and lists. It also lets you send chat messages, moderate across platforms, run polls, predictions and a points game, have chat read aloud, and connect the browser extension, desktop plugins and API tokens. On beta.allch.at it also runs chat commands, custom bots and timers. You broadcast overlays via OBS or any browser source.',
+      'All-Chat combines live chat and events from Twitch, YouTube, Kick, TikTok and Discord, and in beta or early access from Owncast, GoodGame, Picarto, Altstream and Facebook, into overlays you show on your stream: chat, alerts and credit rolls, and on beta.allch.at also goals and lists. It also lets you send chat messages, moderate across platforms, run polls, predictions and a points game, have chat read aloud, and connect the browser extension, desktop plugins and API tokens. It also runs chat commands, custom bots and timers. You broadcast overlays via OBS or any browser source.',
     accountsHeading: '3. Accounts & Authentication',
     accountsIntro:
       'You are responsible for all activity that happens under your account. You agree to:',

@@ -91,7 +91,7 @@ chatcmd consumer (NOACK, at most once): match → min_role → echo guard → pe
 | `GET /chat-commands/settings` | streamer | which sender the replies use: `bot` (All-Chat Bot, default) or `self` |
 | `PUT /chat-commands/settings` | streamer · `chat_commands` gate | switch the sender (`{"sender":"bot"}` or `{"sender":"self"}`) |
 
-Writes take the `engagement:write` PAT scope; paired devices are refused (the routes have no overlay to bind to). The `chat_commands` gate is enforced on both dimensions (`RequireEarlyAccess` and `RequirePremium`) and seeded `early_access=TRUE, is_premium=FALSE`: beta testers and ambassadors only, free. Flip `early_access` off in the admin feature-gates UI to open it to everyone with no redeploy. The only paid part is the YouTube reply check above.
+Writes take the `engagement:write` PAT scope; paired devices are refused (the routes have no overlay to bind to). The `chat_commands` gate is enforced on both dimensions (`RequireEarlyAccess` and `RequirePremium`) and seeded `early_access=TRUE, is_premium=FALSE` (migration 113). Both flags were turned off in the admin feature-gates UI on 2026-11-15, so chat commands are free for everyone; either flag can be turned back on with no redeploy. The only paid part is the YouTube reply check above.
 
 ## Chat timers (ADR-0081)
 

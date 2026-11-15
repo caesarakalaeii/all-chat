@@ -32,14 +32,13 @@ const answer = (apiKey: string, status = 200) =>
 /**
  * The KLIPY app key for the browser (ADR-0072, ADR-0073, ADR-0074). KLIPY
  * requires search calls to come from the user's browser, so the key has to
- * reach it, but only a signed-in user who may use the alerts editor gets it:
- * 401 without a valid session, 403 without premium or beta access.
+ * reach it, but only a signed-in user gets it (GIF search in the alerts
+ * editor is free): 401 without a valid session.
  *
  * The session is checked by forwarding the caller's credentials to the
  * gateway's GET /api/v1/auth/me (API_GATEWAY_URL, the in-cluster service),
- * which validates the JWT and returns the user's premium state. Any failure
- * of that check is a 401. Empty key when KLIPY_API_KEY is unset; the picker
- * then says "unavailable".
+ * which validates the JWT. Any failure of that check is a 401. Empty key when
+ * KLIPY_API_KEY is unset; the picker then says "unavailable".
  */
 export async function GET(request: Request) {
   const credentials: Record<string, string> = {}
@@ -50,7 +49,6 @@ export async function GET(request: Request) {
   if (Object.keys(credentials).length === 0) return answer('', 401)
 
   const gateway = process.env.API_GATEWAY_URL || 'http://localhost:8080'
-  let user: { is_premium?: unknown; is_beta_tester?: unknown }
   try {
     const res = await fetch(`${gateway}/api/v1/auth/me`, {
       headers: credentials,
@@ -58,12 +56,9 @@ export async function GET(request: Request) {
       signal: AbortSignal.timeout(5000),
     })
     if (!res.ok) return answer('', 401)
-    user = await res.json()
   } catch {
     return answer('', 401)
   }
-  // What the alerts editor unlocks on (users.is_premium; beta testers get it too).
-  if (user.is_premium !== true && user.is_beta_tester !== true) return answer('', 403)
 
   return answer(process.env.KLIPY_API_KEY ?? '')
 }

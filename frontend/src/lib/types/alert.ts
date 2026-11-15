@@ -40,8 +40,7 @@ export const ALERT_EVENT_TYPES = [
   'tiktok_subscription',
   'power_up',
   'gift_received',
-  // A chat command's image (ADR-0080). Offered only where chat commands are
-  // (AlertsEditor, lib/platform-availability.ts).
+  // A chat command's image, sound and text (ADR-0080).
   'chat_command',
 ] as const
 

@@ -624,9 +624,7 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     customHtmlLabel: 'HTML',
     customCssLabel: 'CSS',
     customJsLabel: 'JavaScript',
-    customLocked: 'Eigener Alert-Code ist ein Premium-Feature.',
-    lockedBody:
-      'Das Bearbeiten von Alerts ist ein Premium-Feature. Dein Overlay nutzt die eingebauten Alerts, und Test-Alerts bleiben kostenlos.',
+    uploadLocked: 'Eigene Dateien hochzuladen ist ein Premium-Feature.',
     save: 'Alerts speichern',
     saving: 'Wird gespeichert...',
     saved: 'Alerts gespeichert',

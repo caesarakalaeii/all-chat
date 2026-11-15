@@ -138,11 +138,12 @@ Body: {
   "description": "Multi-platform chat display",
   "overlay_type": "chat"   # chat (default) | alerts | goal | list
 }
-# alerts, goal and list need their premium gate (ADR-0008): alerts_overlay
-# (migration 108), goal_overlay (110), list_overlay (111):
+# alerts, goal and list are checked against their gate (ADR-0008):
+# alerts_overlay (migration 108, opened to everyone on 2026-11-15),
+# goal_overlay (110) and list_overlay (111), both premium:
 # 403 {"error":"Premium required","feature":"<gate>"}. Cloning checks the same
 # gate. Existing overlays of those kinds keep working when premium lapses.
-# The frontend offers these kinds on beta.allch.at only for now
+# The frontend offers goal and list on beta.allch.at only for now
 # (frontend/src/lib/platform-availability.ts); the API accepts them on any host.
 
 # List user's overlays
@@ -243,7 +244,7 @@ GET /api/v1/overlays/:overlay_id/alerts/profiles
                     "custom_html": "", "custom_css": "", "custom_js": "" }, ... ],
     "saved": ["all"] }
 
-# Bulk upsert, all or nothing. Premium (gate alerts_editor). 400 unless the
+# Bulk upsert, all or nothing. Gate alerts_editor (free since 2026-11-15). 400 unless the
 # overlay is an alerts overlay, or for an unknown/duplicated event_type, a
 # volume outside 0-100, duration_ms outside 1-60000, a non-http(s) media URL or
 # a template over 500 characters, or a custom_html/custom_css/custom_js field

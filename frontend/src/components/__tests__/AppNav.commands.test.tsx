@@ -17,9 +17,8 @@
  */
 
 /**
- * The Commands nav link (ADR-0079) is beta-only and streamer-only: hidden on
- * production hosts (lib/platform-availability.ts) and for viewer sessions,
- * which have no chat to command.
+ * The Commands nav link (ADR-0079) is streamer-only: shown on every host, but
+ * hidden for viewer sessions, which have no chat to command.
  */
 
 // @vitest-environment jsdom
@@ -73,11 +72,11 @@ describe('AppNav Commands link', () => {
     expect(screen.getByRole('link', { name: 'Commands' })).toHaveAttribute('href', '/commands')
   })
 
-  it('is hidden on production', () => {
+  it('shows for a streamer on production', () => {
     auth.user = { id: 'u1' }
     onHost('allch.at')
     render(<AppNav />)
-    expect(screen.queryByRole('link', { name: 'Commands' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Commands' })).toHaveAttribute('href', '/commands')
   })
 
   it('is hidden for a viewer session on beta', () => {
