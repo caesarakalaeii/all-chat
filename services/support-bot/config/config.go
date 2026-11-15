@@ -15,8 +15,9 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 // Package config loads the support-bot runtime configuration from the environment.
-// The LLM is Claude over the Anthropic Messages API when ANTHROPIC_API_KEY is set,
-// otherwise an OpenAI-compatible endpoint (LOCAL_LLM_*); admin access is gated by an
+// The model is, in order of precedence: the Claude Code CLI on a subscription OAuth
+// token (CLAUDE_CODE_OAUTH_TOKEN), Claude over the Anthropic Messages API
+// (ANTHROPIC_API_KEY), or an OpenAI-compatible endpoint (LOCAL_LLM_*). Admin access is gated by an
 // explicit Discord UID allow-list (SUPPORT_BOT_ADMIN_DISCORD_IDS) rather than being
 // a single fixed tool set.
 package config
@@ -55,6 +56,12 @@ type Config struct {
 	LLMModel     string
 	LLMAPIKey    string // optional; many local servers need none
 	LLMMaxTokens int
+
+	// Claude Code CLI on the subscription. A set token wins over everything below.
+	ClaudeCodeOAuthToken string
+	ClaudeCodeModel      string
+	ClaudeCodeBin        string
+	ClaudeCodeHome       string
 
 	// Claude (Anthropic Messages API). A set key selects it over LOCAL_LLM_*.
 	AnthropicAPIKey    string
@@ -122,6 +129,11 @@ func Load() *Config {
 		LLMModel:     getEnv("LOCAL_LLM_MODEL", ""),
 		LLMAPIKey:    getEnv("LOCAL_LLM_API_KEY", ""),
 		LLMMaxTokens: getEnvInt("LOCAL_LLM_MAX_TOKENS", 2048),
+
+		ClaudeCodeOAuthToken: getEnv("CLAUDE_CODE_OAUTH_TOKEN", ""),
+		ClaudeCodeModel:      getEnv("CLAUDE_CODE_MODEL", "opus"),
+		ClaudeCodeBin:        getEnv("CLAUDE_CODE_BIN", "claude"),
+		ClaudeCodeHome:       getEnv("CLAUDE_CODE_HOME", "/tmp/claude-code"),
 
 		AnthropicAPIKey:    getEnv("ANTHROPIC_API_KEY", ""),
 		AnthropicModel:     getEnv("ANTHROPIC_MODEL", "claude-opus-5-5"),

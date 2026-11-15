@@ -1,9 +1,10 @@
 # Support Bot
 
 A Discord support/admin agent for All-Chat. It answers codebase and operational
-questions over **Claude** (Anthropic Messages API, `ANTHROPIC_API_KEY`) or, when no key is
-set, an **OpenAI-compatible LLM endpoint** (`LOCAL_LLM_BASE_URL`, an external inference
-gateway). Both are disclosed in the privacy policy (Section 2.8). It executes tools
+questions over, in order of precedence, the **Claude Code CLI** on a Claude subscription
+(`CLAUDE_CODE_OAUTH_TOKEN`, production), **Claude** via the Anthropic Messages API
+(`ANTHROPIC_API_KEY`), or an **OpenAI-compatible LLM endpoint** (`LOCAL_LLM_BASE_URL`, an
+external inference gateway). Both are disclosed in the privacy policy (Section 2.8). It executes tools
 through a code-enforced access model, and hands confirmed bugs to **Caterpillar**, the
 autonomous coding agent, as `agent`-labelled issues (ADR-0093). It replaces the previous
 TypeScript bot that shelled out to the `claude` CLI with a native Go agentic loop.
@@ -48,7 +49,20 @@ Guardrails: fail-closed permissioning, repeat/no-progress detection, prompt-inje
 sanitization, XML boundary tags on tool output, and a code-level leak redactor applied
 at both the tool-output and final-answer boundaries.
 
-**Claude specifics** (`llm/anthropic.go`): the transcript stays OpenAI-shaped and is
+**Claude Code path** (`agent/claudecode.go`): with `CLAUDE_CODE_OAUTH_TOKEN` set, the bot
+runs the unmodified `claude` binary (`-p --output-format json`) per question instead of
+its own loop. The CLI gets no built-in tools (`--tools ""`), an empty working directory
+and an environment holding only `PATH`, `HOME` and the token, so none of the bot's own
+secrets reach it. The bot's tool registry is served to it over a localhost MCP endpoint
+(`--mcp-config`, `--strict-mcp-config`, `--allowedTools mcp__allchat`); each run gets a
+random bearer token bound to the requester's access mode, so the fail-closed per-mode
+gate, redaction, the repeat guard and effect reporting work as in the in-process loop.
+`--max-turns` is `SUPPORT_BOT_MAX_ITERATIONS`. A usage or rate limit parks the request in
+the busy queue; a resumed request starts the CLI again from the question. The image
+ships the pinned, checksum-verified binary (`Dockerfile`), which is why it runs on
+`distroless/cc` (glibc) rather than `distroless/static`.
+
+**Messages API specifics** (`llm/anthropic.go`): the transcript stays OpenAI-shaped and is
 translated per request. Each assistant turn keeps its native content in `Message.Native`
 and is replayed verbatim, because Claude's thinking blocks are bound to the conversation
 that produced them. Requests use prompt caching, `output_config.effort` and server-side
@@ -79,6 +93,8 @@ the full list. Key variables:
 | Variable | Purpose |
 |---|---|
 | `DISCORD_BOT_TOKEN` / `DISCORD_CLIENT_ID` / `DISCORD_GUILD_ID` | Discord bot + slash-command registration |
+| `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` token (one year); when set the bot runs the Claude Code CLI and ignores the two rows below |
+| `CLAUDE_CODE_MODEL` / `CLAUDE_CODE_BIN` / `CLAUDE_CODE_HOME` | Defaults `opus` / `claude` / `/tmp/claude-code` |
 | `ANTHROPIC_API_KEY` | Console API key; when set the bot runs on Claude and ignores `LOCAL_LLM_*` |
 | `ANTHROPIC_MODEL` / `ANTHROPIC_EFFORT` / `ANTHROPIC_MAX_TOKENS` | Defaults `claude-opus-5-5` / `medium` / `16000` |
 | `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY` | vLLM endpoint (OpenAI-compatible); key sent as `Authorization: Bearer <key>`. The model id is resolved at boot from `GET <base URL>/v1/models`; `LOCAL_LLM_MODEL` is an optional pin that wins while the gateway still lists it, and is kept when the list endpoint cannot be reached |

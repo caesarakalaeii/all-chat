@@ -998,7 +998,7 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 **Status**: ✅ Accepted
 **Date**: 2026-11-11
 **Problem**: Every Go service ran on `alpine:3.24` and the frontend and discord-bot on `node:*-alpine`, which ship busybox, a shell and `apk` that no service uses at runtime but an attacker with code execution could.
-**Decision**: Go services run on `gcr.io/distroless/static-debian13` (all builds are already `CGO_ENABLED=0`); the frontend runs on `gcr.io/distroless/nodejs26-debian13` and builds on `node:26-trixie-slim` so its native packages (sharp) match the runtime's glibc; discord-bot installs on `node:22-trixie-slim` and runs on `gcr.io/distroless/nodejs22-debian13`. Images use numeric `USER 1000:1000` (frontend `1001:1001`), the UIDs the manifests pin. Docker `HEALTHCHECK`s (busybox `wget`, ignored by Kubernetes) are gone, and support-bot fetches `kubectl` in its build stage. The migrations image (a `psql` shell script) and the Debian-based tiktok images are not converted.
+**Decision**: Go services run on `gcr.io/distroless/static-debian13` (all builds are already `CGO_ENABLED=0`; support-bot is on `distroless/cc-debian13` for the Claude Code binary since ADR-0093); the frontend runs on `gcr.io/distroless/nodejs26-debian13` and builds on `node:26-trixie-slim` so its native packages (sharp) match the runtime's glibc; discord-bot installs on `node:22-trixie-slim` and runs on `gcr.io/distroless/nodejs22-debian13`. Images use numeric `USER 1000:1000` (frontend `1001:1001`), the UIDs the manifests pin. Docker `HEALTHCHECK`s (busybox `wget`, ignored by Kubernetes) are gone, and support-bot fetches `kubectl` in its build stage. The migrations image (a `psql` shell script) and the Debian-based tiktok images are not converted.
 **Impact**: No shell in the converted images, so `kubectl exec <pod> -- sh|wget|printenv` stops working; the runbooks use `kubectl port-forward`, the deployment spec, or `kubectl debug --target` instead. youtube-listener-innertube's `preStop` uses the native `sleep` action (caesar-deployment #179), which must deploy first.
 **→ Read**: [0092-distroless-runtime-images.md](./0092-distroless-runtime-images.md)
 
@@ -1006,11 +1006,11 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ### ADR-0093: Support bot runs on Claude and hands confirmed fixes to Caterpillar
 
-**Status**: ✅ Accepted
+**Status**: ✅ Accepted (revised 2026-11-15)
 **Date**: 2026-11-15
 **Problem**: The support bot's OpenAI-compatible inference gateway was too unstable to leave unattended, and the bot could file issues but nothing it found was ever fixed without a maintainer.
-**Decision**: A second `llm.ChatClient` (`llm/anthropic.go`, official Go SDK) runs the bot on Claude when `ANTHROPIC_API_KEY` is set (Console API key, not subscription OAuth; default `claude-opus-5-5`, effort `medium`, prompt caching, server-side refusal fallbacks, thinking blocks replayed verbatim via `Message.Native`); otherwise the gateway is used as before. The `github` tool gains `search_issues` and `create_issue` `agent_task`, which requires a fenced `agent` block with `acceptance` and labels the issue `agent` so Caterpillar implements it; the system prompt says when to file one and to dedupe first.
-**Impact**: Discord messages now go to Anthropic (US); the privacy policy names it. Any Discord user can steer the bot into filing an owner-authored agent task that Caterpillar runs and may merge; restrict `agent_task` to admin mode to narrow it.
+**Decision**: In production the bot runs the unmodified Claude Code CLI on a `claude setup-token` subscription token (`CLAUDE_CODE_OAUTH_TOKEN`, `agent/claudecode.go`) with no built-in tools, and serves its own tool registry to it over a localhost MCP endpoint whose per-run bearer token binds the requester's access mode. Fallbacks: the Anthropic Messages API with a Console API key (`llm/anthropic.go`), then the gateway. The `github` tool gains `search_issues` and `create_issue` `agent_task`, which requires a fenced `agent` block with `acceptance` and labels the issue `agent` so Caterpillar implements it.
+**Impact**: support-bot runs on `distroless/cc` (ADR-0092 amended). Discord messages go to Anthropic (US); the privacy policy names it. The maintainer accepts that serving Discord users from a personal plan is outside Anthropic's terms. Any Discord user can steer the bot into filing an owner-authored agent task that Caterpillar runs and may merge; restrict `agent_task` to admin mode to narrow it.
 **→ Read**: [0093-support-bot-on-claude-hands-fixes-to-caterpillar.md](./0093-support-bot-on-claude-hands-fixes-to-caterpillar.md)
 
 ---
