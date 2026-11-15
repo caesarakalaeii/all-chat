@@ -278,13 +278,19 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
 
   // Auto-scroll to the newest message. The preview never did this at all: the
   // ref was attached but scrollIntoView was never called, so the newest message
-  // silently fell out of frame once the list overflowed.
-  useEffect(() => {
+  // silently fell out of frame once the list overflowed. Runs again whenever an
+  // image or video in the feed finishes loading (the feed body's
+  // onLoad/onLoadedMetadata): an attachment takes no space until it has loaded,
+  // so the pass on arrival alone left it clipped below the frame.
+  const scrollToNewest = useCallback(() => {
     const body = feedBodyRef.current
     const overflows = body != null && body.scrollHeight > body.clientHeight
     if (!shouldAutoScroll(feedLayout, overflows)) return
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [messages, feedLayout])
+  }, [feedLayout])
+  useEffect(() => {
+    scrollToNewest()
+  }, [messages, scrollToNewest])
 
   // themeCss is already wrapped into @layer marketplace-themes; customCss is
   // the user's manual (or diff) CSS and must stay unlayered. joinPreviewCss
@@ -780,6 +786,10 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
       >
         <div
           ref={feedBodyRef}
+          // React propagates media load events, so these fire for every
+          // descendant <img>/<video>: see scrollToNewest.
+          onLoad={scrollToNewest}
+          onLoadedMetadata={scrollToNewest}
           className={clsx(
             'overlay-preview-body space-y-3 overflow-y-auto p-4',
             // `h-full` (top) / `mt-auto max-h-full` (bottom) — see feedAnchor.
