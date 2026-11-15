@@ -198,3 +198,30 @@ func TestRunLoopDetectorBlocksRepeats(t *testing.T) {
 		t.Fatalf("echo executed %d times; loop detector should cap at 2", got)
 	}
 }
+
+// attachTool returns an image attachment, like send_image does.
+type attachTool struct{ tool.BothModes }
+
+func (attachTool) Def() tool.ToolDef {
+	return tool.ToolDef{Name: "attach", Parameters: json.RawMessage(`{"type":"object"}`)}
+}
+func (attachTool) Invoke(context.Context, *tool.ToolCtx, json.RawMessage) (tool.ToolOutput, error) {
+	return tool.ToolOutput{Content: "attached", Attachment: &tool.Attachment{Name: "a.png", Path: "/x/a.png"}}, nil
+}
+
+func TestRunCollectsAttachments(t *testing.T) {
+	reg := tool.NewRegistry()
+	reg.Register(attachTool{})
+	client := &fakeClient{responses: []*llm.ChatResponse{toolCallResp("c1", "attach", `{}`), stopResp("see the image")}}
+	res, err := Run(context.Background(), baseCfg(), client, reg, supportCtx(),
+		[]llm.Message{llm.TextMessage(llm.RoleUser, "where is it?")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Attachments) != 1 || res.Attachments[0].Name != "a.png" {
+		t.Fatalf("attachments = %+v", res.Attachments)
+	}
+	if len(res.Effects) != 0 {
+		t.Fatalf("an attachment must not count as a side effect: %+v", res.Effects)
+	}
+}

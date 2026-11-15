@@ -30,9 +30,10 @@ import (
 // role:"tool" message. Content is already boundary-tag-wrapped and (in support mode)
 // redacted.
 type DispatchResult struct {
-	Content string
-	IsError bool
-	Effect  *ToolEffect
+	Content    string
+	IsError    bool
+	Effect     *ToolEffect
+	Attachment *Attachment
 }
 
 // Registry holds the tools and is the single execution choke point.
@@ -120,5 +121,5 @@ func (r *Registry) Dispatch(ctx context.Context, tctx *ToolCtx, name string, arg
 	if tctx.Mode == access.ModeSupport && tctx.Redactor != nil {
 		content = tctx.Redactor.Redact(content)
 	}
-	return DispatchResult{Content: sanitize.WrapToolOutput(cn, content), Effect: out.Effect}
+	return DispatchResult{Content: sanitize.WrapToolOutput(cn, content), Effect: out.Effect, Attachment: out.Attachment}
 }

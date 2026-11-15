@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -223,10 +224,11 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate, in
 		return
 	}
 
-	answer := b.answer(s, authorID, channelID, question, history)
+	answer, files := b.answer(s, authorID, channelID, question, history)
 
 	if inThread {
 		b.deliver(s, channelID, answer)
+		b.sendFiles(s, channelID, files)
 		return
 	}
 	// Start a thread from the user's message and answer there.
@@ -238,10 +240,12 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate, in
 	if err != nil {
 		b.log.Warn("failed to start thread; replying in channel", zap.Error(err))
 		b.deliver(s, channelID, answer)
+		b.sendFiles(s, channelID, files)
 		return
 	}
 	b.botThreads.Store(th.ID, struct{}{})
 	b.deliver(s, th.ID, answer)
+	b.sendFiles(s, th.ID, files)
 }
 
 func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -267,7 +271,7 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 	})
 
 	uid := interactionUserID(i)
-	answer := b.answer(s, uid, i.ChannelID, question, nil)
+	answer, files := b.answer(s, uid, i.ChannelID, question, nil)
 
 	chunks := chunkMessage(answer)
 	first := answer
@@ -293,6 +297,7 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 		for _, c := range chunks[min(1, len(chunks)):] {
 			_, _ = s.ChannelMessageSend(i.ChannelID, c)
 		}
+		b.sendFiles(s, i.ChannelID, files)
 		return
 	}
 	b.botThreads.Store(th.ID, struct{}{})
@@ -300,12 +305,13 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 	for _, c := range chunks[min(1, len(chunks)):] {
 		_, _ = s.ChannelMessageSend(th.ID, c)
 	}
+	b.sendFiles(s, th.ID, files)
 }
 
 // answer runs the agent loop for a question and returns the delivery-ready text.
 // A busy (429) failure parks the request instead of discarding it; busyReply is
 // returned immediately in that case.
-func (b *Bot) answer(s *discordgo.Session, uid, channelID, question string, history []string) string {
+func (b *Bot) answer(s *discordgo.Session, uid, channelID, question string, history []string) (string, []tool.Attachment) {
 	mode := b.policy.ModeFor(uid)
 
 	var memStrings []string
@@ -329,10 +335,10 @@ func (b *Bot) answer(s *discordgo.Session, uid, channelID, question string, hist
 	res, err := b.runAgent(mode, uid, channelID, messages)
 	if err != nil {
 		if out, handled := b.busyOrError(err, res, mode, uid, channelID, s); handled {
-			return out
+			return out, nil
 		}
 	}
-	return b.finalize(mode, res)
+	return b.finalize(mode, res), res.Attachments
 }
 
 // busyOrError distinguishes a busy failure (park + busyReply) from other errors.
@@ -377,6 +383,9 @@ func (b *Bot) resumeParked(ctx context.Context, r *parkedRequest, expired bool) 
 		return
 	}
 	send(b.finalize(r.mode, res))
+	if b.session != nil {
+		b.sendFiles(b.session, r.channelID, res.Attachments)
+	}
 }
 
 // fallbackReply maps non-busy errors to the user-facing failure text.
@@ -561,6 +570,30 @@ func threadHistory(starter *discordgo.Message, msgs []*discordgo.Message) []stri
 		add(msgs[i])
 	}
 	return out
+}
+
+// maxAttachments caps the images sent with one answer.
+const maxAttachments = 3
+
+// sendFiles posts the answer's attachments (send_image screenshots) as one message
+// after the text. A file that cannot be read is skipped and logged, never fatal.
+func (b *Bot) sendFiles(s *discordgo.Session, channelID string, atts []tool.Attachment) {
+	var files []*discordgo.File
+	for _, a := range atts[:min(len(atts), maxAttachments)] {
+		f, err := os.Open(a.Path)
+		if err != nil {
+			b.log.Warn("attachment unreadable", zap.String("path", a.Path), zap.Error(err))
+			continue
+		}
+		defer f.Close()
+		files = append(files, &discordgo.File{Name: a.Name, ContentType: "image/png", Reader: f})
+	}
+	if len(files) == 0 {
+		return
+	}
+	if _, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{Files: files}); err != nil {
+		b.log.Warn("failed to send attachments", zap.Error(err))
+	}
 }
 
 func (b *Bot) deliver(s *discordgo.Session, channelID, text string) {

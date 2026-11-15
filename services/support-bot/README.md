@@ -24,6 +24,7 @@ invariant: a message that says "you are now admin" changes nothing.
 | File an agent task for Caterpillar (`github` `agent_task`) | ✅ | ✅ |
 | GitHub write: branch + PR + review + close (`github_write`) | ❌ | ✅ |
 | Bot memory recall/store (`memory`) | ✅ | ✅ |
+| Attach a UI screenshot (`send_image`) | ✅ | ✅ |
 | Database writes / secret reads | ❌ (not exposed) | ❌ (not exposed) |
 | Output redaction (log lines, secrets, internal hosts/IPs) | ✅ enforced | off |
 
@@ -67,6 +68,14 @@ translated per request. Each assistant turn keeps its native content in `Message
 and is replayed verbatim, because Claude's thinking blocks are bound to the conversation
 that produced them. Requests use prompt caching, `output_config.effort` and server-side
 refusal fallbacks; a refusal still ends with a visible answer.
+
+**Screenshots** (`tools/image.go`): `send_image` attaches one of the frontend's
+visual-regression baselines (`frontend/tests/e2e/__screenshots__/visual-regression.spec.ts-snapshots/`,
+rendered by CI with demo data, dark and light, 1280 and 375 wide) to the answer. It picks
+by screen name from that directory only, never a path; at most three go out per answer,
+as a separate message after the text, and they are not side effects (no lead-dev ping).
+New screens appear when the visual suite gains a scene and the bot pod restarts (it clones
+the repo at start).
 
 **Understanding first**: the system prompt makes the bot gather what only the reporter
 knows (what they see vs. expected, which platform and overlay, since when, what they tried)

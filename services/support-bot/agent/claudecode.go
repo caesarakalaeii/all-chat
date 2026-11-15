@@ -74,9 +74,10 @@ type ccSession struct {
 
 	// ponytail: one lock serialises a run's tool calls (the loop detector and effects
 	// are shared); per-call locking if parallel kubectl/grafana reads ever matter.
-	mu      sync.Mutex
-	det     *loopDetector
-	effects []tool.ToolEffect
+	mu          sync.Mutex
+	det         *loopDetector
+	effects     []tool.ToolEffect
+	attachments []tool.Attachment
 }
 
 // NewClaudeCode starts the MCP endpoint on 127.0.0.1 and prepares the CLI's HOME.
@@ -140,7 +141,7 @@ func (c *ClaudeCode) Run(ctx context.Context, tctx *tool.ToolCtx, messages []llm
 	runErr := cmd.Run()
 
 	sess.mu.Lock()
-	res := Result{Effects: sess.effects, Messages: messages, Stop: StopError}
+	res := Result{Effects: sess.effects, Attachments: sess.attachments, Messages: messages, Stop: StopError}
 	sess.mu.Unlock()
 	if ctx.Err() != nil {
 		res.Stop = StopCancelled
@@ -338,6 +339,9 @@ func (c *ClaudeCode) call(ctx context.Context, sess *ccSession, name, args strin
 	dr := c.reg.Dispatch(ctx, sess.tctx, name, json.RawMessage(args))
 	if dr.Effect != nil {
 		sess.effects = append(sess.effects, *dr.Effect)
+	}
+	if dr.Attachment != nil {
+		sess.attachments = append(sess.attachments, *dr.Attachment)
 	}
 	return text(dr.Content, dr.IsError)
 }
