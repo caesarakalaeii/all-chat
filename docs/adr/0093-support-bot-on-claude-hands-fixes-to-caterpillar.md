@@ -78,7 +78,9 @@ and server-side refusal fallbacks (`fallbacks: "default"`). Defaults: `claude-op
 `create_issue`. An agent task is refused in code unless its body carries a fenced
 `agent` block with `acceptance` commands (Caterpillar rejects anything else), and is
 labelled `agent` + `bot-proposed` instead of `needs-review`. The system prompt tells both
-access modes when to file one (a confirmed defect or a small, scoped improvement a code
+access modes to understand a report first (ask the reporter up to three clarifying
+questions rather than guess), to file an agent task only once the evidence confirms the
+defect and the reporter has confirmed the bot's summary in the thread, and when to file one (a confirmed defect or a small, scoped improvement a code
 or manifest change fixes), to search for an existing issue first, and to follow the
 template. Questions, user error, platform-side outages and anything needing secrets,
 database writes or a product decision stay answers or plain issues.
