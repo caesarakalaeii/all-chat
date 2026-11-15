@@ -566,7 +566,9 @@ describe('privacy policy copy', () => {
     expect(t('legal.privacy.processorsAi')).toBe(
       '{label} – messages addressed to the support bot in our Discord server (Section\u00A02.8)'
     )
-    expect(t('legal.privacy.aiLabel')).toBe('Anthropic (US), or as a fallback an AI inference provider (Germany)')
+    expect(t('legal.privacy.aiLabel')).toBe(
+      'Anthropic (US), or as a fallback an AI inference provider (Germany)'
+    )
     expect(t('legal.privacy.processorsDiscord')).toBe(
       '{label} – our monitoring alerts are posted to our own Discord server; an alert about a failing source can name its YouTube channel ID or TikTok username'
     )
