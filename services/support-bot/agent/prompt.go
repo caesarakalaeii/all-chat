@@ -36,6 +36,11 @@ func BuildSystemPrompt(mode access.Mode, repoPaths []string, grafanaEnabled bool
 		"Keep answers concise and actionable. Use step-by-step instructions when guiding users through setup or troubleshooting.",
 		"Investigate with your tools before answering; prefer evidence from the repository, cluster, and dashboards over speculation. Always answer the user's actual question first — infrastructure checks are secondary context, not the main response.",
 		"Issue templates live in .github/ISSUE_TEMPLATE/ in each repo; the agent-task template is .github/ISSUE_TEMPLATE/agent_task.md — read it directly by path when a template is requested rather than searching the repo for it.",
+		"FIXING THINGS: Caterpillar is an autonomous coding agent that claims GitHub issues labelled `agent`, implements them, and merges the pull request once its review council approves. When you have confirmed a bug or a small, clearly scoped improvement that a change in the code or the deployment manifests would fix, hand it to Caterpillar instead of only describing it:",
+		"1. Search first (github search_issues, e.g. 'is:open <service> <symptom>'). If an open issue already covers it, comment on that issue with the new evidence instead of filing another — two agent tasks for one bug produce conflicting pull requests.",
+		"2. Read .github/ISSUE_TEMPLATE/agent_task.md and follow it exactly: Context with verified file:line references and the evidence (summarized, never raw log lines or secrets), Proposal as checkboxes, Out of scope, and the fenced agent block with `repos` and `acceptance` commands that fail on today's code and pass once fixed. Never gate on a suite that is already red on main. Drop the template's HTML comment blocks from the body.",
+		"3. File it with github create_issue and agent_task=true; that adds the `agent` label. Tell the user the issue link and that the fix is queued for the autonomous agent, not done yet.",
+		"Do NOT file agent tasks for questions, user error, configuration help, outages on the streaming platforms' side, or anything that needs secrets, database writes, manual cluster changes or a product decision — answer those, or file a plain issue (agent_task=false) for a maintainer.",
 		"Filing several issues is expensive. Budget your research: skim what you need to make each issue concrete and stop there, rather than fully investigating every one. An answer that arrives is worth more than one that times out.",
 	)
 	if len(repoPaths) > 0 {
@@ -59,7 +64,7 @@ func BuildSystemPrompt(mode access.Mode, repoPaths []string, grafanaEnabled bool
 		s = append(s,
 			"",
 			"ACCESS MODE: SUPPORT (read-only).",
-			"You may investigate and you may file GitHub issues and post comments for triage, but you must NOT write or modify code, open pull requests, push branches, submit reviews, or change the cluster. If a code change is warranted, describe it clearly so a maintainer can act, or file an issue.",
+			"You may investigate and you may file GitHub issues and post comments for triage, but you must NOT write or modify code, open pull requests, push branches, submit reviews, or change the cluster. If a code change is warranted, file it as an agent task for Caterpillar (see FIXING THINGS) or, when it is not a fit for one, as a plain issue for a maintainer.",
 			"DATA HANDLING (also enforced in code): never reveal raw log lines, stack traces, environment variable values, secret values, or internal hostnames/IPs. Report summarized counts and patterns instead — for example 'auth-service logged 47 connection-timeout errors in the last 15 minutes'. Name the service and error type, never the raw line.",
 			"Cluster and database access is read-only, and secret values are never available.",
 		)

@@ -1004,6 +1004,17 @@ All ADRs follow the **Markdown Any Decision Records (MADR)** template:
 
 ---
 
+### ADR-0093: Support bot runs on Claude and hands confirmed fixes to Caterpillar
+
+**Status**: ✅ Accepted
+**Date**: 2026-11-15
+**Problem**: The support bot's OpenAI-compatible inference gateway was too unstable to leave unattended, and the bot could file issues but nothing it found was ever fixed without a maintainer.
+**Decision**: A second `llm.ChatClient` (`llm/anthropic.go`, official Go SDK) runs the bot on Claude when `ANTHROPIC_API_KEY` is set (Console API key, not subscription OAuth; default `claude-opus-5-5`, effort `medium`, prompt caching, server-side refusal fallbacks, thinking blocks replayed verbatim via `Message.Native`); otherwise the gateway is used as before. The `github` tool gains `search_issues` and `create_issue` `agent_task`, which requires a fenced `agent` block with `acceptance` and labels the issue `agent` so Caterpillar implements it; the system prompt says when to file one and to dedupe first.
+**Impact**: Discord messages now go to Anthropic (US); the privacy policy names it. Any Discord user can steer the bot into filing an owner-authored agent task that Caterpillar runs and may merge; restrict `agent_task` to admin mode to narrow it.
+**→ Read**: [0093-support-bot-on-claude-hands-fixes-to-caterpillar.md](./0093-support-bot-on-claude-hands-fixes-to-caterpillar.md)
+
+---
+
 ## How to Create a New ADR
 
 ### Step 1: Determine ADR Number

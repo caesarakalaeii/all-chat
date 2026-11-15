@@ -103,6 +103,13 @@ spec:
                   name: allchat-secrets
                   key: SUPPORT_BOT_LLM_API_KEY
                   optional: true
+            # Claude (ADR-0093). When set, the bot runs on Claude and LOCAL_LLM_* is ignored.
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: SUPPORT_BOT_ANTHROPIC_API_KEY
+                  optional: true
             # --- GitHub ---
             - name: GITHUB_TOKEN
               valueFrom:

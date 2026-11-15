@@ -49,6 +49,11 @@ type Message struct {
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 	Name       string     `json:"name,omitempty"`
+
+	// Native is the provider's own form of an assistant turn, never serialized.
+	// The Anthropic client stores the turn here and replays it verbatim, because
+	// Claude's thinking blocks must come back unchanged (llm/anthropic.go).
+	Native any `json:"-"`
 }
 
 // ToolCall is an assistant -> tool request.

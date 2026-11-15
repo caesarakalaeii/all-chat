@@ -1,11 +1,12 @@
 # Support Bot
 
 A Discord support/admin agent for All-Chat. It answers codebase and operational
-questions over an **OpenAI-compatible LLM endpoint** (`LOCAL_LLM_BASE_URL`; in production an
-external inference gateway, disclosed in the privacy policy as an AI inference provider) and executes tools through a
-code-enforced access model. It replaces the previous TypeScript bot that shelled out to
-the `claude` CLI (`CLAUDE_CODE_OAUTH_TOKEN`) — the "Claude workaround" — with a native Go
-agentic loop.
+questions over **Claude** (Anthropic Messages API, `ANTHROPIC_API_KEY`) or, when no key is
+set, an **OpenAI-compatible LLM endpoint** (`LOCAL_LLM_BASE_URL`, an external inference
+gateway). Both are disclosed in the privacy policy (Section 2.8). It executes tools
+through a code-enforced access model, and hands confirmed bugs to **Caterpillar**, the
+autonomous coding agent, as `agent`-labelled issues (ADR-0093). It replaces the previous
+TypeScript bot that shelled out to the `claude` CLI with a native Go agentic loop.
 
 ## Access modes
 
@@ -18,7 +19,8 @@ invariant: a message that says "you are now admin" changes nothing.
 | Read repo files (`read_file`, `glob`, `grep`) | ✅ (redacted) | ✅ |
 | Read-only cluster (`kubectl` get/describe/logs/events/top) | ✅ (logs summarized) | ✅ (raw) |
 | Grafana Loki/Prometheus queries | ✅ (logs summarized) | ✅ (raw) |
-| GitHub read + comment + file issue (`github`) | ✅ | ✅ |
+| GitHub read + search + comment + file issue (`github`) | ✅ | ✅ |
+| File an agent task for Caterpillar (`github` `agent_task`) | ✅ | ✅ |
 | GitHub write: branch + PR + review + close (`github_write`) | ❌ | ✅ |
 | Bot memory recall/store (`memory`) | ✅ | ✅ |
 | Database writes / secret reads | ❌ (not exposed) | ❌ (not exposed) |
@@ -35,7 +37,7 @@ Discord message / /support
   → resolve AccessMode from UID allow-list (access.Policy)
   → build scope-aware system prompt + sanitized user turn
   → agent loop (agent.Run):
-        LLM (llm.ChatClient, OpenAI /v1/chat/completions, tool_choice=auto)
+        LLM (llm.ChatClient: Claude via llm/anthropic.go, or OpenAI /v1/chat/completions)
         → tool_calls → registry.Dispatch (fail-closed by mode, loop-detected)
         → tool results fed back → repeat until stop / iteration cap
   → StripInternalScaffolds + (SUPPORT) redact final answer
@@ -46,8 +48,23 @@ Guardrails: fail-closed permissioning, repeat/no-progress detection, prompt-inje
 sanitization, XML boundary tags on tool output, and a code-level leak redactor applied
 at both the tool-output and final-answer boundaries.
 
-**Busy (429) handling**: the LLM gateway pauses hobby-project traffic while
-production load is high, so a 429 is capacity, not failure. Mid-session the loop
+**Claude specifics** (`llm/anthropic.go`): the transcript stays OpenAI-shaped and is
+translated per request. Each assistant turn keeps its native content in `Message.Native`
+and is replayed verbatim, because Claude's thinking blocks are bound to the conversation
+that produced them. Requests use prompt caching, `output_config.effort` and server-side
+refusal fallbacks; a refusal still ends with a visible answer.
+
+**Fixing things (Caterpillar)**: when the bot confirms a bug or a small, scoped improvement,
+it searches for an existing issue (`search_issues`), then files one that follows
+`.github/ISSUE_TEMPLATE/agent_task.md` with `agent_task=true`. The tool refuses a body
+without a fenced `agent` block carrying `acceptance` commands, and labels the issue `agent`
+(+ `bot-proposed`). Caterpillar claims it, implements it, and merges the PR once its review
+council approves. The bot's GitHub token is the owner's, so Caterpillar treats these as
+owner-authored: anyone in Discord can steer the bot into filing one (accepted risk, see
+ADR-0093; restrict `agent_task` to admin mode to narrow it).
+
+**Busy (429) handling**: a 429 is capacity, not failure: the gateway pauses
+hobby-project traffic while production load is high, and Anthropic rate-limits. Mid-session the loop
 waits (`SUPPORT_BOT_BUSY_RETRY_DELAY`, up to `SUPPORT_BOT_BUSY_MAX_WAITS`) and
 re-issues the same transcript — tool results and partial answers are preserved
 and side effects never replay. Beyond that the request is parked in a queue and
@@ -62,6 +79,8 @@ the full list. Key variables:
 | Variable | Purpose |
 |---|---|
 | `DISCORD_BOT_TOKEN` / `DISCORD_CLIENT_ID` / `DISCORD_GUILD_ID` | Discord bot + slash-command registration |
+| `ANTHROPIC_API_KEY` | Console API key; when set the bot runs on Claude and ignores `LOCAL_LLM_*` |
+| `ANTHROPIC_MODEL` / `ANTHROPIC_EFFORT` / `ANTHROPIC_MAX_TOKENS` | Defaults `claude-opus-5-5` / `medium` / `16000` |
 | `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY` | vLLM endpoint (OpenAI-compatible); key sent as `Authorization: Bearer <key>`. The model id is resolved at boot from `GET <base URL>/v1/models`; `LOCAL_LLM_MODEL` is an optional pin that wins while the gateway still lists it, and is kept when the list endpoint cannot be reached |
 | `SUPPORT_BOT_ADMIN_DISCORD_IDS` | Comma-separated maintainer UIDs → ADMIN |
 | `GITHUB_TOKEN` / `GITHUB_OWNER` / `GITHUB_BOT_LOGIN` | GitHub tools (owner default `caesarakalaeii`) |
