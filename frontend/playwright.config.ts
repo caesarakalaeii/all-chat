@@ -87,6 +87,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:3000',
+    // next.config.js turns the dev indicator off for test runs (screenshots).
+    env: { PLAYWRIGHT_DEV_SERVER: '1' },
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
   },
