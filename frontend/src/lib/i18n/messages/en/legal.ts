@@ -86,7 +86,7 @@ export const legal = {
   // heading, paragraph, list item and legal basis, and nothing reworded.
   privacy: {
     title: 'Privacy Policy (Datenschutzerklärung)',
-    lastUpdated: 'November 4, 2026',
+    lastUpdated: 'November 15, 2026',
     // Every DSGVO article reference carries a U+00A0 from an &nbsp; entity.
     // It is part of the rendered text, so it stays escaped here to be
     // visible to a reviewer.
@@ -265,7 +265,7 @@ export const legal = {
     supportEmailBody:
       'If you email us, we use your message and email address to answer you. Our support mailbox is hosted by Google (Gmail).',
     supportDiscordBody:
-      "In our Discord server, the support bot reads messages that mention it, that are posted in its threads or that use its /support command, together with the usernames, the recent messages of the thread and any message you reply to (with its author's username) that it needs for context, and answers using a language model run by an external AI inference provider in Germany acting as our processor. To answer, it can look up our service logs, metrics and system status and pass redacted summaries of them to the model; these can concern your account or overlay. The bot also checks every message posted in the server for spam: if an account posts the same message in three or more channels within ten minutes, the bot bans it and deletes about a day of its messages. The bot keeps short notes to remember recurring problems and can turn a support request into a public issue on our GitHub repository, so do not post anything in a support thread that you do not want to be public. Discord processes your messages under Discord's own privacy policy.",
+      "In our Discord server, the support bot reads messages that mention it, that are posted in its threads or that use its /support command, together with the usernames, the recent messages of the thread and any message you reply to (with its author's username) that it needs for context, and answers using Claude, a language model from Anthropic (US), acting as our processor; if Anthropic is unavailable to us, it uses a language model run by an external AI inference provider in Germany instead. To answer, it can look up our service logs, metrics and system status and pass redacted summaries of them to the model; these can concern your account or overlay. The bot also checks every message posted in the server for spam: if an account posts the same message in three or more channels within ten minutes, the bot bans it and deletes about a day of its messages. The bot keeps short notes to remember recurring problems and can turn a support request into a public issue on our GitHub repository, which our automated coding agent, also using Anthropic's models, may pick up to fix the problem, so do not post anything in a support thread that you do not want to be public. Discord processes your messages under Discord's own privacy policy.",
     // 3
     useIntro: 'We use the data we store to:',
     useAuthenticate: 'Authenticate against the platforms you authorize',
@@ -361,7 +361,7 @@ export const legal = {
     googleLabel: 'Google',
     processorsAi:
       '{label} – messages addressed to the support bot in our Discord server (Section\u00A02.8)',
-    aiLabel: 'AI inference provider (Germany)',
+    aiLabel: 'Anthropic (US), or as a fallback an AI inference provider (Germany)',
     processorsDiscord:
       '{label} – our monitoring alerts are posted to our own Discord server; an alert about a failing source can name its YouTube channel ID or TikTok username',
     discordLabel: 'Discord (US)',
@@ -507,7 +507,7 @@ export const legal = {
     childrenBody:
       'All-Chat is not intended for children under 16 (the DSGVO minimum age for consent to data processing in Germany). If we discover data belonging to a minor we will delete it from our live systems immediately; copies in backups expire within 60 days (Section\u00A06).',
     transfersBody:
-      'All-Chat itself is hosted on servers located in Germany and Finland, both within the EU (see Section\u00A04.1). Some recipients are outside the EU: Cloudflare (US), Backblaze (US; our backup copy is stored in its Amsterdam data centre), Twitch Interactive, Inc. (US, an Amazon company), Google, YouTube and Google Cloud (US), TikTok (on servers TikTok chooses, which can be outside the EU), Kick (Australia) and Pusher (UK), whose realtime service Kick uses for chat in one of its two modes, Discord (US), Meta (US, beta), GoodGame (Russia, beta), Patreon (US), GitHub (US), ElevenLabs (US, only with your own API key), and the emote, GIF and pronoun services named in Section\u00A05. Picarto (beta) and Altstream (early access) do not state where they are based, so we treat them as recipients outside the EU. An Owncast server (beta) is wherever its operator runs it.',
+      'All-Chat itself is hosted on servers located in Germany and Finland, both within the EU (see Section\u00A04.1). Some recipients are outside the EU: Cloudflare (US), Backblaze (US; our backup copy is stored in its Amsterdam data centre), Twitch Interactive, Inc. (US, an Amazon company), Google, YouTube and Google Cloud (US), TikTok (on servers TikTok chooses, which can be outside the EU), Kick (Australia) and Pusher (UK), whose realtime service Kick uses for chat in one of its two modes, Discord (US), Meta (US, beta), GoodGame (Russia, beta), Patreon (US), GitHub (US), Anthropic (US), ElevenLabs (US, only with your own API key), and the emote, GIF and pronoun services named in Section\u00A05. Picarto (beta) and Altstream (early access) do not state where they are based, so we treat them as recipients outside the EU. An Owncast server (beta) is wherever its operator runs it.',
     transfersLegalBasis:
       "Where a provider is certified under the EU–US Data Privacy Framework, the transfer rests on the EU Commission's adequacy decision (Art.\u00A045 DSGVO). Otherwise, the transfer is necessary to perform the service you requested (Art.\u00A049(1)(b) DSGVO). Fonts are self-hosted on our infrastructure and therefore do not involve any third-country transfer when loaded.",
     updatesBody:
