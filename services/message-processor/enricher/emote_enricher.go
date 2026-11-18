@@ -299,8 +299,6 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 	if useCache {
 		var entry cache.Entry
 		var err error
-		// Tracked apart from entry.Stale because the two halves need different
-		// refreshes: only a refresh with no user id rewrites the channel key.
 		var channelHalfStale bool
 		if userID != "" {
 			entry, channelHalfStale, err = e.personalPlusChannel(ctx, channel, userID)
@@ -517,11 +515,7 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 				// user-aware request, into which emote-service merges this chatter's
 				// personal 7TV set (FetchCombinedEmotes), and storing it under the key
 				// everyone reads would serve one chatter's emotes to the whole channel
-				// for up to 18h. The extra fetch is paid once per cold channel,
-				// against an emote service that has just cached this channel's
-				// providers. Skipping the seed instead left such a channel caching
-				// nothing at all — every message missing both keys and paying a 3s
-				// fetch, which is worse than the memory it saved.
+				// for up to 18h.
 				channelEmotes, seedErr := e.seedChannelEntry(ctx, channel, platform, twitchChannel)
 				if seedErr != nil {
 					// Without a channel entry to subtract, the split cannot tell this
