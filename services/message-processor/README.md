@@ -320,6 +320,9 @@ normalizers := map[string]normalizer.Normalizer{
    - Call Emote Service to resolve emote URLs
    - Support 7TV, BTTV, FFZ providers
    - Cache emote data (1-hour TTL, 95%+ hit rate)
+   - Cache key is `mp:emotes:v3:{channel}`, with `:{user_id}` appended only for
+     chatters that can have a resolvable 7TV personal set — Twitch or Kick, and
+     not synthetic (see `hasPersonalEmotes` in `enricher/emote_enricher.go`)
 
 4. **Viewer Identity Enrichment** (`enricher/viewer_badge_enricher.go`):
    - Resolve All-Chat platform identity (name_color, avatar frame/flair, admin/premium badges)

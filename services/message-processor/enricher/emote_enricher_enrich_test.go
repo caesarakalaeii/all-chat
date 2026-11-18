@@ -34,12 +34,17 @@ type mockEmoteServiceClient struct {
 	lastChannel string
 	lastUserID  string
 	calls       int
+	// plainCalls counts the GetEmotesForChannel route, which carries no platform
+	// argument, so the two client methods can be told apart.
+	lastPlatform string
+	plainCalls   int
 }
 
 func (m *mockEmoteServiceClient) GetEmotesForChannel(ctx context.Context, channelID string) ([]EmoteServiceEmote, error) {
 	m.mu.Lock()
 	m.lastChannel = channelID
 	m.calls++
+	m.plainCalls++
 	m.mu.Unlock()
 	if m.err != nil {
 		return nil, m.err
@@ -51,6 +56,7 @@ func (m *mockEmoteServiceClient) GetEmotesForChannelWithUser(ctx context.Context
 	m.mu.Lock()
 	m.lastChannel = channel
 	m.lastUserID = userID
+	m.lastPlatform = platform
 	m.calls++
 	m.mu.Unlock()
 	if m.err != nil {

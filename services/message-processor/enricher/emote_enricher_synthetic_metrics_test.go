@@ -224,23 +224,92 @@ func TestSyntheticMessagesUseChannelCacheKey(t *testing.T) {
 	}
 }
 
-// Real users can carry personal (7TV) emotes, so they keep per-user keys.
+// Twitch and Kick chatters can carry personal (7TV) emotes, so they keep
+// per-user keys.
 func TestRealMessageUsesPerUserCacheKey(t *testing.T) {
-	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
-	client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
-	e := NewEnricher(client, store, zap.NewNop())
+	for _, platform := range []string{"twitch", "kick"} {
+		store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
+		e := NewEnricher(client, store, zap.NewNop())
 
-	msg := &models.UnifiedChatMessage{
-		Platform:  "twitch",
-		ChannelID: "caesarlp",
-		User:      models.UserInfo{ID: "real-user"},
-		Message:   models.MessageInfo{Text: "KEKW"},
-		Metadata:  map[string]interface{}{},
+		msg := &models.UnifiedChatMessage{
+			Platform:  platform,
+			ChannelID: "caesarlp",
+			User:      models.UserInfo{ID: "real-user"},
+			Message:   models.MessageInfo{Text: "KEKW"},
+			Metadata:  map[string]interface{}{},
+		}
+		if err := e.Enrich(context.Background(), msg); err != nil {
+			t.Fatalf("%s: Enrich returned error: %v", platform, err)
+		}
+		if store.userCalls != 2 || client.lastUserID != "real-user" {
+			t.Errorf("%s: userCalls=%d lastUserID=%q, want 2 and %q", platform, store.userCalls, client.lastUserID, "real-user")
+		}
 	}
-	if err := e.Enrich(context.Background(), msg); err != nil {
-		t.Fatalf("Enrich returned error: %v", err)
+}
+
+// 7TV cannot resolve a TikTok or YouTube chatter, so those share the channel
+// key — see hasPersonalEmotes. Keyed per user, each stored a redundant copy of
+// the channel set and filled Redis (AllChatRedisMemoryNearLimit, 2026-11-18).
+func TestUnresolvableChatterSharesChannelCacheKey(t *testing.T) {
+	for _, platform := range []string{"tiktok", "youtube"} {
+		store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
+		e := NewEnricher(client, store, zap.NewNop())
+
+		msg := &models.UnifiedChatMessage{
+			Platform:  platform,
+			ChannelID: "bardeado_2001",
+			User:      models.UserInfo{ID: "_delci0"},
+			Message:   models.MessageInfo{Text: "KEKW"},
+			Metadata:  map[string]interface{}{},
+		}
+		if err := e.Enrich(context.Background(), msg); err != nil {
+			t.Fatalf("%s: Enrich returned error: %v", platform, err)
+		}
+
+		if store.userCalls != 0 {
+			t.Errorf("%s: chatter used %d per-user cache calls, want 0", platform, store.userCalls)
+		}
+		if store.setCalls != 1 {
+			t.Errorf("%s: channel cache must still be filled, got %d sets", platform, store.setCalls)
+		}
+		if client.lastUserID != "" {
+			t.Errorf("%s: sent user %q to the emote service, want none", platform, client.lastUserID)
+		}
+		if len(msg.Message.Emotes) != 1 {
+			t.Errorf("%s: message must still enrich, got %#v", platform, msg.Message.Emotes)
+		}
 	}
-	if store.userCalls != 2 || client.lastUserID != "real-user" {
-		t.Fatalf("real message: userCalls=%d lastUserID=%q, want 2 and %q", store.userCalls, client.lastUserID, "real-user")
+}
+
+// Dropping the chatter id for the cache key must not also drop the platform
+// from the outbound request: GetEmotesForChannel carries no platform argument,
+// so routing such a chatter down it degrades emote resolution silently rather
+// than failing (see fetchFromService). Only the platforms that lose their user
+// id can reach that route; the ones that keep it are already user-aware.
+func TestUnresolvableChatterStillSendsPlatformToEmoteService(t *testing.T) {
+	for _, platform := range []string{"tiktok", "youtube"} {
+		store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
+		e := NewEnricher(client, store, zap.NewNop())
+
+		msg := &models.UnifiedChatMessage{
+			Platform:  platform,
+			ChannelID: "bardeado_2001",
+			User:      models.UserInfo{ID: "_delci0"},
+			Message:   models.MessageInfo{Text: "KEKW"},
+			Metadata:  map[string]interface{}{},
+		}
+		if err := e.Enrich(context.Background(), msg); err != nil {
+			t.Fatalf("%s: Enrich returned error: %v", platform, err)
+		}
+
+		if client.plainCalls != 0 {
+			t.Errorf("%s: used the platform-less channel route %d times, want 0", platform, client.plainCalls)
+		}
+		if client.lastPlatform != platform {
+			t.Errorf("%s: emote service got platform %q, want %q", platform, client.lastPlatform, platform)
+		}
 	}
 }
