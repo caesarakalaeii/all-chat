@@ -148,6 +148,39 @@ export function parkBlocksConnect(parkRemainingMs: number): boolean {
   return parkRemainingMs > 0;
 }
 
+/** State connectToStream consults before it dials. */
+export interface ConnectPreconditions {
+  /** Time left on the room's park, from BackoffManager.parkRemainingMs. */
+  parkRemainingMs: number;
+  /** The pod's active + connecting WebSocket connections. */
+  liveConnectionCount: number;
+  /** TIKTOK_MAX_STREAMS_PER_POD. */
+  ceiling: number;
+}
+
+/**
+ * Whether connectToStream may dial, and when not, which condition stopped it.
+ *
+ * 'pod-full' and 'parked' are both deferrals and the caller treats them
+ * identically — release the leadership lease, re-park the room in the live
+ * poller, do not dial. The lease must go first: a leased-but-unconnected room
+ * is deaf everywhere, because no other pod may claim it (the 2026-09-14
+ * incident). They are distinguished only so the caller can log the condition
+ * without re-deriving it.
+ *
+ * Both reasons live here rather than inline at the call site so the decision
+ * is testable: index.ts cannot be constructed in a unit test, so a condition
+ * left there is one nothing fails on when it is deleted.
+ */
+export type ConnectDisposition = 'dial' | 'pod-full' | 'parked';
+
+export function connectDisposition(preconditions: ConnectPreconditions): ConnectDisposition {
+  const { parkRemainingMs, liveConnectionCount, ceiling } = preconditions;
+  if (connectionCeilingReached(liveConnectionCount, ceiling)) return 'pod-full';
+  if (parkBlocksConnect(parkRemainingMs)) return 'parked';
+  return 'dial';
+}
+
 /** Time until the signer's window slides, 0 when the error does not say. */
 export function budgetRefusalRetryAfterMs(error: unknown): number {
   const cause = unwrapConnectorError(error);

@@ -283,7 +283,7 @@ describe('connectDisposition', () => {
   });
 
   it('defers a room with time left on its park', () => {
-    expect(connectDisposition({ ...clear, parkRemainingMs: 47 * 60_000 })).toBe('defer');
+    expect(connectDisposition({ ...clear, parkRemainingMs: 47 * 60_000 })).toBe('parked');
   });
 
   it('dials a room whose park has elapsed', () => {
@@ -291,7 +291,7 @@ describe('connectDisposition', () => {
   });
 
   it('defers a room when the pod is at its connection ceiling', () => {
-    expect(connectDisposition({ ...clear, liveConnectionCount: 20 })).toBe('defer');
+    expect(connectDisposition({ ...clear, liveConnectionCount: 20 })).toBe('pod-full');
   });
 
   it('defers a parked room even when the pod has room to connect', () => {
@@ -301,6 +301,17 @@ describe('connectDisposition', () => {
       ...clear,
       parkRemainingMs: 60_000,
       liveConnectionCount: 0,
-    })).toBe('defer');
+    })).toBe('parked');
+  });
+
+  it('reports the pod being full ahead of the park', () => {
+    // Only decides which log line the operator gets; both defer. A full pod
+    // is the condition that strands other rooms too, so it is the one worth
+    // naming when both hold.
+    expect(connectDisposition({
+      parkRemainingMs: 60_000,
+      liveConnectionCount: 20,
+      ceiling: 20,
+    })).toBe('pod-full');
   });
 });
