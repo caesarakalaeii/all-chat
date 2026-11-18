@@ -18,6 +18,7 @@ package enricher
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -84,10 +85,172 @@ func (s *twoKeyCacheStore) SetWithUser(ctx context.Context, channel, userID stri
 
 func (s *twoKeyCacheStore) DeletePattern(ctx context.Context, pattern string) error { return nil }
 
+// failingChannelReadStore serves the channel entry but fails every read of it
+// with a transport error, the way a Redis blip does. The entry is still there;
+// only the read of it failed.
+type failingChannelReadStore struct {
+	*twoKeyCacheStore
+	readErr error
+}
+
+func (s *failingChannelReadStore) GetEntry(ctx context.Context, channel string) (cache.Entry, error) {
+	return cache.Entry{}, s.readErr
+}
+
+// TestChannelEntryIsNotReseededAfterATransientReadError pins which GetEntry
+// failures mean "no channel entry yet".
+//
+// Only ErrCacheMiss does. A transport or decode error says nothing about
+// whether the entry exists, and on a blip it does: overwriting it there
+// republishes a channel set from a user-aware response and resets the entry's
+// freshness window, on a channel that was already warm.
+func TestChannelEntryIsNotReseededAfterATransientReadError(t *testing.T) {
+	inner := newTwoKeyCacheStore()
+	inner.channel = []cache.CachedEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+	}
+	store := &failingChannelReadStore{
+		twoKeyCacheStore: inner,
+		readErr:          errors.New("dial tcp 10.0.0.1:6379: connect: connection refused"),
+	}
+	client := &userAwareEmoteClient{
+		channel: []EmoteServiceEmote{
+			{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+		},
+		personal: map[string][]EmoteServiceEmote{
+			"chatter-one": {{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"}},
+		},
+	}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	msg := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "caesarlp",
+		User:      models.UserInfo{ID: "chatter-one"},
+		Message:   models.MessageInfo{Text: "KEKW MyPersonalEmote"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	entry := inner.channelEntry()
+	if len(entry) != 1 || entry[0].Code != "KEKW" {
+		t.Fatalf("a failed channel read rewrote the channel entry to %#v; "+
+			"only ErrCacheMiss means the entry is absent", entry)
+	}
+}
+
 func (s *twoKeyCacheStore) channelEntry() []cache.CachedEmote {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.channel
+}
+
+// userAwareEmoteClient models the one way the real emote service differs
+// between its two routes: a request carrying a user id gets that chatter's
+// personal 7TV set merged into the response (FetchCombinedEmotes in
+// services/emote-service/clients/seventv.go), a request without one does not.
+//
+// mockEmoteServiceClient returns the same slice either way, so it cannot tell a
+// channel-only response apart from a user-aware one — which is the distinction
+// the channel key's contents depend on.
+type userAwareEmoteClient struct {
+	mu       sync.Mutex
+	channel  []EmoteServiceEmote
+	personal map[string][]EmoteServiceEmote
+	calls    int
+	userCall int
+}
+
+func (c *userAwareEmoteClient) GetEmotesForChannel(ctx context.Context, channel string) ([]EmoteServiceEmote, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	return c.channel, nil
+}
+
+func (c *userAwareEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string) ([]EmoteServiceEmote, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	if userID == "" {
+		return c.channel, nil
+	}
+	c.userCall++
+	merged := make([]EmoteServiceEmote, 0, len(c.channel)+len(c.personal[userID]))
+	merged = append(merged, c.channel...)
+	merged = append(merged, c.personal[userID]...)
+	return merged, nil
+}
+
+func (c *userAwareEmoteClient) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
+}
+
+// TestChannelSeedExcludesTheSeedingChattersOwnEmotes pins what may be written to
+// the SHARED channel key.
+//
+// The seed runs on a cold channel whose lookups all carry a user id, and the
+// response to such a lookup has that chatter's personal 7TV set merged in. Had
+// it been stored as-is, the first chatter to speak would publish their own
+// emotes as channel emotes to every other viewer for the channel entry's whole
+// lifetime (softTTL + stale grace, up to 18h).
+func TestChannelSeedExcludesTheSeedingChattersOwnEmotes(t *testing.T) {
+	store := newTwoKeyCacheStore()
+	client := &userAwareEmoteClient{
+		channel: []EmoteServiceEmote{
+			{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+		},
+		personal: map[string][]EmoteServiceEmote{
+			"chatter-one": {{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"}},
+		},
+	}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	first := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "caesarlp",
+		User:      models.UserInfo{ID: "chatter-one"},
+		Message:   models.MessageInfo{Text: "KEKW MyPersonalEmote"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), first); err != nil {
+		t.Fatalf("first Enrich returned error: %v", err)
+	}
+
+	for _, emote := range store.channelEntry() {
+		if emote.Code == "MyPersonalEmote" {
+			t.Fatalf("the channel entry carries the seeding chatter's personal emote %q; "+
+				"every other viewer of this channel would be served it as a channel emote", emote.Code)
+		}
+	}
+
+	// The seeding chatter must still see their own emote on the message that
+	// triggered the seed: it is served from the upstream response, not the cache.
+	if len(first.Message.Emotes) != 2 {
+		t.Fatalf("seeding chatter resolved %d emotes (%#v), want the channel's and their own",
+			len(first.Message.Emotes), first.Message.Emotes)
+	}
+
+	// A second chatter reads the channel entry the first one seeded.
+	second := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "caesarlp",
+		User:      models.UserInfo{ID: "chatter-two"},
+		Message:   models.MessageInfo{Text: "KEKW MyPersonalEmote"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), second); err != nil {
+		t.Fatalf("second Enrich returned error: %v", err)
+	}
+	for _, emote := range second.Message.Emotes {
+		if emote.Code == "MyPersonalEmote" {
+			t.Fatalf("chatter-two was served chatter-one's personal emote %q", emote.Code)
+		}
+	}
 }
 
 // TestTwitchOnlyChannelCachesAfterFirstMessage pins the cold-start path for a

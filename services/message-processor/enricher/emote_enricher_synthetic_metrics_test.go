@@ -478,12 +478,14 @@ func TestPerUserCacheHitMergesChannelEmotes(t *testing.T) {
 // TTLs. Serving the personal half alone would silently strip the channel's
 // emotes from the message, so a half hit must count as a miss and re-fetch.
 func TestPerUserCacheHitWithoutChannelEntryRefetches(t *testing.T) {
-	store := &mockEmoteCacheStore{
-		getErr: cache.ErrCacheMiss, // channel entry gone; GetEntryWithUser also misses
-		getData: []cache.CachedEmote{
-			{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"},
-		},
+	// twoKeyCacheStore, not mockEmoteCacheStore: the latter's getErr governs both
+	// reads, so it can only make BOTH halves miss, which is an ordinary double
+	// miss and not the case under test.
+	store := newTwoKeyCacheStore()
+	store.perUser["605199714"] = []cache.CachedEmote{
+		{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"},
 	}
+	// store.channel is left unwritten: the channel half was evicted first.
 	client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{
 		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
 		{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"},
