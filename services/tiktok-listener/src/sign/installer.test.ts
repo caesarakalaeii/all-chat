@@ -90,7 +90,8 @@ const baseConfig: SignConfiguration = {
   selfSignFallback: true,
   disableEulerFallbacks: true,
   enableExtendedGiftInfo: false,
-  eulerApiKey: ''
+  eulerApiKey: '',
+  maxWsConnectsPerHour: 12
 };
 
 function install(

@@ -149,7 +149,8 @@ describe('eulerStillReachableForSignature', () => {
     selfSignFallback: true,
     disableEulerFallbacks: true,
     enableExtendedGiftInfo: false,
-    eulerApiKey: ''
+    eulerApiKey: '',
+    maxWsConnectsPerHour: 12
   };
 
   it('reports Euler reachable under plain euler mode', () => {
