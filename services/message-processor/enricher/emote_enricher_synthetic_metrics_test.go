@@ -226,9 +226,16 @@ func TestSyntheticMessagesUseChannelCacheKey(t *testing.T) {
 
 // Twitch and Kick chatters can carry personal (7TV) emotes, so they keep
 // per-user keys.
+//
+// The channel entry is primed because a per-user entry is now the chatter's
+// emotes minus the channel's, so the write needs a channel entry to split
+// against (see splitPersonal).
 func TestRealMessageUsesPerUserCacheKey(t *testing.T) {
 	for _, platform := range []string{"twitch", "kick"} {
-		store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+		store := &mockEmoteCacheStore{
+			getErr:         cache.ErrCacheMiss,
+			channelGetData: []cache.CachedEmote{{Code: "PogChamp", Provider: "twitch", URL: "https://example/pog"}},
+		}
 		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
 		e := NewEnricher(client, store, zap.NewNop())
 
@@ -320,6 +327,75 @@ func TestPerUserCacheEntryExcludesChannelEmotes(t *testing.T) {
 	}
 	if len(msg.Message.Emotes) != 2 {
 		t.Errorf("message must resolve both the channel and the personal emote, got %#v", msg.Message.Emotes)
+	}
+}
+
+// A cached per-user entry holds only the chatter's own emotes, so serving it
+// means putting it back together with the channel entry. Without the merge a
+// returning chatter would lose every channel emote.
+func TestPerUserCacheHitMergesChannelEmotes(t *testing.T) {
+	store := &mockEmoteCacheStore{
+		channelGetData: []cache.CachedEmote{
+			{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+		},
+		getData: []cache.CachedEmote{
+			{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"},
+		},
+	}
+	client := &mockEmoteServiceClient{}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	msg := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "jtaz",
+		User:      models.UserInfo{ID: "605199714"},
+		Message:   models.MessageInfo{Text: "KEKW MyPersonalEmote"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	if len(msg.Message.Emotes) != 2 {
+		t.Errorf("cache hit resolved %d emotes (%#v), want the channel's and the chatter's", len(msg.Message.Emotes), msg.Message.Emotes)
+	}
+	if client.callCount() != 0 {
+		t.Errorf("both halves were cached, but the emote service was called %d times", client.callCount())
+	}
+}
+
+// Either half of a split entry can be evicted on its own — they carry separate
+// TTLs. Serving the personal half alone would silently strip the channel's
+// emotes from the message, so a half hit must count as a miss and re-fetch.
+func TestPerUserCacheHitWithoutChannelEntryRefetches(t *testing.T) {
+	store := &mockEmoteCacheStore{
+		getErr: cache.ErrCacheMiss, // channel entry gone; GetEntryWithUser also misses
+		getData: []cache.CachedEmote{
+			{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"},
+		},
+	}
+	client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+		{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"},
+	}}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	msg := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "jtaz",
+		User:      models.UserInfo{ID: "605199714"},
+		Message:   models.MessageInfo{Text: "KEKW MyPersonalEmote"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	if client.callCount() != 1 {
+		t.Errorf("emote service called %d times, want 1 re-fetch", client.callCount())
+	}
+	if len(msg.Message.Emotes) != 2 {
+		t.Errorf("re-fetch resolved %d emotes (%#v), want the channel's and the chatter's", len(msg.Message.Emotes), msg.Message.Emotes)
 	}
 }
 

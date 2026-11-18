@@ -323,6 +323,12 @@ normalizers := map[string]normalizer.Normalizer{
    - Cache key is `mp:emotes:v3:{channel}`, with `:{user_id}` appended only for
      chatters that can have a resolvable 7TV personal set — Twitch or Kick, and
      not synthetic (see `hasPersonalEmotes` in `enricher/emote_enricher.go`)
+   - The two keys hold disjoint halves: the channel key holds the set everyone
+     shares, the per-user key holds only that chatter's own emotes. Reads put
+     them back together (`personalPlusChannel`) and a hit on one half alone
+     counts as a miss. Storing the merged set under the per-user key instead put
+     a full copy of the channel's emotes behind every chatter id for 13h, which
+     filled Redis (`AllChatRedisEvictingKeys`, 2026-11-18)
 
 4. **Viewer Identity Enrichment** (`enricher/viewer_badge_enricher.go`):
    - Resolve All-Chat platform identity (name_color, avatar frame/flair, admin/premium badges)

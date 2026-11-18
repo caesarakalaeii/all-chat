@@ -300,7 +300,7 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 		var entry cache.Entry
 		var err error
 		if userID != "" {
-			entry, err = e.cache.GetEntryWithUser(ctx, channel, userID)
+			entry, err = e.personalPlusChannel(ctx, channel, userID)
 		} else {
 			entry, err = e.cache.GetEntry(ctx, channel)
 		}
@@ -339,6 +339,60 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 	}
 
 	return e.fetchFromService(ctx, channel, platform, userID, twitchChannel, seventvSetID, useCache, synthetic)
+}
+
+// personalPlusChannel reassembles a chatter's full emote set from the two keys
+// it is split across: the channel entry everyone shares, and the per-user entry
+// holding only that chatter's own emotes (see splitPersonal).
+//
+// Both halves must be present to answer. A hit on one alone is reported as
+// ErrCacheMiss so the caller re-fetches and rewrites the pair: the halves carry
+// independent TTLs and either can be evicted first, and serving the personal
+// half by itself would silently strip every channel emote from the message.
+//
+// The entry is stale if either half is, so a refresh rewrites both.
+func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID string) (cache.Entry, error) {
+	personal, err := e.cache.GetEntryWithUser(ctx, channel, userID)
+	if err != nil {
+		return cache.Entry{}, err
+	}
+	channelEntry, err := e.cache.GetEntry(ctx, channel)
+	if err != nil {
+		return cache.Entry{}, err
+	}
+
+	merged := make([]cache.CachedEmote, 0, len(channelEntry.Emotes)+len(personal.Emotes))
+	merged = append(merged, channelEntry.Emotes...)
+	merged = append(merged, personal.Emotes...)
+
+	return cache.Entry{Emotes: merged, Stale: personal.Stale || channelEntry.Stale}, nil
+}
+
+// splitPersonal returns the emotes in merged that the channel entry does not
+// already carry, i.e. the ones that are genuinely this chatter's.
+//
+// Only this remainder belongs under the per-user key. Storing the merged set
+// there instead put a near-complete copy of the channel's emotes (384-1486 of
+// them, ~100-230 KB) behind every chatter id for 13h, which is what filled
+// Redis and started the eviction of untyped state (AllChatRedisEvictingKeys,
+// 2026-11-18).
+//
+// Codes are the identity: the emote map Enrich builds is keyed by code, so two
+// entries sharing a code are indistinguishable downstream and the channel one
+// wins either way.
+func splitPersonal(merged, channelEmotes []cache.CachedEmote) []cache.CachedEmote {
+	inChannel := make(map[string]struct{}, len(channelEmotes))
+	for _, emote := range channelEmotes {
+		inChannel[emote.Code] = struct{}{}
+	}
+
+	personal := make([]cache.CachedEmote, 0, len(merged)-len(channelEmotes))
+	for _, emote := range merged {
+		if _, shared := inChannel[emote.Code]; !shared {
+			personal = append(personal, emote)
+		}
+	}
+	return personal
 }
 
 // fetchFromService fetches emotes from the emote service, records lookup metrics,
@@ -395,18 +449,39 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 	// recovers. The emote service has its own cache, so the retry is cheap.
 	if writeCache && len(converted) > 0 {
 		if userID != "" {
-			if err := e.cache.SetWithUser(ctx, channel, userID, converted); err != nil {
-				e.logger.Warn("Failed to populate emote cache",
+			// Store only the chatter's own emotes, against the channel entry everyone
+			// shares; personalPlusChannel puts the two back together on read. Writing
+			// the merged set here instead is what filled Redis.
+			//
+			// With no channel entry to split against there is no way to tell which of
+			// these emotes are the chatter's, and writing the merged set would both
+			// recreate the duplication and, read back as a delta, show this chatter's
+			// personal emotes to everyone. Skip the write: this message is already
+			// enriched from `converted`, and the channel entry a sibling lookup writes
+			// lets the next message cache the delta properly.
+			channelEntry, chErr := e.cache.GetEntry(ctx, channel)
+			switch {
+			case chErr != nil:
+				e.logger.Debug("Skipping per-user emote cache write, no channel entry to split against",
 					zap.String("channel", channel),
 					zap.String("user_id", userID),
-					zap.Error(err),
+					zap.Error(chErr),
 				)
-			} else {
-				e.logger.Debug("Emote cache populated (with user)",
-					zap.String("channel", channel),
-					zap.String("user_id", userID),
-					zap.Int("count", len(converted)),
-				)
+			default:
+				personal := splitPersonal(converted, channelEntry.Emotes)
+				if err := e.cache.SetWithUser(ctx, channel, userID, personal); err != nil {
+					e.logger.Warn("Failed to populate emote cache",
+						zap.String("channel", channel),
+						zap.String("user_id", userID),
+						zap.Error(err),
+					)
+				} else {
+					e.logger.Debug("Emote cache populated (with user)",
+						zap.String("channel", channel),
+						zap.String("user_id", userID),
+						zap.Int("count", len(personal)),
+					)
+				}
 			}
 		} else {
 			if err := e.cache.Set(ctx, channel, converted); err != nil {
