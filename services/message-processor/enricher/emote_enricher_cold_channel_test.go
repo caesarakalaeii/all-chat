@@ -414,3 +414,60 @@ func (s *twoKeyCacheStore) channelIsStale() bool {
 	defer s.mu.Unlock()
 	return s.channelStale
 }
+
+// TestDegradedChannelSeedWritesNeitherKey pins the behaviour when the seed's
+// channel-only lookup comes back empty, which emote-service does when a
+// provider times out (its logs show that routinely).
+//
+// Caching the empty result would be the leak again through a different door:
+// with an empty channel entry, splitPersonal subtracts nothing, so every
+// per-user key receives the chatter's whole merged response — the ~100-230 KB
+// per chatter that filled Redis (AllChatRedisEvictingKeys, 2026-11-18).
+// Neither key may be written; the next message retries.
+func TestDegradedChannelSeedWritesNeitherKey(t *testing.T) {
+	store := newTwoKeyCacheStore()
+	client := &userAwareEmoteClient{
+		// The channel-only route is the degraded one: it returns nothing, while
+		// the user-aware route that serves the message still answers.
+		channel: nil,
+		personal: map[string][]EmoteServiceEmote{
+			"chatter-one": {{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"}},
+		},
+	}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	msg := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "caesarlp",
+		User:      models.UserInfo{ID: "chatter-one"},
+		Message:   models.MessageInfo{Text: "MyPersonalEmote"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	if writes := store.channelWriteCount(); writes != 0 {
+		t.Errorf("an empty channel response was cached (%d write(s)); "+
+			"a timed-out provider would then suppress this channel's emotes for the entry's lifetime", writes)
+	}
+	if entries := store.perUserKeys(); len(entries) != 0 {
+		t.Errorf("the per-user key was written without a channel entry to subtract from: %#v; "+
+			"it holds the chatter's whole merged set, which is the leak this split exists to stop", entries)
+	}
+
+	// The message is still enriched from the upstream response.
+	if len(msg.Message.Emotes) != 1 {
+		t.Errorf("resolved %d emotes (%#v), want the chatter's own", len(msg.Message.Emotes), msg.Message.Emotes)
+	}
+}
+
+func (s *twoKeyCacheStore) perUserKeys() map[string][]cache.CachedEmote {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	copied := make(map[string][]cache.CachedEmote, len(s.perUser))
+	for userID, emotes := range s.perUser {
+		copied[userID] = emotes
+	}
+	return copied
+}
