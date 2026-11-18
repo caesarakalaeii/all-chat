@@ -69,6 +69,7 @@ import {
   isWsFlapError,
   nextFlapRetryDelayMs,
   NoLaneCache,
+  parkBlocksConnect,
   silentFailureParkMs,
   WS_FLAP_MAX_FAST_RETRIES,
   WS_FLAP_RETRY_DELAY_MS
@@ -1281,6 +1282,33 @@ class TikTokListenerService {
         ceiling: TIKTOK_MAX_STREAMS_PER_POD,
         active: this.activeStreams.size,
         connecting: this.connectingStreams.size,
+      });
+      if (this.leadershipCoordinator) {
+        await this.leadershipCoordinator.release(username);
+      }
+      this.livePoller.addTarget(username, overlayId);
+      return;
+    }
+
+    // A live park (sign budget or deaf room) forbids dialling. The poller
+    // honours it, but demand can route around it: a snapshot that briefly
+    // drops a parked room releases its lease, and the next snapshot
+    // re-acquires and dials straight here (prod 2026-11-18: cotermatha
+    // refused at 00:03:51 for 20 minutes, re-dialled and refused again at
+    // 00:08:49). The second dial spends another of the pod's 12 hourly
+    // slots on a room PureNodeSigner has already promised one.
+    //
+    // Release the lease like the ceiling check above: a parked room this pod
+    // cannot dial is deaf everywhere while this pod leads it, and another
+    // pod carries its own connect budget. Re-park in the poller so the room
+    // is re-checked when the park ends.
+    const parkMs = this.backoffManager.parkRemainingMs(username);
+    if (parkBlocksConnect(parkMs)) {
+      logger.info('Stream parked, skipping connect', {
+        username,
+        overlay_id: overlayId,
+        park_remaining_ms: parkMs,
+        park_remaining_minutes: Math.round(parkMs / 60000),
       });
       if (this.leadershipCoordinator) {
         await this.leadershipCoordinator.release(username);

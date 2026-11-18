@@ -38,6 +38,30 @@ export function connectionCeilingReached(liveConnectionCount: number, ceiling: n
 }
 
 /**
+ * Whether a room's live park (sign budget or deaf room) forbids dialling it.
+ *
+ * A budget-refused room is not merely waiting: PureNodeSigner.takeConnectSlot
+ * has promised it the next slot to free, and its park runs exactly that long.
+ * Dialling before then spends a second slot on a room that already holds one,
+ * and the refusal re-queues it further back — the "parked queue re-refused"
+ * shape the budget alert is written to exclude.
+ *
+ * The poller tick and recoverStuckChannels already skip a parked room, and a
+ * rebalance release carries the park into its hold. The demand path had no
+ * such check, so a demand snapshot that briefly dropped a parked room and
+ * re-added it re-dialled it immediately (prod 2026-11-18: cotermatha refused
+ * at 00:03:51 for 20 minutes, re-dialled and refused again at 00:08:49 after
+ * a demand blip released and re-acquired its lease).
+ *
+ * Takes the remaining ms rather than reading the clock so it stays pure;
+ * callers pass BackoffManager.parkRemainingMs, which answers 0 for a room
+ * that was never parked.
+ */
+export function parkBlocksConnect(parkRemainingMs: number): boolean {
+  return parkRemainingMs > 0;
+}
+
+/**
  * How long to park a room after a heartbeat-forced disconnect; 0 means the
  * fast reconnect path.
  *
