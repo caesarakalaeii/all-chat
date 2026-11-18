@@ -108,6 +108,7 @@ TIKTOK_SELF_SIGN_FALLBACK=true        # Under `self`, fall back to Euler when ou
 TIKTOK_SIGNER_URL=                    # tiktok-signer service URL; empty = no self signer
 TIKTOK_SIGNER_AUTH_TOKEN=             # Bearer token if the signer service runs with auth
 TIKTOK_SIGNER_TIMEOUT_MS=180000       # Self-signer HTTP timeout; signer rotates lanes inside one request
+TIKTOK_MAX_WS_CONNECTS_PER_HOUR=12    # pure-node: this pod's WS-connect signs per rolling hour; divide by replicas
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
 
@@ -242,7 +243,8 @@ it (constraint: ~15 WS connects/hour flags the session): successful
 lease fetches ≤ 8/hour (10-min cache, single-flight) and WS connect
 signs ≤ 12/hour **per pod** — the session's flag budget is shared by
 every pod leasing it, so keep ONE connect-capable replica in pure-node
-rollouts or divide the cap accordingly. The premium **fallback tier is
+rollouts or divide the cap across replicas with
+`TIKTOK_MAX_WS_CONNECTS_PER_HOUR`. The premium **fallback tier is
 ON** in this mode (PR 3 of the pure-Node transport): promotion warms the
 target-room tab on the signer (`POST /v1/sign` viewer path, one capture
 per attempt, premium-gated) before attaching the relay, and the canary
