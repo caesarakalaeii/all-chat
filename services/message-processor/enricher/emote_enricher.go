@@ -232,9 +232,9 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	// request logs and testgen counters instead.
 	synthetic := isSynthetic(msg.Metadata)
 
-	// A per-user cache entry holds a full copy of the channel's emote set, so it
-	// is only worth writing when the chatter can actually have personal emotes.
-	// Drop the user id otherwise and share the channel-level entry.
+	// A per-user cache entry is only worth a key when the chatter can actually
+	// have personal emotes to put in it. Drop the user id otherwise so the
+	// lookup shares the channel-level entry outright.
 	userID := msg.User.ID
 	if synthetic || !hasPersonalEmotes(msg.Platform) {
 		userID = ""

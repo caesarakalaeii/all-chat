@@ -333,6 +333,11 @@ normalizers := map[string]normalizer.Normalizer{
      own, in which case it is empty. Its presence is what distinguishes "looked
      up, has nothing" from "never looked up"; without it the read path would
      re-fetch on every message from the majority of chatters
+   - A per-user write with no channel entry yet seeds that entry from the same
+     response first. On a channel whose chatters are all Twitch or Kick nothing
+     else ever writes it — the channel-level write happens only on the lookup
+     with no user id — so skipping instead left the channel caching nothing and
+     paying a ~3s emote-service fetch per message
 
 4. **Viewer Identity Enrichment** (`enricher/viewer_badge_enricher.go`):
    - Resolve All-Chat platform identity (name_color, avatar frame/flair, admin/premium badges)
