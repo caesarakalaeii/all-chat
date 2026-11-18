@@ -321,11 +321,14 @@ normalizers := map[string]normalizer.Normalizer{
    - Support 7TV, BTTV, FFZ providers
    - Cache emote data (1-hour TTL, 95%+ hit rate)
    - Cache key is `mp:emotes:v3:{channel}`, with `:{user_id}` appended only on
-     Twitch. 7TV serves a chatter's personal set through
-     `/v3/users/{platform}/{id}` for a Twitch identity only, so elsewhere a
-     per-user entry would be a redundant copy of the channel set (100-230 KB
-     each, kept 13h). Synthetic chatters share the channel key for the same
-     reason.
+     Twitch. 7TV resolves a chatter's personal set through
+     `/v3/users/{platform}/{id}`, and that succeeds for a Twitch identity only
+     — a TikTok username or a YouTube chatter id returns 400. Elsewhere the
+     per-user response equals the channel one, so a per-user entry would be a
+     redundant copy of the channel set (100-230 KB each, kept 13h). Synthetic
+     chatters share the channel key for the same reason. This applies to
+     chatter ids only: 7TV channel connections for YouTube and Kick still work
+     and are unaffected.
 
 4. **Viewer Identity Enrichment** (`enricher/viewer_badge_enricher.go`):
    - Resolve All-Chat platform identity (name_color, avatar frame/flair, admin/premium badges)
