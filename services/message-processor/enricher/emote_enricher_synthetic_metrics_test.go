@@ -234,6 +234,7 @@ func TestRealMessageUsesPerUserCacheKey(t *testing.T) {
 	for _, platform := range []string{"twitch", "kick"} {
 		store := &mockEmoteCacheStore{
 			getErr:         cache.ErrCacheMiss,
+			userGetErr:     cache.ErrCacheMiss,
 			channelGetData: []cache.CachedEmote{{Code: "PogChamp", Provider: "twitch", URL: "https://example/pog"}},
 		}
 		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
@@ -307,7 +308,7 @@ func TestPerUserCacheEntryExcludesChannelEmotes(t *testing.T) {
 		{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"},
 	}
 
-	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss, channelGetData: channelEmotes}
+	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss, userGetErr: cache.ErrCacheMiss, channelGetData: channelEmotes}
 	client := &mockEmoteServiceClient{emotes: merged}
 	e := NewEnricher(client, store, zap.NewNop())
 
@@ -330,11 +331,14 @@ func TestPerUserCacheEntryExcludesChannelEmotes(t *testing.T) {
 	}
 }
 
-// Most chatters have no personal emotes at all. Spending a key each to record
-// that would keep the per-user family scaling with chatter count, which is the
-// cardinality this split exists to remove — the channel entry alone already
-// answers them.
-func TestChatterWithNoPersonalEmotesGetsNoPerUserEntry(t *testing.T) {
+// Most chatters have no personal emotes. Their entry is still written, and is
+// empty: its presence is the record that the chatter was looked up. Skipping it
+// would make "has nothing of their own" indistinguishable from "never asked",
+// and the read path would re-fetch on every one of their messages.
+//
+// The saving is in the SIZE of the entry, not the number of them: tens of bytes
+// instead of a 100-230 KB copy of the channel set.
+func TestChatterWithNoPersonalEmotesGetsAnEmptyEntry(t *testing.T) {
 	channelEmotes := []cache.CachedEmote{
 		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
 	}
@@ -344,7 +348,7 @@ func TestChatterWithNoPersonalEmotesGetsNoPerUserEntry(t *testing.T) {
 		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
 	}
 
-	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss, channelGetData: channelEmotes}
+	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss, userGetErr: cache.ErrCacheMiss, channelGetData: channelEmotes}
 	client := &mockEmoteServiceClient{emotes: merged}
 	e := NewEnricher(client, store, zap.NewNop())
 
@@ -359,11 +363,49 @@ func TestChatterWithNoPersonalEmotesGetsNoPerUserEntry(t *testing.T) {
 		t.Fatalf("Enrich returned error: %v", err)
 	}
 
-	if store.userSetData != nil {
-		t.Errorf("wrote a per-user entry of %#v for a chatter with no emotes of their own", store.userSetData)
+	if store.userCalls != 2 {
+		t.Errorf("per-user key was read and written %d times, want 2: the lookup must be recorded", store.userCalls)
+	}
+	if len(store.userSetData) != 0 {
+		t.Errorf("per-user entry stored %#v, want it empty: the chatter has no emotes of their own", store.userSetData)
 	}
 	if len(msg.Message.Emotes) != 1 {
 		t.Errorf("message must still resolve the channel emote, got %#v", msg.Message.Emotes)
+	}
+}
+
+// The empty entry written for a chatter with no personal emotes must then serve
+// their later messages from cache. If it did not, every one of them would be a
+// 3s upstream lookup — trading the memory leak for a request storm.
+func TestChatterWithNoPersonalEmotesStillHitsTheCache(t *testing.T) {
+	store := &mockEmoteCacheStore{
+		// The empty per-user entry written on the chatter's first message.
+		getData: []cache.CachedEmote{},
+		channelGetData: []cache.CachedEmote{
+			{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+		},
+	}
+	client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+	}}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	msg := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "jtaz",
+		User:      models.UserInfo{ID: "605199714"},
+		Message:   models.MessageInfo{Text: "KEKW"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	if client.callCount() != 0 {
+		t.Errorf("called the emote service %d times for a chatter the channel entry already answers", client.callCount())
+	}
+	if len(msg.Message.Emotes) != 1 {
+		t.Errorf("message must resolve the channel emote from cache, got %#v", msg.Message.Emotes)
 	}
 }
 
@@ -383,7 +425,7 @@ func TestPerUserSplitSurvivesResponseSmallerThanChannelEntry(t *testing.T) {
 		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
 	}
 
-	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss, channelGetData: channelEmotes}
+	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss, userGetErr: cache.ErrCacheMiss, channelGetData: channelEmotes}
 	client := &mockEmoteServiceClient{emotes: degraded}
 	e := NewEnricher(client, store, zap.NewNop())
 

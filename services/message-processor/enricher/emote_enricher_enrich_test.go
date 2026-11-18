@@ -89,6 +89,11 @@ type mockEmoteCacheStore struct {
 	// channel key and the per-user key different contents. Unset, GetEntry falls
 	// back to getData like GetEntryWithUser.
 	channelGetData []cache.CachedEmote
+	// userGetErr, when set, is what GetEntryWithUser returns instead of getData.
+	// The two keys expire independently in production, so a test needs to be able
+	// to say "the channel entry is there, this chatter's is not" — which getErr
+	// alone cannot, since it also governs the channel read.
+	userGetErr error
 }
 
 func (m *mockEmoteCacheStore) GetEntry(ctx context.Context, channel string) (cache.Entry, error) {
@@ -118,6 +123,9 @@ func (m *mockEmoteCacheStore) GetEntryWithUser(ctx context.Context, channel, use
 	m.mu.Lock()
 	m.userCalls++
 	m.mu.Unlock()
+	if m.userGetErr != nil {
+		return cache.Entry{}, m.userGetErr
+	}
 	if m.getErr != nil {
 		return cache.Entry{}, m.getErr
 	}

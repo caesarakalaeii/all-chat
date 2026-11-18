@@ -347,8 +347,18 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 //
 // Both halves must be present to answer. A hit on one alone is reported as
 // ErrCacheMiss so the caller re-fetches and rewrites the pair: the halves carry
-// independent TTLs and either can be evicted first, and serving the personal
-// half by itself would silently strip every channel emote from the message.
+// independent TTLs and either can be evicted first, and serving the channel
+// half alone would silently drop the chatter's own emotes while serving the
+// personal half alone would drop the channel's.
+//
+// This is why the per-user entry is written even when the chatter turns out to
+// have no emotes of their own (see fetchFromService): its presence is the
+// record that we looked. Skipping the write to save a key instead made "this
+// chatter has nothing" indistinguishable from "we have never asked", which
+// either re-fetches on every message or never discovers a personal set at all.
+// Empty or not, the entry is now tens of bytes rather than the 100-230 KB copy
+// of the channel set it used to hold, and that size — not the key count — is
+// what filled Redis.
 //
 // The entry is stale if either half is, so a refresh rewrites both.
 func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID string) (cache.Entry, error) {
@@ -465,6 +475,11 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 			// personal emotes to everyone. Skip the write: this message is already
 			// enriched from `converted`, and the channel entry a sibling lookup writes
 			// lets the next message cache the delta properly.
+			//
+			// An empty split is still written. The entry's presence is what records
+			// that this chatter has been looked up; without it "has no personal
+			// emotes" is indistinguishable from "never asked", and the read path
+			// would re-fetch on every message from the many chatters who have none.
 			channelEntry, chErr := e.cache.GetEntry(ctx, channel)
 			if chErr != nil {
 				e.logger.Debug("Skipping per-user emote cache write, no channel entry to split against",
@@ -472,27 +487,21 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 					zap.String("user_id", userID),
 					zap.Error(chErr),
 				)
-			} else if personal := splitPersonal(converted, channelEntry.Emotes); len(personal) == 0 {
-				// Nothing of this chatter's own to remember. Writing an empty entry
-				// would spend a key per chatter to record that they have no personal
-				// emotes, which is the cardinality this change exists to remove; the
-				// channel entry alone already answers them correctly.
-				e.logger.Debug("Skipping per-user emote cache write, chatter adds no emotes",
-					zap.String("channel", channel),
-					zap.String("user_id", userID),
-				)
-			} else if err := e.cache.SetWithUser(ctx, channel, userID, personal); err != nil {
-				e.logger.Warn("Failed to populate emote cache",
-					zap.String("channel", channel),
-					zap.String("user_id", userID),
-					zap.Error(err),
-				)
 			} else {
-				e.logger.Debug("Emote cache populated (with user)",
-					zap.String("channel", channel),
-					zap.String("user_id", userID),
-					zap.Int("count", len(personal)),
-				)
+				personal := splitPersonal(converted, channelEntry.Emotes)
+				if err := e.cache.SetWithUser(ctx, channel, userID, personal); err != nil {
+					e.logger.Warn("Failed to populate emote cache",
+						zap.String("channel", channel),
+						zap.String("user_id", userID),
+						zap.Error(err),
+					)
+				} else {
+					e.logger.Debug("Emote cache populated (with user)",
+						zap.String("channel", channel),
+						zap.String("user_id", userID),
+						zap.Int("count", len(personal)),
+					)
+				}
 			}
 		} else {
 			if err := e.cache.Set(ctx, channel, converted); err != nil {
