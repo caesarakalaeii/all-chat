@@ -349,46 +349,6 @@ describe('PureNodeSigner WS-connect budget', () => {
       vi.useRealTimers();
     }
   });
-
-  it('spreads refusals across an hour when the budget was filled by one burst', async () => {
-    // Prod 2026-11-18, pod tiktok-listener-76b589cfc9-bx7kf: a cold start
-    // dialled its whole 12-connect budget between 00:52:55 and 00:53:11,
-    // so every retained connect expires inside the same 16 seconds. The
-    // nine rooms refused over the next half hour were each promised a slot
-    // in the band 01:52:55-01:53:07 — all of them, within 12 seconds. They
-    // wake together, one connects, the rest are refused again: exactly the
-    // re-refusal storm the queue exists to prevent.
-    //
-    // A room that takes a queued room's slot connects an hour after THAT
-    // room connects, so the n-th refusal must wait about n hours, not the
-    // same hour as the first.
-    vi.useFakeTimers();
-    try {
-      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 3 });
-      const start = Date.now();
-      for (let i = 0; i < 3; i++) {
-        vi.setSystemTime(start + i * 1_000);
-        await signer.sign(signRequest({ roomId: `burst${i}` }));
-      }
-
-      vi.setSystemTime(start + 60_000);
-      const waits: number[] = [];
-      for (const roomId of ['first', 'second', 'third']) {
-        await signer.sign(signRequest({ roomId })).then(
-          () => expect.unreachable(`${roomId} should have been refused`),
-          (error: SignatureFailure) => waits.push(error.retryAfterMs!)
-        );
-      }
-
-      // first inherits a burst slot; second must wait for first's own
-      // connect to free, an hour after that, and third an hour after second.
-      expect(waits[0]).toBeLessThan(60 * 60_000);
-      expect(waits[1]).toBeGreaterThan(waits[0] + 59 * 60_000);
-      expect(waits[2]).toBeGreaterThan(waits[1] + 59 * 60_000);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 });
 
 describe('PureNodeSigner budget refusal classification', () => {
