@@ -115,6 +115,31 @@ describe('loadSignConfiguration', () => {
   it('treats an absent signer URL as "sign in-process"', () => {
     expect(loadSignConfiguration({}).signerBaseUrl).toBe('');
   });
+
+  it('defaults the per-pod WS-connect budget to the single-replica value', () => {
+    expect(loadSignConfiguration({}).maxWsConnectsPerHour).toBe(12);
+  });
+
+  it('reads the per-pod WS-connect budget so N replicas can divide the shared ceiling', () => {
+    // The leased session's flag budget is shared by every pod leasing it, so
+    // the fleet enforces replicas x this value. Two replicas at the 12/hour
+    // default meant 24 against TikTok's measured ~15/hour (alert
+    // TikTokPureNodeConnectBudgetExhausted, 2026-11-18).
+    expect(loadSignConfiguration({ TIKTOK_MAX_WS_CONNECTS_PER_HOUR: '6' }).maxWsConnectsPerHour)
+      .toBe(6);
+  });
+
+  it('keeps the default WS-connect budget when the value is not a positive integer', () => {
+    // Same reasoning as the signer mode: a typo in the manifest should leave
+    // the listener on the known-good budget, not start it with a budget of
+    // zero (which refuses every room) or NaN (which refuses every room too).
+    for (const bad of ['', 'six', '0', '-1', '2.5']) {
+      expect(
+        loadSignConfiguration({ TIKTOK_MAX_WS_CONNECTS_PER_HOUR: bad }).maxWsConnectsPerHour,
+        bad
+      ).toBe(12);
+    }
+  });
 });
 
 describe('eulerStillReachableForSignature', () => {
@@ -124,7 +149,8 @@ describe('eulerStillReachableForSignature', () => {
     selfSignFallback: true,
     disableEulerFallbacks: true,
     enableExtendedGiftInfo: false,
-    eulerApiKey: ''
+    eulerApiKey: '',
+    maxWsConnectsPerHour: 12
   };
 
   it('reports Euler reachable under plain euler mode', () => {

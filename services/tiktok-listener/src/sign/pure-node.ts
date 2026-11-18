@@ -88,7 +88,12 @@ export interface PureNodeSignerOptions {
   staleAfterMs?: number;
   /** Successful lease fetches per rolling hour (constraint 1). */
   maxLeasesPerHour?: number;
-  /** Per-pod WS-connect signs per rolling hour. The session's flag budget is shared. */
+  /**
+   * Per-pod WS-connect signs per rolling hour. The session's flag budget is
+   * shared across pods, so the caller divides this by the connect-capable
+   * replica count (TIKTOK_MAX_WS_CONNECTS_PER_HOUR). The default suits one
+   * replica.
+   */
   maxWsConnectsPerHour?: number;
   /** Injectable fetch for tests. */
   fetchImpl?: typeof undiciRequest;
