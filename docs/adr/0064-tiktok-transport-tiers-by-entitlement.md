@@ -15,7 +15,7 @@ TikTok chat ingest has one primary transport: the listener's own Node
 WebSocket, signed by the self-hosted signer (ADR-0052) and pinned to the
 capture's proxy lane. Lab validation on 2026-09-16 showed it holds sustained
 streams, but its connect handshake is exposed to TikTok session scoring —
-the "Unexpected server response: 200" flap (transport plan, phase 1). Fast
+the "Unexpected server response: 200" flap. Fast
 retries clear most flaps; the ones that do not clear currently park the room
 in escalating error backoff with **no delivery at all** for the duration.
 

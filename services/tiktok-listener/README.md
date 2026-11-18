@@ -131,7 +131,7 @@ TIKTOK_US_RELAY_TOKEN=                # Shared secret, sent as X-Relay-Token
 TIKTOK_HEARTBEAT_INTERVAL_MS=30000     # How often to check (default)
 TIKTOK_HEARTBEAT_TIMEOUT_MS=90000      # Silence before a forced reconnect (default)
 
-# WS connect flap (2026-09-16 transport plan): TikTok answering the upgrade
+# WS connect flap (ADR-0064): TikTok answering the upgrade
 # with HTTP 200 is a transient flap; connect retries immediately up to
 # TIKTOK_FLAP_MAX_FAST_RETRIES before falling into normal error backoff.
 # Retries 1-2 wait TIKTOK_FLAP_RETRY_DELAY_MS, retries 3+ wait 3x that —
