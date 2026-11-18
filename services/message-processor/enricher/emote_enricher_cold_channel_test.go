@@ -145,9 +145,6 @@ func TestChannelEntryIsNotReseededAfterATransientReadError(t *testing.T) {
 		t.Fatalf("Enrich returned error: %v", err)
 	}
 
-	// Counted, not compared: a reseed would write the same channel-only emotes
-	// this entry already holds, but it would also reset the key's TTL on a
-	// channel that was already warm. Only ErrCacheMiss means the entry is absent.
 	if writes := inner.channelWriteCount(); writes != 0 {
 		t.Fatalf("a failed channel read rewrote the channel entry %d time(s); "+
 			"a transport error says nothing about whether the entry exists", writes)
@@ -180,7 +177,6 @@ type userAwareEmoteClient struct {
 	channel  []EmoteServiceEmote
 	personal map[string][]EmoteServiceEmote
 	calls    int
-	userCall int
 }
 
 func (c *userAwareEmoteClient) GetEmotesForChannel(ctx context.Context, channel string) ([]EmoteServiceEmote, error) {
@@ -197,7 +193,6 @@ func (c *userAwareEmoteClient) GetEmotesForChannelWithUser(ctx context.Context, 
 	if userID == "" {
 		return c.channel, nil
 	}
-	c.userCall++
 	merged := make([]EmoteServiceEmote, 0, len(c.channel)+len(c.personal[userID]))
 	merged = append(merged, c.channel...)
 	merged = append(merged, c.personal[userID]...)

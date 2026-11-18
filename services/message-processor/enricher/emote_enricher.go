@@ -351,13 +351,11 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 // half alone would silently drop the chatter's own emotes while serving the
 // personal half alone would drop the channel's.
 //
-// The entry is stale if either half is. Note that the refresh this triggers
-// rewrites only the personal half: fetchFromService writes the channel key on
-// this path solely to seed a missing one, so a stale-but-present channel entry
-// keeps reporting stale until it expires. The cost is a background refresh per
-// channel rather than a blocked message, which is why it is tolerated here
-// rather than fixed by re-seeding — re-seeding needs its own channel-only
-// fetch, and doing it on every stale read would undo the saving.
+// The entry is stale if either half is. Known limitation: the refresh this
+// triggers rewrites only the personal half, so a stale-but-present channel
+// entry keeps reporting stale until it expires, costing one background refresh
+// per channel. Re-seeding it instead would need its own channel-only fetch on
+// every stale read.
 func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID string) (cache.Entry, error) {
 	personal, err := e.cache.GetEntryWithUser(ctx, channel, userID)
 	if err != nil {
@@ -391,8 +389,7 @@ func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID stri
 // merged can be SHORTER than channelEmotes: emote-service drops a provider's
 // emotes when that provider times out, which its logs show happening routinely.
 // The result is then empty, which is correct — a degraded response adds nothing
-// the channel entry lacks — so the capacity hint must not be derived from the
-// difference in lengths, which would be negative and panic.
+// the channel entry lacks.
 func splitPersonal(merged, channelEmotes []cache.CachedEmote) []cache.CachedEmote {
 	inChannel := make(map[string]struct{}, len(channelEmotes))
 	for _, emote := range channelEmotes {
@@ -417,7 +414,7 @@ func splitPersonal(merged, channelEmotes []cache.CachedEmote) []cache.CachedEmot
 //
 // The route selection mirrors fetchFromService: GetEmotesForChannel takes no
 // platform argument, so a non-Twitch platform has to go down the user-aware
-// call with an empty user id to keep its platform.
+// call with an empty user id to keep its platform (see the reasoning there).
 func (e *Enricher) seedChannelEntry(ctx context.Context, channel, platform, twitchChannel string) ([]cache.CachedEmote, error) {
 	var emotes []EmoteServiceEmote
 	var err error
@@ -505,20 +502,15 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 			channelEntry, chErr := e.cache.GetEntry(ctx, channel)
 			switch {
 			case errors.Is(chErr, cache.ErrCacheMiss):
-				// No channel entry yet, so seed one. Nothing else would: the
-				// channel-level write below runs only on the userID == "" branch,
-				// which a channel whose chatters are all on Twitch or Kick never
-				// takes. Skipping instead left such a channel caching nothing at all
-				// — every message missing both keys and paying a 3s emote-service
+				// Seed it (see seedChannelEntry). Not from converted: that answers a
+				// user-aware request, into which emote-service merges this chatter's
+				// personal 7TV set (FetchCombinedEmotes), and storing it under the key
+				// everyone reads would serve one chatter's emotes to the whole channel
+				// for up to 18h. The extra fetch is paid once per cold channel,
+				// against an emote service that has just cached this channel's
+				// providers. Skipping the seed instead left such a channel caching
+				// nothing at all — every message missing both keys and paying a 3s
 				// fetch, which is worse than the memory it saved.
-				//
-				// It must be seeded from a fresh channel-only lookup, not from
-				// converted: converted answers a user-aware request, into which
-				// emote-service merges this chatter's personal 7TV set
-				// (FetchCombinedEmotes). Storing it under the key everyone reads
-				// would serve one chatter's emotes to the whole channel for up to
-				// 18h. The extra fetch is paid once per cold channel, against an
-				// emote service that has just cached this channel's providers.
 				channelEmotes, seedErr := e.seedChannelEntry(ctx, channel, platform, twitchChannel)
 				if seedErr != nil {
 					// Without a channel entry to subtract, the split cannot tell this
