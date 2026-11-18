@@ -503,8 +503,12 @@ func TestPerUserCacheHitWithoutChannelEntryRefetches(t *testing.T) {
 		t.Fatalf("Enrich returned error: %v", err)
 	}
 
-	if client.callCount() != 1 {
-		t.Errorf("emote service called %d times, want 1 re-fetch", client.callCount())
+	// Two: the user-aware re-fetch that serves this message, and the channel-only
+	// fetch that reseeds the evicted half. The seed cannot reuse the first
+	// response because that one carries this chatter's personal emotes (see
+	// seedChannelEntry). It is paid once, when the channel half goes missing.
+	if client.callCount() != 2 {
+		t.Errorf("emote service called %d times, want a re-fetch plus a channel reseed", client.callCount())
 	}
 	if len(msg.Message.Emotes) != 2 {
 		t.Errorf("re-fetch resolved %d emotes (%#v), want the channel's and the chatter's", len(msg.Message.Emotes), msg.Message.Emotes)

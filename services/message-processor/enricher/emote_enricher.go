@@ -401,6 +401,42 @@ func splitPersonal(merged, channelEmotes []cache.CachedEmote) []cache.CachedEmot
 	return personal
 }
 
+// seedChannelEntry fetches the channel's shared emote set — no user id, so no
+// chatter's personal emotes in it — and writes it to the channel cache key.
+//
+// It exists because the per-user write needs a channel entry to subtract from
+// (see splitPersonal) and a channel whose chatters all carry a user id never
+// reaches the userID == "" branch that would otherwise create one.
+//
+// The route selection mirrors fetchFromService: GetEmotesForChannel takes no
+// platform argument, so a non-Twitch platform has to go down the user-aware
+// call with an empty user id to keep its platform.
+func (e *Enricher) seedChannelEntry(ctx context.Context, channel, platform, twitchChannel string) ([]cache.CachedEmote, error) {
+	var emotes []EmoteServiceEmote
+	var err error
+	if twitchChannel != "" || isNonTwitchPlatform(platform) {
+		emotes, err = e.client.GetEmotesForChannelWithUser(ctx, channel, platform, "", twitchChannel, "")
+	} else {
+		emotes, err = e.client.GetEmotesForChannel(ctx, channel)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	converted := convertToCached(emotes)
+	// Never cache an empty result, for the reason given at the call site in
+	// fetchFromService: a transient upstream failure would otherwise suppress
+	// this channel's emotes for the entry's whole lifetime.
+	if len(converted) == 0 {
+		return nil, fmt.Errorf("emote service returned no channel emotes for %q", channel)
+	}
+
+	if err := e.cache.Set(ctx, channel, converted); err != nil {
+		return nil, err
+	}
+	return converted, nil
+}
+
 // fetchFromService fetches emotes from the emote service, records lookup metrics,
 // and (when writeCache is set) populates the cache. It is shared by the blocking
 // cache-miss path and the background stale-refresh path.
@@ -460,25 +496,46 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 			// emotes" is indistinguishable from "never asked", and the read path
 			// would re-fetch on every message from the many chatters who have none.
 			channelEntry, chErr := e.cache.GetEntry(ctx, channel)
-			if chErr != nil {
-				// No channel entry yet, so seed it from this response before splitting.
-				// Nothing else would: the channel-level write below runs only on the
-				// userID == "" branch, which a channel whose chatters are all on
-				// Twitch or Kick never takes. Skipping instead left such a channel
-				// caching nothing at all — every message missing both keys and paying
-				// a 3s emote-service fetch, which is worse than the memory it saved.
+			switch {
+			case errors.Is(chErr, cache.ErrCacheMiss):
+				// No channel entry yet, so seed one. Nothing else would: the
+				// channel-level write below runs only on the userID == "" branch,
+				// which a channel whose chatters are all on Twitch or Kick never
+				// takes. Skipping instead left such a channel caching nothing at all
+				// — every message missing both keys and paying a 3s emote-service
+				// fetch, which is worse than the memory it saved.
 				//
-				// The split against it then yields an empty personal set: the first
-				// chatter's own emotes are indistinguishable from the channel's until
-				// a second chatter shows which are shared.
-				if err := e.cache.Set(ctx, channel, converted); err != nil {
-					e.logger.Warn("Failed to seed channel emote cache entry",
+				// It must be seeded from a fresh channel-only lookup, not from
+				// converted: converted answers a user-aware request, into which
+				// emote-service merges this chatter's personal 7TV set
+				// (FetchCombinedEmotes). Storing it under the key everyone reads
+				// would serve one chatter's emotes to the whole channel for up to
+				// 18h. The extra fetch is paid once per cold channel, against an
+				// emote service that has just cached this channel's providers.
+				channelEmotes, seedErr := e.seedChannelEntry(ctx, channel, platform, twitchChannel)
+				if seedErr != nil {
+					// Without a channel entry to subtract, the split cannot tell this
+					// chatter's emotes from the channel's. Skip the per-user write and
+					// leave the pair unwritten rather than store a full copy under it,
+					// which is what filled Redis. The next message retries.
+					e.logger.Warn("Failed to seed channel emote cache entry, skipping per-user write",
 						zap.String("channel", channel),
 						zap.String("user_id", userID),
-						zap.Error(err),
+						zap.Error(seedErr),
 					)
+					return converted, nil
 				}
-				channelEntry = cache.Entry{Emotes: converted}
+				channelEntry = cache.Entry{Emotes: channelEmotes}
+			case chErr != nil:
+				// A transport or decode error says nothing about whether the entry
+				// exists, so neither seeding nor splitting against an empty set is
+				// safe. Serve this message and leave the cache alone.
+				e.logger.Warn("Failed to read channel emote entry, skipping per-user write",
+					zap.String("channel", channel),
+					zap.String("user_id", userID),
+					zap.Error(chErr),
+				)
+				return converted, nil
 			}
 
 			personal := splitPersonal(converted, channelEntry.Emotes)
