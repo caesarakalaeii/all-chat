@@ -140,18 +140,9 @@ export function isBudgetRefusalError(error: unknown): boolean {
  * Whether a room with `parkRemainingMs` left on its park may be dialled.
  *
  * A park is a promise about the SIGNER's rolling hour, not about this pod's
- * connection: takeConnectSlot has already queued the refused room for the
- * next slot to free, and recordBudgetRefusal parks it for exactly that long.
- * Dialling before it ends spends a second of the pod's twelve hourly slots
- * on a room that already holds a promise, and the fresh refusal re-queues it
- * further back — so one room occupies two slots and reaches the wire later
- * than if it had waited (prod 2026-11-18: alfonsooc0304 refused at 01:06:14
- * for 47 minutes, dropped by a demand blip at 01:06:16, re-dialled and
- * refused again at 01:10:00).
- *
- * Takes the remaining ms rather than reading the clock so it stays pure and
- * testable; the caller supplies BackoffManager.parkRemainingMs, which clamps
- * an elapsed park to 0.
+ * connection, so dialling inside it costs a slot and re-queues the room
+ * further back than if it had waited — see BackoffManager.forgetConnectionState
+ * for the mechanism and the 2026-11-18 incident.
  */
 export function parkBlocksConnect(parkRemainingMs: number): boolean {
   return parkRemainingMs > 0;

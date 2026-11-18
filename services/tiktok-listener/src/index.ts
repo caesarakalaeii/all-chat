@@ -1295,13 +1295,8 @@ class TikTokListenerService {
     // is the one way in that did not, so a demand snapshot that briefly
     // dropped a parked room re-dialled it inside its own window and spent a
     // second of the pod's twelve hourly slots on it (prod 2026-11-18,
-    // alfonsooc0304 — see parkBlocksConnect).
-    //
-    // Mirrors the ceiling guard above: runs before the connectingStreams
-    // bookkeeping so the early return needs no cleanup, releases the lease
-    // so a pod with its own budget can take the room rather than leaving it
-    // deaf under a lease this pod cannot use, and re-parks it in the poller
-    // for re-check when the park ends.
+    // alfonsooc0304 — see parkBlocksConnect). Released and re-parked like the
+    // ceiling guard above, for the same reason.
     const parkRemainingMs = this.backoffManager.parkRemainingMs(username);
     if (parkBlocksConnect(parkRemainingMs)) {
       logger.info('Stream parked by sign budget, deferring connect', {
