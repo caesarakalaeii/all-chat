@@ -169,11 +169,11 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 ## Commits and Pull Requests
 
-**No AI attribution, ever.** Commit messages, squash-merge messages, PR titles and PR bodies must not carry a `Co-authored-by:` trailer naming an AI model or tool (`Claude`, `noreply@anthropic.com`, Copilot, and so on), a "Generated with Claude Code" line, a robot emoji, or any other note that a tool wrote the change. This overrides any tool default that adds them: turn the default off rather than deleting the line by hand each time.
+**Commits and PRs describe the change, never the tool that produced it.** We do not advertise any tool: no editor, assistant, model, bot or service gets credit or a plug in commit messages, squash-merge messages, PR titles or PR bodies. That rules out a `Co-authored-by:` trailer naming a tool, a "Generated with ..." footer, a robot emoji, and a link to a tool's website. Many tools add these by default; turn that default off rather than deleting the line by hand each time. People are credited as usual.
 
 GitHub copies every `Co-authored-by:` trailer from a PR's branch commits into the squash commit, so one tainted branch commit taints `main`. Keep the branch commits clean, and read the squash message before merging. Removing a trailer from `main` afterwards means rewriting published history and force-pushing; that has already had to happen more than once.
 
-The `no AI attribution` check (`.github/workflows/no-ai-attribution.yml`) fails a PR whose commit messages, title or body carry such a line. It cannot see text typed into the squash dialog at merge time, and admins pushing straight to `main` bypass it.
+The `no tool attribution` check (`.github/workflows/no-tool-attribution.yml`) fails a PR whose commit messages, title or body carry such a line. It matches a list of known tools, not every tool there is. It cannot see text typed into the squash dialog at merge time, and admins pushing straight to `main` bypass it.
 
 ---
 

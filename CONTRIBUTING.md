@@ -107,7 +107,7 @@ func TestFeature(t *testing.T) {
 
 **Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
-**No AI attribution**: no `Co-authored-by:` trailer for an AI model or tool, no "Generated with ..." line, in commits, squash-merge messages or PR descriptions. GitHub carries branch-commit trailers into the squash commit, so check the squash message before merging.
+**No tool advertising**: a commit or PR describes the change, not the tool that produced it. No `Co-authored-by:` trailer naming a tool, no "Generated with ..." footer, in commits, squash-merge messages or PR descriptions. GitHub carries branch-commit trailers into the squash commit, so check the squash message before merging; the `no tool attribution` check fails a PR that carries one.
 
 **Examples**:
 ```
