@@ -239,3 +239,90 @@ describe('BackoffManager silent-failure parking', () => {
   });
 });
 
+describe('BackoffManager connection-state teardown', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('keeps a live park', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordBudgetRefusal('parked', 600_000);
+    mgr.forgetConnectionState('parked');
+
+    expect(mgr.parkRemainingMs('parked')).toBe(600_000);
+    now.mockReturnValue(1_000_000 + 600_000);
+    expect(mgr.parkRemainingMs('parked')).toBe(0);
+  });
+
+  // Preserving parkedUntil without nextCheckTime would leave the room eligible
+  // for an immediate check, and a room checked live is a room dialled.
+  it('still defers the next check of a parked room', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordBudgetRefusal('parked', 600_000);
+    mgr.forgetConnectionState('parked');
+
+    expect(mgr.shouldCheckNow('parked')).toBe(false);
+    now.mockReturnValue(1_000_000 + 600_000);
+    expect(mgr.shouldCheckNow('parked')).toBe(true);
+  });
+
+  // Only the park survives: the error curve describes the connection that just
+  // ended, and a room re-added later must start it from scratch.
+  it('drops the error curve of a parked room', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordConnectionError('parked', new Error('boom'));
+    mgr.recordConnectionError('parked', new Error('boom'));
+    mgr.recordBudgetRefusal('parked', 600_000);
+    mgr.forgetConnectionState('parked');
+
+    expect(mgr.getState('parked')!.consecutiveErrors).toBe(0);
+  });
+
+  // Without this the manager grows an entry per torn-down room for the
+  // lifetime of the pod.
+  it('forgets a room whose park has already elapsed', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordBudgetRefusal('expired', 600_000);
+    now.mockReturnValue(1_000_000 + 600_001);
+    mgr.forgetConnectionState('expired');
+
+    expect(mgr.getAllUsernames()).not.toContain('expired');
+  });
+
+  it('forgets a room that was never parked', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordOfflineCheck('plain');
+    mgr.forgetConnectionState('plain');
+
+    expect(mgr.getAllUsernames()).not.toContain('plain');
+  });
+
+  // /api/reset-backoff and /api/retry call removeState precisely to override a
+  // park by hand, so it must stay a full delete.
+  it('leaves removeState clearing a live park outright', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordBudgetRefusal('parked', 600_000);
+    mgr.removeState('parked');
+
+    expect(mgr.parkRemainingMs('parked')).toBe(0);
+    expect(mgr.getAllUsernames()).not.toContain('parked');
+  });
+});

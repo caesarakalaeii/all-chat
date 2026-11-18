@@ -1713,8 +1713,8 @@ class TikTokListenerService {
       stream.connection.disconnect();
       this.activeStreams.delete(username);
 
-      // Clear backoff state (the poller target went above)
-      this.backoffManager.removeState(username);
+      // Clear backoff state (the poller target went above); a live park survives.
+      this.backoffManager.forgetConnectionState(username);
       this.statusChecker.clearCache(username);
       // The heartbeat-forced path does not come through here (it disconnects
       // directly and reads the streak in the disconnected handler), so clearing

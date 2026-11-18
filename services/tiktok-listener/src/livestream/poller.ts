@@ -160,7 +160,9 @@ export class LiveStreamPoller {
   removeTarget(username: string): void {
     const deleted = this.pollingTargets.delete(username);
     if (deleted) {
-      this.backoffManager.removeState(username);
+      // Teardown, so a live park survives: it is owed to the signer's rolling
+      // hour, not to the poller target going away.
+      this.backoffManager.forgetConnectionState(username);
       this.statusChecker.clearCache(username);
       this.logger.debug('Removed polling target', { username });
     }
