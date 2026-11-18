@@ -4,11 +4,7 @@
 **Status**: Accepted
 **Deciders**: caesarakalaeii, the sole copyright holder of the plugin code
 
-(ADR numbering is shared with the caesar-deployment repo. If 0067 is already
-taken there, renumber this file; the slug `desktop-plugins-in-own-repositories`
-is the stable identifier.)
-
-## Context and Problem Statement
+## Context
 
 ADR-0049 put two desktop plugins in this repository: `streamdeck-plugin/`
 (TypeScript, Elgato SDK) and `streamcontroller-plugin/` (Python,
@@ -24,14 +20,11 @@ StreamController). Three things went wrong with that location.
   every Go service, the frontend and the migrations, and works inside CI and
   conventions built for all of them.
 
-## Decision Drivers
+Constraints: the plugins must be installable from their stores and from a release page;
+drift between the two plugins (the risk ADR-0049 names) must keep being checked whatever
+replaces the monorepo; and a contributor to one plugin should not need the platform.
 
-- The plugins must be installable from their stores and from a release page.
-- Drift between the two plugins is the risk ADR-0049 names; whatever replaces the
-  monorepo must keep checking it.
-- A contributor to one plugin should not need the platform.
-
-## Considered Options
+## Considered options
 
 1. **Keep both in this repository** and mirror the StreamController plugin into a
    generated read-only repository for the store.

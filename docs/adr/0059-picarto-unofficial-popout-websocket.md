@@ -27,36 +27,24 @@ Neither is official, and Picarto ships its client as one minified React
 bundle, so the protocol surface can change in any deploy without deprecation
 notice or a changelog.
 
-## Spike findings (2026-09-08)
+## Spike findings (2026-09-08, verified same day)
 
-Everything below was verified the same day, from Picarto's own production
-bundle and a live anonymous capture — not inferred.
-
-- **Endpoint.** The production bundle (`/static/js/main.d543fe27.js`) carries
-  the full socket map as build constants:
-  `REACT_APP_CHAT_URL = "wss://chat.picarto.tv/chat/token=:token"`, alongside
-  stream/feed/widget/dm/cms/notify sockets on the same hosts. Chat uses the
-  chat path.
-- **Token.** The pop-out obtains its read token by POSTing a GraphQL query to
-  Picarto's internal API `https://ptvintern.picarto.tv/ptvapi`:
-  `generateJwtToken(channel_name: $name) { key }`. No authentication is
-  needed; the returned HS256 JWT carries `userId: 0` (anonymous viewer) and
-  the target `channelName`. Verified live.
-- **Handshake.** A raw HTTP Upgrade to `wss://chat.picarto.tv/chat/token=<jwt>`
-  returns `101 Switching Protocols` (uWebSockets behind Cloudflare). No
-  client hello is required; the server immediately starts pushing feed data.
-- **Message shapes.** Live capture (60 s on a streaming channel) received:
-  - chat batches: `{"t":"c","m":[{"t":"c","c":"<channel id>","u":"<user id>",
-    "n":"<username>","rn":"<display name>","i":"<avatar path>","m":"<text>",
-    "id":"<uuid>","d":1788880502781,"k":"ffc2dd","rc":"ffc2dd"}]}` — fields
-    match PicaBot's destructure exactly. Emotes arrive as `:name:` shortcodes
-    inside `m`.
-  - stream metadata: `{"type":"stream","messages":{…viewers, multistream…}}`
-    (legacy full-word type field, alongside the short `t` field).
-  - user-list updates: `{"t":"ur","m":{"u":"…","n":"…"}}`.
-- **Write path.** Anonymous sends are rejected with
-  `{"success":false,"code":"INVALID_USER"}` — reading is free, posting needs
-  an account. All-Chat only reads.
+- **Endpoint**: `REACT_APP_CHAT_URL = "wss://chat.picarto.tv/chat/token=:token"`,
+  a build constant in Picarto's production bundle.
+- **Token**: the pop-out obtains a read token by POSTing a GraphQL query
+  (`generateJwtToken(channel_name) { key }`) to Picarto's internal API
+  `https://ptvintern.picarto.tv/ptvapi`; no authentication needed, and the
+  returned HS256 JWT carries `userId: 0` (anonymous viewer). Verified live.
+- **Handshake**: a raw HTTP Upgrade returns `101 Switching Protocols` (uWebSockets
+  behind Cloudflare); no client hello needed, the server starts pushing
+  immediately.
+- **Message shapes** from a live capture: chat batches
+  `{"t":"c","m":[{"t":"c","c","u":<user id>,"n":<username>,"rn":<display name>,
+  "i":<avatar>,"m":<text>,"id","d","k","rc":""}]}` (fields matching
+  PicaBot's destructure; emotes arrive as `:name:` shortcodes inside `m`),
+  legacy stream metadata frames, and user-list updates `{"t":"ur","m":...}`.
+- **Write path**: anonymous sends are rejected (`INVALID_USER`); reading is
+  free. All-Chat only reads.
 
 ## Decision
 

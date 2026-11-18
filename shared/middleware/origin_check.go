@@ -84,7 +84,7 @@ func prefixMatchAtBoundary(origin, prefix string) bool {
 // an Origin (or Referer fallback), it must be in the allowed list. Absent
 // Origin/Referer is allowed (non-browser API clients authenticate via
 // Authorization header). Safe methods (GET/HEAD/OPTIONS) are not checked.
-// See docs/pi/specs/2026-06-23-h3-cookie-auth-design.md.
+// See docs/security/h3-cookie-auth.md.
 func OriginCheck(allowed []string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		switch c.Request.Method {

@@ -177,10 +177,10 @@ command to run
 **Update CLAUDE.md** if this is a common task:
 
 ```markdown
-| {Task} | [QUICK-REF-{TASK}.md](./docs/llm-guides/QUICK-REF-{TASK}.md) | ~{N} lines |
+| {Task} | [QUICK-REF-{TASK}.md](./docs/llm-guides/QUICK-REF-{TASK}.md) |
 ```
 
-**Update docs/llm-guides/NAVIGATION.md** if relevant.
+Also add it to the llm-guides line in `docs/README.md` if relevant.
 
 ---
 

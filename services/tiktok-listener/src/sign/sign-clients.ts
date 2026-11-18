@@ -21,7 +21,7 @@
  * testable without constructing the 2400-line service (same precedent as
  * src/reliability/connection-decisions.ts).
  *
- * The rules these functions encode (PR 2 plan ruling 6, PR 3 extension):
+ * The rules these functions encode:
  *
  *  - `euler` and `shadow` construct a SelfSigner whenever a signer URL is
  *    configured — unchanged from pre-PR2 behaviour, because the k8s default
@@ -32,7 +32,7 @@
  *    connect path.
  *  - Fallback (relay) promotion needs a target-room warm tab: self mode's
  *    pre-sign already ran one, and pure-node mode warms it at promotion
- *    time (PR 3, sign/warm-target-tab.ts) — so promotion is available in
+ *    time (sign/warm-target-tab.ts) — so promotion is available in
  *    every mode with a signer URL.
  */
 
@@ -97,7 +97,7 @@ export function pickSignClients(mode: SignerMode, deps: SignClientDeps): SignCli
  * Whether premium fallback (relay) promotion can run. The relay attaches to
  * a target-room warm tab: self/euler/shadow modes get one from the
  * connect-time pre-sign, and pure-node mode warms it at promotion time
- * (PR 3, sign/warm-target-tab.ts) — so any mode with a signer URL can
+ * (sign/warm-target-tab.ts) — so any mode with a signer URL can
  * promote; without one there is no relay to promote to.
  */
 export function fallbackPromotionAvailable(
@@ -108,7 +108,7 @@ export function fallbackPromotionAvailable(
   return (
     Boolean(signerUrl) &&
     (Boolean(clients.selfSigner) ||
-      // PR 3: pure-node promotion warms the target tab at promotion time
+      // Pure-node promotion warms the target tab at promotion time
       // (sign/warm-target-tab.ts), so the relay is attachable now.
       mode === 'pure-node')
   );

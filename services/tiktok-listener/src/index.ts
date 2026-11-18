@@ -546,7 +546,7 @@ class TikTokListenerService {
   // same lane. Undefined when self signing is not configured.
   private selfSigner?: SelfSigner;
 
-  // The pure-node session signer (PR 2): set only in pure-node mode, where
+  // The pure-node session signer: set only in pure-node mode, where
   // the pre-sign reads the leased session's proxyHost instead of driving a
   // page capture. Exactly one of selfSigner/pureNodeSigner is ever set.
   private pureNodeSigner?: PureNodeSigner;
@@ -652,7 +652,7 @@ class TikTokListenerService {
     // Apply the Euler Stream retirement configuration to the connector's global route registry
     // (issue #698). Must happen before any TikTokLiveConnection is constructed, because the
     // connector reads these module-level singletons at connect time and caches its Euler client.
-    // Mode-gated signer construction (PR 2 plan ruling 6): euler/shadow
+    // Mode-gated signer construction: euler/shadow
     // keep SelfSigner whenever a signer URL is configured (k8s default
     // relies on it for lane pinning and relay promotion); pure-node gets
     // the PureNodeSigner and no SelfSigner.
@@ -1828,8 +1828,8 @@ class TikTokListenerService {
    * viewer-tab relay. Promotion is premium-only (a tab is ~150MB in the
    * signer pod), gated by TIKTOK_PREMIUM_FALLBACK, and requires a signer
    * URL: self/euler/shadow modes get their target-room tab from the
-   * connect-time pre-sign, and pure-node mode warms it here (PR 3,
-   * sign/warm-target-tab.ts) — one capture per promotion attempt.
+   * connect-time pre-sign, and pure-node mode warms it here
+   * (sign/warm-target-tab.ts) — one capture per promotion attempt.
    *
    * The connection handed in stays DISCONNECTED: its listeners were wired
    * in connectToStream before the primary attempt failed, and the fallback

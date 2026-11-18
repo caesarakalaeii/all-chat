@@ -231,7 +231,7 @@ against Euler's, on live rooms, before anything depends on it — after cutover,
 the signing algorithm takes TikTok ingest down until we fix it, where today it is Euler's problem.
 That break-fix cycle lands on the signer service; see its README for the update procedure.
 
-`pure-node` details (PR 2 of the pure-Node transport, measured 2026-09-18):
+`pure-node` details (measured 2026-09-18):
 the signer leases a **shared WS session** — one warm classic room's
 webcast URL + cookie jar, freshness-stamped — and the listener
 synthesizes the connector's initial fetch result in-process
@@ -245,7 +245,7 @@ signs ≤ 12/hour **per pod** — the session's flag budget is shared by
 every pod leasing it, so keep ONE connect-capable replica in pure-node
 rollouts or divide the cap across replicas with
 `TIKTOK_MAX_WS_CONNECTS_PER_HOUR`. The premium **fallback tier is
-ON** in this mode (PR 3 of the pure-Node transport): promotion warms the
+ON** in this mode: promotion warms the
 target-room tab on the signer (`POST /v1/sign` viewer path, one capture
 per attempt, premium-gated) before attaching the relay, and the canary
 mirror attaches the same way — one warm per canary stint, paced by the

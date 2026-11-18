@@ -4,7 +4,7 @@
 
 A **passive overlay** renders chat exactly like a normal overlay but does **not**
 ask the backend to start capturing chat. It exists for streamers who keep an OBS
-instance connected around the clock — most commonly IRL streamers running a 24/7
+instance connected around the clock, most commonly IRL streamers running a 24/7
 OBS server for disconnect protection.
 
 Add `?passive=true` to your overlay browser-source URL:
@@ -23,7 +23,7 @@ YouTube for a channel that is offline, discovery **gives up after 1 hour** of no
 finding a live stream and parks the channel until it is re-triggered.
 
 A normal overlay asserts "demand" for the whole time it is connected. If your OBS
-overlay is connected 24/7, that demand is always on — so when you are offline,
+overlay is connected 24/7, that demand is always on; so when you are offline,
 discovery runs, hits the 1-hour limit, and parks. By the time you go live, the
 overlay is parked and chat does not appear until you re-trigger discovery.
 
@@ -47,12 +47,12 @@ A **passive** overlay never asserts that demand, so:
    page for the overlay).
 3. If chat is not already flowing, use **Rediscover** on the monitor to trigger
    discovery. Capture starts within about a minute.
-4. Keep the chat monitor open while you stream — that is what keeps capture
+4. Keep the chat monitor open while you stream; that is what keeps capture
    running for the session. When you close it, capture winds down a few minutes
    later (which is the behaviour you want when the stream ends).
 
 > A plain browser-source refresh does **not** re-trigger a parked YouTube
-> channel — use the monitor's **Rediscover** button.
+> channel; use the monitor's **Rediscover** button.
 
 ## Reading the platform indicator
 
@@ -61,9 +61,9 @@ parked state:
 
 | Indicator | Meaning |
 |-----------|---------|
-| Green | Connected — chat is flowing |
+| Green | Connected: chat is flowing |
 | Yellow (`reconnecting`) | Searching for the stream / retrying |
-| **Indigo (`paused`)** | Discovery gave up after 1h and is parked — use the chat monitor's **Rediscover** to retry |
+| **Indigo (`paused`)** | Discovery gave up after 1h and is parked; use the chat monitor's **Rediscover** to retry |
 | Red (`error`) | A real error (e.g. auth required) |
 | Dim (`offline`) | Not live |
 
@@ -81,7 +81,7 @@ capture is idle and waiting for you to trigger it.
 ## How it works (technical)
 
 `?passive=true` makes the overlay's WebSocket connect **without asserting overlay
-demand** — the API gateway attaches it via the no-demand path (the same mechanism
+demand**: the API gateway attaches it via the no-demand path (the same mechanism
 used for anonymous participate tabs), skipping source auto-activation while still
 delivering chat frames. With no demand asserted, `source-manager` never tells the
 YouTube listener to poll, so the 1-hour discovery give-up is never reached.

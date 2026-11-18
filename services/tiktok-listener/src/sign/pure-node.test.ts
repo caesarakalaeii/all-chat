@@ -22,15 +22,14 @@ import { PureNodeSigner } from './pure-node.js';
 import { classifySignatureFailure, SignatureFailure, type SignRequest } from './signer.js';
 
 /**
- * The lease is the signer service's SessionLease (PR 1): a warm classic
+ * The lease is the signer service's SessionLease: a warm classic
  * room's captured webcast WS URL plus its cookie jar. The synthesized
  * fetchResult must reproduce the RECORDED URL's shape with the target's
- * room_id — the bare origin is handshake-rejected (measured, spike report
- * PR 2 Task 1).
+ * room_id — the bare origin is handshake-rejected (measured 2026-09-18).
  */
 
 // X-Bogus rides the fixture: measured handshake-load-bearing (stripping
-// it → instant 200-rejection, PR 0); a filter regression dropping it must
+// it → instant 200-rejection); a filter regression dropping it must
 // fail the contract test.
 const LEASE_URL =
   'wss://webcast-ws.eu.tiktok.com/webcast/im/ws_proxy/ws_reuse_supplement/?version_code=180800&device_platform=web&browser_platform=Linux%20x86_64&X-Bogus=asdf1234&identity=audience&room_id=111&internal_ext=test&cursor=abc&compress=gzip';
@@ -84,7 +83,7 @@ describe('PureNodeSigner fetchResult contract', () => {
     // The four keys the connector appends itself are NOT in routeParams;
     // every other recorded identity param is forwarded — deep-equal, not
     // sampled: a filter regression dropping ANY load-bearing param
-    // (X-Bogus stripped it → instant 200-rejection, PR 0) must fail here.
+    // (X-Bogus stripped it → instant 200-rejection) must fail here.
     expect(fr.routeParams).toEqual({
       version_code: '180800',
       device_platform: 'web',

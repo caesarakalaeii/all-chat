@@ -256,7 +256,7 @@ describe('CanaryConsumer divergence detection', () => {
   });
 });
 
-describe('CanaryConsumer tab warm (PR 3, pure-node mode)', () => {
+describe('CanaryConsumer tab warm (pure-node mode)', () => {
   // The RelayStream calls the 409 hook (onNoWarmTab) once per connect that
   // answers 409; the consumer must run the warm callback at most ONCE per
   // stint — each warm is a signer-side capture against a single-digit-

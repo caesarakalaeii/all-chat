@@ -1,84 +1,35 @@
-# Getting Started with All-Chat
+# Getting Started
 
-**This file has been reorganized for better LLM efficiency.**
+Before anything else, read [CLAUDE.md](../CLAUDE.md): project overview, architecture, tech stack, documentation conventions.
 
----
-
-## Quick Navigation
-
-**For LLM agents and developers**, see the comprehensive navigation guide:
-
-→ **[docs/llm-guides/NAVIGATION.md](./llm-guides/NAVIGATION.md)** (~400 lines)
-
-This guide includes:
-- Service-by-service navigation (every service in `services/`)
-- Common tasks and where to find relevant code
-- Quick reference card links
-- Troubleshooting guides
-- Database schema overview
-- Useful commands
-
----
-
-## Essential Starting Points
-
-1. **[CLAUDE.md](../CLAUDE.md)** - Project overview, architecture, tech stack
-2. **[docs/llm-guides/NAVIGATION.md](./llm-guides/NAVIGATION.md)** - Detailed service navigation
-3. **[docs/architecture/00-OVERVIEW.md](./architecture/00-OVERVIEW.md)** - System architecture
-
-**For specific tasks**, see quick reference guides:
-- [QUICK-REF-ADD-PLATFORM.md](./llm-guides/QUICK-REF-ADD-PLATFORM.md) - Add new platform support
-- [QUICK-REF-DEBUG-QUOTA.md](./llm-guides/QUICK-REF-DEBUG-QUOTA.md) - YouTube quota debugging
-- [More quick refs...](./llm-guides/)
-
-**For troubleshooting**, start with:
-- [Troubleshooting Decision Tree](./troubleshooting/decision-tree.md) - High-level triage
-
----
-
-## Quick Start (Development)
+## Local development
 
 ```bash
-# Start local environment
-make docker-up         # Postgres, Redis, all services
-
-# Run tests
-make test
-
-# Apply database migrations
-make migrate
-
-# Access services
-# - API Gateway: http://localhost:8080
-# - Overlays: http://localhost:3000 (frontend)
+make docker-up          # Postgres, Redis, all services (docker compose)
+make migrate            # Apply database migrations
+make test               # Run Go tests
 ```
 
----
+Services: API Gateway on http://localhost:8080, frontend on http://localhost:3000.
 
-## Documentation Organization
+Frontend-only work (minimal backend):
 
-All documentation has been reorganized into focused, LLM-optimized guides:
-
-```
-docs/
-├── llm-guides/              # Task-oriented quick references (quick-reference guides + NAVIGATION)
-├── adr/                     # Architecture Decision Records
-├── architecture/            # System architecture (6 docs, numbered 00-05)
-├── troubleshooting/         # Diagnostic guides (decision tree + 5 guides)
-├── operations/              # Deployment and runbooks
-└── phase-reports/           # Historical documents (archived)
+```bash
+make frontend-dev       # Postgres, Redis, gateway, overlay-manager, message-processor
+make frontend-seed      # Create test overlay and chat sources
+make frontend-messages  # Generate mock chat messages
+cd frontend && npm run dev
 ```
 
-**Reading time**: Most tasks require <200 lines of reading (vs 1,000+ previously).
+Dependencies for all service modules: `make deps`. See `make help` (and the `Makefile`) for the full target list, and [FRONTEND_QUICK_START.md](./frontend/FRONTEND_QUICK_START.md) for frontend setup details.
 
----
+## Where to read next
 
-## Need Help?
-
-1. **First time?** → Read [CLAUDE.md](../CLAUDE.md)
-2. **Specific task?** → Check [quick reference cards](./llm-guides/)
-3. **Architecture questions?** → Read [architecture docs](./architecture/)
-4. **Troubleshooting?** → Use [decision tree](./troubleshooting/decision-tree.md)
-5. **Why was X chosen?** → Check [ADRs](./adr/)
-
-**Complete navigation**: [docs/llm-guides/NAVIGATION.md](./llm-guides/NAVIGATION.md)
+| Task | Doc |
+|---|---|
+| Task-oriented quick refs (add a platform, endpoint, migration; debug quota; Redis ops; security audit) | [docs/llm-guides/](./llm-guides/) |
+| System architecture and data flow | [docs/architecture/](./architecture/) |
+| Why a decision was made | [docs/adr/](./adr/) |
+| Troubleshooting | [docs/troubleshooting/decision-tree.md](./troubleshooting/decision-tree.md) |
+| Per-service details | [services/*/README.md](../services/) |
+| PR process | [CONTRIBUTING.md](../CONTRIBUTING.md) |

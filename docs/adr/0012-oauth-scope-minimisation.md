@@ -2,122 +2,42 @@
 
 **Date**: 2026-04-29
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-18
+**Deciders**: Auth team
 
----
+## Context
 
-## Context and Problem Statement
+The backend's viewer OAuth flows historically requested send-capable scopes (`user:write:chat` on Twitch, `youtube.force-ssl` on YouTube, `chat:write`/`chat:read`/`channel:read` on Kick) because extension v1.5.x routed chat sending through the backend's `/auth/viewer/chat/send`. Extension v1.6.0 (2026-04-29) moved sending onto each platform's native session (Twitch GraphQL via the `auth-token` cookie, YouTube's native live-chat input via InnerTube, Kick's REST send with the XSRF cookie), leaving those scopes as dead capability.
 
-The AllChat backend's viewer OAuth flows historically requested send-capable scopes — `user:write:chat` (Twitch), `youtube.force-ssl` (YouTube), `chat:write` plus `chat:read`/`channel:read` (Kick) — because the extension routed chat sending through the backend's `/auth/viewer/chat/send` endpoint. The endpoint used the viewer's OAuth token to call each platform's send API.
-
-Extension v1.6.0 (released 2026-04-29) moved chat sending entirely off the backend onto each platform's native session:
-
-- Twitch: GraphQL via the user's `auth-token` cookie
-- YouTube: native YouTube live-chat input bar (InnerTube + SAPISIDHASH from page session)
-- Kick: REST `messages/send/{chatroomId}` with cookie XSRF token
-
-After v1.6.0 ships and propagates, the backend's send-via-OAuth path is no longer reachable from any current client. The send-capable scopes therefore correspond to dead capability.
-
-Continuing to request them costs:
-
-1. **Consent friction.** Twitch / Google / Kick consent screens display a separate "send messages on your behalf" line, which a non-trivial fraction of viewers refuse. Conversion rate on first sign-in is a real signal we measure on the dashboard.
-2. **Token blast radius.** A leaked OAuth token grants strictly the scopes it was issued with. Reducing scope list reduces what an attacker can do with it (e.g. spam-send messages as the user across platforms).
-3. **"Only ask for what we need" honesty.** The marketing site's privacy paragraph explicitly invokes this principle. Requesting send scope while never sending is a contradiction.
+Continuing to request them costs consent friction ("send messages on your behalf" lines refused by many viewers at sign-in) and widens the blast radius of a leaked token, and contradicts the "only ask for what we need" privacy promise.
 
 ## Decision
 
-Drop every OAuth scope that has no remaining call site in current backend code, in a single hard cutover (no soft-deprecation phase). Effective immediately on this branch.
+Drop every OAuth scope with no remaining call site, as a hard cutover (no deprecation window). Final scopes per flow:
 
-**Final scope set per provider × flow:**
+| Provider | Flow | Scopes |
+|---|---|---|
+| Twitch | viewer/login | none |
+| Twitch | streamer | `channel:read:redemptions`, `channel:read:subscriptions`, `bits:read`, `moderator:read:followers` (all used by EventSub) |
+| YouTube | viewer | `youtube.readonly`, `userinfo.profile` (replaces `force-ssl` for `GetChannelID`) |
+| YouTube | streamer | `youtube.readonly`, `userinfo.profile` |
+| Kick | streams | `user:read` |
+| Kick | add-source | `user:read`, `channel:read` (2026-09-26 addendum) |
+| Discord | bot | `bot` + permissions `1024,2048,65536` (capability flags, not user OAuth) |
 
-| Provider | Flow | Final scopes | Removed |
-|---|---|---|---|
-| Twitch | viewer | (none — empty slice) | `user:write:chat` |
-| Twitch | streamer | `channel:read:redemptions`, `channel:read:subscriptions`, `bits:read`, `moderator:read:followers` | (no change — every scope still used by EventSub) |
-| YouTube | viewer | `youtube.readonly`, `userinfo.profile` | `youtube.force-ssl` (replaced with `youtube.readonly` for `GetChannelID`) |
-| YouTube | streamer | `youtube.readonly`, `userinfo.profile` | `youtube.force-ssl` |
-| Kick | viewer | `user:read` | `chat:read`, `chat:write`, `channel:read` |
-| Kick | streamer | `user:read` | `chat:read`, `chat:write`, `channel:read` (though the add-source flow later re-requests `channel:read`, see the addendum below) |
-| Discord | bot | `bot` + permissions `1024,2048,65536` | (no change — bot capability flags, not user OAuth) |
+Addendum (2026-09-26): Kick streamer `channel:read` is restored for the add-source flow only. The originally claimed "no consumer" no longer holds: add-source must resolve the streamer's actual channel slug via Kick's authenticated `GET /public/v1/channels`, because `/public/v1/users` `name` is the display name, not the slug. Storing the name made every slug lookup 404 and silently auto-deactivated the source (prod incident, overlay `36847b00`). See `KickOAuth.GetAuthURLWithChannelScopePKCE`; login and viewer flows stay at `user:read`.
 
-**Verification basis for each removal:**
-- `user:write:chat` (Twitch viewer): only consumer was `helix/chat/messages POST` in auth-service `chat_send` handler. No other caller requested it in the viewer or login flows at the time. (It later returned via explicit opt-in: the moderation re-consent flow adds it as the send scope, `TwitchSendScope`; the login and viewer flows stay empty.)
-- `youtube.force-ssl` (YouTube viewer): only consumer was `liveChat/messages POST` in viewer-side `sendYouTubeMessage`. `GetChannelID` does `channels?part=id&mine=true` which is satisfied by `youtube.readonly`.
-- `youtube.force-ssl` (YouTube streamer): only consumer was `sendStreamerYouTubeMessage`. No production caller of that path remains; streamer-side YouTube sending happens via the streamer's own browser session. (Like the Twitch send scope, YouTube's `force-ssl` later returned via the moderation re-consent flow: the `timeout` and `ban` actions request it (`youtubeModerationScopeByAction` in `services/auth-service/handlers/chat_bot_send.go`), which is the ADR-0017 addendum below.)
-- `channel:read` (Kick, both flows): no consumer found at the time — channel info was fetched via the unauthenticated public Kick API in kick-listener. *(Restored 2026-09-26 for the add-source flow only; see the addendum below.)*
-- `chat:read` (Kick, both flows): no consumer found anywhere — kick-listener consumes chat over Kick's websocket, which does not gate on this OAuth scope.
-- `chat:write` (Kick viewer): only consumer was `api.kick.com/public/v1/chat POST` in `sendKickMessage`, the dead pre-1.6.0 send path. It later returned as an explicit grant through the moderation re-consent (ADR-0017 addendum below); the login and viewer flows stay minimal.
+Addendum (2026-06-19): send scopes returned where they have a real caller, via explicit re-consent flows, never autoplay: the moderation re-consent requests `TwitchSendScope` for Twitch and `youtube.force-ssl` for the `timeout`/`ban` actions (`youtubeModerationScopeByAction` in `services/auth-service/handlers/chat_bot_send.go`, ADR-0017). Kick `chat:write` similarly returns through moderation re-consent. The flows below stay minimal.
 
-### Addendum (2026-09-26): Kick streamer `channel:read` restored in the add-source flow only
-
-The verification above that `channel:read` (Kick) had "no consumer" no longer holds in
-full: the add-source flow must resolve the streamer's *actual channel slug* via Kick's
-authenticated `GET /public/v1/channels` (no parameters = the consenting user's channel),
-because the `/public/v1/users` `name` field is the account **display name, not the slug**
-(Kick's own OpenAPI spec models it as "John Doe"). The kick-listener looks channels up
-by slug (`GET /api/v2/channels/{channel_id}`); for any streamer whose display name
-differs from their slug, storing the name made every sync 404 and auto-deactivate the
-source — permanently silent "Kick nothing" with no error shown to the streamer (prod
-incident, overlay `36847b00`).
-
-Scope: the streamer **add-source** consent requests `user:read channel:read`
-(`KickOAuth.GetAuthURLWithChannelScopePKCE`); login and the viewer flow stay at
-`user:read` as decided above. This is a genuine caller, not scope creep: the
-resolution call is required to store a working channel identifier at all.
-
-### Addendum (2026-06-19, ADR-0017): `youtube.force-ssl` re-added for opt-in YouTube moderation only
-
-[ADR-0017](./0017-chat-moderation-write-path.md) re-adds `youtube.force-ssl` — not on
-login and never for viewers, but only via the explicit moderation re-consent flow for
-streamers who enable YouTube moderation (ban/timeout on live chat). The streamer and
-viewer scope tables above remain true for those flows.
-
-## Cutover: hard, not soft
-
-We chose a hard cutover (drop scopes immediately) over a soft cutover (deprecate `/auth/viewer/chat/send` first, drop scopes a release later).
-
-**Soft path was rejected because:**
-
-- The v1.6.0 store rollout already started — Chrome Web Store + Firefox Add-ons review queues are in flight. Most users will upgrade naturally over the next 1–2 weeks.
-- A v1.5.x extension still in the wild only fails to send when the user re-authenticates after this change deploys. Existing tokens keep their old scopes until natural expiry/refresh.
-- The failure mode for an affected user is "send returns an error" — visible, noisy, prompts an upgrade. Not a silent corruption.
-- Maintaining two scope sets across a soft-deprecation window adds branching code and consent-screen variability that has to be reconciled later.
-
-The risk we accept: a v1.5.x user who reauths between deploy and their natural extension update will see send failures until they upgrade. We judged this acceptable given the explicit error UX.
-
-## Files Changed
-
-```
-services/auth-service/oauth/viewer_twitch.go    — empty Scopes slice
-services/auth-service/oauth/viewer_youtube.go   — force-ssl → readonly
-services/auth-service/oauth/viewer_kick.go      — only user:read
-services/auth-service/oauth/youtube.go          — drop force-ssl
-services/auth-service/oauth/kick.go             — only user:read (both PKCE call sites)
-docs/adr/0012-oauth-scope-minimisation.md       — this file
-```
-
-`go build ./...` clean across the auth-service module; `go test ./oauth/...` passes (existing tests don't assert scope literals, so no test changes were needed).
+Hard-cut rationale: rolled-out extensions upgrade naturally over 1-2 weeks; existing tokens keep their old scopes until refresh; failures are loud ("send returns an error"), prompting upgrade, rather than silent; and a soft window means maintaining two scope sets. Accepted risk: a v1.5.x user reauthing before upgrading loses send until they upgrade.
 
 ## Consequences
 
-### Positive
+Smaller consent screens, smaller token blast radius, backend intent matching the privacy promise. Cost: the noted v1.5.x window; and backend viewer send code becomes dead capability kept as a safety hatch (send paths reappeared as callers via moderation and streamer sends). Reversibility is trivial: re-add a scope string to the relevant flow's `Scopes` slice.
 
-- Smaller consent screens; expected uplift on viewer sign-in conversion.
-- Reduced token-leak blast radius across all three platforms.
-- Backend's intent matches its marketed privacy promise.
-- Removes confusion about why "send messages on your behalf" appears on a dashboard sign-in flow that never sends.
+## Implementation
 
-### Negative
+- Scope lists live in `services/auth-service/oauth/` (`viewer_twitch.go`, `viewer_youtube.go`, `viewer_kick.go`, `youtube.go`, `kick.go`).
+- Backend send paths that remain: `/chat/send` and `/viewer/chat/send` in `services/auth-service/handlers/chat_send.go` (viewer sends via backend were removed from the extension's flow; the bridge endpoints remain for the chat-bot and streamer paths), plus `chat_bot_send.go` and `chat_announce.go`.
 
-- v1.5.x extension users who re-authenticate during the cutover window will see send failures and need to upgrade. We judge this acceptable per the cutover analysis above.
-- Backend's `sendKickMessage` / `sendYouTubeMessage` / Twitch viewer-side helix call become dead code: they were kept as a safety hatch and are still in the repo (still reachable via `/chat/send` and `/viewer/chat/send`, and `sendStreamerYouTubeMessage` via the chat-announce, chat bot-send and streamer chat-send paths), and remain a candidate for removal in a follow-up.
-
-### Reversibility
-
-Trivial — re-add a string to the appropriate `Scopes` slice and redeploy. Existing tokens are unaffected. The change is per-flow and narrowly scoped.
-
-## Related
-
-- Extension v1.6.0 release (commits `b76b1c3` CSP fix for emote APIs, `b98d309` popout SW relay, tag `v1.6.0`)
-- Future ADR (TBD): removal of dead viewer-side send handlers from `auth-service`
-
+Related: ADR-0017 (moderation write path and the moderation re-consent scopes).

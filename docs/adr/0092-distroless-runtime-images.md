@@ -5,58 +5,40 @@
 **Revised**: 2026-11-15
 **Deciders**: caesarakalaeii
 
-## Context and Problem Statement
+## Context
 
-Every Go service image ran on `alpine:3.24`, and the frontend and discord-bot ran on
-`node:26-alpine` and `node:22-alpine`. In production each service needs only its binary
-(or `node` and its bundle), CA certificates and tzdata. The alpine runtime stage also
-shipped busybox, a shell and `apk`. None of that is used at runtime, but all of it is
-attack surface, shows up in image scans, and lets an attacker who gets code execution in a
-pod run arbitrary shell commands.
+Every Go service image ran on `alpine:3.24`, and the frontend and discord-bot on
+`node:26-alpine`/`node:22-alpine`. Runtime needs are only the binary (or `node` and its
+bundle), CA certificates and tzdata; the alpine stage additionally shipped busybox, a
+shell and `apk`, unused at runtime but attack surface for anyone with code execution in a
+pod. The only shell uses were Docker `HEALTHCHECK`s (ignored by Kubernetes), support-bot
+downloading `kubectl`, youtube-listener-innertube's `preStop` (`["/bin/sh", "-c", "sleep
+5"]`), and runbooks `kubectl exec`-ing `wget`/`printenv`/`sh`.
 
-The only runtime uses of the shell were:
+Constraints: ship nothing but the service and its runtime (no shell, no package manager);
+change no behaviour (ports, env defaults, working directory and UIDs stay the same, so no
+manifest needs a new `securityContext`); keep picking up base-image security fixes on
+every build as the floating `alpine:3.24` tag did.
 
-- Docker `HEALTHCHECK` instructions calling busybox `wget`. Kubernetes ignores them and runs
-  its own `httpGet` probes.
-- support-bot downloading `kubectl` with `wget` in its runtime stage.
-- youtube-listener-innertube's `preStop` hook, `["/bin/sh", "-c", "sleep 5"]`, in
-  caesar-deployment.
-- Runbooks that `kubectl exec` into a service pod to run `wget`, `printenv` or `sh`.
+## Considered options
 
-## Decision Drivers
+- Keep alpine: busybox and `apk` cannot be removed from alpine itself.
+- `scratch` for the Go services: no CA bundle, tzdata or `/etc/passwd` shipped; every image
+  would copy them from the builder, and Node still needs a base.
+- Google distroless on Debian 13 (trixie) (`gcr.io/distroless/static-debian13` for Go,
+  `gcr.io/distroless/nodejs<N>-debian13` for Node): ships CA certificates, tzdata and
+  `SSL_CERT_FILE`, no shell, Node variants with `node` as the entrypoint. Chosen.
 
-- Ship nothing but the service and its runtime: no shell, no package manager.
-- Change no behaviour. Ports, env defaults, working directory and UIDs stay the same, so no
-  manifest needs a new `securityContext`.
-- Keep picking up base-image security fixes on every build, as the floating `alpine:3.24`
-  tag did.
+## Decision
 
-## Considered Options
-
-1. **Keep alpine** and remove packages. busybox and `apk` cannot be removed from alpine
-   itself.
-2. **`scratch`** for the Go services. It has no CA bundle, tzdata or `/etc/passwd`, so every
-   image would have to copy them in from the builder, and the Node images would still need a
-   base.
-3. **Google distroless** (`gcr.io/distroless/static-debian13` for Go,
-   `gcr.io/distroless/nodejs<N>-debian13` for Node). Ships CA certificates, tzdata and
-   `SSL_CERT_FILE`, no shell, and Node variants with `node` as the entrypoint.
-
-## Decision Outcome
-
-Chosen option: **3, distroless**, on Debian 13 (trixie).
-
-- **Go services** (every `services/*` Go image): the runtime stage is
-  `FROM gcr.io/distroless/static-debian13`. Every build is already `CGO_ENABLED=0`, so the
-  binaries are static. The build stage stays `golang:<version>-alpine`, because nothing from
-  it ships except the binary.
-- **support-bot** downloads `kubectl` in the build stage and copies it to
-  `/usr/local/bin/kubectl`. Its tools call `exec.Command("kubectl", ...)` directly, with no
-  shell, and distroless puts `/usr/local/bin` on `PATH`. Since
-  [ADR-0093](./0093-support-bot-on-claude-hands-fixes-to-caterpillar.md) it also ships the
-  pinned Claude Code binary (`/usr/local/bin/claude`), which links against glibc, so
-  support-bot is the one Go service on `gcr.io/distroless/cc-debian13` instead of
-  `static-debian13`. Still no shell or package manager.
+- **Go services** (every `services/*` image): runtime `FROM
+  gcr.io/distroless/static-debian13`; builds are already `CGO_ENABLED=0` so the binaries
+  are static, and the builder stays `golang:<version>-alpine` because nothing from it
+  ships except the binary.
+- **support-bot** copies `kubectl` (downloaded in the build stage) to `/usr/local/bin`;
+  its tools `exec.Command("kubectl", ...)` directly, with no shell. Since ADR-0093 it also
+  ships the pinned Claude Code binary, which links glibc, so support-bot alone runs
+  `distroless/cc-debian13` instead of `static-debian13`.
 - **frontend**: the runtime stage is `gcr.io/distroless/nodejs26-debian13` with
   `CMD ["server.js"]`. Its build stages move from `node:26-alpine` to `node:26-trixie-slim`.
   The Next.js standalone output ships native packages (sharp) installed for the build
@@ -70,11 +52,10 @@ Chosen option: **3, distroless**, on Debian 13 (trixie).
 - **Health checks**: the Docker `HEALTHCHECK` instructions are removed. Kubernetes never used
   them, and no compose file waits on a service's health status.
 - **Tags**: `static-debian13` and `nodejs<N>-debian13` float within Debian 13, as
-  `alpine:3.24` floated within 3.24. Digests are not pinned: distroless republishes often, and
-  digest pins would mean a Dependabot PR per image every few days in exchange for
-  reproducibility the deploy flow does not use (Keel deploys what `main` builds).
+  `alpine:3.24` did. Digests are left unpinned: distroless republishes often and Keel
+  deploys what `main` builds anyway.
 
-### Not converted
+## Not converted
 
 - **migrations** (`allchat-migrations`) stays on alpine. It is a shell script around `psql`
   and `pg_isready`, run as an init container. Moving it means rewriting the runner in Go, a
@@ -83,27 +64,26 @@ Chosen option: **3, distroless**, on Debian 13 (trixie).
   `node:*-bookworm-slim`. tiktok-signer needs Chromium, which distroless cannot provide.
 - **test/contract/dual-listener** is a test harness that is never deployed.
 
-### Consequences
+## Consequences
 
-- Good: no shell, busybox or package manager in any converted image. Image scans report only
-  the service's own dependencies and the Debian base packages distroless ships.
-- Good: the frontend and discord-bot run on glibc, the same libc as their builds.
-- Bad: `kubectl exec <pod> -- sh`, `wget`, `printenv` and similar no longer work. Use
-  `kubectl port-forward` plus a local `curl` for HTTP endpoints, the deployment spec for env
-  var names, and `kubectl debug <pod> -it --image=busybox:1.37 --target=<container>
-  --profile=restricted` for an interactive shell next to the process. The runbooks show
-  these forms.
-- Bad: a manifest that runs a shell command against these images breaks. The only one,
-  youtube-listener-innertube's `preStop`, uses the native `sleep` action (caesar-deployment
-  #179), which must be deployed before the images.
+- No shell, busybox or package manager in any converted image; scans report only the
+  service's dependencies and the Debian base packages. The frontend and discord-bot run on
+  glibc, the same libc as their builds.
+- `kubectl exec <pod> -- sh`/`wget`/`printenv` no longer work: use `kubectl port-forward`
+  plus local `curl`, the deployment spec for env names, and `kubectl debug <pod> -it
+  --image=busybox:1.37 --target=<container> --profile=restricted` for an interactive
+  shell next to the process (the runbooks show these forms).
+- A manifest running a shell command against these images breaks; the only one,
+  youtube-listener-innertube's `preStop`, uses the native `sleep` action (caesar-
+  deployment), which must deploy before the images.
 
 ## Implementation
 
-- `services/*/Dockerfile`, `frontend/Dockerfile`, `services/discord-bot/Dockerfile`.
-- caesar-deployment: `lifecycle.preStop.sleep` for youtube-listener-innertube.
-- Runbooks and guides: every `kubectl exec` into a service pod uses one of the forms above.
+`services/*/Dockerfile`, `frontend/Dockerfile`, `services/discord-bot/Dockerfile`;
+caesar-deployment `lifecycle.preStop.sleep` for youtube-listener-innertube; every runbook
+and guide's `kubectl exec` uses one of the forms above.
 
-## Related Decisions
+## Related
 
 - [ADR-0005](./0005-react-nextjs-frontend.md): the Next.js standalone frontend this image
   runs.

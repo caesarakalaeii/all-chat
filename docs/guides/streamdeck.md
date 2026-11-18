@@ -1,32 +1,13 @@
 # Driving All-Chat from a Stream Deck
 
 **Audience**: streamers running the Elgato Stream Deck plugin or the Linux StreamController plugin
-**You will need**: an All-Chat account, and about a minute once — you press one button and approve it in your browser
-
----
+**You will need**: an All-Chat account, and about a minute once, you press one button and approve it in your browser
 
 ## What these plugins are for
 
-A multistreamer already has both hands busy. The dashboard is one more window
-competing for attention on a second monitor, and reaching for it mid-sentence to
-close a poll is exactly the moment you did not want to be looking at a browser.
-A physical button removes that step: one press sends a message to every connected
-chat at once, or opens a poll, or locks a prediction just as the play resolves.
+One physical keypress sends a message to every connected chat, opens or closes a poll, or locks a prediction the moment a play resolves, without reaching for a browser mid-stream. Two plugins exist because the hardware runs two different apps: Elgato's own app (Windows, macOS) loads the **Stream Deck plugin**, and Linux runs **StreamController** with its own plugin format. Both talk to the same All-Chat endpoints and are set up the same way.
 
-Two plugins exist because the hardware is driven by two different pieces of
-software. Elgato's own app runs on Windows and macOS and loads the **Stream Deck
-plugin**. It does not run on Linux at all, so Linux users run
-**StreamController**, which has its own plugin format and loads the
-**StreamController plugin**. They are separate programs, but they talk to the
-same All-Chat endpoints and are set up the same way, so this guide covers both
-and calls out the two places they differ.
-
-Both plugins are free. So is installing them, so is linking one to your account,
-and so is every action described below. The one thing that asks for a premium
-account is *starting* a poll or a prediction, for reasons explained under
-[Where premium comes in](#where-premium-comes-in).
-
----
+Both plugins, installing them, and linking one to your account are free. Starting a poll or prediction needs a premium account; see [Where premium comes in](#where-premium-comes-in).
 
 ## Step 1: Link the plugin to your account
 
@@ -42,7 +23,7 @@ What happens next takes about ten seconds:
 2. The screen tells you what is being granted: **which overlay** this device may
    control, **what it may do** (sending chat, running polls and predictions), and
    what the plugin calls itself. That last one is labelled *self-reported*,
-   because it comes from the plugin and nobody can verify it — if you did not
+   because it comes from the plugin and nobody can verify it, if you did not
    just press Link, deny it.
 3. Press **Approve**. The credential goes straight from All-Chat to the plugin.
 
@@ -66,8 +47,8 @@ next request.
 ### If a code appears instead
 
 Linking needs the plugin and your browser on the **same computer**. When they are
-not — a Stream Deck driving a second PC, a headless capture box, a machine with
-no desktop session — the plugin cannot hand the credential to itself over a local
+not, a Stream Deck driving a second PC, a headless capture box, a machine with
+no desktop session, the plugin cannot hand the credential to itself over a local
 connection, so it shows you an eight-character code instead:
 
 1. The plugin displays something like `KRPT-8W4M`.
@@ -79,23 +60,21 @@ connection, so it shows you an eight-character code instead:
 The code lasts ten minutes and tolerates five wrong attempts before it dies, so
 if you fumble it a couple of times just start again from the plugin.
 
----
-
 ## Step 2 (alternative): Paste a personal access token
 
 This is the route for a machine linking cannot reach at all: a headless capture
 box, a PC you only reach over SSH, a script. It is fully supported and is not
-going away — it simply asks more of you, because a pasted secret is a secret you
+going away, it simply asks more of you, because a pasted secret is a secret you
 have handled.
 
 1. Sign in at <https://allch.at>.
 2. Open **Settings → API tokens** (<https://allch.at/settings/api-tokens>).
 3. Click to create a token and give it a name that tells you which machine it
-   is on later — `stream-pc-deck` beats `token1` the day you want to revoke one
+   is on later, `stream-pc-deck` beats `token1` the day you want to revoke one
    of three.
 4. Grant it the scopes you actually need:
-   - **`chat:write`** — the *Send chat message* action.
-   - **`engagement:write`** — the poll and prediction actions.
+   - **`chat:write`**, the *Send chat message* action.
+   - **`engagement:write`**, the poll and prediction actions.
 
    A token with neither scope authenticates fine and is refused at every action,
    which is a confusing way to spend an evening. Grant both if you intend to use
@@ -118,7 +97,7 @@ decide whether a bearer is one of these tokens or an ordinary session token, so 
 token pasted without it will not work.
 
 Unlike a linked device, a pasted token is **not** tied to one overlay and has
-**no** expiry unless you set one — which is exactly why it works on a box that
+**no** expiry unless you set one, which is exactly why it works on a box that
 cannot link, and exactly why linking is the better choice when it is available.
 
 ### The Server field, either way
@@ -132,20 +111,18 @@ with no trailing slash.
 The plugin keeps it with the key's other settings and sends it in one HTTP
 header. It is never written to the plugin log, never put in a URL, and never
 echoed back inside an error message. When a diagnostic has to tell two configured
-keys apart it prints only the prefix — `allchat_dev_…` for a linked device,
-`allchat_pat_…` for a pasted token — so a log line says which *kind* of
+keys apart it prints only the prefix, `allchat_dev_…` for a linked device,
+`allchat_pat_…` for a pasted token, so a log line says which *kind* of
 credential is configured without disclosing any of it.
 
 Neither kind can do everything your login can. Neither can mint credentials,
-delete your account, export your data, or reach any admin surface — those refuse
+delete your account, export your data, or reach any admin surface, those refuse
 both outright. A leaked credential is a bad day, not a lost account.
-
----
 
 ## Step 3: The actions
 
 **Send chat message.** Type the message into the key's settings; pressing the key
-fans it out to every chat you have connected — Twitch, YouTube and Kick — in one
+fans it out to every chat you have connected, Twitch, YouTube and Kick, in one
 press. This is the action most people buy the hardware for. Requires
 `chat:write`.
 
@@ -167,13 +144,11 @@ normally pressed at a precise moment. *Resolve* settles it on the winning
 outcome and pays out. *Cancel* calls it off and refunds. Requires
 `engagement:write`.
 
-Each key targets one overlay. A **linked** device already has one — you chose it
+Each key targets one overlay. A **linked** device already has one, you chose it
 on the approve screen, and the server refuses a request for any other overlay, so
 a compromised deck cannot reach the rest of your account. With a **pasted** token
 you set the overlay per key instead, and nothing stops you pointing a key at a
 different overlay you own.
-
----
 
 ## Where premium comes in
 
@@ -198,12 +173,10 @@ action in exactly the same way that account's browser session is refused. If a p
 feature works in the dashboard it will work from the key, and if it does not, it
 will not.
 
----
-
 ## Troubleshooting
 
 **Check which plugin version you are running, first.** There is no auto-update on
-either plugin — both install from a file you download — so a bug that was fixed
+either plugin: both install from a file you download, so a bug that was fixed
 months ago is still present on a build from before the fix, and nothing has moved
 you off it. On the **Stream Deck plugin**, open any All-Chat key's settings: under
 **Link with All-Chat** the panel prints `Plugin version …`, which is the build
@@ -214,12 +187,11 @@ This matters most when **linking hangs**. Stream Deck plugin installs from befor
 2026-08-31 have a property inspector that cannot render a status at all: the
 button still starts the flow, but nothing it reports back can ever replace
 "Starting…", whether the flow succeeded or failed. If the panel warns that the
-plugin has not answered and the build may be out of date, that is this. Install a current build — see [Installing and
-updating](https://github.com/caesarakalaeii/allchat-streamdeck#installing-and-updating) — and try
-again. Quote the version in any bug report; the Stream Deck plugin also writes it
-into every linking failure in its log.
+plugin has not answered and the build may be out of date, that is this. Install a
+current build, see [Installing and updating](https://github.com/caesarakalaeii/allchat-streamdeck#installing-and-updating), and try again. Quote the version in any bug report; the Stream Deck
+plugin also writes it into every linking failure in its log.
 
-**`401` — the credential is the problem.** The server did not accept it at all.
+**`401`: the credential is the problem.** The server did not accept it at all.
 Which fix applies depends on how the key was set up:
 
 - **A linked device**: it was revoked, or it lapsed after ninety days unused.
@@ -227,12 +199,12 @@ Which fix applies depends on how the key was set up:
   <https://allch.at/settings/devices> first if you want to see which.
 - **A pasted token**: it was mistyped, truncated on paste, missing its
   `allchat_pat_` prefix, or revoked. Tokens are not recoverable, so do not hunt
-  for the original — mint a fresh one at
+  for the original, mint a fresh one at
   <https://allch.at/settings/api-tokens> and paste it in again. If one key works
   and another does not, compare their token fields; a partial paste is the usual
   cause.
 
-**`403` — the token is fine, the request is not allowed.** You authenticated
+**`403`: the token is fine, the request is not allowed.** You authenticated
 successfully and were then refused, which narrows it to three things:
 
 - **The feature needs premium.** By far the most common, and it means you
@@ -248,13 +220,13 @@ successfully and were then refused, which narrows it to three things:
 - **The overlay is not yours.** Check the overlay selected on the key.
 
 The distinction to keep hold of is that **401 means re-link or re-mint** and
-**403 means the credential is working** — so re-doing it will not help, and the
+**403 means the credential is working**, so re-doing it will not help, and the
 answer is upgrading, re-scoping, or fixing the overlay.
 
-**Link does nothing, or hangs.** Check the plugin version first, as above — an
+**Link does nothing, or hangs.** Check the plugin version first, as above, an
 old build is the most common cause and the one you cannot diagnose from the
 panel. On a current build it means the browser could not be opened, or the plugin
-could not open a local port — a sandboxed host, a locked-down container, a
+could not open a local port, a sandboxed host, a locked-down container, a
 machine with no desktop. The plugin should fall back to the pairing code on its
 own; if it does not, use <https://allch.at/link> with the code it shows, or paste
 a personal access token instead.
@@ -267,11 +239,9 @@ All-Chat.
 one-at-a-time per overlay, including rounds started natively on Twitch. Close or
 resolve the current one first.
 
----
-
 ## See also
 
-- [ADR-0049: Stream Deck and desktop control surfaces via paired device tokens](../adr/0049-desktop-control-surfaces-via-paired-device-tokens.md) — why linking works the way it does, and why the loopback redirect gets its own validation rule
-- [ADR-0051: Personal access tokens for non-browser clients](../adr/0051-personal-access-tokens-for-non-browser-clients.md) — why the pasted-token route exists, how tokens are stored, and why it stays supported
-- [`allchat-streamdeck`](https://github.com/caesarakalaeii/allchat-streamdeck) — installing and building the Elgato plugin (its own repository, GPL-3.0-or-later)
-- [`allchat-streamcontroller`](https://github.com/caesarakalaeii/allchat-streamcontroller) — installing the Linux StreamController plugin (its own repository, GPL-3.0-or-later)
+- [ADR-0049: Stream Deck and desktop control surfaces via paired device tokens](../adr/0049-desktop-control-surfaces-via-paired-device-tokens.md): why linking works the way it does, and why the loopback redirect gets its own validation rule
+- [ADR-0051: Personal access tokens for non-browser clients](../adr/0051-personal-access-tokens-for-non-browser-clients.md): why the pasted-token route exists, how tokens are stored, and why it stays supported
+- [`allchat-streamdeck`](https://github.com/caesarakalaeii/allchat-streamdeck), installing and building the Elgato plugin (its own repository, GPL-3.0-or-later)
+- [`allchat-streamcontroller`](https://github.com/caesarakalaeii/allchat-streamcontroller), installing the Linux StreamController plugin (its own repository, GPL-3.0-or-later)

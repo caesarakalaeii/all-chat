@@ -5,47 +5,34 @@
 **Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
-## Context and Problem Statement
+## Context
 
-Issue #523 adds cross-platform **polls, predictions, and viewer points**. The feature only pays off if the *default* viewer can participate — and the default viewer has not installed the (explicitly optional, low-adoption) browser extension. Gating votes/wagers behind the extension produces empty polls and a dead feature.
+Issue #523 adds cross-platform polls, predictions and viewer points (ADR-0029). The feature only pays off if the default viewer can participate, and the default viewer has not installed the optional, low-adoption browser extension. The universal, zero-install participation channel is chat commands ("`!vote 2`", a bare "`2`", "`!predict 1 500`") — every ingested message already carries a stable per-platform user id. The question is how a chat message becomes a validated vote/wager without burdening the message-processor hot path, and how feedback is delivered. The baseline must not require the opt-in send scope (ADR-0012 posture), and the existing `viewer_platform_identities` + `GetOrCreateViewerByPlatform` (migration 035) already resolve a durable `viewer_id`.
 
-Every ingested chat message already carries a stable per-platform user id (`UnifiedChatMessage.User.ID`) across Twitch/YouTube/Kick/TikTok. So the universal, zero-install participation channel is **chat commands** ("`!vote 2`", a bare "`2`", "`!predict 1 500`"). The question is *how* a chat message becomes a validated vote/wager without regressing the message-processor hot path (a tight normalize→enrich→publish loop with per-message retry/DLQ), and how feedback is delivered.
+## Decision
 
-## Decision Drivers
+The message-processor detects candidate commands on the hot path and forwards them to a durable stream; engagement-service does the parsing and DB work off the hot path.
 
-- **Universal reach.** Must work for every chatter on every platform, no login, no install.
-- **Hot-path safety.** message-processor is latency-sensitive and central; it must not take on DB work or a second firehose consumer.
-- **Durability of participation.** A dropped vote/wager is worse than a dropped earn — the participation transport must survive a consumer restart.
-- **No chat spam.** Posting confirmations back to the platform requires the opt-in send scope (ADR-0012 posture); the baseline must not depend on it.
-- **Reuse existing identity.** `viewer_platform_identities` + `GetOrCreateViewerByPlatform` (migration 035) already resolve a durable `viewer_id` from `(platform, platform_user_id)`.
+- **Hot-path hook** (`message-processor/consumer/engagement.go`): for a message passing a cheap in-process pre-check (`looksLikeCommand`) whose channel has a live engagement (`EXISTS engagement:active:{platform}:{channel}`, a refcounted key engagement-service maintains while a poll/prediction is ACTIVE), forward a `CommandJob` to the approx-`MAXLEN`-capped `engagement:commands` stream. Ordinary chat pays only the in-process check.
+- **Off-hot-path consumer** (`engagement-service/consumer/command.go`): parse, resolve `viewer_id` via `GetOrCreateViewerByPlatform`, apply the vote/wager with per-(poll|prediction, viewer) idempotency, ack after the DB write.
+- **No platform-chat spam.** Confirmations are silent by default; feedback reaches the viewer via the overlay tally broadcast and the authenticated pull endpoint `GET /viewers/me/engagement`.
+- **Earning is separate and best-effort.** Event-driven earns (subs/bits/donations/gifts) ride the Pub/Sub channel `engagement:events` — a missed earn is an unpaid point, not a corrupted balance. Votes/wagers, which can corrupt balances, get the durable stream.
+- **Multi-overlay channels**: a `CommandJob` carries `(platform, channel_id)`; engagement-service applies to every overlay sourcing the channel that has a live engagement.
 
-## Considered Options
+Alternatives considered: engagement-service consuming `chat:raw` directly (a second consumer on the whole firehose, re-implementing dedup/DLQ/PEL machinery); bidirectional frames on the overlay WebSocket (an anonymous one-way broadcast for OBS; large net-new surface). Both rejected.
 
-1. **message-processor detects a candidate command and `XADD`s a job to a new durable `engagement:commands` stream; engagement-service consumes it via its own group.**
-   - ✅ Hot path adds only a byte-cheap text pre-check plus, on the rare hit, a single Redis `EXISTS` and `XADD`. All parsing/validation/DB writes happen off the hot path. Durable (survives restart), acked, DLQ-free reuse.
-   - ❌ One new stream + a small hot-path hook.
-2. **engagement-service runs a second `XREADGROUP` consumer group directly on `chat:raw`.**
-   - ✅ No message-processor change.
-   - ❌ A second consumer on the whole firehose: every message deserialized twice, engagement scaling coupled to total chat volume, and it re-implements the native-dedup/DLQ/PEL machinery message-processor already owns.
-3. **Bidirectional command frames on the overlay WebSocket.**
-   - ❌ That socket is an anonymous one-way broadcast for OBS; adding authenticated upstream command semantics is large net-new surface and doesn't reach non-extension viewers anyway.
-
-## Decision Outcome
-
-**Chosen**: Option 1.
-
-- **Hot-path hook** (`message-processor/consumer/engagement.go`): for a chat message that passes a cheap in-process pre-check (`looksLikeCommand`) *and* whose channel currently has a live engagement (`EXISTS engagement:active:{platform}:{channel}` — a refcounted SET the engagement-service maintains while a poll/prediction is ACTIVE), forward a `CommandJob` to `engagement:commands` (approx-`MAXLEN`-capped). Ordinary chat pays only the in-process check.
-- **Off-hot-path processing** (`engagement-service/consumer/command.go`): parse the grammar, resolve `viewer_id` via `GetOrCreateViewerByPlatform`, look up the overlay's active poll/prediction, and apply the vote/wager with per-`(poll,viewer)` / per-`(prediction,viewer)` idempotency. Ack after the DB write (message-processor's proven pattern).
-- **No platform-chat spam.** Confirmations/rejections are silent on the platform by default. Feedback reaches the viewer through the aggregate overlay tally (broadcast) and the authenticated web page's pull endpoint (`GET /viewers/me/engagement`). A future opt-in "confirm in chat" can reuse the moderation send-scope check.
-- **Earning is separate and best-effort.** Event-driven earning (subs/bits/donations/gifts) is republished on the Pub/Sub channel `engagement:events` (not the durable stream): a missed earn is an unpaid point, never a corrupted balance. Votes/wagers, which *can* corrupt balances, get the durable stream.
+**Premium gate on starting a round (2026-07-07 amendment).** *Starting* a poll/prediction posts the question and participate link to chat (`announce_on_start`), which spends the streamer's send quota, so `POST …/polls` and `POST …/predictions` are per-route gated behind `shared/middleware.RequirePremium("engagement")` (ADR-0008); a non-premium owner gets 403. Managing an already-open round, the earn config, viewer participation and earning are deliberately not gated. The `GateEngagement` gate is seeded premium in migration 076 and can graduate to free via the feature-gate admin endpoint with no redeploy; a cache-load failure leaves the feature premium (fail closed).
 
 ## Consequences
 
-- The extension and the no-install web page become *enhancements* (richer UI, private balance display, wager confirmation), not gates. Twitch viewers additionally get their native poll/prediction UI mirrored (see ADR-0030; ADR-0029 for the points semantics).
-- One new Redis stream (`engagement:commands`), one Pub/Sub channel (`engagement:events`), and one refcounted flag key family (`engagement:active:*`). The hot path gains a pre-check + at most one `EXISTS`/`XADD` for command-shaped messages on channels with a live engagement.
-- Chat-participation *points* (as opposed to votes) are deferred in v1 to keep the hot path free of a per-message Redis op; the earn consumer already supports the `engagement:chat` signal when a future revision decides the cost is worth it.
-- Multi-overlay channels: a `CommandJob` carries `(platform, channel_id)`; engagement-service resolves every overlay that carries the channel and applies to those with a live engagement.
+- The extension and the no-install web page become enhancements, not gates; Twitch viewers additionally get native poll/prediction mirroring (ADR-0030) with points semantics from ADR-0029.
+- One new stream (`engagement:commands`), one Pub/Sub channel (`engagement:events`), one flag-key family (`engagement:active:*`).
+- Chat-participation *points* stay deferred in v1 (the earn consumer supports the `engagement:chat` signal, but nothing publishes it yet).
+- The durable-stream transport survives an engagement-service restart; worker restarts re-deliver at-least-once and idempotency keys make that safe.
 
-## Update (2026-07-07): premium gate on starting a round
+## Related
 
-*Starting* a poll/prediction is gated behind `shared/middleware.RequirePremium("engagement")` (ADR-0008), applied per-route to `POST …/polls` and `POST …/predictions` in engagement-service `main.go`. Rationale: opening a round posts the question + participate link to chat (`announce_on_start`), which consumes the streamer's **send quota** — a paid capability, consistent with the send-scope posture in this ADR's drivers. A non-premium owner gets `403` (the dashboard also surfaces the message via the returned `error`). Managing an already-open round (close/lock/resolve/cancel), the earn config, viewer participation, and points earning are deliberately **not** gated — a viewer never needs premium to take part, and points accrual sends no messages. The gate (`GateEngagement`) is seeded premium in migration 076 and can graduate to free via the feature-gate admin endpoint with no redeploy (mirrors moderation, ADR-0017/061). Unknown-key fail-closed (FeatureGateCache) means a cache-load failure keeps the feature premium rather than opening it to everyone.
+- [ADR-0029](./0029-viewer-points-economy-and-prediction-payout.md) — points semantics the votes/wagers debit against.
+- [ADR-0030](./0030-twitch-native-engagement-mirroring.md) — native mirroring sits beside this path.
+
+Runbook-level help: `docs/runbooks/fixing-service-issues.md` and `docs/troubleshooting/decision-tree.md`.

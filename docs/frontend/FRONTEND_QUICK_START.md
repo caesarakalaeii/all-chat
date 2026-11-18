@@ -1,237 +1,115 @@
-# Frontend Development - Quick Start
+# Frontend Quick Start
 
-**One-command setup for fast iteration on the frontend.**
-
-## 🚀 30-Second Setup
+Minimal backend for fast frontend iteration: `make frontend-dev` starts
+PostgreSQL, Redis, API Gateway, Overlay Manager, Message Processor and Share
+Service, but no auth service, emote service, platform listeners, token
+refresh service or source manager.
 
 ```bash
-# 1. Start services
-make frontend-dev
-
-# 2. Seed test data
-make frontend-seed
-
-# 3. Verify everything works
-make frontend-verify
+make frontend-dev     # start services (about 30 s)
+make frontend-seed    # create test overlay and chat sources
+make frontend-verify  # check everything is up
 ```
 
-**Done!** Backend is ready.
+Then, in two terminals:
 
-## 🎯 Start Developing
-
-### Terminal 1: Message Generator
 ```bash
-make frontend-messages
-```
-This generates realistic chat messages every 3 seconds.
-
-### Terminal 2: Frontend
-```bash
-cd frontend
-npm install  # First time only
-npm run dev
+make frontend-messages    # mock chat messages every 3 s
+cd frontend && npm install && npm run dev
 ```
 
-Visit: **http://localhost:3000**
+Visit http://localhost:3000. All dev defaults work without secrets. This setup
+has no authentication, no emotes and no real platform connections; it is for
+frontend development only. For full testing use `deployments/docker-compose.yml`.
 
-## 📊 What You Get
+`scripts/quick-start-frontend.sh` does the same in one command.
 
-- **Test Overlay**: `00000000-0000-0000-0000-000000000002`
-- **Test User**: `teststreamer`
-- **Chat Sources**: Twitch + YouTube configured
-- **Mock Messages**: Continuous stream of test messages
-- **WebSocket**: `ws://localhost:8080/ws/overlay/00000000-0000-0000-0000-000000000002`
+## What gets seeded
 
-## 🔧 Common Commands
+- User `teststreamer` (`00000000-0000-0000-0000-000000000001`)
+- Overlay `00000000-0000-0000-0000-000000000002`
+- Twitch channel `teststreamer` and YouTube channel `UCtest12345` sources
+- WebSocket: `ws://localhost:8080/ws/overlay/00000000-0000-0000-0000-000000000002`
+
+## Common commands
 
 ```bash
-# View logs
-docker-compose -f docker-compose.frontend.yml logs -f
-
-# Restart a service
-docker-compose -f docker-compose.frontend.yml restart api-gateway
-
-# Stop everything
-make frontend-down
-
-# Complete reset
-make frontend-reset
+docker-compose -f docker-compose.frontend.yml logs -f [service]
+make frontend-down    # stop, keep data
+make frontend-reset   # stop and reset
 ```
 
-## 🧪 Testing Tools
+Full cleanup: `docker-compose -f docker-compose.frontend.yml down -v`
+(add `--rmi all` to free images). Services restart automatically on crash
+(`restart: unless-stopped`) and use separate volumes, so they can run next to
+the main compose stack.
 
-### WebSocket Test (Node.js)
+## Development loop
+
+Next.js hot-reloads, so the running backend needs no restart. Restart services
+only when changing API Gateway code, the database schema or message-processor
+logic.
+
+## Customizing messages
+
 ```bash
-cd scripts
-npm install  # First time only
-node test-websocket.js
+MESSAGE_INTERVAL=1 ./scripts/generate-test-messages.sh     # 1 msg/s
+MESSAGE_COUNT=100 MESSAGE_INTERVAL=0.1 ./scripts/generate-test-messages.sh
+TEST_OVERLAY_ID=<id> ./scripts/generate-test-messages.sh
 ```
 
-### WebSocket Test (wscat)
-```bash
-npm install -g wscat
-wscat -c ws://localhost:8080/ws/overlay/00000000-0000-0000-0000-000000000002
-```
+Edit `scripts/generate-test-messages.sh` to change texts, usernames or
+platforms. Sending a single message directly:
 
-### Direct API Test
 ```bash
-# Send a message via the message-processor mock endpoint
 curl -X POST http://localhost:8087/internal/mock-messages \
   -H "Content-Type: application/json" \
   -H "X-Internal-Token: dev-frontend-key" \
-  -d '{
-    "overlay_id": "00000000-0000-0000-0000-000000000002",
-    "platform": "twitch",
-    "username": "APIUser",
-    "text": "Hello from API!"
-  }'
+  -d '{"overlay_id": "00000000-0000-0000-0000-000000000002",
+       "platform": "twitch", "username": "APIUser", "text": "Hello!"}'
 ```
 
-## 🎨 LLM Agent Workflow
+## API endpoints
 
-**Perfect for iterative frontend development:**
+- Overlay Manager (`:8082`) mounts routes at the root path, no `/api/overlays`
+  prefix. Most endpoints need a JWT; easiest is through the gateway
+  (`/api/v1/overlays/...` on :8080). Public read-only:
+  `GET /public/:id/config`.
+- API Gateway (`:8080`): WebSocket at `/ws/overlay/:id`, health at `/health/live`.
 
-1. **One-time setup** (do once per session):
-   ```bash
-   make frontend-dev
-   make frontend-seed
-   ```
+WebSocket test: `node scripts/test-websocket.js` (after `cd scripts && npm install`),
+or `wscat -c ws://localhost:8080/ws/overlay/00000000-0000-0000-0000-000000000002`.
 
-2. **Keep running** (in separate terminals):
-   ```bash
-   make frontend-messages  # Terminal 1
-   cd frontend && npm run dev  # Terminal 2
-   ```
+## Debugging
 
-3. **Iterate**:
-   - LLM modifies frontend code
-   - Next.js hot-reloads automatically
-   - See changes immediately
-   - No backend restarts needed
-
-4. **Monitor** (optional):
-   ```bash
-   docker-compose -f docker-compose.frontend.yml logs -f api-gateway
-   ```
-
-## 🔍 Debugging
-
-### Check Service Health
 ```bash
-curl http://localhost:8080/health/live  # API Gateway
-curl http://localhost:8082/health/live  # Overlay Manager
-curl http://localhost:8087/health/live  # Message Processor
-```
-
-### Monitor Redis
-```bash
-# Watch messages being published
+curl http://localhost:8080/health/live   # API Gateway
+curl http://localhost:8082/health/live   # Overlay Manager
+curl http://localhost:8087/health/live   # Message Processor
 redis-cli SUBSCRIBE "overlay:00000000-0000-0000-0000-000000000002"
-
-# View raw stream
 redis-cli XREAD COUNT 10 STREAMS chat:raw 0-0
+PGPASSWORD=dev_password_123 psql -h localhost -U allchat -d allchat \
+  -c 'SELECT id, name, is_active FROM overlays;
+      SELECT platform, channel_name, is_active FROM overlay_chat_sources;'
 ```
 
-### Check Database
-```bash
-PGPASSWORD=dev_password_123 psql -h localhost -U allchat -d allchat
+Reconnection test: `docker-compose -f docker-compose.frontend.yml restart api-gateway` mid-stream.
 
-# View overlays
-SELECT id, name, is_active FROM overlays;
+## Services and ports
 
-# View sources
-SELECT platform, channel_name, is_active FROM overlay_chat_sources;
-```
+| Service | Port |
+|---|---|
+| PostgreSQL | 5432 |
+| Redis | 6379 |
+| API Gateway | 8080 |
+| Overlay Manager | 8082 |
+| Message Processor | 8087 |
+| Share Service | 8090 |
 
-## ⚡ Performance Tips
+## Troubleshooting
 
-### Faster Message Generation
-```bash
-MESSAGE_INTERVAL=1 ./scripts/generate-test-messages.sh  # 1 msg/second
-MESSAGE_INTERVAL=0.5 ./scripts/generate-test-messages.sh  # 2 msg/second
-```
-
-### Burst Testing
-```bash
-MESSAGE_COUNT=100 MESSAGE_INTERVAL=0.1 ./scripts/generate-test-messages.sh
-```
-
-### Custom Messages
-Edit `scripts/generate-test-messages.sh` and modify:
-- `MESSAGES` array - different message texts
-- `USERNAMES` array - different usernames
-- `PLATFORMS` array - add/remove platforms
-
-## 🛑 Cleanup
-
-```bash
-# Stop services (keep data)
-make frontend-down
-
-# Stop and remove all data
-docker-compose -f docker-compose.frontend.yml down -v
-
-# Remove Docker images (free disk space)
-docker-compose -f docker-compose.frontend.yml down --rmi all -v
-```
-
-## 📦 What's Running
-
-| Service | Port | Purpose |
-|---------|------|---------|
-| PostgreSQL | 5432 | Database |
-| Redis | 6379 | Pub/Sub + Streams |
-| API Gateway | 8080 | WebSocket + HTTP |
-| Overlay Manager | 8082 | CRUD operations |
-| Message Processor | 8087 | Message normalization |
-| Share Service | 8090 | Shareable overlay links |
-
-**Not running** (to save resources):
-- Auth Service
-- Emote Service
-- Platform Listeners
-- Token Refresh Service
-- Source Manager
-
-## 💡 Tips
-
-1. **Auto-restart on crashes**: Services use `restart: unless-stopped`
-2. **Fast startup**: ~30 seconds from `make frontend-dev` to ready
-3. **No secrets needed**: All dev defaults work out-of-the-box
-4. **Isolated data**: Uses separate volumes from main docker-compose
-5. **Parallel safe**: Can run alongside main stack on different ports
-
-## 📚 Full Documentation
-
-For complete details, see:
-- [FRONTEND_DEV_SETUP.md](./FRONTEND_DEV_SETUP.md) - Complete guide
-- [GETTING_STARTED.md](../GETTING_STARTED.md) - Full project onboarding
-
-## ❓ Troubleshooting
-
-**Services won't start**
-```bash
-# Check if ports are in use
-lsof -i :8080,8082,8087,5432,6379
-
-# Stop full stack if needed
-cd deployments && docker-compose down
-```
-
-**No messages appearing**
-```bash
-# Verify message processor
-curl http://localhost:8087/health/live
-
-# Check Redis subscription
-redis-cli SUBSCRIBE "overlay:00000000-0000-0000-0000-000000000002"
-```
-
-**Database errors**
-```bash
-# Verify PostgreSQL is ready
-PGPASSWORD=dev_password_123 psql -h localhost -U allchat -d allchat -c '\dt'
-
-# Re-seed if needed
-make frontend-seed
-```
+- **Services won't start**: check ports with `lsof -i :5432,:6379,:8080,:8082,:8087`;
+  stop the full stack (`cd deployments && docker-compose down`) if it holds them.
+- **Postgres not ready**: `docker-compose -f docker-compose.frontend.yml logs postgres`.
+- **No messages appearing**: check the message-processor health endpoint and the
+  Redis subscription above; re-seed with `make frontend-seed`.

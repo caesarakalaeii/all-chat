@@ -32,7 +32,7 @@ const (
 // SetAuthCookies issues httpOnly; Secure; SameSite=Lax cookies for the access
 // and refresh JWTs. The access cookie is Path=/ (every same-origin request);
 // the refresh cookie is Path=/api/v1/auth/ (only auth routes receive it).
-// See docs/pi/specs/2026-06-23-h3-cookie-auth-design.md.
+// See docs/security/h3-cookie-auth.md.
 func SetAuthCookies(c *gin.Context, accessToken, refreshToken string, accessTTL, refreshTTL time.Duration) {
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     CookieAccessToken,

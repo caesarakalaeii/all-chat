@@ -7,7 +7,7 @@
 (ADR numbering is shared with the caesar-deployment repo. If 0069 is already
 taken there, renumber this file; the slug is the stable identifier.)
 
-## Context and Problem Statement
+## Context
 
 The credit roll measures a stream by its session, the `session:active:{overlay}`
 Redis hash that api-gateway creates on the first WebSocket connect. Message
@@ -50,7 +50,7 @@ stream were missing from the credits.
    cover the whole stream. Leaderboards stay per session. Other platforms are not
    consulted yet.
 
-## Considered Options
+## Considered options
 
 - **Use only the platform's stream start time** (Twitch `stream.online`, YouTube
   `actualStartTime`). Fixes the displayed number but not the leaderboard split,

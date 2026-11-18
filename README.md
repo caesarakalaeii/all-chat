@@ -294,38 +294,22 @@ Visit `http://localhost:3000` (frontend) — you're live. The API Gateway is on 
 - Twitch Developer application (for OAuth)
 - Optional: YouTube API credentials, Kick OAuth, Discord bot token
 
-For production Kubernetes deployment, see the **[Deployment Guide](./docs/DEPLOYMENT.md)**.
+For production Kubernetes deployment, see the **[Deployment Guide](./docs/architecture/02-DEPLOYMENT.md)**.
 
 ### Key Design Decisions
 
-Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README.md):
-
-- **ADR-0001**: Standard Go Layout (not hexagonal/ports-adapters)
-- **ADR-0002**: Redis Streams + Pub/Sub hybrid messaging
-- **ADR-0003**: CloudNativePG for PostgreSQL in Kubernetes
-- **ADR-0006**: YouTube quota reserve-confirm-rollback pattern
-- **ADR-0007**: Leadership rebalancing for auto-scaling listeners
-- **ADR-0008**: Feature gate infrastructure for premium capabilities
-- **ADR-0020**: Beta-tester role + early-access feature gates (extends ADR-0008; a beta-tester is premium plus early-access, granted via an admin button — no data migration)
-- **ADR-0041**: Ambassador role + public homepage showcase (extends ADR-0020; an ambassador is premium plus early-access AND opts into a public "Featured Ambassadors" homepage card; admin-granted, streamer-consented)
-- **ADR-0013**: Public overlay observability view + shared `useOverlayStream` hook
-- **ADR-0014**: Linger upstream capture demand symmetric with the downstream pub/sub linger
-- **ADR-0015**: Dynamic EventSub chat-ownership claim — IRC is the always-on fallback; EventSub owns a channel only while it is actively delivering chat (no silent loss across the partition)
-- **ADR-0026**: Two-phase deprecation of the Twitch IRC listener — `warn` nudges connected sources to re-add their Twitch source (in-overlay notice), `enforce` stops joining channels
-- **ADR-0046**: Twitch chat notices via `channel.chat.notification` — watch streaks and announcements carry the chatter's own message on no other subscription, so they were silently dropped; notices are routed by type, skipping the five a dedicated subscription already delivers
-- **ADR-0048**: Delegated overlay moderators — a moderator acts with their OWN platform credential (never the streamer's, no fallback), so the platform re-checks their role per call; Discord is the exception (the shared bot always acts, so All-Chat verifies guild permissions live) and premium is keyed on the overlay owner
-- **ADR-0088**: Account and viewer data erasure — account deletion succeeds for everyone and also erases the user's own viewer identity, viewers can delete their own data (including votes and points collected by chat command without signing in), and uploaded files leave the public bucket within one sweep interval
-- **ADR-0027**: Time-limited admin premium grants — an optional expiry on the admin override (streamer + viewer) that reverts on its own; recompute ignores an expired override, and a single-replica payment-service sweep clears lapsed grants
+Architecture decisions are documented as ADRs; the [ADR index](./docs/adr/README.md) lists every one with a one-line summary. The foundations are ADR-0001 (standard Go layout), ADR-0002 (Redis Streams plus Pub/Sub), ADR-0003 (CloudNativePG) and ADR-0008 (feature gates).
 
 ### Documentation
 
 | Topic | Link |
 |-------|------|
+| All docs | [docs/README.md](./docs/README.md) |
 | Onboarding | [GETTING_STARTED.md](./docs/GETTING_STARTED.md) |
 | Frontend dev | [FRONTEND_QUICK_START.md](./docs/frontend/FRONTEND_QUICK_START.md) |
 | Frontend UI / design system | [DESIGN_SYSTEM.md](./frontend/DESIGN_SYSTEM.md) |
 | CSS customization | [CSS_CUSTOMIZATION.md](./docs/CSS_CUSTOMIZATION.md) |
-| Deployment | [DEPLOYMENT.md](./docs/DEPLOYMENT.md) |
+| Deployment | [02-DEPLOYMENT.md](./docs/architecture/02-DEPLOYMENT.md) |
 | Architecture overview | [docs/architecture/](./docs/architecture/00-OVERVIEW.md) |
 | Data flow | [01-DATA-FLOW.md](./docs/architecture/01-DATA-FLOW.md) |
 | Troubleshooting | [Decision Tree](./docs/troubleshooting/decision-tree.md) |

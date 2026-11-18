@@ -801,9 +801,8 @@ interface LeaseResolution {
 
 /**
  * GET /v1/session: serve the shared WS session (warm lease, or capture a
- * tab-less room). Deterministic four-phase flow — the phases and their
- * recovery semantics are the plan's contract; see the PR 1 plan in
- * docs/phase-reports/ for the state-machine rationale.
+ * tab-less room). Deterministic four-phase flow; the phases and their
+ * recovery semantics are documented on the /v1/session row in README.md.
  *
  * The per-room capture breaker (the same instance /v1/sign consults) paces
  * a dead or live_new configured room's retries. It does NOT prevent the

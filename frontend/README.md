@@ -193,7 +193,7 @@ base origin differs from `window.location.origin`.
 > `SameSite=None` + strict CORS allowlist + revisiting CSRF are required (out
 > of scope for the current rollout).
 
-See: [H3 cookie-auth design spec](../docs/pi/specs/2026-06-23-h3-cookie-auth-design.md).
+See: [H3 cookie auth](../docs/security/h3-cookie-auth.md).
 
 ## Environment Variables
 

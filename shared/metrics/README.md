@@ -2,7 +2,7 @@
 
 ## Overview
 
-This package provides Prometheus metrics for the All-Chat platform following the observability strategy outlined in `/docs/OBSERVABILITY_STRATEGY.md`.
+This package provides the Prometheus metric recorders for All-Chat services; see `docs/architecture/04-OBSERVABILITY.md` for the observability overview and `deployments/k8s/monitoring/` for alert rules.
 
 ## Current Implementation Status
 
@@ -209,6 +209,6 @@ curl http://localhost:8085/metrics | grep listener_messages_received_total
 ## Support
 
 For questions or issues with metrics implementation:
-1. Review `/docs/OBSERVABILITY_STRATEGY.md` for full metric specifications
+1. Review `docs/architecture/04-OBSERVABILITY.md` for the metric reference
 2. Check existing implementations in `services/twitch-listener/`
 3. Refer to Prometheus best practices: https://prometheus.io/docs/practices/naming/

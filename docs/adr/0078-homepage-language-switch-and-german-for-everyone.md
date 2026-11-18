@@ -4,7 +4,7 @@
 **Status**: Accepted
 **Deciders**: caesarakalaeii
 
-## Context and Problem Statement
+## Context
 
 ADR-0066 put the language picker on `/settings` only, behind the `ui_languages`
 feature gate, which share-service checks on `GET /api/v1/ui-languages` for the
@@ -17,13 +17,11 @@ Server Component. In practice the page body is `HomeClient` and its sections,
 which read copy through `useTranslations()`, so they re-render in the chosen
 language like any other client surface.
 
-## Decision Drivers
+Constraints: a visitor should be able to read the homepage in German before signing in;
+one answer to "who may pick German", not one per surface; locale still never enters the
+URL, and nothing reads request state (ADR-0066).
 
-- A visitor should be able to read the homepage in German before signing in.
-- One answer to "who may pick German", not one per surface.
-- Locale still never enters the URL, and nothing reads request state (ADR-0066).
-
-## Considered Options
+## Considered options
 
 1. **A switch in the homepage nav, not gated, with German opened to everyone by
    turning off `early_access` on the `ui_languages` gate (chosen).**
@@ -33,7 +31,7 @@ language like any other client surface.
 3. A switch that is not gated on the homepage while the gate stays beta-only.
    The homepage and `/settings` would then disagree on who may pick German.
 
-## Decision Outcome
+## Decision
 
 Option 1.
 
@@ -54,7 +52,7 @@ Option 1.
 - Neutral: the parts ADR-0066 lists as English stay English: `metadata`, the
   JSON-LD, Server Components and `legal.*`.
 
-## Related Decisions
+## Related
 
 - [ADR-0066](./0066-client-side-ui-locale-selection.md): per-browser locale
   choice, the `ui_languages` gate. This record amends where the picker lives

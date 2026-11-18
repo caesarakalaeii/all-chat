@@ -66,9 +66,8 @@ Map category to service/component:
 **Read category-specific** (if exists):
 - `docs/troubleshooting/build-errors.md` (for build category)
 - `docs/troubleshooting/connection-errors.md` (for connection category)
-- `docs/troubleshooting/youtube-quota-exceeded.md` (for quota category)
 - `docs/troubleshooting/websocket-disconnects.md` (for websocket category)
-- `docs/troubleshooting/twitch-irc-issues.md` (for platform-twitch)
+- `docs/troubleshooting/youtube.md` (for quota and platform-youtube)
 
 **Read service READMEs**:
 - Relevant service README troubleshooting section

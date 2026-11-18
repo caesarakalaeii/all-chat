@@ -43,9 +43,7 @@ cd frontend && npm run dev  # Start frontend
 
 **First Time Setup**: See [GETTING_STARTED.md](./docs/GETTING_STARTED.md) for complete onboarding guide.
 
-**Frontend Development**: See [FRONTEND_QUICK_START.md](./docs/frontend/FRONTEND_QUICK_START.md) for minimal backend setup (30 seconds).
-  - **All-in-one**: `make frontend-quick` (starts services, seeds data, verifies setup)
-  - **Full docs**: [FRONTEND_DEV_SETUP.md](./docs/frontend/FRONTEND_DEV_SETUP.md)
+**Frontend Development**: See [FRONTEND_QUICK_START.md](./docs/frontend/FRONTEND_QUICK_START.md) for minimal backend setup. All-in-one: `make frontend-quick` (starts services, seeds data, verifies setup).
 
 ---
 
@@ -55,50 +53,27 @@ cd frontend && npm run dev  # Start frontend
 
 **Need to...**
 
-| Task | Guide | Lines |
-|------|-------|-------|
-| Build or change any frontend UI | [DESIGN_SYSTEM.md](./frontend/DESIGN_SYSTEM.md) (skill: `shadcn-ui`) | ~250 |
-| Add support for a new platform | [QUICK-REF-ADD-PLATFORM.md](./docs/llm-guides/QUICK-REF-ADD-PLATFORM.md) | ~150 |
-| Debug YouTube quota issues | [QUICK-REF-DEBUG-QUOTA.md](./docs/llm-guides/QUICK-REF-DEBUG-QUOTA.md) | ~200 |
-| Add a new HTTP endpoint | [QUICK-REF-ADD-ENDPOINT.md](./docs/llm-guides/QUICK-REF-ADD-ENDPOINT.md) | ~100 |
-| Perform security audit | [QUICK-REF-SECURITY-AUDIT.md](./docs/llm-guides/QUICK-REF-SECURITY-AUDIT.md) | ~150 |
-| Scale services or infrastructure | [QUICK-REF-SCALING.md](./docs/llm-guides/QUICK-REF-SCALING.md) | ~150 |
-| Create database migration | [QUICK-REF-DATABASE-MIGRATION.md](./docs/llm-guides/QUICK-REF-DATABASE-MIGRATION.md) | ~100 |
-| Debug Kubernetes issues | [QUICK-REF-KUBERNETES-DEBUG.md](./docs/llm-guides/QUICK-REF-KUBERNETES-DEBUG.md) | ~150 |
-| Inspect Redis Streams/Pub/Sub | [QUICK-REF-REDIS-OPERATIONS.md](./docs/llm-guides/QUICK-REF-REDIS-OPERATIONS.md) | ~100 |
+|Task|Guide|
+|---|---|
+|Build or change any frontend UI|[DESIGN_SYSTEM.md](./frontend/DESIGN_SYSTEM.md) (skill: `shadcn-ui`)|
+|Add support for a new platform|[QUICK-REF-ADD-PLATFORM.md](./docs/llm-guides/QUICK-REF-ADD-PLATFORM.md)|
+|Debug YouTube quota issues|[QUICK-REF-DEBUG-QUOTA.md](./docs/llm-guides/QUICK-REF-DEBUG-QUOTA.md)|
+|Add a new HTTP endpoint|[QUICK-REF-ADD-ENDPOINT.md](./docs/llm-guides/QUICK-REF-ADD-ENDPOINT.md)|
+|Perform security audit|[QUICK-REF-SECURITY-AUDIT.md](./docs/llm-guides/QUICK-REF-SECURITY-AUDIT.md)|
+|Scale services or infrastructure|[QUICK-REF-SCALING.md](./docs/llm-guides/QUICK-REF-SCALING.md)|
+|Create database migration|[QUICK-REF-DATABASE-MIGRATION.md](./docs/llm-guides/QUICK-REF-DATABASE-MIGRATION.md)|
+|Debug Kubernetes issues|[QUICK-REF-KUBERNETES-DEBUG.md](./docs/llm-guides/QUICK-REF-KUBERNETES-DEBUG.md)|
+|Inspect Redis Streams/Pub/Sub|[QUICK-REF-REDIS-OPERATIONS.md](./docs/llm-guides/QUICK-REF-REDIS-OPERATIONS.md)|
 
 ### Troubleshooting
 
-**Having issues?** Start with the decision tree:
-
-→ [Troubleshooting Decision Tree](./docs/troubleshooting/decision-tree.md) - High-level triage for all common issues
-
-**Detailed troubleshooting guides** (created as needed):
-- [build-errors.md](./docs/troubleshooting/build-errors.md) - Go compilation, Docker build, startup failures
-- [connection-errors.md](./docs/troubleshooting/connection-errors.md) - PostgreSQL, Redis connection issues
-- [youtube-quota-exceeded.md](./docs/troubleshooting/youtube-quota-exceeded.md) - Quota state machine, recovery procedures
-- [twitch-irc-issues.md](./docs/troubleshooting/twitch-irc-issues.md) - IRC connection, channel join, message parsing
-- [websocket-disconnects.md](./docs/troubleshooting/websocket-disconnects.md) - API Gateway WebSocket issues
+Start with the [decision tree](./docs/troubleshooting/decision-tree.md); it links the specific guides in `docs/troubleshooting/` (build errors, connection errors, WebSocket disconnects, YouTube). Operational procedures are in `docs/runbooks/`.
 
 ### Architecture & Design Decisions
 
-**Understand the system**:
-- [Architecture Overview](./docs/architecture/00-OVERVIEW.md) - High-level design, service map
-- [Data Flow](./docs/architecture/01-DATA-FLOW.md) - Message processing pipeline
-- [Deployment](./docs/architecture/02-DEPLOYMENT.md) - Kubernetes architecture
-- [Scaling](./docs/architecture/03-SCALING.md) - Performance and scalability
-- [Observability](./docs/architecture/04-OBSERVABILITY.md) - Metrics, logging, tracing
-- [Security](./docs/architecture/05-SECURITY.md) - Security architecture
-
-**Understand WHY decisions were made**:
-- [ADR Index](./docs/adr/README.md) - Architecture Decision Records
-  - ADR-0001: Standard Go Layout (not hexagonal)
-  - ADR-0002: Redis Streams + Pub/Sub hybrid
-  - ADR-0003: CloudNativePG for PostgreSQL
-  - ADR-0004: No ports/adapters abstraction
-  - ADR-0005: React + Next.js frontend
-  - ADR-0006: YouTube quota reserve-confirm-rollback
-  - ADR-0007: Leadership rebalancing for auto-scaling
+- [docs/README.md](./docs/README.md) - index of all docs
+- Architecture: [Overview](./docs/architecture/00-OVERVIEW.md), [Data Flow](./docs/architecture/01-DATA-FLOW.md), [Deployment](./docs/architecture/02-DEPLOYMENT.md), [Scaling](./docs/architecture/03-SCALING.md), [Observability](./docs/architecture/04-OBSERVABILITY.md), [Security](./docs/architecture/05-SECURITY.md)
+- [ADR Index](./docs/adr/README.md) - Architecture Decision Records: why each design was chosen and how it is implemented today
 
 ### Service Documentation
 
@@ -137,27 +112,26 @@ Each service has a detailed README:
 
 ### Development Guides
 
-- [GETTING_STARTED.md](./docs/GETTING_STARTED.md) - Complete navigation guide for LLM agents
+- [GETTING_STARTED.md](./docs/GETTING_STARTED.md) - Local setup and where to read next
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Pull request process, code review guidelines
-- [Testing Guide](./docs/TESTING_COMPREHENSIVE.md) - Unit, integration, E2E tests
+- [Testing](./docs/TESTING.md) - Test targets and CI workflows
 - [Accessibility](./docs/ACCESSIBILITY.md) - WCAG 2.2 AA scope, CI gates (shrink-only ratchets), contracts for new UI code
 - [Frontend i18n](./docs/frontend/I18N.md) - the UI string catalog (English, German): how to add a string, placeholder syntax, how a locale is chosen and what stays English, why there is no provider and no locale in the URL
-- [Agent UI verification](./docs/frontend/AGENT_UI_VERIFICATION.md) - the screenshot ritual and pixel-baseline gate every UI change must pass before "done"; [Onlook pilot](./docs/frontend/ONLOOK_PILOT.md) for visual editing
+- [Agent UI verification](./docs/frontend/AGENT_UI_VERIFICATION.md) - the screenshot ritual and pixel-baseline gate every UI change must pass before "done"
 - [Design System](./frontend/DESIGN_SYSTEM.md) - shadcn primitives, design tokens, and the CI gates that keep the UI consistent (ADR-0056). Agents: use the `shadcn-ui` skill
 
 ---
 
 ## Documentation Conventions
 
-Keep documentation from rotting. The repo root repeatedly accumulated stale, point-in-time docs; these rules exist to stop that recurring. **There are no point-in-time docs anywhere under docs/.** The ban is on the pattern, not on a directory: it applies to the whole tree, including `docs/` and its subdirectories, `services/*/`, and `.github/`.
+Keep documentation from rotting. **There are no point-in-time docs anywhere in the tree** (`docs/`, `services/*/`, `.github/`, the root). The repo has twice accumulated thousands of lines of them and had to be cleaned out; recover anything deleted from git history.
 
-**The repo root holds only three markdown docs:** `README.md`, `CLAUDE.md`, and `CONTRIBUTING.md`. Everything else lives under `docs/` (`docs/GETTING_STARTED.md`, `docs/frontend/`, `docs/security/`, `docs/adr/`, `docs/architecture/`, and so on). Do **not** add new markdown files to the repo root, and never add point-in-time documents anywhere:
-
-- No `*-FIX-SUMMARY.md`, `*_IMPLEMENTATION.md`, `*-CHECKLIST.md`, `*_COMPLETE.md`, `*_STATUS.md`, or one-off audit/TODO trackers. Each describes a single past change, goes stale within weeks, and becomes clutter. (On 2026-07-15 this pattern was cleaned out: seven such docs were deleted, COORDINATOR-FILTERING-FIX-SUMMARY, CREDIT_ROLL_IMPLEMENTATION, DEPLOYMENT-CHECKLIST, DOC_AUDIT, GOOGLE_OAUTH_TODO, YOUTUBE_DETECTION_FIX_SUMMARY and Roadmap; the remaining root guides were relocated into `docs/` subdirs.)
-- The same reasoning applies one directory down, which is where this rule was learned the hard way. Written as a rule about the repo root, it moved the problem rather than solving it: the identical documents reappeared in `docs/` and reached roughly 9,000 lines. They lasted because they cross-link almost only to each other, so the cluster looks referenced from the inside while nothing living points at it. (On 2026-09-02 that cluster was deleted: 18 files — metrics and events write-ups, a documentation-refactoring report, a quota checkpoint, an OAuth checklist, two service-level implementation summaries, and five stale `.txt` files that were either raw YouTube API dumps or offline copies of Google's own docs pages. Their names are deliberately not listed here, because a rule that recites the banned filenames is itself a file that matches them; recover them from git history if you need them. No index of them was left behind, on purpose.)
-- **The default answer is the PR description, not a committed file.** Write the point-in-time account in the pull request or the commit body, where it is dated, attributed and never has to be maintained. `docs/phase-reports/` is the one exception, for a lasting record that genuinely needs to outlive the PR — and it is an exception to argue for, not a default to reach for. If it will not be maintained, it does not go in the tree.
-- Three questions decide what to do with an existing doc. Does it describe a single past change? Delete it. Does it state facts about how the system works today? Fix those facts in place. Does it record a decision and why it was taken? Leave it alone — and if it is stale but still the only record of a rationale, give it a dated deprecation banner as its first line instead of deleting it.
-- `docs/adr/` describes the current state. An ADR records a decision *and* how the system implements it today: when code changes what an ADR says, fix the ADR body in the same change, fold amendments from later ADRs into it (with a cross-link), and add or bump a `**Revised**: YYYY-MM-DD` line under `**Status**`. A replaced ADR gets `Superseded by ADR-XXXX` and a body that points at its successor; a removed feature gets `Withdrawn`. Never delete an ADR or renumber one.
+- **The repo root holds only three markdown docs:** `README.md`, `CLAUDE.md`, and `CONTRIBUTING.md`. Everything else lives under `docs/`; [docs/README.md](./docs/README.md) is its index.
+- No `*-FIX-SUMMARY.md`, `*_IMPLEMENTATION.md`, `*-CHECKLIST.md`, `*_COMPLETE.md`, `*_STATUS.md`, plans, spikes, handoffs, review findings, phase reports, or one-off audit/TODO trackers. They describe a single past change, go stale within weeks, and cross-link mostly to each other, so they look referenced while nothing living points at them.
+- **The point-in-time account goes in the PR description or commit body**, where it is dated and attributed and never has to be maintained. A lasting decision goes in an ADR.
+- Three questions decide what to do with an existing doc. Does it describe a single past change? Delete it. Does it state facts about how the system works today? Fix those facts in place. Does it record a decision and why it was taken? It belongs in `docs/adr/`.
+- Keep docs short: what it is, how it works, how to run it, where the code lives. Link to the source or another doc instead of copying code or restating it.
+- `docs/adr/` describes the current state. An ADR records a decision *and* how the system implements it today: when code changes what an ADR says, fix the ADR body in the same change, fold amendments from later ADRs into it (with a cross-link), and add or bump a `**Revised**: YYYY-MM-DD` line under `**Status**`. A replaced ADR gets `Superseded by ADR-XXXX` and a body that points at its successor; a removed feature gets `Withdrawn`. Never delete an ADR or renumber one. ADR numbers are shared with the deployment repo, so gaps in `docs/adr/` are expected.
 
 **Update docs in the same change as the code.** When you change behavior, update the living docs it affects in the same PR: `README.md`, `CLAUDE.md`, `docs/GETTING_STARTED.md`, the relevant `services/*/README.md`, and the ADR index. A doc that contradicts the code is worse than no doc.
 
@@ -294,36 +268,11 @@ REDIS_PORT=6379
 
 ## Known Issues & Technical Debt
 
-### Security
-- Token encryption uses AES-GCM (`shared/encryption/`); a versioned multi-key rotation API is available in `shared/encryption/versioned.go`
-- CORS allows `*` in dev (configure for production)
 - Service-to-service signing is implemented in `shared/signing/` (HMAC-SHA256, constant-time compare, query+service-name signed, replay-protected) but NOT YET WIRED into any prod service; Kubernetes NetworkPolicies are the current service-to-service isolation control. See docs/security/SECURITY_AUDIT_REPORT.md L2 + docs/security/RESIDUALS.md
+- Integration tests incomplete for YouTube Listener; no E2E test covers the full message flow.
+- Shared PostgreSQL database across services.
 
-### Testing
-- Integration tests incomplete for YouTube Listener
-- E2E tests needed for full message flow
-
-### Scalability
-- Shared PostgreSQL database (consider separate per service)
-- YouTube quota limit increased to 1,009,000 units/day (was 10,000)
-
-**See**: [CRITICAL_ARCHITECTURE_ANALYSIS.md](./docs/phase-reports/CRITICAL_ARCHITECTURE_ANALYSIS.md) for historical security audit.
-
----
-
-## Production Readiness
-
-**Services ready for production**:
-- ✅ API Gateway, Twitch EventSub Listener, YouTube Listener, Kick Listener, Message Processor
-
-**Production considerations**:
-- YouTube API quota already increased to 1,009,000 units/day (see Known Issues → Scalability)
-- Configure CORS for production domain
-- Set up monitoring (Prometheus + Grafana)
-- Enable TLS for all services
-- Implement rate limiting on API Gateway
-
-**See**: [Deployment Guide](./docs/architecture/02-DEPLOYMENT.md) for Kubernetes manifests and configuration.
+**See**: [Security Architecture](./docs/architecture/05-SECURITY.md) and [Deployment](./docs/architecture/02-DEPLOYMENT.md).
 
 ---
 

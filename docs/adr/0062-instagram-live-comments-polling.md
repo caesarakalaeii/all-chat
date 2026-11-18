@@ -5,42 +5,25 @@
 **Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
-## Context and Problem Statement
+## Context
 
-All-Chat aggregates live chat from Twitch, YouTube, Kick, TikTok, Discord,
-Owncast, GoodGame, Picarto, Altstream (ADR-0082) and (Phase 4, ADR-0060)
-Facebook. Instagram Live is the last phase of that plan (Phase 6): the
-sister surface to Facebook — same Meta app, same polling architecture — but
-a separate listener, not a config flip on facebook-listener.
-facebook-listener.
+Instagram Live is the sister surface to Facebook (ADR-0060, same Meta app,
+same polling architecture) but a separate listener. Platform facts that shape
+the design:
 
-Facts about Instagram's platform that shape the design:
-
-- **The ingest surface is the IG Graph API, not the Page API.** Comments on an
-  Instagram live broadcast are read via `GET /{ig-user-id}/live_comments` on
-  the streamer's Instagram professional account (business or creator), which
-  must be linked to a Facebook Page. The IG Comment node reference states the
-  constraint outright: *"Comments on live video IG Media can only be read
-  while the IG Media upon which the comment was created is being broadcast."*
-- **There is no public realtime comment API for the polling shape All-Chat
-  uses.** Meta's realtime surface for Instagram is webhooks (`live_comments`
-  is a subscribable Instagram webhook field), and webhooks need a public HTTPS
-  endpoint plus a per-deployment verify token. All-Chat already polls Facebook
-  live-video comments for exactly this reason (ADR-0060), and the Facebook
-  platform's own reference recommends continual polling.
-- **The credential is Page-adjacent.** Per Meta's Comment Moderation guide,
-  the "Instagram API with Facebook Login" column for comment endpoints on
-  graph.facebook.com requires `instagram_basic` + `instagram_manage_comments`
-  (+ `pages_read_engagement`), and the token that works is the Facebook Page
-  access token for the Page linked to the IG account. As with Facebook, a Page
-  token obtained from a long-lived user token does not expire — so the default
-  stored credential is non-expiring. The expiry path exists anyway because the
-  re-auth flow can store a 60-day long-lived user token instead; the schema
-  keeps `expires_at` to represent that honestly.
-- **Rate limits are BUC-based, like Facebook's.** A hobby deployment polling a
-  handful of IG users every 10 s cannot approach Meta's rate limits, so no
-  quota ledger is warranted.
-
+- The ingest surface is the IG Graph API, not the Page API: comments on an
+  Instagram live broadcast are read via `live_comments` on the streamer's
+  Instagram professional account (business or creator), which must be linked
+  to a Facebook Page; and per the IG Comment node reference, comments can only
+  be read while the broadcast runs.
+- There is no public realtime comment API for the polling shape All-Chat
+  uses; Meta's realtime surface is webhooks, which need a public endpoint and
+  a per-deployment verify token.
+- The credential that works is the Facebook Page token for the Page linked to
+  the IG account (like Facebook, a Page token from a long-lived user token
+  does not expire; the schema keeps `expires_at` for the 60-day user-token
+  fallback path).
+- Rate limits are BUC-based like Facebook's; no quota ledger.
 ## Decision
 
 **Ingest: HTTP polling of `GET /{ig-user-id}/live_comments` in a new
@@ -58,42 +41,29 @@ per source in Redis under `instagram:source:state:` so a poller restart does
 not re-publish the whole live backlog more than once.
 
 **Separate service and token table, shared Meta app.** `instagram-listener`
-runs on port 8100 (8095-8099 are taken); its pollers key on the IG user id,
-which is the source's `channel_id` in `overlay_chat_sources`. The token lives
-in its own `instagram_oauth_tokens` table (migration 096), keyed on
-`(user_id, ig_user_id)` — not in `facebook_oauth_tokens`, because the IG
-identity the source keys on is the IG user id, and the two platforms' re-consent
-and expiry semantics differ. The same Meta app carries both products; the
-Instagram permissions fold into the next App Review cycle (a separate
-submission would be a second ~20-day review).
+runs on port 8100; pollers key on the IG user id (the source's `channel_id`).
+The token lives in its own `instagram_oauth_tokens` table (migration 096),
+keyed on `(user_id, ig_user_id)` — the IG identity is the user id and the two
+platforms' re-consent and expiry semantics differ. The Instagram permissions
+fold into the next App Review cycle (a separate submission would be a second
+~20-day review).
 
-**Token chain chosen by the auth-service slice, within this contract:** prefer
-the non-expiring Page-derived token (the ADR-0060 chain: code → short-lived
-user token → long-lived user token → Page token via `/me/accounts`, storing the
-Page token for the Page whose `instagram_business_account` matches) with
-`expires_at = NULL`; fall back to storing the 60-day long-lived user token with
-`expires_at` set only when the API shape requires it. Any additional dependency
-scope beyond the contract's `instagram_basic` + `instagram_manage_comments` is
-limited to what the account-resolution call requires (in practice
-`pages_show_list`, because the IG user id is only obtainable by enumerating
-Pages) and is documented there rather than requested speculatively.
+**Token chain**: prefer the non-expiring Page-derived token (ADR-0060's
+chain; store the Page token of the Page whose `instagram_business_account`
+matches) with `expires_at = NULL`, falling back to the 60-day long-lived user
+token only when the API shape requires it. Beyond the contract's
+`instagram_basic` + `instagram_manage_comments`, additional scope is limited
+to what account resolution requires (in practice `pages_show_list`, since the
+IG user id is only obtainable by enumerating Pages).
 
-**Read-only ingest, deliberately narrower than Facebook.** No moderation write
-path (out of plan scope), no emotes (out of scope for all new platforms), no
-quota subsystem (BUC-based limits like Facebook's, ADR-0060's analysis
-transfers). A poller 401/403 marks the source inactive and emits a
-`platform:status` event so the dashboard prompts the streamer to re-auth; an
-expired row (per `expires_at`) is treated as a missing credential, not a Graph
-error — the listener fails the poll with an UnresolvedTokenError-shaped error
-and skips.
+**Read-only**, deliberately narrower than Facebook: no moderation write path,
+no emotes, no quota subsystem. A poller 401/403 marks the source inactive and
+emits a `platform:status` event prompting re-auth; an expired row
+(`expires_at`) is treated as a missing credential, not a Graph error.
 
-**Single-pod listener, no leader election.** Same argument as ADR-0060: the
-poll is cheap and the comment_id cursor tolerates replays, so the deployment
-pins `replicas: 1` and skips HPA and leadership plumbing.
-
-**Fail-closed source adds.** overlay-manager refuses an Instagram source unless
-`instagram_oauth_tokens` has a row for that exact (user, ig_user_id) pair —
-same ownership-evidence argument as ADR-0060's Page anchor.
+**Single pod, no leader election** (same argument as ADR-0060). **Fail-closed
+source adds**: overlay-manager refuses an Instagram source unless
+`instagram_oauth_tokens` has a row for that exact (user, ig_user_id) pair.
 
 ## Risks and Operator Actions
 
@@ -124,19 +94,5 @@ same ownership-evidence argument as ADR-0060's Page anchor.
 
 ## References
 
-- Live comments (the ingest edge, `comment_id` pagination):
-  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/live-comments/
-- IG User live media (broadcast discovery, "only media being broadcast"):
-  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/live_media/
-- IG Comment node (fields; live-read limitation):
-  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-comment/
-- IG media comments ("cannot be filtered by timestamp"):
-  https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-media/comments
-- Comment Moderation guide (permissions matrix, Page token requirement):
-  https://developers.facebook.com/docs/instagram-platform/comment-moderation
-- Permissions reference (`instagram_basic`, `instagram_manage_comments`):
-  https://developers.facebook.com/docs/permissions
-- Webhooks reference (the realtime alternative, deliberately not used):
-  https://developers.facebook.com/docs/graph-api/webhooks/reference/instagram/
-- ADR-0060 (Facebook polling — the template this decision mirrors), ADR-0008
-  (feature gate seeded by migration 096), ADR-0032 (source liveness/status)
+- [Live comments edge](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/live-comments/) (`comment_id` pagination), [IG User live media](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/live_media/), [IG Comment node](https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-comment/) (live-read limitation), [Comment Moderation guide](https://developers.facebook.com/docs/instagram-platform/comment-moderation) (permissions matrix, Page token)
+- ADR-0060 (the template), ADR-0008 (the `platform_instagram` gate), ADR-0032 (source liveness/status)

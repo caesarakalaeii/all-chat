@@ -2,97 +2,35 @@
 
 **Date**: 2026-06-20
 **Status**: Accepted
-**Revised**: 2026-11-04 (viewer routes read premium from the database, not the JWT claim; admin grant keyed on the viewer, ADR-0034)
+**Revised**: 2026-11-18 (viewer routes read premium from the database, not the JWT claim; admin grant keyed on the viewer)
 **Deciders**: caesarakalaeii
 
-## Context and Problem Statement
+## Context
 
-All-Chat conflates two audiences under one "premium" concept (see ADR-0018 Future Work, ROADMAP Phase 16):
+Two audiences sit under one "premium" concept: `users.is_premium` (streamer/overlay-owner features, derived from Patreon plus admin override per ADR-0018) and `viewers.is_premium` (cosmetic badge, read on the message hot path by `ViewerBadgeEnricher` and into the viewer JWT; set by admin or inherited from a premium streamer account at viewer login). The goal is a cheaper, separately-priced viewer subscription granting only viewer perks. The hard part is identity: streamer premium is keyed by a `users` account that OAuth-links Patreon; a viewer is a platform identity (`viewer_platform_identities`) usually without a `users` row, so a pledge has no obvious subject.
 
-- `users.is_premium` gates **streamer / overlay-owner** features (sharing, moderation, TTS, stream-selection) via `shared/middleware/premium.go` + `feature_gates` (ADR-0008). It is now derived from a Patreon subscription + admin override (ADR-0018), written by `payment-service` / `share-service` via `shared/premium.Recompute`.
-- `viewers.is_premium` is a **viewer cosmetic** flag (premium chat badge), read on the message hot path by `message-processor`'s `ViewerBadgeEnricher` and into the viewer JWT. Today it is only set by an admin (`SetViewerPremium`) or **inherited** at viewer-login when the viewer's platform identity matches a premium streamer `users` account (`LinkViewerToUser`).
+Alternatives rejected: inheritance-only (a pure viewer could never buy anything, which fails the product goal); splitting write ownership between services (reintroduces clobbering); a parallel viewer-only payment stack (two webhooks/reconciles/code paths to keep convergent).
 
-We want a **cheaper, separately-priced viewer subscription** that grants only viewer-facing perks, while streamer premium keeps the richer set. The hard part is **identity**: streamer premium is keyed by an all-chat `users` account that OAuth-links Patreon (`patreon_oauth_tokens.user_id`), but a viewer is a *platform identity* (`viewer_platform_identities`: platform + platform_user_id) — usually **not** a `users` account. So: how does a Patreon pledge grant *viewer* premium to someone who has no `users` row?
+## Decision
 
-## Decision Drivers
+Generalize the ADR-0018 pipeline: a polymorphic premium subject (`user` | `viewer`) with a tier-driven `product`.
 
-- **Reuse ADR-0018.** One `payment-service`, one Patreon campaign, one webhook endpoint, one reconcile loop, one `Effective` entitlement rule. Don't fork a parallel payment stack.
-- **Serve pure viewers.** The target buyer is a viewer who is *not* a streamer; the design must grant them premium without requiring a dashboard/`users` account.
-- **Don't touch the read path** (ADR-0018 principle). `ViewerBadgeEnricher` and the viewer JWT keep reading `viewers.is_premium`; we only change *who writes it and how*.
-- **Convergent / clobber-free.** `viewers.is_premium` has up to three inputs (admin, viewer subscription, inherited streamer premium). They must not clobber each other — the ADR-0018 derived-column model already solved this shape for `users.is_premium`.
-- **Least new surface.** A viewer-facing inbound payment path is security-sensitive; keep it inside the already-isolated `payment-service`.
+- **One Patreon account, one identity**: a connection anchors to exactly one subject (`user` XOR `viewer`), enforced by the existing unique constraints plus CHECKs. A single human who is both streamer and distinct viewer can only link one side; the other is covered by inheritance where applicable (documented limitation).
+- **Product follows the connection subject, with per-product thresholds**: a viewer connection is active iff `active_patron` and `cents >= PATREON_VIEWER_MIN_TIER_CENTS` (cheaper); a user connection iff `cents >= PATREON_MIN_TIER_CENTS`. Reuses `SubscriptionStatusFor(snap, threshold)` unchanged; no explicit tier-id map (cents are simpler and already returned).
+- **Viewer connect lives in payment-service, viewer-JWT authenticated** (`shared/auth.ValidateViewerJWTWithKeyChain`): `GET /api/v1/payment/viewer/patreon/connect`, `GET .../status`, `DELETE .../connection`. The OAuth callback and webhook stay single endpoints; the callback's Redis state carries the subject and the webhook resolves it from the polymorphic token row, which every subscription write also reads. A viewer disconnect deletes the viewer's membership rows (ADR-0018 connection rule).
+- **`viewers.is_premium` becomes a single-writer derived column**:
+  `Effective(viewers.premium_admin_override, hasActiveViewerSubscription OR linkedStreamerIsPremium)`
+  reusing `shared/premium.Effective`. Inheritance survives as the `linkedStreamerIsPremium` term (a premium `users` row joined via `viewer_sessions.user_id`), so nothing changes for readers; `LinkViewerToUser` and the admin path stop writing the boolean and instead set their input + recompute, fixing the staleness bug where inherited premium was never revoked on streamer lapse.
+- **Read path unchanged**: `ViewerBadgeEnricher` untouched. The viewer JWT's `is_premium` claim is only a sign-in snapshot, so `FreshViewerPremium` middleware replaces it with the current `viewers.is_premium` on every `/viewer/*` request and `GET /viewer/me` returns the current value: admin grants, subscriptions and lapses take effect immediately. Admin grants target the `viewers` row (`POST /admin/viewers/identities/:viewer_id/premium`, ADR-0034, with ADR-0027's optional override expiry).
 
-## Considered Options
-
-1. **Viewer-side "connect Patreon" + polymorphic subject** — generalize the ADR-0018 pipeline so a Patreon connection/subscription is anchored to *either* a `users.id` (streamer) *or* a `viewers.id` (viewer), with a `product` dimension; `viewers.is_premium` becomes a derived column via a new `RecomputeViewer`.
-   - ✅ Serves pure viewers; reuses the whole payment stack (OAuth client, webhook verify, status mapping, reconcile, `Effective`); one webhook resolves to either subject; mirrors the proven `users` model exactly.
-   - ❌ Touches the freshly-built (committed, undeployed) ADR-0018 tables (via a new migration); adds a viewer-JWT-authenticated connect surface to `payment-service`.
-
-2. **Only viewers linked to a `users` account inherit it** — no viewer-side purchase; viewer premium is a perk of a Patreon-backed streamer account.
-   - ✅ Zero new payment surface; inheritance already exists.
-   - ❌ **Fails the product goal** — pure viewers (the buyer) have no `users` account, so they could never buy it. This is essentially today's behavior.
-
-3. **Split write ownership** (payment-service writes `viewers.is_premium` for linked viewers, auth-service for the rest) — a who-writes tweak.
-   - ✅ Small.
-   - ❌ Doesn't answer the identity question (how a pure viewer pledges); reintroduces the multi-writer clobber problem ADR-0018 eliminated.
-
-4. **Parallel viewer-only payment tables/service** — duplicate `patreon_oauth_tokens` / `premium_subscriptions` / reconcile for viewers.
-   - ✅ Leaves ADR-0018 tables untouched.
-   - ❌ Two webhooks or a fan-out from one; duplicated reconcile + status mapping; two code paths to keep convergent. Higher long-run cost than a polymorphic subject.
-
-## Decision Outcome
-
-**Chosen**: Option 1 — **a polymorphic premium subject (`user` | `viewer`) with a tier-driven `product`**, reusing ADR-0018 end to end.
-
-**Rationale**: It is the only option that serves pure viewers (driver 2) while reusing one payment stack (driver 1); it extends the exact derived-column model that already made `users.is_premium` convergent and clobber-free (driver 4) and leaves both readers untouched (driver 3).
-
-### Key sub-decisions
-
-- **One Patreon account ↔ one all-chat identity.** A connection is anchored to *exactly one* subject (`user` XOR `viewer`). The existing `UNIQUE(patreon_user_id)` (token) and `UNIQUE(provider, provider_user_id)` (subscription) are kept and now mean "one connection per Patreon account". A single human who is *both* a streamer and a distinct viewer can link Patreon to only one; the other side is covered by the existing inheritance term where applicable. (Documented limitation.)
-- **Product = connection subject, gated by a per-product cents threshold.** A viewer connection ⇒ `product='viewer'`, active iff `patron_status=active_patron AND cents >= PATREON_VIEWER_MIN_TIER_CENTS` (cheaper). A user connection ⇒ `product='streamer'`, active iff `cents >= PATREON_MIN_TIER_CENTS` (unchanged). This realizes ROADMAP's "cheaper tier → viewer" as two config thresholds, reusing `SubscriptionStatusFor(snap, threshold)` unchanged. (An explicit tier-id→product map is deferred — cents thresholds are simpler and Patreon already returns entitled cents.)
-- **Viewer "Connect Patreon" lives in `payment-service`, authenticated by a viewer JWT.** Reuses `shared/auth.ValidateViewerJWTWithKeyChain` (same signing keychain, `ViewerClaims.ViewerID`). Keeps the inbound payment surface isolated per ADR-0018 rather than bolting Patreon OAuth onto auth-service. New routes: `GET /api/v1/payment/viewer/patreon/connect`, `GET /api/v1/payment/viewer/status`, `DELETE /api/v1/payment/viewer/patreon/connection`. The OAuth **callback** and the **webhook** stay single endpoints; the callback's Redis state carries the subject, the webhook resolves the subject from the polymorphic token row. The subscription row's subject (`user_id` or `viewer_id`) is likewise read from the token row on every write, and a viewer disconnect deletes the viewer's membership rows (ADR-0018, "The membership link follows the connection").
-- **`viewers.is_premium` becomes a single-writer derived column via `RecomputeViewer`:**
-  ```
-  viewers.is_premium = Effective(
-      viewers.premium_admin_override,                  -- tri-state, mirrors users
-      hasActiveViewerSubscription OR linkedStreamerIsPremium
-  )
-  ```
-  `linkedStreamerIsPremium` = a `users` row joined through `viewer_sessions.user_id` that `is_premium` — this **preserves the inheritance the enricher/JWT already depend on** and makes the column clobber-free. Reuses `shared/premium.Effective` (same truth table). Both `LinkViewerToUser` and the admin path stop writing `viewers.is_premium` directly and instead set their input + call `RecomputeViewer`, so there is exactly **one** writer (fixes today's bug where inherited premium is never revoked on streamer lapse — it now converges on any recompute).
-- **Migration 064 (new; does not edit 063).** Idempotent ALTERs that write **no** entitlement values (so re-runs can't clobber a live grant, per the runner's re-run-everything contract):
-  - `premium_subscriptions`: add `product VARCHAR(16) NOT NULL DEFAULT 'streamer'` (CHECK in `'streamer','viewer'`), add `viewer_id UUID REFERENCES viewers(id) ON DELETE CASCADE`, CHECK not-both-subjects; index `(viewer_id)`.
-  - `patreon_oauth_tokens`: `ALTER user_id DROP NOT NULL`; add `viewer_id UUID REFERENCES viewers(id) ON DELETE CASCADE`; drop the inline `UNIQUE(user_id)` → two partial unique indexes (`user_id WHERE NOT NULL`, `viewer_id WHERE NOT NULL`); keep `UNIQUE(patreon_user_id)`; CHECK exactly-one-subject.
-  - `viewers`: add `premium_admin_override BOOLEAN DEFAULT NULL` (tri-state mirror).
-- **Read path unchanged.** `ViewerBadgeEnricher` and `generateViewerJWT` keep reading `viewers.is_premium`; no enricher change. The viewer JWT's `is_premium` claim is only the value at sign-in, so auth-service's `FreshViewerPremium` middleware replaces it with the current `viewers.is_premium` on every `/viewer/*` request, and `GET /viewer/me` returns that current value to the web page (2026-11-04): an admin grant, a new subscription or a lapse takes effect at once instead of when the day-long token expires. The admin grant targets the `viewers` row directly (`POST /admin/viewers/identities/:viewer_id/premium`, ADR-0034).
+Schema (migration 064, no edits to 063; idempotent, writes no entitlement values): `premium_subscriptions` gains `product` and `viewer_id`; `patreon_oauth_tokens` drops its inline `user_id` uniqueness for partial unique indexes on either subject; `viewers` gains a tri-state `premium_admin_override`.
 
 ## Consequences
 
-### Positive
-- Pure viewers can self-serve a cheaper viewer subscription; streamer premium is unchanged.
-- One payment-service / webhook / reconcile / `Effective` rule serves both products.
-- `viewers.is_premium` gains the same convergent, single-writer, clobber-free guarantees as `users.is_premium`, and fixes the current "inherited premium never revoked" staleness.
-- Both premium read paths are untouched (enricher hot path, viewer JWT).
-
-### Negative
-- One Patreon account grants premium to a single all-chat identity (documented limitation).
-- Adds the viewer product via a forward migration (064) beside ADR-0018's tables rather than editing 063, keeping the auditable migration history.
-- A new viewer-JWT-authenticated inbound surface inside payment-service (small; reuses existing verify + isolation).
-- Streamer→viewer inheritance revocation is *eventually* convergent (on next viewer activity / reconcile), not instant, unless a cascade from the user recompute is added (deferred; no worse than today).
+Pure viewers self-serve a cheaper subscription; one payment stack serves both products; `viewers.is_premium` gains the same convergent single-writer guarantees as `users.is_premium`; both read paths untouched. Costs: the one-Patreon-account-per-identity limitation; inheritance revocation is eventually convergent (next viewer activity or reconcile pass, not instant); a small new viewer-authenticated inbound surface inside payment-service.
 
 ## Implementation
 
-- **Migration**: `migrations/064_viewer_premium_product.sql` (+ `_down`).
-- **Shared**: `shared/premium/recompute.go` — add `RecomputeViewer(viewerID)` (reuses `Effective`); keep `Recompute` for users.
-- **payment-service**: subject-aware `entitlement.Apply` (`Subject{UserID, ViewerID, Product}`, per-product threshold); `repository` token+subscription carry `viewer_id`/`product`, `GetByPatreonUserID` returns the subject, `ListAll` returns subjects; viewer connect/status/disconnect handlers; subject in OAuth-state; reconcile iterates both subjects; `cmd/main.go` adds `PATREON_VIEWER_MIN_TIER_CENTS` + viewer routes + viewer-JWT middleware.
-- **auth-service**: `LinkViewerToUser` and `SetViewerPremium` route through `RecomputeViewer`; admin writes `viewers.premium_admin_override` (tri-state, with the ADR-0027 optional expiry), mirroring share-service's `UpdateUserPremium`.
-- **Gateway**: `service_config.go` already routes `/api/v1/payment/*`; add the viewer connect routes (public callback already covered).
-- **Frontend**: `frontend/src/app/settings/viewer/premium/page.tsx` (viewer-facing connect/status page, mirroring `settings/premium`) served by `lib/api/viewer.ts` viewer-premium methods (`getPremiumStatus` / `startPatreonConnect` / `disconnectPatreon`).
-- **Config**: `PATREON_VIEWER_MIN_TIER_CENTS` (`deployments/k8s/base/configmap.yaml` + `.env.example`).
-- **Tests**: unit (`Effective` reused; product/threshold mapping; subject resolution); testcontainers E2E mirroring ADR-0018 (viewer webhook flips `viewers.is_premium`; admin-override survives lapse; inheritance preserved; one-subject CHECK); migration 064 re-run idempotency.
+`migrations/064_viewer_premium_product.sql`; `RecomputeViewer` in `shared/premium/recompute.go`; subject-aware `entitlement.Apply` (`Subject{UserID, ViewerID, Product}`), repository and reconcile in payment-service; `cmd/main.go` adds `PATREON_VIEWER_MIN_TIER_CENTS` + viewer routes; auth-service routes `LinkViewerToUser`/`SetViewerPremium` through `RecomputeViewer`; frontend `frontend/src/app/settings/viewer/premium/page.tsx` via `lib/api/viewer.ts`. Tests mirror ADR-0018: viewer webhook flips the flag, override survives lapse, inheritance preserved, exactly-one-subject CHECK, migration rerun idempotency.
 
-## Related Decisions
-
-- [ADR-0018](./0018-premium-entitlements-via-patreon.md) — the user-premium pipeline this generalizes (subject, `Effective`, webhook, reconcile).
-- [ADR-0008](./0008-feature-gate-infrastructure.md) — premium feature-gate layer (streamer side).
-- [ADR-0016](./0016-linked-twitch-credentials.md) — the encrypted per-subject OAuth-token pattern reused for the viewer connection.
-- ROADMAP Phase 16 (this) and Phase 17 (beta-tester role, builds on the viewer override + `RecomputeViewer`).
+Related: ADR-0018 (pipeline this generalizes), ADR-0008, ADR-0016.

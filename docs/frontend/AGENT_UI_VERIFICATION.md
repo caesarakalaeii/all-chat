@@ -27,7 +27,7 @@ green. Two additions close that:
    start). Note the PID if you started it.
 3. **Shoot it** at 1280px and 375px, desktop and mobile both. Use
    `skills/ui-review`'s `shoot.py` when available, Playwright MCP
-   (`browser_take_screenshot`) when wired (see AGENT_MCP_PLAN.md), or a
+   (`browser_take_screenshot`, wired via `.mcp.json`), or a
    throwaway Playwright script. Mobile width is not optional: the overflow
    nobody scrolled to see lives there. Shoot the light theme too (set
    `localStorage.allchat_theme = 'light'` before load, ADR-0087): a literal
@@ -67,8 +67,8 @@ green. Two additions close that:
 
 | Need | Tool |
 | --- | --- |
-| Repeatable interaction/verification in the agent loop | Playwright MCP (see AGENT_MCP_PLAN.md) |
-| Debugging: console, network, perf traces | Chrome DevTools MCP (see AGENT_MCP_PLAN.md) |
+| Repeatable interaction/verification in the agent loop | Playwright MCP (`.mcp.json`) |
+| Debugging: console, network, perf traces | Chrome DevTools MCP (not wired yet) |
 | Batch pixel gate on PRs | `frontend-visual.yml` / `npm run test:visual` |
 | Baseline regeneration | dispatch `frontend-visual.yml` with `update_snapshots=true` |
 | Local run on NixOS | `PLAYWRIGHT_CHROMIUM_PATH=<nix chromium> npm run test:visual` |

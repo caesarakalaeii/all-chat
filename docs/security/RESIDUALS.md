@@ -1,41 +1,44 @@
-# Security Audit — Residuals & Deferrals
+# Security Audit — Residuals
 
-Tracks items from `SECURITY_AUDIT_REPORT.md` that are **not yet fully closed**.
-Status reflects the `security/audit-hardening` branch state as of the audit pass.
+Tracks the items from [SECURITY_AUDIT_REPORT.md](./SECURITY_AUDIT_REPORT.md)
+that are not fully closed. Status follows the hardening work that landed on
+the `security/audit-hardening` branch (subsequently merged to main). Finding
+IDs refer to that report.
 
-Legend: ✅ done · 🔶 minimum done / partial · ⏳ deferred · 🟡 done in working tree (committed)
+## Open
 
----
+- **L2** — `shared/signing/` is hardened (min secret length, future-timestamp
+  replay rejection, query and service name signed, constant-time compare)
+  but no prod service imports it; k8s NetworkPolicies remain the
+  service-to-service isolation control. Next: wire `Signer.VerifyMiddleware()`
+  into one pilot internal endpoint and design secret distribution
+  (`secretKeyRef` per service pair) before rolling out.
+- **ENG1** — auth-service `/internal/chat/announce` (engagement-service
+  round-start posts, ADR-0028), `/internal/chat/bot-send` (chat command
+  replies and timers, ADR-0079/0081) and `/internal/twitch/clip` post or clip
+  as any streamer whose body the caller names, gated only by the shared
+  `SERVICE_JWT_SECRET`, a wider surface than `/chat/send` (which derives the
+  streamer from the token). Not externally reachable: `/internal` only
+  mounts when `SERVICE_JWT_SECRET` is set, and NetworkPolicy restricts it to
+  in-cluster callers. Keep the allow-list tight and consider an
+  engagement-only key so a leaked secret cannot mint announces for unrelated
+  services; sign these calls once `shared/signing` (L2) rolls out.
+- **ENG2** — outbound fetches of user-chosen URLs (`{urlfetch}` in
+  engagement-service, Owncast instance URLs) rely on `shared/safehttp` only
+  (refuses non-public IPs at dial time, after DNS and on every redirect, no
+  proxy; `{urlfetch}` is https/443 only). Cluster egress is otherwise open,
+  so a code path that dials a user URL without `safehttp` would escape.
+  Next: egress NetworkPolicies for engagement-service and owncast-listener
+  that deny private, link-local and CGNAT ranges.
 
-## Genuinely deferred
+## Accepted, not deferred
 
-| ID | Finding | Status | Rationale / Scope | Suggested next step |
-|----|---------|--------|--------------------|--------------------|
-| **H3** | JWT + refresh token in `localStorage` → XSS = account takeover | ✅ | **DONE** (full cookie migration + PR-478 review fixes landed on `security/audit-hardening`). Streamer/admin access + refresh JWTs now live in `httpOnly; Secure; SameSite=Lax` cookies (`shared/auth/cookie.go`); auth-service `/exchange` + `/refresh` set/rotate cookies + redact tokens from bodies; `/logout` clears cookies + revokes refresh; gateway is the cookie boundary (`CookieToBearer` for HTTP, `AuthCookieForward` for auth routes, owner-WS reads access cookie, and a cookie that does not prove ownership of that overlay falls back to the anonymous OBS feed of L13 rather than a 403, because OBS shares one cookie jar across all browser sources and docks); CSRF defense = SameSite=Lax + stateless `OriginCheck`; impersonation moved server-side. Frontend fetch wrappers drop `Authorization` attachment (cookies via `credentials:'same-origin'`); 401→refresh→retry interceptor; `auth-store` derives login from `/auth/me`. See `docs/pi/specs/2026-06-23-h3-cookie-auth-design.md`. **Viewer token explicitly out of scope** (cross-origin overlay embeds hit third-party-cookie phaseout; left in-memory). **PR-478 review fixes (2026-06-24):** C1 — registered missing `POST /api/v1/auth/exchange` gateway route (streamer/admin login was 404'ing); C2 — `/exchange` now seeds the `refresh_token:<hash>` reuse-detection key (first `/refresh` after login was misclassified as theft → force-logout); L2 — `/refresh` restores the reuse key on transient upstream 5xx (not on terminal 400/401) so a provider hiccup no longer invalidates a valid session; L3 — `DELETE /auth/me` now clears cookies + revokes refresh (parity with `/logout`); L4 — fixed wrong error var logged in both callback store-code paths; L1 — blacklist Redis errors are now actually logged (were silently dropped). New tests: `TestHandleStreamerTokenExchange_SeedsRefreshTokenReuseKey` + `TestHandleRefresh_AfterExchange_DoesNotForceLogout` prove the C1/C2 contract. | Wire the remaining backward-compat fallbacks out post-rollout (Authorization-header + JSON-body refresh fallbacks); add a full Twitch-mocked E2E (callback → /exchange → authed → access expiry → /refresh → /logout) — current tests stop short of calling real Twitch (no interface). |
-| **L2** | `shared/signing/` implemented but not wired into any prod service | ⏳ | Package is hardened (min secret length, future-timestamp replay rejection, query + service-name signed, constant-time compare) but `grep shared/signing services/ --glob '*.go'` = **0 prod imports** (tests only). Documented as deferral — wiring requires shared secret distribution + service-identity contract rollout across all inter-service calls. Current isolation = k8s NetworkPolicies (default-deny added in this pass). | Wire `Signer.VerifyMiddleware()` into one pilot internal endpoint; design key distribution (secretKeyRef per service pair); then roll out. CLAUDE.md updated to state "implemented-not-deployed". |
-| **ENG1** | auth-service `/internal/chat/announce` (used by engagement-service for opt-in round-start posts, ADR-0028) and `/internal/chat/bot-send` (chat command replies and timers, ADR-0079, ADR-0081, posting as the streamer, their custom bot or the All-Chat Bot into the streamer's chat) are arbitrary-message-**as-any-streamer** primitives, and `/internal/twitch/clip` (chat command clips) is the same shape for clipping any streamer who granted `clips:edit`: the acting streamer comes from an unauthenticated request body, gated only by the shared `SERVICE_JWT_SECRET`. A wider internal surface than `/chat/send` (which derives the streamer from the authenticated token). PR #524 review P3-10. | ⏳ | Not externally reachable — the `/internal` route is only registered when `SERVICE_JWT_SECRET` is set and is NetworkPolicy-restricted to in-cluster callers; consistent with the current internal trust model (services already trust the shared service JWT). The exposure is that any holder of the service secret can post to chat as any streamer with the send scope, or as the All-Chat Bot into any channel that granted `channel:bot` or runs Kick. | Keep the NetworkPolicy allow-list to `auth-service:8081/internal` tight; consider a dedicated engagement-only key/kid so a leaked engagement secret can't mint announces for unrelated services; once `shared/signing` (L2) rolls out, sign the announce and bot-send with the engagement service identity. |
-| **ENG2** | Outbound fetches of user-chosen URLs (chat command `{urlfetch}` in engagement-service, Owncast instance URLs in owncast-listener, ADR-0080) rely on an in-code guard only: allchat-namespace egress is open, so nothing below the application stops a pod from reaching the cluster or the metadata endpoint. | 🔶 | `shared/safehttp` refuses every non-public IP at dial time, after DNS resolution and on every redirect, and never uses a proxy; `{urlfetch}` is further limited to https on port 443, which keeps the nodes' own public IPs to the ingress. The exposure is a new code path that dials a user URL without `safehttp`. | Add egress NetworkPolicies for engagement-service and owncast-listener that allow 0.0.0.0/0 except the private, link-local and CGNAT ranges, plus the in-cluster dependencies they need. |
+- **L13** — OBS-mode unauthenticated WebSocket to any active overlay;
+  judged acceptable for OBS.
+- **M2** — refresh-token rotation: minimum rotation tracking landed, full
+  family revocation is a larger auth redesign.
+- **S3** — `gorilla/websocket` pseudo-version: block on an upstream tag.
 
-## Completed in this hardening pass (committed)
-
-These were listed as deferred in the initial commit message but the parallel
-residual pass landed them. Listed here for traceability.
-
-| ID | Finding | Status | Note |
-|----|---------|--------|------|
-| **H2** | Logout blacklist never checked | 🟡 | `JWTAuthWithRevocation(kc, rdb)` now used in all 5 services (api-gateway was done in initial commit; share/moderation/payment/overlay-manager wired in residual pass). |
-| **H5** | JWT in WS URL query → access logs | 🟡 | Gateway now reads token via `Sec-WebSocket-Protocol` (`extractWSAuthToken`) with `?token=` query fallback for rollout; logging middleware redacts token. Frontend WS clients updated. |
-| **H7** | Redis unauthenticated | 🟡 | k8s manifests committed (NetworkPolicy default-deny + Redis secret). Go clients across 18 services now read `REDIS_PASSWORD`; activation requires setting the secret in-cluster. |
-| **M1** | Refresh token in URL fragment (streamer login) | ✅ | Streamer OAuth redirect now uses short-lived `?code=` exchanged via Redis (mirrors viewer flow), not `#access_token=&refresh_token=`. **H3** further hardened: `/exchange` returns `user` (no tokens) + sets httpOnly cookies. |
-| **M17** | TTS token + spoken text in URL query | 🟡 | Frontend sends `Authorization: Bearer` + JSON body; backend `HandleTTS` reads header with `?tts_token=` query fallback for backward compat. |
-
-## Out of scope per audit (acknowledged, not deferred)
-
-- **L2 (alt)** — wiring signing into a prod service is a deliberate rollout, not a quick fix; tracked above as ⏳.
-- **L13** — OBS-mode unauth WS to any active overlay; audit marked "acceptable for OBS".
-- **M2** — refresh-token rotation / reuse detection (family tracking); minimum rotation-tracking landed, full family revocation is a larger auth redesign.
-- **S3** — `gorilla/websocket` pseudo-version pinning; blocked on upstream tag release (no tag exists yet).
-
----
-
-*Cross-reference: `SECURITY_AUDIT_REPORT.md` finding IDs. Initial hardening commit: `🔒 fix(security): harden auth/crypto/gateway/infra/frontend per audit` on branch `security/audit-hardening`.*
+Earlier advisories from the audit (H3 cookie migration, H2 blacklist check,
+H5 token-in-query, H7 Redis auth, M1 code exchange, M17 TTS token) were
+closed in the hardening pass; the report records where.

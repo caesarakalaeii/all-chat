@@ -297,7 +297,7 @@ This service maintains **byte-for-byte compatibility** with the official youtube
 
 ## Deployment
 
-See [ROLLOUT_GUIDE.md](../../docs/deployment/ROLLOUT_GUIDE.md) for canary deployment instructions.
+See [docs/architecture/02-DEPLOYMENT.md](../../docs/architecture/02-DEPLOYMENT.md) for the canary rollout setup and thresholds.
 
 ### Docker Build
 
@@ -563,4 +563,4 @@ See `docs/architecture/04-OBSERVABILITY.md` for complete dashboard configuration
 
 ## Troubleshooting
 
-See [TROUBLESHOOTING_INNERTUBE.md](../../docs/deployment/TROUBLESHOOTING_INNERTUBE.md) for issue diagnosis and resolution.
+See [docs/troubleshooting/youtube.md](../../docs/troubleshooting/youtube.md) (Innertube Argo Rollout section) and [docs/architecture/02-DEPLOYMENT.md](../../docs/architecture/02-DEPLOYMENT.md) for issue diagnosis and rollout setup.

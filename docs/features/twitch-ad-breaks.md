@@ -60,26 +60,7 @@ consent can never request it, and moderators do not see the banner.
 
 ## End-to-end trace
 
-1. **Twitch → webhook.** `routeEvent` in
-   `services/twitch-eventsub-listener/webhooks/handler.go` dispatches
-   `channel.ad_break.begin` to `handleAdBreakBegin`.
-2. **Handler → wire format.** `buildAdBreak` produces a
-   `RawChatMessage{EventType: "ad_break"}` on the lowercased broadcaster login.
-   `eventsub.AdBreakBeginEvent` accepts `duration_seconds` and `is_automatic` as numbers
-   or quoted strings: Twitch's reference table types them integer/boolean, its own example
-   payload quotes them.
-3. **`chat:raw` → message-processor.** `mapEventTypeToColumn` answers
-   `columnAlwaysEnabled` (the consent is the opt-in, so there is no per-overlay toggle).
-   `TwitchNormalizer.NormalizeEvent` sets the value pill (`formatAdBreakDuration`:
-   `30s`, `1m 30s`, `3m`); `classifier.ClassifyEvent` returns tier `low`, duration 0.
-   alert-processor never routes it: `ad_break` is not on its allowlist.
-4. **api-gateway.** `isOwnerOnlyFrame` (`services/api-gateway/cmd/main.go`) marks
-   `ad_break` owner-only, so `Pool.BroadcastFiltered` skips anonymous and viewer
-   sockets, and `shouldBufferForReplay` keeps it out of the replay buffer. Nothing in the
-   frame is confidential; the reasons are that an OBS source would render it on stream,
-   and that a replayed ad break is one that already ended.
-5. **Frontend.** A normal feed item: `partitionItems` puts it in `events`,
-   `ActivityPanel` renders it with `CompactEvent`.
+`channel.ad_break.begin` reaches `twitch-eventsub-listener` (signature-verified webhook, `routeEvent` in `services/twitch-eventsub-listener/webhooks/handler.go`), where `buildAdBreak` wraps it as a `RawChatMessage{EventType: "ad_break"}`. `duration_seconds` and `is_automatic` are accepted as numbers or quoted strings because Twitch's reference table and its own example payloads disagree. message-processor normalizes it (tier `low`, duration 0, a duration pill via `formatAdBreakDuration: "30s"`, "1m 30s"), the consent is the sole opt-in so there is no per-overlay event toggle, and api-gateway marks `ad_break` owner-only via `isOwnerOnlyFrame`: nothing in it is confidential, but an OBS source would render it on stream, and a replayed ad break is one that already ended. The monitor view renders it as a normal feed item.
 
 ## `EventData` keys
 
@@ -112,5 +93,5 @@ harmless.
 ## References
 
 - [Twitch: channel.ad_break.begin event reference](https://dev.twitch.tv/docs/eventsub/eventsub-reference/#channel-ad-break-begin-event)
-- [ADR-0054: Twitch moderation and AutoMod event feed](../adr/0054-twitch-moderation-and-automod-event-feed.md) — the owner-only delivery this reuses
-- [ADR-0030: Twitch native engagement mirroring](../adr/0030-twitch-native-engagement-mirroring.md) — the resync limitation
+- [ADR-0054: Twitch moderation and AutoMod event feed](../adr/0054-twitch-moderation-and-automod-event-feed.md): the owner-only delivery this reuses
+- [ADR-0030: Twitch native engagement mirroring](../adr/0030-twitch-native-engagement-mirroring.md): the resync limitation

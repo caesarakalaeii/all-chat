@@ -5,105 +5,31 @@
 **Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
-## Context and Problem Statement
+## Context
 
-The admin dashboard (`frontend/src/app/admin/*`) is a set of list+detail pages — users,
-overlays, sources, viewers, cosmetics, feature gates. Each page kept its selected entity and
-its filter state in opaque React component state (`useState`). Two problems followed from that:
+The admin dashboard is a set of list+detail pages (users, overlays, sources, viewers, cosmetics, feature gates). Each page kept its selected entity and filter state in opaque React state. Two problems followed: entities could not be linked to each other (a source row knew its `overlay_id`, but there was no way to navigate from an overlay to its owning user or back — the single most common admin usability complaint, "overlays are not linked to their users"), and nothing was shareable (an admin investigating a ticket could not paste a link that reopened the dashboard on the exact entity).
 
-- **Entities could not be linked to each other.** A source row knew its `overlay_id`, but there
-  was no way to navigate from an overlay to its owning user, from a user to their sources, or
-  from a source back to the owning user, because selection lived in a component that another page
-  could not address. This was the single most common admin usability complaint: *"overlays are
-  not linked to their users."*
-- **Nothing was shareable.** An admin investigating a support ticket could not paste a link that
-  reopened the dashboard on the exact entity in question; the recipient had to be told which page
-  to open and which row to click.
+One page already pointed the way: the Overlays page read `?overlay=<id>` on load and auto-selected, and the Sources page linked into it. The pattern just needed to become the convention.
 
-One page already pointed the way: the Overlays page read `?overlay=<id>` on load and auto-selected
-that overlay (`frontend/src/app/admin/overlays/page.tsx`), and the Sources page linked into it
-(`href={`/admin/overlays?overlay=${source.overlay_id}`}`). But the pattern was ad hoc — a single
-deep-link on a single page, not a convention the other pages followed.
+## Decision
 
-## Decision Drivers
+**URL query parameters are the single source of truth for admin selection and filters.** Each list+detail page reads selection (`?user=<id>`, `?overlay=<id>`, …) and filters (`?filter=`, `?connected=`, `?platform=`, `?q=`) from the query string on mount and auto-selects the referenced entity; cross-links are plain `href`s carrying the owning page's params (source → `/admin/overlays?overlay=<id>`, overlay → `/admin/users?user=<owner_id>`, user → `/admin/sources?user=<id>`). Reloading or sharing a URL reopens the same entity.
 
-- Make every admin entity deep-linkable and cross-navigable, resolving the "not linked" complaint.
-- Make admin state shareable via URL for support hand-offs.
-- Reuse the pattern the Overlays page already proved (`?overlay=<id>`) rather than invent a new one.
-- Keep the change small and per-page — no framework/routing migration, no big-bang rewrite.
+Master-detail is the standard layout: a scrollable list next to a sticky detail panel, the URL selecting what the panel shows. No new `[id]` routes — selection stays in query params, which keeps list and detail co-resident and avoids a Next.js routing migration.
 
-## Considered Options
-
-1. **Standardize URL query parameters for selection and filters across every admin page.**
-   - ✅ Generalizes the existing `?overlay=<id>` pattern; deep-linkable and shareable; each page
-     reads params on mount and reflects selection/filter changes back into the URL; no new routes.
-   - ❌ Query strings are flatter than nested routes; each page needs a small read-params-on-mount
-     change.
-2. **Introduce real nested dynamic routes (`/admin/users/[id]`, `/admin/overlays/[id]`, …).**
-   - ✅ Canonical URLs, natural breadcrumbs, per-entity server components.
-   - ❌ A routing migration across every admin page plus a split of list vs detail layouts; higher
-     cost for a dashboard whose master-detail layout wants the list and the panel on screen together.
-     Rejected for now on migration cost.
-3. **Keep selection in React state, add cross-links as in-memory navigation only.**
-   - ✅ No URL work.
-   - ❌ Still not shareable, still not restorable on reload, still can't hand a link to another admin.
-     Rejected — it does not solve the actual complaint.
-
-## Decision Outcome
-
-**Chosen**: Option 1 — URL query parameters as the single source of truth for admin selection and
-filters.
-
-- **Selection is URL-addressable.** Admin list+detail pages read selection from the query string
-  on load (`?user=<id>`, `?overlay=<id>`, and the like) and auto-select the referenced entity.
-  Cross-links are plain `href`s carrying the owning page's params, so reloading or sharing a URL
-  reopens the same entity. Note: pages only *read* params on mount; in-page selection changes are
-  not written back into the address bar — the URL stays the entry-point mechanism, not a live
-  mirror of current selection. Write-back was in the decision's scope but never shipped; the
-  deep-link + cross-link pattern covers the original complaint.
-- **Filters are URL-addressable too.** List filters are also read from the query string on load —
-  `?filter=`, `?connected=`, `?platform=`, `?q=` — so a pre-filtered view is itself a link; the
-  same write-back caveat as selection applies.
-- **Master-detail is the standard layout.** Each page is a scrollable list next to a sticky side
-  detail panel; the URL selects which entity the panel shows. This is the layout the Overlays page
-  already used, promoted to the convention for all of them.
-- **No new `[id]` routes.** Selection stays in query params rather than nested dynamic segments. This
-  keeps list and detail co-resident, avoids a Next.js routing migration, and lets cross-links be plain
-  `href` strings into the existing pages (e.g. source → `/admin/overlays?overlay=<id>`,
-  overlay → `/admin/users?user=<owner_id>`, user → `/admin/sources?user=<id>`).
+Alternatives considered: real nested dynamic routes (`/admin/users/[id]`, …) — canonical URLs and breadcrumbs, but a routing migration across every page for a dashboard that wants list and panel on screen together (the documented next step if per-entity URLs are ever needed); cross-links in memory only (still not shareable, does not solve the complaint).
 
 ## Consequences
 
-### Positive
-- Admin entities are cross-navigable: source → owning user, overlay → owner, user → their sources —
-  the "overlays are not linked to their users" complaint is resolved with plain links.
-- Every admin view is deep-linkable and shareable; a support hand-off is a URL.
-- The pattern is uniform, so future admin pages get deep-linking by following the same convention.
-- Zero routing/infra migration; changes are localized to each page's mount-time param read and
-  its selection/filter handlers.
-
-### Negative
-- Query strings are a flatter address space than nested routes; if the admin later needs canonical
-  per-entity URLs, breadcrumbs, or per-entity server rendering, the nested-route migration (Option 2)
-  remains the documented next step.
-- Pages read params only on mount; in-page selection changes are not written back into the
-  address bar, so a shared URL reflects the view at the time the link was copied, not any later
-  navigation. Deep links in and cross-links out remain accurate.
+- Entities are cross-navigable with plain links; a support hand-off is a URL; future admin pages get deep-linking by following the convention.
+- **Caveat:** pages only *read* params on mount. In-page selection changes are not written back into the address bar, so a shared URL reflects the view at the time the link was copied, not later navigation. Write-back was in the original scope but never shipped; deep links in and cross-links out remain accurate.
 - Each page carries a small amount of param-read boilerplate.
 
 ## Implementation
 
-- **Frontend**: `frontend/src/app/admin/{users,overlays,sources,viewers,...}/page.tsx` — read
-  selection/filter query params on mount and auto-select the referenced entity; render the
-  scrollable-list + sticky-panel master-detail layout. Cross-links are `href`s into the sibling
-  admin pages' query params. (No page writes selection back into the URL; see the Negative note.)
-- **Prior art**: `frontend/src/app/admin/overlays/page.tsx` already read `?overlay=<id>`;
-  `frontend/src/app/admin/sources/page.tsx` already linked into it. This ADR generalizes that.
-- **Routing**: unchanged — no new dynamic segments are added.
+- `frontend/src/app/admin/{users,overlays,sources,viewers,...}/page.tsx` — mount-time param reads, master-detail layout, cross-link `href`s. No routing change.
 
-## Related Decisions
+## Related
 
-- [ADR-0034](./0034-admin-viewer-identity-model.md) — the viewer admin view, one of the pages
-  standardized on this pattern.
-- [ADR-0035](./0035-admin-global-entity-search.md) — global admin search deep-links its results
-  into the URL-addressable views defined here.
+- [ADR-0034](./0034-admin-viewer-identity-model.md) — the viewer admin view, one of the standardized pages.
+- [ADR-0035](./0035-admin-global-entity-search.md) — global search deep-links into these views.
