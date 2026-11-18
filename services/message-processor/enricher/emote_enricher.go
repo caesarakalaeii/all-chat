@@ -349,13 +349,12 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 	var err error
 
 	// GetEmotesForChannel takes no platform argument, so it may only serve a
-	// request that carries nothing for emote-service to branch on. A non-Twitch
-	// platform alone is enough: emote-service uses it to add Twitch globals, to
-	// fall back to the "global" BTTV/FFZ set instead of looking those providers
-	// up by a platform id, and to pick the 7TV channel-connection path. Routing
-	// such a request down the plain call drops the platform and degrades all
-	// three silently — which is reachable whenever a chatter has no user id,
-	// as chatters without a resolvable 7TV identity now do (hasPersonalEmotes).
+	// request with nothing for emote-service to branch on. A non-Twitch platform
+	// alone is enough: emote-service uses it to add Twitch globals, to fall back
+	// to the "global" BTTV/FFZ set instead of looking those providers up by a
+	// platform id, and to pick the 7TV channel-connection path. Routing such a
+	// request down the plain call drops the platform and degrades all three
+	// silently.
 	if userID != "" || twitchChannel != "" || seventvSetID != "" || isNonTwitchPlatform(platform) {
 		thirdPartyEmotes, err = e.client.GetEmotesForChannelWithUser(ctx, channel, platform, userID, twitchChannel, seventvSetID)
 	} else {
@@ -475,8 +474,8 @@ func (e *Enricher) refreshAsync(channel, platform, userID, twitchChannel string)
 // per channel for 13h, which filled Redis (AllChatRedisMemoryNearLimit,
 // 2026-11-18).
 //
-// Note this is about CHATTER ids only. The same 7TV endpoint does serve
-// YouTube and Kick CHANNEL connections — see fetchPlatformConnectionEmotes in
+// This is about CHATTER ids only. The same 7TV endpoint does serve YouTube and
+// Kick CHANNEL connections — see fetchPlatformConnectionEmotes in
 // emote-service — so the channel lookup is unaffected by this predicate.
 func hasPersonalEmotes(platform string) bool {
 	return platform == "twitch" || platform == "kick"

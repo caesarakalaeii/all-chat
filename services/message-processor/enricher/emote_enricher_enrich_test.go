@@ -34,11 +34,8 @@ type mockEmoteServiceClient struct {
 	lastChannel string
 	lastUserID  string
 	calls       int
-	// lastPlatform is the platform the request carried, and plainCalls counts
-	// the GetEmotesForChannel route, which has no platform argument at all.
-	// Both are needed to tell the two client methods apart: emote-service
-	// branches on platform (Twitch globals, the BTTV/FFZ "global" fallback and
-	// the 7TV connection lookup), so a request that loses it degrades silently.
+	// plainCalls counts the GetEmotesForChannel route, which carries no platform
+	// argument, so the two client methods can be told apart.
 	lastPlatform string
 	plainCalls   int
 }
