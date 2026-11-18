@@ -69,6 +69,7 @@ import {
   isWsFlapError,
   nextFlapRetryDelayMs,
   NoLaneCache,
+  parkBlocksConnect,
   silentFailureParkMs,
   WS_FLAP_MAX_FAST_RETRIES,
   WS_FLAP_RETRY_DELAY_MS
@@ -1281,6 +1282,33 @@ class TikTokListenerService {
         ceiling: TIKTOK_MAX_STREAMS_PER_POD,
         active: this.activeStreams.size,
         connecting: this.connectingStreams.size,
+      });
+      if (this.leadershipCoordinator) {
+        await this.leadershipCoordinator.release(username);
+      }
+      this.livePoller.addTarget(username, overlayId);
+      return;
+    }
+
+    // A live sign-budget (or deaf-room) park. The poller tick,
+    // recoverStuckChannels and the rebalance hold all consult it; this path
+    // is the one way in that did not, so a demand snapshot that briefly
+    // dropped a parked room re-dialled it inside its own window and spent a
+    // second of the pod's twelve hourly slots on it (prod 2026-11-18,
+    // alfonsooc0304 — see parkBlocksConnect).
+    //
+    // Mirrors the ceiling guard above: runs before the connectingStreams
+    // bookkeeping so the early return needs no cleanup, releases the lease
+    // so a pod with its own budget can take the room rather than leaving it
+    // deaf under a lease this pod cannot use, and re-parks it in the poller
+    // for re-check when the park ends.
+    const parkRemainingMs = this.backoffManager.parkRemainingMs(username);
+    if (parkBlocksConnect(parkRemainingMs)) {
+      logger.info('Stream parked by sign budget, deferring connect', {
+        username,
+        overlay_id: overlayId,
+        park_remaining_ms: parkRemainingMs,
+        park_remaining_minutes: Math.round(parkRemainingMs / 60000),
       });
       if (this.leadershipCoordinator) {
         await this.leadershipCoordinator.release(username);
