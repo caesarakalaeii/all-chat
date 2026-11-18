@@ -39,6 +39,10 @@ type twoKeyCacheStore struct {
 	mu      sync.Mutex
 	channel []cache.CachedEmote
 	perUser map[string][]cache.CachedEmote
+	// channelWrites counts Set calls. A rewrite that happens to store the same
+	// emotes still resets the key's TTL in Redis, so contents alone cannot show
+	// whether the channel entry was left alone.
+	channelWrites int
 }
 
 func newTwoKeyCacheStore() *twoKeyCacheStore {
@@ -58,7 +62,14 @@ func (s *twoKeyCacheStore) Set(ctx context.Context, channel string, emotes []cac
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.channel = emotes
+	s.channelWrites++
 	return nil
+}
+
+func (s *twoKeyCacheStore) channelWriteCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.channelWrites
 }
 
 func (s *twoKeyCacheStore) Delete(ctx context.Context, channel string) error { return nil }
@@ -134,10 +145,19 @@ func TestChannelEntryIsNotReseededAfterATransientReadError(t *testing.T) {
 		t.Fatalf("Enrich returned error: %v", err)
 	}
 
-	entry := inner.channelEntry()
-	if len(entry) != 1 || entry[0].Code != "KEKW" {
-		t.Fatalf("a failed channel read rewrote the channel entry to %#v; "+
-			"only ErrCacheMiss means the entry is absent", entry)
+	// Counted, not compared: a reseed would write the same channel-only emotes
+	// this entry already holds, but it would also reset the key's TTL on a
+	// channel that was already warm. Only ErrCacheMiss means the entry is absent.
+	if writes := inner.channelWriteCount(); writes != 0 {
+		t.Fatalf("a failed channel read rewrote the channel entry %d time(s); "+
+			"a transport error says nothing about whether the entry exists", writes)
+	}
+
+	// The message is still served: the failure skips the cache write, not the
+	// enrichment.
+	if len(msg.Message.Emotes) != 2 {
+		t.Fatalf("resolved %d emotes (%#v), want the channel's and the chatter's",
+			len(msg.Message.Emotes), msg.Message.Emotes)
 	}
 }
 
