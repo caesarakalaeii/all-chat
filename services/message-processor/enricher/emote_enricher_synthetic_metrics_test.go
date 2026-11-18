@@ -283,6 +283,46 @@ func TestUnresolvableChatterSharesChannelCacheKey(t *testing.T) {
 	}
 }
 
+// A per-user entry must hold only what is actually per-user: the chatter's own
+// emotes. It used to hold the whole merged response, so every Twitch or Kick
+// chatter stored a second copy of the channel set (384-1486 emotes, ~100-230 KB)
+// for 13h — the family behind AllChatRedisEvictingKeys on 2026-11-18.
+func TestPerUserCacheEntryExcludesChannelEmotes(t *testing.T) {
+	channelEmotes := []cache.CachedEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+		{Code: "PogChamp", Provider: "twitch", URL: "https://example/pog"},
+	}
+	// What emote-service returns for a user-aware lookup: the channel set with
+	// the chatter's personal emotes merged in.
+	merged := []EmoteServiceEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+		{Code: "PogChamp", Provider: "twitch", URL: "https://example/pog"},
+		{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"},
+	}
+
+	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss, channelGetData: channelEmotes}
+	client := &mockEmoteServiceClient{emotes: merged}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	msg := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "jtaz",
+		User:      models.UserInfo{ID: "605199714"},
+		Message:   models.MessageInfo{Text: "KEKW MyPersonalEmote"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	if len(store.userSetData) != 1 || store.userSetData[0].Code != "MyPersonalEmote" {
+		t.Errorf("per-user entry stored %d emotes (%#v), want only the chatter's own", len(store.userSetData), store.userSetData)
+	}
+	if len(msg.Message.Emotes) != 2 {
+		t.Errorf("message must resolve both the channel and the personal emote, got %#v", msg.Message.Emotes)
+	}
+}
+
 // Dropping the chatter id for the cache key must not also drop the platform
 // from the outbound request: GetEmotesForChannel carries no platform argument,
 // so routing such a chatter down it degrades emote resolution silently rather

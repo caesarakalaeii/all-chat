@@ -80,9 +80,21 @@ type mockEmoteCacheStore struct {
 	setData  []cache.CachedEmote
 	// userCalls counts GetEntryWithUser/SetWithUser, i.e. per-user cache keys.
 	userCalls int
+	// channelSetData and userSetData record what each key shape was last given,
+	// so a test can assert on the size of a per-user entry specifically. setData
+	// cannot: both writers share it.
+	channelSetData []cache.CachedEmote
+	userSetData    []cache.CachedEmote
+	// channelGetData, when set, is what GetEntry serves, so a test can give the
+	// channel key and the per-user key different contents. Unset, GetEntry falls
+	// back to getData like GetEntryWithUser.
+	channelGetData []cache.CachedEmote
 }
 
 func (m *mockEmoteCacheStore) GetEntry(ctx context.Context, channel string) (cache.Entry, error) {
+	if m.channelGetData != nil {
+		return cache.Entry{Emotes: m.channelGetData, Stale: m.getStale}, nil
+	}
 	if m.getErr != nil {
 		return cache.Entry{}, m.getErr
 	}
@@ -94,6 +106,7 @@ func (m *mockEmoteCacheStore) Set(ctx context.Context, channel string, emotes []
 	defer m.mu.Unlock()
 	m.setCalls++
 	m.setData = emotes
+	m.channelSetData = emotes
 	return nil
 }
 
@@ -117,6 +130,7 @@ func (m *mockEmoteCacheStore) SetWithUser(ctx context.Context, channel, userID s
 	m.userCalls++
 	m.setCalls++
 	m.setData = emotes
+	m.userSetData = emotes
 	return nil
 }
 
