@@ -348,7 +348,15 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 	var thirdPartyEmotes []EmoteServiceEmote
 	var err error
 
-	if userID != "" || twitchChannel != "" || seventvSetID != "" {
+	// GetEmotesForChannel takes no platform argument, so it may only serve a
+	// request that carries nothing for emote-service to branch on. A non-Twitch
+	// platform alone is enough: emote-service uses it to add Twitch globals, to
+	// fall back to the "global" BTTV/FFZ set instead of looking those providers
+	// up by a platform id, and to pick the 7TV channel-connection path. Routing
+	// such a request down the plain call drops the platform and degrades all
+	// three silently — which is reachable whenever a chatter has no user id,
+	// as chatters without a resolvable 7TV identity now do (hasPersonalEmotes).
+	if userID != "" || twitchChannel != "" || seventvSetID != "" || isNonTwitchPlatform(platform) {
 		thirdPartyEmotes, err = e.client.GetEmotesForChannelWithUser(ctx, channel, platform, userID, twitchChannel, seventvSetID)
 	} else {
 		thirdPartyEmotes, err = e.client.GetEmotesForChannel(ctx, channel)
@@ -472,6 +480,14 @@ func (e *Enricher) refreshAsync(channel, platform, userID, twitchChannel string)
 // emote-service — so the channel lookup is unaffected by this predicate.
 func hasPersonalEmotes(platform string) bool {
 	return platform == "twitch" || platform == "kick"
+}
+
+// isNonTwitchPlatform reports whether emote-service has platform-specific
+// handling to do for this request. It mirrors the identically named condition
+// in emote-service's own handler (handlers/emote.go), including treating an
+// unknown platform as nothing to branch on.
+func isNonTwitchPlatform(platform string) bool {
+	return platform != "" && platform != "twitch"
 }
 
 // isSynthetic reports whether a message originates from a synthetic source —
