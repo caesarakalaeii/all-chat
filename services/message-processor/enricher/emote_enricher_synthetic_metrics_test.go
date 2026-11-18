@@ -292,9 +292,7 @@ func TestUnresolvableChatterSharesChannelCacheKey(t *testing.T) {
 }
 
 // A per-user entry must hold only what is actually per-user: the chatter's own
-// emotes. It used to hold the whole merged response, so every Twitch or Kick
-// chatter stored a second copy of the channel set (384-1486 emotes, ~100-230 KB)
-// for 13h — the family behind AllChatRedisEvictingKeys on 2026-11-18.
+// emotes. It used to hold the whole merged response (see splitPersonal).
 func TestPerUserCacheEntryExcludesChannelEmotes(t *testing.T) {
 	channelEmotes := []cache.CachedEmote{
 		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
@@ -335,9 +333,6 @@ func TestPerUserCacheEntryExcludesChannelEmotes(t *testing.T) {
 // empty: its presence is the record that the chatter was looked up. Skipping it
 // would make "has nothing of their own" indistinguishable from "never asked",
 // and the read path would re-fetch on every one of their messages.
-//
-// The saving is in the SIZE of the entry, not the number of them: tens of bytes
-// instead of a 100-230 KB copy of the channel set.
 func TestChatterWithNoPersonalEmotesGetsAnEmptyEntry(t *testing.T) {
 	channelEmotes := []cache.CachedEmote{
 		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},

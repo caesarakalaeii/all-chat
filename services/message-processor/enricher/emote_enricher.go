@@ -351,15 +351,6 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 // half alone would silently drop the chatter's own emotes while serving the
 // personal half alone would drop the channel's.
 //
-// This is why the per-user entry is written even when the chatter turns out to
-// have no emotes of their own (see fetchFromService): its presence is the
-// record that we looked. Skipping the write to save a key instead made "this
-// chatter has nothing" indistinguishable from "we have never asked", which
-// either re-fetches on every message or never discovers a personal set at all.
-// Empty or not, the entry is now tens of bytes rather than the 100-230 KB copy
-// of the channel set it used to hold, and that size — not the key count — is
-// what filled Redis.
-//
 // The entry is stale if either half is, so a refresh rewrites both.
 func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID string) (cache.Entry, error) {
 	personal, err := e.cache.GetEntryWithUser(ctx, channel, userID)
@@ -394,8 +385,7 @@ func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID stri
 // merged can be SHORTER than channelEmotes: emote-service drops a provider's
 // emotes when that provider times out, which its logs show happening routinely.
 // The result is then empty, which is correct — a degraded response adds nothing
-// the channel entry lacks — so the capacity hint must not be derived from the
-// difference in lengths.
+// the channel entry lacks.
 func splitPersonal(merged, channelEmotes []cache.CachedEmote) []cache.CachedEmote {
 	inChannel := make(map[string]struct{}, len(channelEmotes))
 	for _, emote := range channelEmotes {
@@ -465,10 +455,6 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 	// recovers. The emote service has its own cache, so the retry is cheap.
 	if writeCache && len(converted) > 0 {
 		if userID != "" {
-			// Store only the chatter's own emotes, against the channel entry everyone
-			// shares; personalPlusChannel puts the two back together on read. Writing
-			// the merged set here instead is what filled Redis.
-			//
 			// An empty split is still written. The entry's presence is what records
 			// that this chatter has been looked up; without it "has no personal
 			// emotes" is indistinguishable from "never asked", and the read path
@@ -482,11 +468,9 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 				// caching nothing at all — every message missing both keys and paying
 				// a 3s emote-service fetch, which is worse than the memory it saved.
 				//
-				// The merged response is exactly what that branch would have stored,
-				// and the split against it then yields an empty personal set: correct,
-				// because the first chatter's own emotes are indistinguishable from
-				// the channel's until a second chatter shows which are shared. The
-				// next chatter splits properly against the seeded entry.
+				// The split against it then yields an empty personal set: the first
+				// chatter's own emotes are indistinguishable from the channel's until
+				// a second chatter shows which are shared.
 				if err := e.cache.Set(ctx, channel, converted); err != nil {
 					e.logger.Warn("Failed to seed channel emote cache entry",
 						zap.String("channel", channel),

@@ -30,16 +30,14 @@ import (
 // channel entry and each per-user entry under genuinely separate keys, so a
 // read only hits what some earlier write actually put there.
 //
-// The shared mockEmoteCacheStore cannot express this. Its GetEntry serves
+// The shared mockEmoteCacheStore cannot express this: its GetEntry serves
 // channelGetData regardless of whether anything was ever written, so a test
-// using it always starts from a channel entry that exists — which is exactly
-// the precondition the cold-channel case does NOT have, and therefore exactly
-// the bug it cannot catch.
+// using it always starts from a channel entry that exists — the one precondition
+// the cold-channel case does not have.
 type twoKeyCacheStore struct {
-	mu        sync.Mutex
-	channel   []cache.CachedEmote
-	perUser   map[string][]cache.CachedEmote
-	userWrite int
+	mu      sync.Mutex
+	channel []cache.CachedEmote
+	perUser map[string][]cache.CachedEmote
 }
 
 func newTwoKeyCacheStore() *twoKeyCacheStore {
@@ -81,7 +79,6 @@ func (s *twoKeyCacheStore) SetWithUser(ctx context.Context, channel, userID stri
 		emotes = []cache.CachedEmote{}
 	}
 	s.perUser[userID] = emotes
-	s.userWrite++
 	return nil
 }
 
@@ -99,10 +96,8 @@ func (s *twoKeyCacheStore) channelEntry() []cache.CachedEmote {
 // Every such lookup carries a user id, and the per-user write needs a channel
 // entry to subtract from. Nothing else writes that entry: the channel-level
 // Set runs only on the userID == "" branch, which a Twitch-only channel never
-// takes. So without the channel entry being seeded here, the first message
-// caches nothing, the second finds nothing, and the channel re-fetches from
-// emote-service on every message forever — a 3s upstream call per message in
-// place of a cache.
+// takes. Without the seed, the channel re-fetches from emote-service on every
+// message forever.
 func TestTwitchOnlyChannelCachesAfterFirstMessage(t *testing.T) {
 	store := newTwoKeyCacheStore()
 	client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{

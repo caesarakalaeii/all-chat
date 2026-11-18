@@ -331,13 +331,10 @@ normalizers := map[string]normalizer.Normalizer{
      filled Redis (`AllChatRedisEvictingKeys`, 2026-11-18)
    - The per-user entry is written even when the chatter has no emotes of their
      own, in which case it is empty. Its presence is what distinguishes "looked
-     up, has nothing" from "never looked up"; without it the read path would
-     re-fetch on every message from the majority of chatters
+     up, has nothing" from "never looked up"
    - A per-user write with no channel entry yet seeds that entry from the same
-     response first. On a channel whose chatters are all Twitch or Kick nothing
-     else ever writes it — the channel-level write happens only on the lookup
-     with no user id — so skipping instead left the channel caching nothing and
-     paying a ~3s emote-service fetch per message
+     response first, since on a channel whose chatters are all Twitch or Kick
+     nothing else ever writes it
 
 4. **Viewer Identity Enrichment** (`enricher/viewer_badge_enricher.go`):
    - Resolve All-Chat platform identity (name_color, avatar frame/flair, admin/premium badges)
