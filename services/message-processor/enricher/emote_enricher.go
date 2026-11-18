@@ -380,13 +380,19 @@ func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID stri
 // Codes are the identity: the emote map Enrich builds is keyed by code, so two
 // entries sharing a code are indistinguishable downstream and the channel one
 // wins either way.
+//
+// merged can be SHORTER than channelEmotes: emote-service drops a provider's
+// emotes when that provider times out, which its logs show happening routinely.
+// The result is then empty, which is correct — a degraded response adds nothing
+// the channel entry lacks — so the capacity hint must not be derived from the
+// difference in lengths.
 func splitPersonal(merged, channelEmotes []cache.CachedEmote) []cache.CachedEmote {
 	inChannel := make(map[string]struct{}, len(channelEmotes))
 	for _, emote := range channelEmotes {
 		inChannel[emote.Code] = struct{}{}
 	}
 
-	personal := make([]cache.CachedEmote, 0, len(merged)-len(channelEmotes))
+	var personal []cache.CachedEmote
 	for _, emote := range merged {
 		if _, shared := inChannel[emote.Code]; !shared {
 			personal = append(personal, emote)
@@ -460,28 +466,33 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 			// enriched from `converted`, and the channel entry a sibling lookup writes
 			// lets the next message cache the delta properly.
 			channelEntry, chErr := e.cache.GetEntry(ctx, channel)
-			switch {
-			case chErr != nil:
+			if chErr != nil {
 				e.logger.Debug("Skipping per-user emote cache write, no channel entry to split against",
 					zap.String("channel", channel),
 					zap.String("user_id", userID),
 					zap.Error(chErr),
 				)
-			default:
-				personal := splitPersonal(converted, channelEntry.Emotes)
-				if err := e.cache.SetWithUser(ctx, channel, userID, personal); err != nil {
-					e.logger.Warn("Failed to populate emote cache",
-						zap.String("channel", channel),
-						zap.String("user_id", userID),
-						zap.Error(err),
-					)
-				} else {
-					e.logger.Debug("Emote cache populated (with user)",
-						zap.String("channel", channel),
-						zap.String("user_id", userID),
-						zap.Int("count", len(personal)),
-					)
-				}
+			} else if personal := splitPersonal(converted, channelEntry.Emotes); len(personal) == 0 {
+				// Nothing of this chatter's own to remember. Writing an empty entry
+				// would spend a key per chatter to record that they have no personal
+				// emotes, which is the cardinality this change exists to remove; the
+				// channel entry alone already answers them correctly.
+				e.logger.Debug("Skipping per-user emote cache write, chatter adds no emotes",
+					zap.String("channel", channel),
+					zap.String("user_id", userID),
+				)
+			} else if err := e.cache.SetWithUser(ctx, channel, userID, personal); err != nil {
+				e.logger.Warn("Failed to populate emote cache",
+					zap.String("channel", channel),
+					zap.String("user_id", userID),
+					zap.Error(err),
+				)
+			} else {
+				e.logger.Debug("Emote cache populated (with user)",
+					zap.String("channel", channel),
+					zap.String("user_id", userID),
+					zap.Int("count", len(personal)),
+				)
 			}
 		} else {
 			if err := e.cache.Set(ctx, channel, converted); err != nil {

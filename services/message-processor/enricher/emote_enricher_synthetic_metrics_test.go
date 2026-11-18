@@ -330,6 +330,79 @@ func TestPerUserCacheEntryExcludesChannelEmotes(t *testing.T) {
 	}
 }
 
+// Most chatters have no personal emotes at all. Spending a key each to record
+// that would keep the per-user family scaling with chatter count, which is the
+// cardinality this split exists to remove — the channel entry alone already
+// answers them.
+func TestChatterWithNoPersonalEmotesGetsNoPerUserEntry(t *testing.T) {
+	channelEmotes := []cache.CachedEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+	}
+	// 7TV resolved the chatter but they have no set of their own, so the merged
+	// response is exactly the channel's.
+	merged := []EmoteServiceEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+	}
+
+	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss, channelGetData: channelEmotes}
+	client := &mockEmoteServiceClient{emotes: merged}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	msg := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "jtaz",
+		User:      models.UserInfo{ID: "605199714"},
+		Message:   models.MessageInfo{Text: "KEKW"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	if store.userSetData != nil {
+		t.Errorf("wrote a per-user entry of %#v for a chatter with no emotes of their own", store.userSetData)
+	}
+	if len(msg.Message.Emotes) != 1 {
+		t.Errorf("message must still resolve the channel emote, got %#v", msg.Message.Emotes)
+	}
+}
+
+// emote-service degrades to a partial response when a provider times out (the
+// "Failed to fetch emotes from provider ... context deadline exceeded" lines
+// that fill its logs), so the merged response can be SHORTER than the channel
+// entry already cached. Splitting must survive that rather than panicking in
+// the enrichment path.
+func TestPerUserSplitSurvivesResponseSmallerThanChannelEntry(t *testing.T) {
+	channelEmotes := []cache.CachedEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+		{Code: "PogChamp", Provider: "twitch", URL: "https://example/pog"},
+		{Code: "LULW", Provider: "7tv", URL: "https://example/lulw"},
+	}
+	// One provider timed out, so the response carries less than the channel entry.
+	degraded := []EmoteServiceEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+	}
+
+	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss, channelGetData: channelEmotes}
+	client := &mockEmoteServiceClient{emotes: degraded}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	msg := &models.UnifiedChatMessage{
+		Platform:  "twitch",
+		ChannelID: "jtaz",
+		User:      models.UserInfo{ID: "605199714"},
+		Message:   models.MessageInfo{Text: "KEKW"},
+		Metadata:  map[string]interface{}{},
+	}
+	if err := e.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	if len(store.userSetData) != 0 {
+		t.Errorf("per-user entry stored %#v, want nothing: the response added no emote the channel lacks", store.userSetData)
+	}
+}
+
 // A cached per-user entry holds only the chatter's own emotes, so serving it
 // means putting it back together with the channel entry. Without the merge a
 // returning chatter would lose every channel emote.
