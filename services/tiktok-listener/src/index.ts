@@ -64,7 +64,7 @@ import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
 import {
   budgetRefusalRetryAfterMs,
-  connectionCeilingReached,
+  connectDisposition,
   isBudgetRefusalError,
   isWsFlapError,
   nextFlapRetryDelayMs,
@@ -1264,25 +1264,45 @@ class TikTokListenerService {
       return;
     }
 
-    // Connection ceiling (see TIKTOK_MAX_STREAMS_PER_POD). Checked before the
+    // Both reasons not to dial (see connectDisposition). Checked before the
     // connectingStreams bookkeeping so the early return needs no cleanup, and
-    // before the live-status pre-check so a full pod spends no Euler budget on
-    // a stream it cannot connect anyway.
+    // before the live-status pre-check so a deferred stream spends no Euler
+    // budget on a connection it will not make.
     //
-    // The lease must be released before re-parking: a leased-but-unconnected
-    // stream is deaf everywhere, because no other pod may claim it (the exact
-    // failure of the 2026-09-14 incident). Rebalancing normally keeps leases
-    // under the same ceiling, so this is the last-resort guard when pods
-    // scale down between cycles.
+    // The park is the newer of the two. The poller tick, recoverStuckChannels
+    // and the rebalance hold all consult it; this path was the one way in that
+    // did not, so a demand snapshot that briefly dropped a parked room
+    // re-dialled it inside its own window and spent a second of the pod's
+    // twelve hourly slots on it (prod 2026-11-18, alfonsooc0304).
     const liveConnectionCount = this.activeStreams.size + this.connectingStreams.size;
-    if (connectionCeilingReached(liveConnectionCount, TIKTOK_MAX_STREAMS_PER_POD)) {
-      logger.warn('Connection ceiling reached, re-parking stream', {
-        username,
-        overlay_id: overlayId,
-        ceiling: TIKTOK_MAX_STREAMS_PER_POD,
-        active: this.activeStreams.size,
-        connecting: this.connectingStreams.size,
-      });
+    const parkRemainingMs = this.backoffManager.parkRemainingMs(username);
+    const disposition = connectDisposition({
+      parkRemainingMs,
+      liveConnectionCount,
+      ceiling: TIKTOK_MAX_STREAMS_PER_POD,
+    });
+    if (disposition !== 'dial') {
+      // A full pod is an operational problem (rebalancing normally prevents
+      // it) and warns; a park is the budget working as designed.
+      if (disposition === 'pod-full') {
+        logger.warn('Connection ceiling reached, re-parking stream', {
+          username,
+          overlay_id: overlayId,
+          ceiling: TIKTOK_MAX_STREAMS_PER_POD,
+          active: this.activeStreams.size,
+          connecting: this.connectingStreams.size,
+        });
+      } else {
+        logger.info('Stream parked by sign budget, deferring connect', {
+          username,
+          overlay_id: overlayId,
+          park_remaining_ms: parkRemainingMs,
+          park_remaining_minutes: Math.round(parkRemainingMs / 60000),
+        });
+      }
+      // The lease must be released before re-parking: a leased-but-unconnected
+      // stream is deaf everywhere, because no other pod may claim it (the
+      // exact failure of the 2026-09-14 incident).
       if (this.leadershipCoordinator) {
         await this.leadershipCoordinator.release(username);
       }
