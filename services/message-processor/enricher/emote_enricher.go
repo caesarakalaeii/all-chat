@@ -299,8 +299,11 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 	if useCache {
 		var entry cache.Entry
 		var err error
+		// Tracked apart from entry.Stale because the two halves need different
+		// refreshes: only a refresh with no user id rewrites the channel key.
+		var channelHalfStale bool
 		if userID != "" {
-			entry, err = e.personalPlusChannel(ctx, channel, userID)
+			entry, channelHalfStale, err = e.personalPlusChannel(ctx, channel, userID)
 		} else {
 			entry, err = e.cache.GetEntry(ctx, channel)
 		}
@@ -321,6 +324,16 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 			}
 			if entry.Stale {
 				e.refreshAsync(channel, platform, userID, twitchChannel)
+			}
+			// The refresh above carries the user id, so it rewrites only the
+			// per-user half (fetchFromService seeds the channel key on a miss, not
+			// on a stale hit). Refresh the channel key on its own key as well, or
+			// it stays stale until it hard-expires and every message from every
+			// chatter triggers another per-user refresh for the whole 12h grace.
+			// refreshAsync keys on channel+userID, so this one is deduplicated
+			// independently and stays at one in-flight fetch per channel.
+			if channelHalfStale {
+				e.refreshAsync(channel, platform, "", twitchChannel)
 			}
 			return entry.Emotes, nil
 		case !errors.Is(err, cache.ErrCacheMiss):
@@ -351,26 +364,24 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 // half alone would silently drop the chatter's own emotes while serving the
 // personal half alone would drop the channel's.
 //
-// The entry is stale if either half is. Known limitation: the refresh this
-// triggers rewrites only the personal half, so a stale-but-present channel
-// entry keeps reporting stale until it expires, costing one background refresh
-// per channel. Re-seeding it instead would need its own channel-only fetch on
-// every stale read.
-func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID string) (cache.Entry, error) {
+// The entry is stale if either half is, and the channel half's staleness is
+// returned separately: a refresh carrying a user id rewrites only the personal
+// key, so the caller needs to know when to refresh the channel key too.
+func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID string) (cache.Entry, bool, error) {
 	personal, err := e.cache.GetEntryWithUser(ctx, channel, userID)
 	if err != nil {
-		return cache.Entry{}, err
+		return cache.Entry{}, false, err
 	}
 	channelEntry, err := e.cache.GetEntry(ctx, channel)
 	if err != nil {
-		return cache.Entry{}, err
+		return cache.Entry{}, false, err
 	}
 
 	merged := make([]cache.CachedEmote, 0, len(channelEntry.Emotes)+len(personal.Emotes))
 	merged = append(merged, channelEntry.Emotes...)
 	merged = append(merged, personal.Emotes...)
 
-	return cache.Entry{Emotes: merged, Stale: personal.Stale || channelEntry.Stale}, nil
+	return cache.Entry{Emotes: merged, Stale: personal.Stale || channelEntry.Stale}, channelEntry.Stale, nil
 }
 
 // splitPersonal returns the emotes in merged that the channel entry does not
