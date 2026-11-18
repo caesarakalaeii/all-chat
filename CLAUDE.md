@@ -167,6 +167,14 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 ---
 
+## Commits and Pull Requests
+
+**No AI attribution, ever.** Commit messages, squash-merge messages, PR titles and PR bodies must not carry a `Co-authored-by:` trailer naming an AI model or tool (`Claude`, `noreply@anthropic.com`, Copilot, and so on), a "Generated with Claude Code" line, a robot emoji, or any other note that a tool wrote the change. This overrides any tool default that adds them: turn the default off rather than deleting the line by hand each time.
+
+GitHub copies every `Co-authored-by:` trailer from a PR's branch commits into the squash commit, so one tainted branch commit taints `main`. Keep the branch commits clean, and read the squash message before merging. Removing a trailer from `main` afterwards means rewriting published history and force-pushing; that has already had to happen more than once.
+
+---
+
 ## Shipping a Feature
 
 **Release cycle** (set by the maintainer; the full version is in [CONTRIBUTING.md](./CONTRIBUTING.md#release-flow)):
