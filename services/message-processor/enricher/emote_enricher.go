@@ -469,39 +469,47 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 			// shares; personalPlusChannel puts the two back together on read. Writing
 			// the merged set here instead is what filled Redis.
 			//
-			// With no channel entry to split against there is no way to tell which of
-			// these emotes are the chatter's, and writing the merged set would both
-			// recreate the duplication and, read back as a delta, show this chatter's
-			// personal emotes to everyone. Skip the write: this message is already
-			// enriched from `converted`, and the channel entry a sibling lookup writes
-			// lets the next message cache the delta properly.
-			//
 			// An empty split is still written. The entry's presence is what records
 			// that this chatter has been looked up; without it "has no personal
 			// emotes" is indistinguishable from "never asked", and the read path
 			// would re-fetch on every message from the many chatters who have none.
 			channelEntry, chErr := e.cache.GetEntry(ctx, channel)
 			if chErr != nil {
-				e.logger.Debug("Skipping per-user emote cache write, no channel entry to split against",
-					zap.String("channel", channel),
-					zap.String("user_id", userID),
-					zap.Error(chErr),
-				)
-			} else {
-				personal := splitPersonal(converted, channelEntry.Emotes)
-				if err := e.cache.SetWithUser(ctx, channel, userID, personal); err != nil {
-					e.logger.Warn("Failed to populate emote cache",
+				// No channel entry yet, so seed it from this response before splitting.
+				// Nothing else would: the channel-level write below runs only on the
+				// userID == "" branch, which a channel whose chatters are all on
+				// Twitch or Kick never takes. Skipping instead left such a channel
+				// caching nothing at all — every message missing both keys and paying
+				// a 3s emote-service fetch, which is worse than the memory it saved.
+				//
+				// The merged response is exactly what that branch would have stored,
+				// and the split against it then yields an empty personal set: correct,
+				// because the first chatter's own emotes are indistinguishable from
+				// the channel's until a second chatter shows which are shared. The
+				// next chatter splits properly against the seeded entry.
+				if err := e.cache.Set(ctx, channel, converted); err != nil {
+					e.logger.Warn("Failed to seed channel emote cache entry",
 						zap.String("channel", channel),
 						zap.String("user_id", userID),
 						zap.Error(err),
 					)
-				} else {
-					e.logger.Debug("Emote cache populated (with user)",
-						zap.String("channel", channel),
-						zap.String("user_id", userID),
-						zap.Int("count", len(personal)),
-					)
 				}
+				channelEntry = cache.Entry{Emotes: converted}
+			}
+
+			personal := splitPersonal(converted, channelEntry.Emotes)
+			if err := e.cache.SetWithUser(ctx, channel, userID, personal); err != nil {
+				e.logger.Warn("Failed to populate emote cache",
+					zap.String("channel", channel),
+					zap.String("user_id", userID),
+					zap.Error(err),
+				)
+			} else {
+				e.logger.Debug("Emote cache populated (with user)",
+					zap.String("channel", channel),
+					zap.String("user_id", userID),
+					zap.Int("count", len(personal)),
+				)
 			}
 		} else {
 			if err := e.cache.Set(ctx, channel, converted); err != nil {
