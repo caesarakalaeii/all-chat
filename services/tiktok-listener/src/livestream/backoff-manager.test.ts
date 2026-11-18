@@ -294,6 +294,23 @@ describe('BackoffManager state removal during a live park', () => {
     expect(mgr.getAllUsernames()).not.toContain('expired');
   });
 
+  // The poller gates its status checks on shouldCheckNow, which reads
+  // nextCheckTime. Preserving parkedUntil without it would leave the room
+  // eligible for an immediate check — and a live room checked live is a room
+  // dialled, which is the slot we are trying not to spend.
+  it('still defers the next check of a torn-down parked room', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const mgr = new BackoffManager(noopLogger);
+    mgr.recordBudgetRefusal('parked', 600_000);
+    mgr.removeState('parked');
+
+    expect(mgr.shouldCheckNow('parked')).toBe(false);
+    now.mockReturnValue(1_000_000 + 600_000);
+    expect(mgr.shouldCheckNow('parked')).toBe(true);
+  });
+
   it('forgets a room that was never parked', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);

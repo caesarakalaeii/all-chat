@@ -307,11 +307,51 @@ export class BackoffManager {
   }
 
   /**
-   * Remove backoff state when channel is no longer active
+   * Remove backoff state when channel is no longer active, except for a park
+   * that has not yet elapsed.
+   *
+   * A park is a promise about the SIGNER's rolling hour, not about the
+   * connection being torn down: PureNodeSigner.takeConnectSlot has already
+   * queued the refused room for the next slot to free, and recordBudgetRefusal
+   * parks it for exactly that long. Forgetting it lets the room re-dial inside
+   * its own window, spend a second of the pod's twelve hourly slots, and get
+   * re-queued further back than if it had waited (prod 2026-11-18: cotermatha
+   * refused at 00:03:51 for 20 minutes, torn down at 00:08:19 by a demand
+   * snapshot that briefly dropped it, re-dialled and refused again at
+   * 00:08:49). A deaf-room park rides the same field for the same reason —
+   * every reconnect is a sign against the same budget.
+   *
+   * A budget-refused room reaches here readily: connectToStream registers the
+   * stream in activeStreams before connection.connect() and its catch leaves
+   * it there, so the next demand snapshot that drops the room walks
+   * activeStreams into disconnectFromStream.
+   *
+   * Everything else is connection state and goes: the offline streak and the
+   * error curve describe the connection that just ended, and a room re-added
+   * later must start those from scratch.
    *
    * @param username TikTok username
    */
   removeState(username: string): void {
+    const parkRemaining = this.parkRemainingMs(username);
+    if (parkRemaining > 0) {
+      const parkedUntil = Date.now() + parkRemaining;
+      this.backoffStates.set(username, {
+        username,
+        consecutiveOfflineChecks: 0,
+        consecutiveErrors: 0,
+        lastCheckTime: Date.now(),
+        nextCheckTime: parkedUntil,
+        currentBackoffMs: 0,
+        parkedUntil
+      });
+      this.logger.debug('Kept live park while removing backoff state', {
+        username,
+        park_remaining_ms: parkRemaining
+      });
+      return;
+    }
+
     const deleted = this.backoffStates.delete(username);
     if (deleted) {
       this.logger.debug('Removed backoff state', { username });
