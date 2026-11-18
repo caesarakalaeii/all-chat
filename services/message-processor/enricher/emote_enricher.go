@@ -232,11 +232,12 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	// request logs and testgen counters instead.
 	synthetic := isSynthetic(msg.Metadata)
 
-	// Synthetic users have no personal emotes on any provider, so they share the
-	// channel-level cache entry. Keyed per user, the test stream's random
-	// test-<n> IDs each cached a full channel set and filled Redis (2026-11-15).
+	// A per-user cache entry holds a full copy of the channel's emote set
+	// (100-230 KB, kept 13h), so it is only worth writing when the chatter can
+	// actually have personal emotes. Drop the user id otherwise and share the
+	// channel-level entry.
 	userID := msg.User.ID
-	if synthetic {
+	if synthetic || !hasPersonalEmotes(msg.Platform) {
 		userID = ""
 	}
 
@@ -454,6 +455,21 @@ func (e *Enricher) refreshAsync(channel, platform, userID, twitchChannel string)
 			)
 		}
 	}()
+}
+
+// hasPersonalEmotes reports whether a chatter on this platform can have a
+// personal emote set we are able to resolve. 7TV is the only provider that
+// serves per-user emotes, through /v3/users/{platform}/{id}, and it answers
+// that only for a Twitch identity — a TikTok username or a YouTube channel id
+// returns 400 ("Failed to fetch user emotes, ignoring user-set"). On every
+// other platform the per-user response is identical to the channel one, so
+// keying the cache per user stored one redundant full-size copy per chatter
+// and filled Redis (AllChatRedisMemoryNearLimit, 2026-11-18).
+//
+// If 7TV ever serves chatter emotes for another platform, add it here — the
+// cache key follows this predicate.
+func hasPersonalEmotes(platform string) bool {
+	return platform == "twitch"
 }
 
 // isSynthetic reports whether a message originates from a synthetic source —
