@@ -173,6 +173,8 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 GitHub copies every `Co-authored-by:` trailer from a PR's branch commits into the squash commit, so one tainted branch commit taints `main`. Keep the branch commits clean, and read the squash message before merging. Removing a trailer from `main` afterwards means rewriting published history and force-pushing; that has already had to happen more than once.
 
+The `no AI attribution` check (`.github/workflows/no-ai-attribution.yml`) fails a PR whose commit messages, title or body carry such a line. It cannot see text typed into the squash dialog at merge time, and admins pushing straight to `main` bypass it.
+
 ---
 
 ## Shipping a Feature

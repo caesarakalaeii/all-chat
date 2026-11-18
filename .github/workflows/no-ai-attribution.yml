@@ -1,0 +1,39 @@
+name: No AI Attribution
+
+# Squash merges copy every branch commit message into the commit on main
+# (squash_merge_commit_message: COMMIT_MESSAGES), so one tainted branch commit
+# taints main. Rule: CLAUDE.md "Commits and Pull Requests".
+# `edited` re-runs the check when the PR title or body changes. Title and body
+# go through env, never `${{ }}` inside the script, so a crafted PR body cannot
+# inject shell.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  no-ai-attribution:
+    name: no AI attribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Scan commit messages, PR title and body
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          pattern='^co-authored-by:.*(claude|anthropic|copilot|openai|chatgpt|gemini|cursor)|generated with \[?claude|🤖'
+          hits=$(git log --format='%h %B' "$BASE..$HEAD" | grep -inE "$pattern" || true)
+          meta=$(printf '%s\n%s\n' "$TITLE" "$BODY" | grep -inE "$pattern" || true)
+          if [ -n "$hits$meta" ]; then
+            echo "::error::AI attribution found. Reword the commits (git rebase -i) and edit the PR."
+            [ -n "$hits" ] && echo "$hits"
+            [ -n "$meta" ] && echo "PR title/body: $meta"
+            exit 1
+          fi
