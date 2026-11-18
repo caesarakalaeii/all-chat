@@ -107,7 +107,7 @@ func TestFeature(t *testing.T) {
 
 **Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
-**No tool advertising**: a commit or PR describes the change, not the tool that produced it. No `Co-authored-by:` trailer naming a tool, no "Generated with ..." footer, in commits, squash-merge messages or PR descriptions. GitHub carries branch-commit trailers into the squash commit, so check the squash message before merging; the `no tool attribution` check fails a PR that carries one.
+**No tool advertising**: a commit or PR describes the change, not the tool that produced it. No `Co-authored-by:` trailer naming a third-party tool, no "Generated with ..." footer, in commits, squash-merge messages or PR descriptions. Caterpillar, our own agent, is exempt and keeps its name as author or co-author. GitHub carries branch-commit trailers into the squash commit, so check the squash message before merging; the `no tool attribution` check fails a PR that carries one.
 
 **Examples**:
 ```

@@ -169,7 +169,9 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 
 ## Commits and Pull Requests
 
-**Commits and PRs describe the change, never the tool that produced it.** We do not advertise any tool: no editor, assistant, model, bot or service gets credit or a plug in commit messages, squash-merge messages, PR titles or PR bodies. That rules out a `Co-authored-by:` trailer naming a tool, a "Generated with ..." footer, a robot emoji, and a link to a tool's website. Many tools add these by default; turn that default off rather than deleting the line by hand each time. People are credited as usual.
+**Commits and PRs describe the change, never the tool that produced it.** We do not advertise any third-party tool: no editor, assistant, model, bot or service gets credit or a plug in commit messages, squash-merge messages, PR titles or PR bodies. That rules out a `Co-authored-by:` trailer naming such a tool, a "Generated with ..." footer, a robot emoji, and a link to a tool's website. Many tools add these by default; turn that default off rather than deleting the line by hand each time. People are credited as usual.
+
+**Caterpillar is exempt.** It is our own agent: `caterpillar-agent[bot]` authors, co-authors and opens PRs under its own name, and that stays. Its commits must still not credit a third-party tool. Bots that author their own PRs, such as dependabot, keep their name as author or co-author too; that is authorship, not advertising.
 
 GitHub copies every `Co-authored-by:` trailer from a PR's branch commits into the squash commit, so one tainted branch commit taints `main`. Keep the branch commits clean, and read the squash message before merging. Removing a trailer from `main` afterwards means rewriting published history and force-pushing; that has already had to happen more than once.
 
