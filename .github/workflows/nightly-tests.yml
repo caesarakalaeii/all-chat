@@ -35,6 +35,9 @@ jobs:
           - source-manager
           - token-refresh-service
           - moderation-service
+          # Its integrationtest package (testcontainers Postgres, skipped under
+          # -short) runs nowhere else.
+          - payment-service
           - engagement-service
           - alert-processor
           - discord-listener
@@ -45,7 +48,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.27.3'
+          go-version: '1.27.4'
 
       - name: Run full test suite for ${{ matrix.service }}
         run: |

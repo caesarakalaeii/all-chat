@@ -38,10 +38,10 @@
  * yields an aggregate load count without per-overlay cardinality.
  *
  * URLs are sanitised before they leave the browser (see `lib/umami-sanitize`):
- * path UUIDs collapse to `:id`, token-bearing query params are dropped, and the
+ * UUIDs collapse to `:id`, every query param except `utm_*` is dropped, and the
  * hash is excluded entirely (`data-exclude-hash`) — so high-cardinality overlay
- * IDs and OAuth tokens (e.g. `/auth/callback#access_token=...`) never reach
- * analytics. The sanitiser is installed before the tracker renders, so even a
+ * IDs, tokens (e.g. `/auth/callback#access_token=...`, `?tts_token=...`) and
+ * usernames in query params never reach analytics. The sanitiser is installed before the tracker renders, so even a
  * fresh OAuth-callback page load is covered on its very first page view.
  */
 

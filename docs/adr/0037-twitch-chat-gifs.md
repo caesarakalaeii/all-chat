@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-18
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -101,9 +102,14 @@ representation (`start-end|gif_id|url`, Twitch's own IRC format):
   Twitch's published contract; if Twitch changes field names before GA, `ChatGif`/`buildGifsTag`
   are the single place to adjust. Known scoped-out cases, each consistent with existing behaviour
   and safe to defer:
-  - **Event-path GIFs** (a GIF inside a resub/shared-sub *message*) are not rendered: the event
-    handlers build no `gifs` tag and `NormalizeEvent` does not extract one — the same reason
-    those messages already don't carry tag-based first-party emotes. Uniform, pre-existing gap.
+  - **Event-path GIFs** (a GIF inside a resub/sub *message*): originally scoped out, on the
+    reasoning that the event handlers build no `gifs` tag and `NormalizeEvent` does not extract
+    one. The render half of that gap is since closed (follow-up to ADR-0046):
+    `NormalizeEvent` runs the same `extractTwitchGifs` call the chat path does
+    (`services/message-processor/normalizer/twitch_normalizer.go:441`), so a notice whose
+    message carries a `gifs` tag renders its GIF. The `resubscription` handler still attaches
+    no tags (`services/twitch-eventsub-listener/webhooks/handler.go:782`), so a GIF inside a
+    dedicated-resub message remains unrendered.
   - **Zero-caption GIFs** are dropped: the tag format is position-based (`start-end`), so a GIF
     with no alt-caption span in the body has nothing to key on. Twitch always sends a bracketed
     caption today.
@@ -114,9 +120,12 @@ representation (`start-end|gif_id|url`, Twitch's own IRC format):
   #576's ungated Discord media), not a premium add-on, so it ships as a base feature with no
   `feature_gates` entry and no onboarding-tour entry. A Patreon note is still worthwhile once
   deployed.
+- GIF **search** is a separate feature with its own providers and entitlements: the later,
+  client-side editor GIF search (ADR-0071) and the Klipy alert-overlay GIF provider, whose app
+  key is only delivered to entitled sessions (ADR-0073, ADR-0074).
 
 ## References
 
 - ADR-0015 (EventSub chat-ownership claim), ADR-0026 (IRC listener deprecation)
-- PR #576 (Discord image/GIF/video attachments — the media groundwork)
+- ADR-0071 (later, client-side editor GIF search), ADR-0073/ADR-0074 (Klipy alert-overlay GIF provider: app key delivery and entitlement)
 - Twitch docs: EventSub `channel.chat.message`; IRC `gifs` tag on PRIVMSG

@@ -373,7 +373,7 @@ slots: 16384 # Distributed across nodes
 
 **Mitigation**:
 - Increase MAXLEN: 50K → 500K (monitor memory usage)
-- Monitor consumer lag: `XPENDING chat:raw message-processors`
+- Monitor consumer lag: `XPENDING chat:raw message-processor`
 - Alert if lag > 10,000 messages
 - Implement backpressure (stop publishing if lag too high)
 

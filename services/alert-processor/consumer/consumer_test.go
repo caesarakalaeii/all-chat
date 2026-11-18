@@ -25,6 +25,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/shared/alerts"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -189,6 +190,70 @@ func TestReadAndProcess_SkipsChatAndDeletions(t *testing.T) {
 	require.Len(t, handler.calls, 1, "only the event may reach the handler")
 	assert.Equal(t, "bits", handler.calls[0].EventType)
 	assert.Equal(t, int64(0), pendingCount(t, rdb, ConsumerGroup), "skipped entries must be ACKed, not left pending")
+}
+
+// TestReadAndProcess_KeepsModerationLogOffAlertOverlays: the moderation log is
+// owner-only. A mod_action (channel.moderate, or an AutoMod hold carrying the
+// withheld text) that reached the handler would be persisted to alert_events
+// and published on overlay:{id}:alerts, which every alerts/goal/list socket
+// receives, anonymous OBS sources and shared-overlay recipients included. The
+// same goes for streamer-only system warnings and any type nobody declared as
+// an alert. Only alert event types may pass; everything else is ACKed.
+func TestReadAndProcess_KeepsModerationLogOffAlertOverlays(t *testing.T) {
+	handler := &recordingHandler{}
+	_, rdb, c, _ := newTestConsumer(t, handler)
+	createGroup(t, rdb)
+
+	modAction := seedChat("timed out someviewer")
+	modAction.MessageID = "mod-1"
+	modAction.EventType = "mod_action"
+	modAction.EventData = map[string]interface{}{"action": "timeout", "moderator_login": "somemod"}
+	automodHold := seedChat("")
+	automodHold.MessageID = "mod-2"
+	automodHold.EventType = "mod_action"
+	automodHold.EventData = map[string]interface{}{"action": "automod_hold", "held_text": "withheld words"}
+	tokenWarning := seedChat("")
+	tokenWarning.MessageID = "sys-1"
+	tokenWarning.Platform = "system"
+	tokenWarning.EventType = "token_expiration_warning"
+	undeclared := seedChat("")
+	undeclared.MessageID = "new-1"
+	undeclared.EventType = "some_future_event"
+
+	sub := seedChat("")
+	sub.MessageID = "ok-1"
+	sub.EventType = "subscription"
+	watchStreak := seedChat("10 streams!")
+	watchStreak.MessageID = "ok-2"
+	watchStreak.EventType = "watch_streak" // forwarded without a profile
+	newMember := seedChat("")
+	newMember.MessageID = "ok-3"
+	newMember.Platform = "youtube"
+	newMember.EventType = "member_joined" // InnerTube's new member
+
+	for _, msg := range []*mpmodels.RawChatMessage{modAction, automodHold, tokenWarning, undeclared, sub, watchStreak, newMember} {
+		seed(t, rdb, msg)
+	}
+
+	require.NoError(t, c.readAndProcess(context.Background()))
+
+	var got []string
+	for _, call := range handler.calls {
+		got = append(got, call.EventType)
+	}
+	assert.Equal(t, []string{"subscription", "watch_streak", "member_joined"}, got,
+		"only alert event types may reach the handler")
+	assert.Equal(t, int64(0), pendingCount(t, rdb, ConsumerGroup), "skipped entries must be ACKed, not left pending")
+}
+
+// TestIsAlertEvent_CoversGoalAndListCounters: every event type a goal counter
+// or list leaderboard scores (leaderboard.GoalMetric, leaderboard.Category)
+// must pass the allowlist, or that overlay silently stops counting.
+func TestIsAlertEvent_CoversGoalAndListCounters(t *testing.T) {
+	for _, eventType := range []string{"bits", "super_chat", "mystery_gift", "gift_subscription", "membership_gift", "gift"} {
+		assert.True(t, isAlertEvent(eventType), eventType)
+	}
+	assert.False(t, isAlertEvent(alerts.AllEvents), "the base-style pseudo type is not an event")
 }
 
 // TestReadAndProcess_AcksOnlyAfterHandlerSucceeds: the at-least-once contract.

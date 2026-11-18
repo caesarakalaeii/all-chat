@@ -1,7 +1,8 @@
 # ADR-0023: Decoupled YouTube Quota Monitor
 
 **Date**: 2026-06-22
-**Status**: ✅ Accepted (amended by ADR-0065: the quota listener runs again, for opted-in premium channels only)
+**Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: Infrastructure Lead, Platform Team
 
 ---
@@ -13,25 +14,34 @@ quota observability: it ran the in-memory quota `Tracker`, exported the Promethe
 `listener_quota_usage_percentage{platform="youtube"}`, and published `QuotaEvent`s to the
 `quota:alerts` Redis Pub/Sub channel that the `discord-bot` renders as Discord embeds.
 
-That service is **no longer deployed** — the listener path moved to `youtube-listener-innertube`,
-which reads chat via InnerTube and consumes **no** official quota. But two deployed services
-still spend official quota against the shared `youtube_quota_usage` table:
+That service was **not deployed** at the time — the listener path had moved to
+`youtube-listener-innertube`, which reads chat via InnerTube and consumes **no** official
+quota. (Only ADR-0065 later revived `youtube-listener`, for opted-in, owner-verified,
+premium channels: [ADR-0065](./0065-premium-official-youtube-api-listener.md). The
+InnerTube listener remains the default path for every other channel.) Two deployed
+services still spend official quota against the shared table:
 
 - `moderation-service` — bans (`liveChatBans.insert`, 50 units), counted via direct-SQL
   reserve-confirm-rollback (ADR-0006).
 - `auth-service` — streamer sends (`liveChatMessages.insert`, 5 units).
 
-With the listener gone, the consequences were:
+With the quota listener not deployed, the consequences were:
 
-1. **No metric exporter** → the Prometheus alert rules `YouTubeQuotaHigh/Critical/Exhausted`
-   (ADR-0022) had no series to evaluate; YouTube quota alerting was silently dark.
+1. **No metric exporter** → the Prometheus quota alert rules on
+   `listener_quota_usage_percentage` had no series to evaluate. The deployed rules (in the
+   caesar-deployment repo, `apps/platform/allchat-monitoring/`) are `YouTubeQuotaHigh` (>80%),
+   `YouTubeQuotaCritical` (>95%) and `YouTubeQuotaExhausted` (>=100%); the copies under
+   `deployments/k8s/monitoring/alerts/` in this repo are older (`YouTubeQuotaWarning` >80%,
+   `YouTubeQuotaCritical` >90%);
 2. **No publisher** → the still-running `discord-bot` `quota:alerts` subscriber was starved.
 3. **`auth-service` wasn't even counting sends** — it coordinated quota over HTTP with the
-   (now absent) `youtube-listener` and *failed open*, so every send went unaccounted.
+   (then not deployed) `youtube-listener` and *failed open*, so every send went unaccounted.
 4. **No owner for `cleanup_stale_quota_reservations()`**, which the listener used to run.
 
 **Problem**: restore quota metrics + alerting (both the Prometheus and discord-bot paths),
-driven by the real source of truth (the shared table), without reviving the listener — and
+driven by the real source of truth (the shared table), without making the general chat
+path depend on official-quota listeners (ADR-0065 later revived the listener, but only
+for opted-in premium channels; the monitor is what covers every other channel) — and
 make `auth-service` actually count its sends so the numbers are correct.
 
 ---
@@ -50,8 +60,10 @@ make `auth-service` actually count its sends so the numbers are correct.
 
 ## Considered Options
 
-1. **Re-deploy the quota-based `youtube-listener`** — rejected: reverses the InnerTube
-   decision and drags in stream discovery/polling we no longer want, just for the tracker.
+1. **Re-deploy the quota-based `youtube-listener`** — rejected: for the general channel
+   population it reverses the InnerTube decision and drags in stream discovery/polling
+   nobody wanted, just for the tracker. (ADR-0065 later revived it, but only for opted-in,
+   owner-verified, premium channels, not as the quota-alerting owner.)
 2. **Publish + export from each consumer** (auth-service, moderation-service) — rejected:
    multi-replica double-publishing, alert logic smeared across services, gauge goes stale
    between calls, and cross-process dedup (Redis SETNX) is fiddly.
@@ -94,22 +106,21 @@ replica would double-publish. Quota *accounting* is DB-atomic and remains safe u
   single owner and no duplicate alerts.
 - `auth-service` sends are now counted, so the quota numbers reflect real total usage.
 - The canonical `shared/quota` removes the divergence between moderation-service's and the
-  listener's quota code (Pathfinder cleanup).
+  listener's quota code.
 
 **Negative / trade-offs**
 
 - One more (small) deployable, and a single-replica SPOF for *alerting* (not for accounting).
   Mitigated by liveness/readiness + the Prometheus path being independent of any one pod.
-- The `QuotaState` logic is duplicated between `shared/quota` and the undeployed listener
-  (tech debt; consolidate if the listener is ever revived). The canonical version also fixes
-  a latent bug in the listener's `calculateState` (the `healthy`/`exhausted` thresholds were
-  unused/unreachable), so it now matches the documented state ranges.
+- The `QuotaState` logic is duplicated between `shared/quota` and the listener (tech debt;
+  consolidate if the listener's official-API mode ever grows again).
 
 **Relationships**
 
 - Builds on **ADR-0006** (reserve-confirm-rollback over `youtube_quota_usage`).
-- Restores the metric/alert inputs assumed by **ADR-0022** (Prometheus/Alertmanager is the
-  alerting source of truth); the discord-bot Redis path complements, not replaces, Alertmanager.
+- Restores the metric/alert inputs assumed by the alerting stack (Prometheus/Alertmanager is
+  the alerting source of truth; the ADR that defined the original alert rules lives in the
+  caesar-deployment repo); the discord-bot Redis path complements, not replaces, Alertmanager.
 
 ---
 
@@ -122,6 +133,7 @@ replica would double-publish. Quota *accounting* is DB-atomic and remains safe u
 - `services/auth-service/handlers/chat_send.go` — `reserveYouTubeSendQuota`/`settleYouTubeSendQuota`
   now use `shared/quota.Reserver` (direct SQL) instead of HTTP coordination.
 - `services/moderation-service/` — imports `shared/quota`; local `quota/` package removed.
-- Deployment (`caesar-deployment/apps/workloads/all-chat/`): `youtube-quota-monitor-deployment.yaml`
-  (1 replica, `Recreate`), added to `kustomization.yaml`, the `allchat-listeners` ServiceMonitor,
-  and a NetworkPolicy; the `discord-bot` `YOUTUBE_LISTENER_URL` is repointed to the monitor.
+- Deployment: the monitor runs in the local dev `deployments/docker-compose.yml` (service
+  `youtube-quota-monitor`, and `discord-bot`'s `YOUTUBE_LISTENER_URL` repointed to it). The
+  production k8s manifests for this service and the ServiceMonitor/NetworkPolicy wiring live
+  in the separate deployment repo, so they are not listed here.

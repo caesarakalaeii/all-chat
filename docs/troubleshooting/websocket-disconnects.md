@@ -97,7 +97,7 @@ redis-cli XREAD COUNT 10 STREAMS chat:raw 0
 
 # Check if Message Processor is consuming
 redis-cli XINFO GROUPS chat:raw
-# Should show "message-processors" consumer group with lag=0
+# Should show "message-processor" consumer group with lag=0
 ```
 
 **File**: `services/message-processor/publisher/pubsub.go:Publish()`

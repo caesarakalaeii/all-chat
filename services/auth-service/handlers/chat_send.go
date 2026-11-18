@@ -92,12 +92,24 @@ const (
 	sendErrReauth       sendErrKind = "reauth_required" // platform 401 → 401, prompt re-login
 	sendErrOffline      sendErrKind = "stream_offline"  // not live → 422
 	sendErrQuota        sendErrKind = "quota_exhausted" // YouTube send quota depleted → 422
+	sendErrDropped      sendErrKind = "message_dropped" // platform accepted but did not deliver → 422
 )
 
-// streamerSendError carries a classified streamer-send failure.
+// streamerSendError carries a classified streamer-send failure. detail is the
+// platform's own human-readable explanation, when it gave one.
 type streamerSendError struct {
-	kind sendErrKind
-	msg  string
+	kind   sendErrKind
+	msg    string
+	detail string
+}
+
+// sendErrorDetail returns the platform's explanation carried by a send error, or "".
+func sendErrorDetail(err error) string {
+	var se *streamerSendError
+	if errors.As(err, &se) {
+		return se.detail
+	}
+	return ""
 }
 
 func (e *streamerSendError) Error() string { return e.msg }
@@ -107,14 +119,45 @@ func (e *streamerSendError) Error() string { return e.msg }
 // anything else ⇒ an upstream failure. Previously every platform error surfaced as a
 // raw 502, so the monitor could not tell "needs re-consent" from "platform hiccup".
 func classifyPlatformStatus(platform string, status int, body string) *streamerSendError {
+	var parsed struct {
+		Message string `json:"message"`
+	}
+	_ = json.Unmarshal([]byte(body), &parsed)
 	switch status {
 	case http.StatusUnauthorized:
-		return &streamerSendError{kind: sendErrReauth, msg: fmt.Sprintf("%s auth rejected (401): %s", platform, body)}
+		return &streamerSendError{kind: sendErrReauth, msg: fmt.Sprintf("%s auth rejected (401): %s", platform, body), detail: parsed.Message}
 	case http.StatusForbidden:
-		return &streamerSendError{kind: sendErrMissingScope, msg: fmt.Sprintf("%s missing send scope (403): %s", platform, body)}
+		return &streamerSendError{kind: sendErrMissingScope, msg: fmt.Sprintf("%s missing send scope (403): %s", platform, body), detail: parsed.Message}
 	default:
-		return &streamerSendError{kind: sendErrUpstream, msg: fmt.Sprintf("%s API error: status=%d body=%s", platform, status, body)}
+		return &streamerSendError{kind: sendErrUpstream, msg: fmt.Sprintf("%s API error: status=%d body=%s", platform, status, body), detail: parsed.Message}
 	}
+}
+
+// twitchSendError checks a Helix chat/messages response. Twitch answers a message
+// it will not deliver (AutoMod, the channel's chat settings, an unverified sender)
+// with 200 and is_sent=false, so a 2xx alone does not mean the message reached chat.
+func twitchSendError(resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return classifyPlatformStatus("twitch", resp.StatusCode, string(body))
+	}
+	var out struct {
+		Data []struct {
+			IsSent     bool `json:"is_sent"`
+			DropReason *struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"drop_reason"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(body, &out) != nil || len(out.Data) == 0 || out.Data[0].IsSent {
+		return nil
+	}
+	reason, detail := "no reason given", ""
+	if d := out.Data[0].DropReason; d != nil {
+		reason, detail = d.Code+": "+d.Message, d.Message
+	}
+	return &streamerSendError{kind: sendErrDropped, msg: "twitch dropped the message (" + reason + ")", detail: detail}
 }
 
 // streamerSendHTTPResponse maps a send error to (HTTP status, JSON body) for the
@@ -132,6 +175,8 @@ func streamerSendHTTPResponse(platform string, err error) (int, gin.H) {
 			return http.StatusUnprocessableEntity, gin.H{"error": string(sendErrOffline), "platform": platform, "details": "The streamer is not currently live."}
 		case sendErrQuota:
 			return http.StatusUnprocessableEntity, gin.H{"error": string(sendErrQuota), "platform": platform, "details": "YouTube send quota is exhausted. Please try again later."}
+		case sendErrDropped:
+			return http.StatusUnprocessableEntity, gin.H{"error": string(sendErrDropped), "platform": platform, "details": se.msg}
 		}
 	}
 	status, desc := classifySendError(err.Error())
@@ -158,6 +203,9 @@ func classifySendError(errMsg string) (int, string) {
 		if strings.Contains(errMsg, s) {
 			return http.StatusUnprocessableEntity, "The streamer is not currently live. Messages can only be sent during an active live stream."
 		}
+	}
+	if strings.Contains(errMsg, "twitch dropped the message") {
+		return http.StatusUnprocessableEntity, "Twitch did not deliver the message: the channel's chat settings or AutoMod blocked it."
 	}
 	// Missing account/config — user needs to link their account
 	for _, s := range []string{
@@ -642,12 +690,23 @@ func (h *ChatSendHandler) refreshStreamerTokenIfNeeded(ctx context.Context, user
 	return nil
 }
 
+// streamerTwitchBroadcasterID returns the streamer's Twitch id when the streamer can send
+// to Twitch as themselves: only a Twitch-login account holds a Twitch token on its users
+// row. A Kick or YouTube account can carry a linked twitch_id, but its users-row token is
+// for its own platform, and Twitch rejects it.
+func streamerTwitchBroadcasterID(user *models.User) (string, bool) {
+	if user.AuthProvider != "twitch" || user.TwitchID == nil || *user.TwitchID == "" {
+		return "", false
+	}
+	return *user.TwitchID, true
+}
+
 // sendStreamerTwitchMessage sends a message to Twitch chat as the streamer (broadcaster)
 func (h *ChatSendHandler) sendStreamerTwitchMessage(ctx context.Context, user *models.User, message string) error {
-	if user.TwitchID == nil || *user.TwitchID == "" {
+	broadcasterID, ok := streamerTwitchBroadcasterID(user)
+	if !ok {
 		return fmt.Errorf("no Twitch account linked")
 	}
-	broadcasterID := *user.TwitchID
 
 	reqBody := map[string]string{
 		"broadcaster_id": broadcasterID,
@@ -674,13 +733,7 @@ func (h *ChatSendHandler) sendStreamerTwitchMessage(ctx context.Context, user *m
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return classifyPlatformStatus("twitch", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return twitchSendError(resp)
 }
 
 // sendStreamerYouTubeMessage sends a message to YouTube live chat as the streamer
@@ -950,8 +1003,8 @@ func (h *ChatSendHandler) handleStreamerSendToAll(c *gin.Context, ctx context.Co
 	// Candidate platforms: those the streamer has a platform identity on. senderID is
 	// the platform-native id that appears as the author on the echoed-back message.
 	idsByPlatform := map[string]string{}
-	if user.TwitchID != nil && *user.TwitchID != "" {
-		idsByPlatform["twitch"] = *user.TwitchID
+	if twitchID, ok := streamerTwitchBroadcasterID(user); ok {
+		idsByPlatform["twitch"] = twitchID
 	}
 	if _, kickID, kickErr := h.resolveKickSender(ctx, user); kickErr == nil {
 		idsByPlatform["kick"] = kickID
@@ -1410,13 +1463,7 @@ func (h *ChatSendHandler) sendTwitchMessage(ctx context.Context, session *models
 	}
 	defer resp.Body.Close()
 
-	// Check response
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return fmt.Errorf("twitch API error: status=%d body=%s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return twitchSendError(resp)
 }
 
 // sendYouTubeMessage sends a message to YouTube live chat using the Live Chat API.

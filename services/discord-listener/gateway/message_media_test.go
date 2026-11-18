@@ -155,3 +155,75 @@ func TestHandleMessageCreate_NoAttachmentsOmitsField(t *testing.T) {
 	raw := roundTripToRawMessage(t, pub.last)
 	assert.Empty(t, raw.Attachments)
 }
+
+// tenorUpdate is the MESSAGE_UPDATE Discord sends once it has unfurled a GIF
+// picked from the GIF picker: same id and text, now carrying the gifv embed.
+func tenorUpdate() gateway.MessageCreateData {
+	return gateway.MessageCreateData{
+		ID:        "msg-4",
+		ChannelID: "channel-1",
+		Content:   "https://tenor.com/view/dance-gif-123",
+		Author:    gateway.DiscordUser{ID: "user-1", Username: "someone"},
+		Embeds: []gateway.DiscordEmbed{{
+			Type:  "gifv",
+			URL:   "https://tenor.com/view/dance-gif-123",
+			Video: &gateway.DiscordEmbedMedia{ProxyURL: "https://media.discordapp.net/ext/dance.mp4", Width: 498, Height: 280},
+		}},
+	}
+}
+
+func TestHandleMessageUpdate_LateEmbedPublishesUpdate(t *testing.T) {
+	pub := &mediaCapturePublisher{}
+	reg := &mockChannelRegistry{overlayID: "overlay-1", found: true}
+	client := gateway.NewGatewayClient(
+		"token", "wss://gateway.discord.gg", &mockSessionStore{}, nil, reg, pub, nil,
+	)
+
+	require.NoError(t, client.HandleMessageUpdate(context.Background(), tenorUpdate()))
+	require.Equal(t, 1, pub.calls)
+
+	raw := roundTripToRawMessage(t, pub.last)
+	assert.True(t, raw.IsUpdate, "must replace the row the MESSAGE_CREATE produced")
+	assert.Equal(t, "msg-4", raw.MessageID, "same id as the original, or the overlay cannot match the row")
+	require.Len(t, raw.Attachments, 1)
+	assert.Equal(t, "https://media.discordapp.net/ext/dance.mp4", raw.Attachments[0].URL)
+}
+
+func TestHandleMessageUpdate_IgnoresOtherUpdates(t *testing.T) {
+	edited := tenorUpdate()
+	ts := "2026-11-13T10:00:00.000000+00:00"
+	edited.EditedTimestamp = &ts
+
+	noEmbedMedia := tenorUpdate()
+	noEmbedMedia.Embeds = []gateway.DiscordEmbed{{Type: "article", URL: "https://news.example/story"}}
+	noEmbedMedia.Attachments = []gateway.DiscordAttachment{{
+		Filename: "pic.png", ContentType: "image/png", ProxyURL: "https://media.discordapp.net/pic.png",
+	}}
+
+	for name, msg := range map[string]gateway.MessageCreateData{
+		"author edit":                        edited,
+		"no embed media (e.g. a pin update)": noEmbedMedia,
+	} {
+		t.Run(name, func(t *testing.T) {
+			pub := &mediaCapturePublisher{}
+			reg := &mockChannelRegistry{overlayID: "overlay-1", found: true}
+			client := gateway.NewGatewayClient(
+				"token", "wss://gateway.discord.gg", &mockSessionStore{}, nil, reg, pub, nil,
+			)
+			require.NoError(t, client.HandleMessageUpdate(context.Background(), msg))
+			assert.Zero(t, pub.calls)
+		})
+	}
+}
+
+func TestHandleMessageCreate_NotMarkedAsUpdate(t *testing.T) {
+	pub := &mediaCapturePublisher{}
+	reg := &mockChannelRegistry{overlayID: "overlay-1", found: true}
+	client := gateway.NewGatewayClient(
+		"token", "wss://gateway.discord.gg", &mockSessionStore{}, nil, reg, pub, nil,
+	)
+
+	require.NoError(t, client.HandleMessageCreate(context.Background(), tenorUpdate()))
+	raw := roundTripToRawMessage(t, pub.last)
+	assert.False(t, raw.IsUpdate)
+}

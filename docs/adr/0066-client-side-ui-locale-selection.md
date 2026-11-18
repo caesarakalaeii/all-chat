@@ -1,22 +1,18 @@
 # ADR-0066: German as a second UI language, chosen per browser and applied after hydration
 
 **Date**: 2026-10-15
-**Status**: Proposed
+**Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
-
-(ADR numbering is shared with the caesar-deployment repo. If 0066 is already
-taken there, renumber this file; the slug `client-side-ui-locale-selection` is
-the stable identifier.)
 
 ## Context and Problem Statement
 
-ADR-0055 built a typed UI string catalog with English as its only locale and
-deliberately deferred the question of how a second locale is chosen. Its two
-constraints still hold: locale never goes in the URL (overlay URLs are pasted
-into OBS, the extension and the Stream Deck plugins), and reading `cookies()` or
-`headers()` in the root layout would make every statically rendered page
-dynamic. ADR-0063 then gave beta testers a tool to translate the catalog, but
-no locale was ever wired in.
+ADR-0055 built a typed UI string catalog and deliberately deferred the question
+of how a second locale is chosen. Its two constraints still hold: locale never
+goes in the URL (overlay URLs are pasted into OBS, the extension and the Stream
+Deck plugins), and reading `cookies()` or `headers()` in the root layout would
+make every statically rendered page dynamic. ADR-0063 then gave beta testers a
+tool to translate the catalog, but no locale was wired in at decision time.
 
 German is the obvious first language: the operator and much of the early
 audience are German-speaking. This record decides how a user picks it, where
@@ -79,11 +75,12 @@ who gets it first.
   extra key in them is a compile error.
 - German translates every namespace except `legal`, which stays English until a
   legal review signs off a German privacy policy, terms and cookie notice.
-- The picker is a card on `/settings`. Who may pick a non-English language is
+- The picker is a card on `/settings` (ADR-0078 added a second, ungated switch
+  in the homepage nav). Who may pick a non-English language on `/settings` is
   the `ui_languages` feature gate (migration 103), enforced by share-service on
   `GET /api/v1/ui-languages`, which the card probes. Seeded
-  `early_access=TRUE, is_premium=FALSE`: beta testers and ambassadors first,
-  then everyone, free, by flipping `early_access` in the admin UI. English stays
+  `early_access=TRUE, is_premium=FALSE`; ADR-0078 later turned `early_access`
+  off in the admin UI, so every signed-in user can pick. English stays
   selectable in every state so nobody is stuck in a language they lost access to.
 
 ## Consequences
@@ -99,8 +96,8 @@ who gets it first.
 
 ### Negative
 
-- **Server-rendered pages stay English.** The marketing homepage, guides, docs,
-  blog chrome, metadata and the skip link are Server Components and always render
+- **Server-rendered pages stay English.** Guides, docs, blog chrome, metadata,
+  the JSON-LD and the skip link are Server Components and render
   `DEFAULT_LOCALE`. The German catalog covers their namespaces anyway, so they
   switch the day those surfaces resolve a locale client-side.
 - **A brief English frame** on load for a German user, before the effect runs.
@@ -120,6 +117,7 @@ who gets it first.
 - **Files**: `frontend/src/lib/i18n/{config,active-locale,translators,use-translations,translate,format,index}.ts`,
   `frontend/src/lib/i18n/messages/de/`, `frontend/src/components/LocaleSync.tsx`,
   `frontend/src/components/settings/LanguageSettingsCard.tsx`,
+  `frontend/src/components/home/LanguageToggle.tsx` (ADR-0078),
   `shared/featuregates/cache.go` (`GateUILanguages`),
   `services/share-service/cmd/main.go`, `services/api-gateway/` (route + proxy prefix),
   `migrations/103_ui_languages_gate.sql`.
@@ -135,5 +133,8 @@ who gets it first.
   the rejection of locale routing and request-time resolution this builds on.
 - [ADR-0063](./0063-localization-contribution.md): the contributor tool that
   improves the German catalog.
+- [ADR-0078](./0078-homepage-language-switch-and-german-for-everyone.md): amends
+  where the picker lives (a homepage switch too) and who the gate admits
+  (everyone).
 - [ADR-0008](./0008-feature-gate-infrastructure.md) and
   [ADR-0020](./0020-beta-tester-role.md): feature gates and early access.

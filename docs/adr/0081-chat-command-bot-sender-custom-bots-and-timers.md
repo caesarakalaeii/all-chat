@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-23
 **Status**: Accepted
+**Revised**: 2026-11-15 (released: `chat_commands` is open to everyone and `custom_chat_bot` is premium without early access)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -52,7 +53,10 @@ across engagement-service replicas without a live/offline signal.
   account authorizes our app once with `user:bot` and `user:write:chat`, and the
   broadcaster grants `channel:bot`. Twitch then shows the message from the bot
   with the Chat Bot badge. The same holds for a custom bot, so a Twitch bot row
-  needs only the bot's user id at send time.
+  needs only the bot's user id at send time. A message Twitch will not deliver
+  (AutoMod, the channel's chat settings, an unverified bot account) still comes
+  back as 200 with `is_sent=false`; auth-service counts that as a failed send
+  (`message_dropped`) and logs Twitch's `drop_reason`.
 - **Kick.** `POST /public/v1/chat` with `type: "bot"` and the **streamer's**
   token posts as the bot configured on our Kick app. No second account and no
   database row. A custom Kick bot posts with its own token as `type: "user"`
@@ -84,7 +88,8 @@ across engagement-service replicas without a live/offline signal.
   template, optional `interval_minutes` (5 to 1440), optional `min_messages`
   (1 to 10000), at least one of them required, plus `last_fired_at`,
   `lines_at_last_fire` and `fire_count`. At most 20 per streamer.
-- Feature gate `custom_chat_bot`, seeded `is_premium=TRUE, early_access=TRUE`.
+- Feature gate `custom_chat_bot`, seeded `is_premium=TRUE, early_access=TRUE`;
+  `early_access` was turned off on 2026-11-15, so it is premium on every host.
   Timer and sender-setting writes use the existing `chat_commands` gate.
 
 ### Sending
@@ -110,6 +115,17 @@ working while the operator connects the bot accounts and streamers grant
 For `purpose: "timer"`, YouTube reads the live chat id only from the Redis
 stream state the YouTube listeners keep. It never falls back to the Data API
 lookup, so an offline channel costs nothing.
+
+A post that goes out but is not delivered does **not** fall back to self: the
+streamer would suddenly answer under their own name. Instead it is made visible.
+Each bot-send result carries `sender`, `error_kind` and `detail`, the platform's
+own explanation (Twitch's drop reason, or the message of a 401/403).
+engagement-service sends replies and timer posts through `consumer.SendStatus`,
+which keeps the last undelivered post per streamer and platform in Redis
+(`chatcmd:sendfail:{owner}`, 7 days, cleared by the next delivered post).
+`GET /chat-commands` returns them as `send_failures`, and `/commands` explains
+each one: what the platform said, and who has to act (the streamer, their bot,
+or us for the All-Chat Bot).
 
 ### Connecting bot accounts
 
@@ -148,7 +164,8 @@ an admin and exists for Twitch and YouTube only. The admin page is
   posts into Twitch and Kick chat while the stream is offline. Setting a
   minimum message count avoids that, and the editor says so.
 - **Staging.** auth-service and engagement-service run from `:main` only, so the
-  feature reaches beta.allch.at once its backend is on main. It stays behind the
-  `chat_commands` early-access gate and the beta-only `/commands` page.
+  feature reached beta.allch.at once its backend was on main. It was released
+  on 2026-11-15: the `chat_commands` gate is open to everyone and `/commands`
+  is offered on every host.
 - **Supersedes in part.** ADR-0079's "a reply is posted from the streamer's own
-  account" and "timers are left out" no longer hold.
+  account" and "timers are left out" no longer hold; its body says so.

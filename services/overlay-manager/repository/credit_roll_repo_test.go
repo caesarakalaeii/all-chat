@@ -91,3 +91,26 @@ func TestCreditRollCustomizationRoundTrip(t *testing.T) {
 	assert.Equal(t, config.Texts, reloaded.Texts)
 	assert.Equal(t, config.FontScales, reloaded.FontScales)
 }
+
+// A fresh row restarts the roll the way it always has (no pause after its end),
+// and a saved pause reads back.
+func TestCreditRollRestartDelayRoundTrip(t *testing.T) {
+	pool, cleanup := setupEventSettingsTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	runMigrations(t, pool, loadUpMigrations(t))
+	overlayID := seedOverlayWithEventSettings(t, pool, "credit_roll_restart_delay")
+
+	repo := NewCreditRollRepository(pool)
+	config, err := repo.GetOrCreate(ctx, overlayID)
+	require.NoError(t, err)
+	assert.Equal(t, 0, config.RestartDelaySeconds)
+
+	config.RestartDelaySeconds = 300
+	require.NoError(t, repo.Update(ctx, config))
+
+	reloaded, err := repo.GetByOverlayID(ctx, overlayID)
+	require.NoError(t, err)
+	assert.Equal(t, 300, reloaded.RestartDelaySeconds)
+}

@@ -129,6 +129,10 @@ func classifyTwitchEvent(eventType string, value *models.EventValue) (tier strin
 		// overlay: duration 0 is how "produce no alert" is said here.
 		return "low", 0
 
+	case "ad_break":
+		// A cue for the streamer's monitor, never an on-stream alert.
+		return "low", 0
+
 	default:
 		return "medium", 15
 	}

@@ -80,12 +80,13 @@ func (p *PubSubPublisher) Publish(ctx context.Context, overlayID string, msg *mo
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	// Determine channel based on whether this is an update (TikTok like aggregates)
+	// Updates go to the overlay's updates channel, which the gateway delivers as
+	// message_update: TikTok like aggregates (Event.IsUpdate) and chat messages
+	// whose media arrived late (IsUpdate), both replacing a row already shown.
 	channel := fmt.Sprintf("overlay:%s", overlayID)
-	isUpdate := msg.Event != nil && msg.Event.IsUpdate
+	isUpdate := msg.IsUpdate || (msg.Event != nil && msg.Event.IsUpdate)
 
 	if isUpdate {
-		// For TikTok like aggregates: publish updates to special channel
 		channel = fmt.Sprintf("overlay:%s:updates", overlayID)
 	}
 

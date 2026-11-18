@@ -43,10 +43,11 @@ const signIn = (isPremium: boolean) =>
   useAuthStore.setState({ user: { id: 'u', is_premium: isPremium } as User })
 
 describe('OverlayKindPicker', () => {
-  it('renders nothing for a user who may only create chat overlays', () => {
+  it('offers alerts beside chat without premium (alerts_overlay is free)', () => {
     signIn(false)
-    const { container } = render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
-    expect(container).toBeEmptyDOMElement()
+    render(<OverlayKindPicker value="chat" onChange={vi.fn()} />)
+    expect(screen.getAllByRole('radio')).toHaveLength(2)
+    expect(screen.getByRole('radio', { name: /^Alerts/ })).toBeInTheDocument()
   })
 
   it('offers alerts, goal and list beside chat to a premium user on beta.allch.at', () => {

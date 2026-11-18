@@ -90,9 +90,10 @@ func (h *StatusHandler) ViewerStatus(c *gin.Context) {
 	statusResponse(c, sub, found)
 }
 
-// Disconnect unlinks the caller's (streamer) Patreon account, marks their
-// subscriptions former, and recomputes premium (which revokes the
-// subscription-derived grant; an admin override, if any, is preserved).
+// Disconnect unlinks the caller's (streamer) Patreon account: it deletes the
+// connection and the membership rows linked to the account, then recomputes
+// premium (which revokes the subscription-derived grant; an admin override, if
+// any, is preserved). Later webhooks for the patron store an unlinked row only.
 func (h *StatusHandler) Disconnect(c *gin.Context) {
 	userID := c.GetString("user_id")
 	if userID == "" {
@@ -106,8 +107,8 @@ func (h *StatusHandler) Disconnect(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disconnect"})
 		return
 	}
-	if err := h.subRepo.MarkFormerByUserID(ctx, userID); err != nil {
-		h.logger.Error("Failed to mark subscriptions former", zap.String("user_id", userID), zap.Error(err))
+	if err := h.subRepo.DeleteByUserID(ctx, userID); err != nil {
+		h.logger.Error("Failed to delete subscriptions", zap.String("user_id", userID), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disconnect"})
 		return
 	}
@@ -120,10 +121,10 @@ func (h *StatusHandler) Disconnect(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Patreon disconnected"})
 }
 
-// ViewerDisconnect unlinks the caller's (viewer) Patreon account, marks their
-// subscriptions former, and recomputes viewer premium (which revokes the
-// subscription-derived grant; an admin override or streamer inheritance, if any,
-// is preserved by RecomputeViewer).
+// ViewerDisconnect unlinks the caller's (viewer) Patreon account: it deletes the
+// connection and the linked membership rows, then recomputes viewer premium
+// (which revokes the subscription-derived grant; an admin override or streamer
+// inheritance, if any, is preserved by RecomputeViewer).
 func (h *StatusHandler) ViewerDisconnect(c *gin.Context) {
 	viewerID := c.GetString("viewer_id")
 	if viewerID == "" {
@@ -137,8 +138,8 @@ func (h *StatusHandler) ViewerDisconnect(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disconnect"})
 		return
 	}
-	if err := h.subRepo.MarkFormerByViewerID(ctx, viewerID); err != nil {
-		h.logger.Error("Failed to mark viewer subscriptions former", zap.String("viewer_id", viewerID), zap.Error(err))
+	if err := h.subRepo.DeleteByViewerID(ctx, viewerID); err != nil {
+		h.logger.Error("Failed to delete viewer subscriptions", zap.String("viewer_id", viewerID), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to disconnect"})
 		return
 	}

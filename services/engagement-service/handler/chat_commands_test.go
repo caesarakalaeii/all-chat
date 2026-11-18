@@ -34,7 +34,12 @@ import (
 )
 
 type memCmdStore struct {
-	cmds []models.ChatCommand
+	cmds     []models.ChatCommand
+	failures []models.SendFailure
+}
+
+func (m *memCmdStore) Failures(context.Context, uuid.UUID) ([]models.SendFailure, error) {
+	return m.failures, nil
 }
 
 func (m *memCmdStore) ListChatCommands(_ context.Context, userID uuid.UUID) ([]models.ChatCommand, error) {
@@ -91,7 +96,7 @@ var testOwner = uuid.MustParse("22222222-2222-2222-2222-222222222222")
 
 func newCmdRouter(store *memCmdStore, changes *int, userID string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := NewChatCommands(store, func() { *changes++ }, zap.NewNop())
+	h := NewChatCommands(store, store, func() { *changes++ }, zap.NewNop())
 	r := gin.New()
 	g := r.Group("/", func(c *gin.Context) {
 		if userID != "" {
@@ -163,6 +168,9 @@ func TestChatCommandsValidation(t *testing.T) {
 		`{"kind":"command","trigger":"!x","response":"` + strings.Repeat("y", 2001) + `","min_role":"everyone"}`,
 		`{"kind":"command","trigger":"!x","image_url":"` + strings.Repeat("y", 1001) + `","min_role":"everyone"}`,
 		`{"kind":"command","trigger":"!x","image_url":"   ","min_role":"everyone"}`,
+		`{"kind":"command","trigger":"!x","sound_url":"http://media.example.com/a.mp3","min_role":"everyone"}`,
+		`{"kind":"command","trigger":"!x","sound_url":"not a url","min_role":"everyone"}`,
+		`{"kind":"command","trigger":"!x","alert_text":"` + strings.Repeat("y", 501) + `","min_role":"everyone"}`,
 	}
 	for _, body := range bad {
 		assert.Equal(t, http.StatusBadRequest, do(r, http.MethodPost, "/chat-commands", body).Code, body[:min(len(body), 80)])
@@ -171,6 +179,10 @@ func TestChatCommandsValidation(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", ok).Code)
 	imageOnly := `{"kind":"command","trigger":"!hype","image_url":"https://img.example.com/hype.gif","min_role":"everyone"}`
 	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", imageOnly).Code)
+	soundOnly := `{"kind":"command","trigger":"!bark","sound_url":"https://media.example.com/bark.mp3","min_role":"everyone"}`
+	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", soundOnly).Code)
+	textOnly := `{"kind":"command","trigger":"!wave","alert_text":"{user} waves","min_role":"everyone"}`
+	assert.Equal(t, http.StatusCreated, do(r, http.MethodPost, "/chat-commands", textOnly).Code)
 }
 
 func TestChatCommandsCap(t *testing.T) {
@@ -224,4 +236,20 @@ func TestChatCommandsPreviewImage(t *testing.T) {
 		assert.Equal(t, want.image, out.Image, body)
 		assert.Len(t, out.Errors, want.errs, body)
 	}
+}
+
+// The editor learns why replies are missing: the last undelivered post per platform.
+func TestChatCommandsListShowsSendFailures(t *testing.T) {
+	store := &memCmdStore{failures: []models.SendFailure{{Platform: "twitch", Sender: "allchat_bot",
+		ErrorKind: "reauth_required", Detail: "The sender must have authorized the app."}}}
+	r := newCmdRouter(store, new(int), testOwner.String())
+	w := do(r, http.MethodGet, "/chat-commands", "")
+	require.Equal(t, http.StatusOK, w.Code)
+	var body struct {
+		SendFailures []models.SendFailure `json:"send_failures"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+	require.Len(t, body.SendFailures, 1)
+	assert.Equal(t, "reauth_required", body.SendFailures[0].ErrorKind)
+	assert.Equal(t, "allchat_bot", body.SendFailures[0].Sender)
 }

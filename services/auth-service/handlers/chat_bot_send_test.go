@@ -49,6 +49,8 @@ type recordingTransport struct {
 	// request. Empty means a plain {} (no token), so only the token-cache test
 	// sets it.
 	tokenBody string
+	// chatBody, when set, is served for Helix chat/messages sends.
+	chatBody string
 }
 
 type chatCall struct {
@@ -93,6 +95,9 @@ func (t *recordingTransport) RoundTrip(r *http.Request) (*http.Response, error) 
 			respBody := "{}"
 			if strings.Contains(r.URL.String(), "id.twitch.tv/oauth2/token") && t.tokenBody != "" {
 				respBody = t.tokenBody
+			}
+			if strings.Contains(r.URL.String(), "helix/chat/messages") && t.chatBody != "" {
+				respBody = t.chatBody
 			}
 			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(respBody)), Header: http.Header{}}, nil
 		}
@@ -306,6 +311,54 @@ func TestSendBotTwitchMessage_BodyAndHeaders(t *testing.T) {
 		"the send goes to Helix chat/messages: %s", sendCall.url)
 }
 
+// Twitch answers a send it refuses to deliver (AutoMod, chat settings, an
+// unverified bot account) with HTTP 200 and is_sent=false. Treating that 200 as
+// success made a chat command reply vanish while every log said it was posted.
+const twitchDroppedBody = `{"data":[{"message_id":"","is_sent":false,"drop_reason":{"code":"msg_requires_verified_phone_number","message":"A verified phone number is required to chat in this channel."}}]}`
+
+func TestSendBotTwitchMessage_DroppedIsAnError(t *testing.T) {
+	transport := &recordingTransport{
+		prefixes:  []string{"https://api.twitch.tv/", "https://id.twitch.tv/"},
+		tokenBody: `{"access_token":"app-token","expires_in":3600}`,
+		chatBody:  twitchDroppedBody,
+	}
+	h := &ChatSendHandler{
+		log:        zap.NewNop(),
+		httpClient: &http.Client{Transport: transport},
+		clientID:   "test-client-id",
+		twitchAppTokens: &twitchAppTokenCache{
+			client:       &http.Client{Transport: transport},
+			clientID:     "test-client-id",
+			clientSecret: "test-client-secret",
+		},
+	}
+	acct := &repository.ChatBotAccount{Platform: "twitch", PlatformUserID: "botuid"}
+
+	err := h.sendBotTwitchMessage(context.Background(), acct, streamerFixture("u1"), "hi")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "msg_requires_verified_phone_number")
+	assert.Equal(t, sendErrDropped, sendResultErrorKind(err))
+}
+
+func TestSendStreamerTwitchMessage_DroppedIsAnError(t *testing.T) {
+	transport := &recordingTransport{prefixes: []string{"https://api.twitch.tv/"}, chatBody: twitchDroppedBody}
+	h := &ChatSendHandler{log: zap.NewNop(), httpClient: &http.Client{Transport: transport}, clientID: "c"}
+
+	err := h.sendStreamerTwitchMessage(context.Background(), streamerFixture("u1"), "hi")
+
+	require.Error(t, err)
+	assert.Equal(t, sendErrDropped, sendResultErrorKind(err))
+}
+
+func TestSendStreamerTwitchMessage_SentIsSuccess(t *testing.T) {
+	transport := &recordingTransport{prefixes: []string{"https://api.twitch.tv/"},
+		chatBody: `{"data":[{"message_id":"abc","is_sent":true,"drop_reason":null}]}`}
+	h := &ChatSendHandler{log: zap.NewNop(), httpClient: &http.Client{Transport: transport}, clientID: "c"}
+
+	require.NoError(t, h.sendStreamerTwitchMessage(context.Background(), streamerFixture("u1"), "hi"))
+}
+
 // kickLoginStreamerFixture is a streamer who signed in with Kick, so the users
 // row itself carries their Kick token and id.
 func kickLoginStreamerFixture(userID string) *models.User {
@@ -418,6 +471,38 @@ func TestHandleInternalBotSend_LinkedKickStreamerGetsKickReply(t *testing.T) {
 	assert.Equal(t, BotSendResult{Platform: "kick", Success: true, Sender: botSenderAllChatBot}, results[0])
 	require.Len(t, calls, 1)
 	assert.Equal(t, "Bearer kick-linked-token", calls[0].authorization)
+}
+
+// A reply Twitch refused carries Twitch's own explanation, so the streamer can be
+// told what to change (here: the bot account needs a verified phone number).
+func TestHandleInternalBotSend_DroppedTwitchReplyCarriesTheReason(t *testing.T) {
+	streamer := streamerFixture("u1")
+	store := &stubBotStore{settings: "bot", global: map[string]*repository.ChatBotAccount{
+		"twitch": {Platform: "twitch", PlatformUserID: "botuid"}}}
+	_, h := newBotTestHandler(t, store, streamer)
+	transport := h.httpClient.Transport.(*recordingTransport)
+	transport.prefixes = []string{"https://api.twitch.tv/", "https://id.twitch.tv/"}
+	transport.tokenBody = `{"access_token":"app-token","expires_in":3600}`
+	transport.chatBody = twitchDroppedBody
+
+	w := botSendRequest(t, h, streamer, `{"user_id":"u1","message":"hello","platforms":["twitch"]}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp struct {
+		Results []BotSendResult `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	require.Len(t, resp.Results, 1)
+	assert.Equal(t, BotSendResult{Platform: "twitch", Success: false, Sender: botSenderAllChatBot,
+		Error: "message_dropped", ErrorKind: "message_dropped",
+		Detail: "A verified phone number is required to chat in this channel."}, resp.Results[0])
+}
+
+// A bot whose authorization Twitch revoked gets Twitch's message, not the raw body.
+func TestClassifyPlatformStatusKeepsThePlatformMessage(t *testing.T) {
+	err := classifyPlatformStatus("twitch", http.StatusUnauthorized,
+		`{"error":"Unauthorized","status":401,"message":"The sender must have authorized the app with the user:write:chat and user:bot scopes."}`)
+	assert.Equal(t, "The sender must have authorized the app with the user:write:chat and user:bot scopes.", sendErrorDetail(err))
+	assert.Empty(t, sendErrorDetail(classifyPlatformStatus("twitch", http.StatusBadGateway, "<html>")))
 }
 
 func TestHandleInternalBotSend_NoKickIdentitySkipsKick(t *testing.T) {

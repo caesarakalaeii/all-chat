@@ -415,6 +415,17 @@ export const overlayEditor = {
       'Your premium has ended, so this channel is read without the official API until you upgrade again. You can still switch it off.',
     saveFailed: 'Could not change the official API setting. Please try again.',
   },
+  // Merging a channel's simultaneous vertical (Shorts) broadcast into the overlay.
+  verticalCompanion: {
+    label: 'Merge my vertical stream',
+    description:
+      'Streaming landscape and vertical at the same time gives your channel two broadcasts with separate chats. All-Chat merges the vertical one into this overlay when it has the same title as your main stream or its title says so (Vertical, Portrait, #shortslive).',
+    unmarkedLabel: 'My vertical stream has a different title',
+    unmarkedDescription:
+      'Merge a second live broadcast on this channel even when its title neither matches your main stream nor says it is vertical.',
+    multiStreamNote: 'Your stream selection already follows every live broadcast on this channel.',
+    saveFailed: 'Could not change the vertical stream setting. Please try again.',
+  },
   // Relaying All-Chat messages back out to a Discord channel.
   relay: {
     loopFilter: 'Loop filter: active — Discord messages are never relayed back to Discord.',
@@ -687,9 +698,7 @@ export const overlayEditor = {
     customHtmlLabel: 'HTML',
     customCssLabel: 'CSS',
     customJsLabel: 'JavaScript',
-    customLocked: 'Custom alert code is a Premium feature.',
-    lockedBody:
-      'Editing alerts is a Premium feature. Your overlay uses the built-in alerts, and test alerts stay free.',
+    uploadLocked: 'Uploading your own files is a Premium feature.',
     save: 'Save alerts',
     saving: 'Saving...',
     saved: 'Alerts saved',
@@ -893,7 +902,10 @@ export const overlayEditor = {
     currentValue: 'Current: {value}',
     durationLabel: 'Display Duration (seconds)',
     durationHint:
-      'How long the roll runs before it starts over (10-300 seconds). A roll too long to fit scrolls to its end first.',
+      'The shortest time the roll runs before it starts over (10-300 seconds). A roll too long to fit scrolls to its end and waits out the pause first.',
+    restartDelayLabel: 'Pause Before Restart (seconds)',
+    restartDelayHint:
+      'How long the end of the roll stays on screen before it starts over (0-3600 seconds).',
     opacityLabel: 'Background Opacity (0-1)',
     opacityHint:
       'With clips on, this only dims the clip behind the roll, to half brightness at most, so the clip always stays visible.',
@@ -1092,6 +1104,7 @@ export const overlayEditor = {
     streamLinkCleared: 'Stream link cleared',
     officialApiEnabled: 'Official YouTube API switched on',
     officialApiDisabled: 'Official YouTube API switched off',
+    verticalCompanionSaved: 'Vertical stream setting saved',
     relaySaved: 'Relay settings saved',
     relaySaveFailed: 'Failed to save relay settings',
     engagementSaved: 'Engagement settings saved',

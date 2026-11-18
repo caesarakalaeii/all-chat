@@ -285,6 +285,26 @@ type streamSelectionGate interface {
 	Allowed(ctx context.Context, userID string) (bool, error)
 }
 
+// validateVerticalCompanion checks a YouTube source's vertical_companion: absent, "",
+// "on" or "off". It merges the channel's simultaneous vertical broadcast into the
+// overlay and is deliberately free, unlike stream_select: it is the expected behaviour
+// for a streamer who streams landscape and vertical at once, not a premium extra. The
+// premium "all" strategy still covers following any number of independent broadcasts.
+// Returns a client error message, or "" when valid.
+func validateVerticalCompanion(config map[string]interface{}) string {
+	raw, present := config["vertical_companion"]
+	if !present {
+		return ""
+	}
+	if raw == nil {
+		return ""
+	}
+	if v, ok := raw.(string); ok && (v == "" || v == "on" || v == "off") {
+		return ""
+	}
+	return "vertical_companion must be \"\", \"on\" or \"off\""
+}
+
 // SetStreamSelectionGate wires the stream_selection premium check. Unset (direct struct
 // construction) reads as open, like the platform gate.
 func (h *SourcesHandler) SetStreamSelectionGate(g streamSelectionGate) {
@@ -366,6 +386,20 @@ func (h *SourcesHandler) copyAdminToken(ctx context.Context, platform, adminUser
 		return h.copyKickTokenForChannel(ctx, adminUserID, channelID)
 	}
 	return nil
+}
+
+// keepRelayWebhook makes config.relay_webhook_url server-owned (ADR-0091): a client value is
+// dropped, since discord-listener posts chat to whatever URL is stored, and the stored webhook
+// is carried over while the relay still targets the same channel. A new relay channel leaves it
+// unset, so discord-listener provisions a webhook in that channel. stored is nil on create.
+func keepRelayWebhook(stored, requested map[string]interface{}) {
+	delete(requested, models.RelayWebhookURLKey)
+	webhook, ok := stored[models.RelayWebhookURLKey]
+	storedChannel, _ := stored["relay_channel_id"].(string)
+	requestedChannel, _ := requested["relay_channel_id"].(string)
+	if ok && storedChannel == requestedChannel {
+		requested[models.RelayWebhookURLKey] = webhook
+	}
 }
 
 // discordConfigChannelKeys are the config fields that name a Discord channel All-Chat will
@@ -1013,6 +1047,10 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	}
 
 	if req.Platform == "youtube" {
+		if msg := validateVerticalCompanion(req.Config); msg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			return
+		}
 		if status, body := h.checkStreamSelection(c.Request.Context(), userID.(string), nil, req.Config); status != 0 {
 			c.JSON(status, body)
 			return
@@ -1032,6 +1070,7 @@ func (h *SourcesHandler) HandleAddSource(c *gin.Context) {
 	if req.Config != nil {
 		sourceConfig = req.Config
 	}
+	keepRelayWebhook(nil, sourceConfig)
 
 	source := &models.ChatSource{
 		OverlayID:     overlayID,
@@ -1217,6 +1256,10 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 	}
 
 	if source.Platform == "youtube" {
+		if msg := validateVerticalCompanion(req.Config); msg != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+			return
+		}
 		if status, body := h.checkStreamSelection(c.Request.Context(), userID.(string), source.Config, req.Config); status != 0 {
 			c.JSON(status, body)
 			return
@@ -1226,6 +1269,8 @@ func (h *SourcesHandler) HandleUpdateSourceConfig(c *gin.Context) {
 			return
 		}
 	}
+
+	keepRelayWebhook(source.Config, req.Config)
 
 	if err := h.sourceRepo.UpdateConfig(c.Request.Context(), sourceID, req.Config); err != nil {
 		h.logger.Error("Failed to update source config",

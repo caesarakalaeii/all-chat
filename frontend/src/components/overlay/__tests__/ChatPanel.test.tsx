@@ -334,3 +334,70 @@ describe('ChatPanel row identity', () => {
     expect(after[2]).toBe(before[1])
   })
 })
+
+describe('ChatPanel late-loading attachments', () => {
+  /** Record writes to the scroll container's scrollTop (jsdom does no layout). */
+  function trackScrollTop(container: HTMLElement): { el: HTMLElement; writes: number[] } {
+    const el = container.querySelector('.overflow-y-auto') as HTMLElement
+    const writes: number[] = []
+    let top = 0
+    Object.defineProperty(el, 'scrollTop', {
+      configurable: true,
+      get: () => top,
+      set: (value: number) => {
+        top = value
+        writes.push(value)
+      },
+    })
+    return { el, writes }
+  }
+
+  function withAttachment(id: string, type: 'image' | 'video', url: string): ViewItem {
+    const base = item(id, 'look')
+    return { ...base, message: { ...base.message, attachments: [{ type, url }] } }
+  }
+
+  it('re-pins to the live edge when an image finishes loading and grows the feed', () => {
+    const { container } = render(
+      <ChatPanel
+        items={[item('1', 'hello'), withAttachment('2', 'image', 'https://cdn.example/a.png')]}
+      />
+    )
+    const { el, writes } = trackScrollTop(container)
+    // The image loaded and made the content taller than at arrival.
+    Object.defineProperty(el, 'scrollHeight', { value: 1400, configurable: true })
+
+    fireEvent.load(container.querySelector('img') as HTMLImageElement)
+
+    expect(writes).toEqual([1400])
+  })
+
+  it('re-pins when a video learns its size (loadedmetadata)', () => {
+    const { container } = render(
+      <ChatPanel
+        items={[item('1', 'hello'), withAttachment('2', 'video', 'https://cdn.example/a.mp4')]}
+      />
+    )
+    const { el, writes } = trackScrollTop(container)
+    Object.defineProperty(el, 'scrollHeight', { value: 1400, configurable: true })
+
+    fireEvent.loadedMetadata(container.querySelector('video') as HTMLVideoElement)
+
+    expect(writes).toEqual([1400])
+  })
+
+  it('leaves the scroll position alone while paused', () => {
+    const { container } = render(
+      <ChatPanel
+        items={[item('1', 'hello'), withAttachment('2', 'image', 'https://cdn.example/a.png')]}
+      />
+    )
+    scrollUp(container)
+    const { el, writes } = trackScrollTop(container)
+    Object.defineProperty(el, 'scrollHeight', { value: 1400, configurable: true })
+
+    fireEvent.load(container.querySelector('img') as HTMLImageElement)
+
+    expect(writes).toEqual([])
+  })
+})

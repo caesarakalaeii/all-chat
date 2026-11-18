@@ -451,13 +451,21 @@ export function applyModerationMark(items: ViewItem[], meta: DeletionMetadata): 
 }
 
 /**
- * Append a chat/event item, merging TikTok like-aggregate updates in place by
- * `aggregation_id`. New items respect the scrollback `cap`; an in-place merge
- * does not grow the array so it is not re-capped.
+ * Apply a `message_update`. A TikTok like aggregate replaces the row with the
+ * same `aggregation_id`, or is appended (respecting the scrollback `cap`) when
+ * that row is gone. Any other update (a Discord message whose media arrived
+ * late) replaces the row with the same `id`, keeping its moderation mark, and
+ * is dropped when there is no such row so it cannot re-add a removed message.
  */
-export function mergeByAgg(prev: ViewItem[], updated: ViewItem, cap: number): ViewItem[] {
+export function mergeUpdate(prev: ViewItem[], updated: ViewItem, cap: number): ViewItem[] {
   const aggId = updated.event?.aggregation_id
-  if (!aggId) return [...prev, updated].slice(-cap)
+  if (!aggId) {
+    const idx = prev.findIndex((m) => m.id === updated.id)
+    if (idx === -1) return prev
+    const next = [...prev]
+    next[idx] = { ...updated, _moderated: prev[idx]._moderated }
+    return next
+  }
   const idx = prev.findIndex((m) => m.event?.aggregation_id === aggId)
   if (idx === -1) return [...prev, updated].slice(-cap)
   const next = [...prev]

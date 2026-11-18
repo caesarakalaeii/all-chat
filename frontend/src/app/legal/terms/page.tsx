@@ -20,6 +20,7 @@ import Link from 'next/link'
 import LegalLayout from '@/components/legal/LegalLayout'
 import { getTranslations } from '@/lib/i18n'
 import { emphasise, interpolateElements } from '@/lib/i18n/emphasise'
+import { PATREON_PAGE_URL } from '@/lib/constants'
 
 // getTranslations, not the hook: this route is a Server Component.
 const t = getTranslations()
@@ -34,6 +35,7 @@ const listClasses = 'list-disc pl-6 space-y-1 text-sub'
 const linkClasses = 'underline decoration-white/40 underline-offset-4'
 
 const SUPPORT_MAILTO = 'mailto:all.chat.support@gmail.com'
+const STATUS_URL = 'https://status.allch.at'
 
 export default function TermsOfServicePage() {
   const supportEmail = t('legal.terms.supportEmail')
@@ -74,6 +76,8 @@ export default function TermsOfServicePage() {
         <ul className={listClasses}>
           <li>{t('legal.terms.accountsAccurate')}</li>
           <li>{t('legal.terms.accountsSecurity')}</li>
+          <li>{t('legal.terms.accountsAccessTokens')}</li>
+          <li>{t('legal.terms.accountsModerators')}</li>
           <li>
             {emphasise(
               t('legal.terms.accountsNotify', { email: supportEmail }),
@@ -95,7 +99,16 @@ export default function TermsOfServicePage() {
           <li>{t('legal.terms.acceptableUseBypass')}</li>
           <li>{t('legal.terms.acceptableUseHarassment')}</li>
           <li>{t('legal.terms.acceptableUsePartner')}</li>
+          <li>{t('legal.terms.acceptableUseAutomation')}</li>
+          <li>{t('legal.terms.acceptableUseSpam')}</li>
         </ul>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl">{t('legal.terms.contentHeading')}</h2>
+        <p>{t('legal.terms.contentOwnership')}</p>
+        <p>{t('legal.terms.contentResponsibility')}</p>
+        <p>{t('legal.terms.contentTranslations')}</p>
       </section>
 
       <section className="space-y-4">
@@ -105,6 +118,8 @@ export default function TermsOfServicePage() {
           <li>{t('legal.terms.thirdPartyComply')}</li>
           <li>{t('legal.terms.thirdPartyOutages')}</li>
           <li>{t('legal.terms.thirdPartyQuotas')}</li>
+          <li>{t('legal.terms.thirdPartyUnofficial')}</li>
+          <li>{t('legal.terms.thirdPartyOwnAccounts')}</li>
         </ul>
         <p className="font-semibold">
           {interpolateElements(t('legal.terms.youtubeBinding'), {
@@ -120,6 +135,16 @@ export default function TermsOfServicePage() {
             ),
           })}
         </p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl">{t('legal.terms.betaHeading')}</h2>
+        <p>{t('legal.terms.betaBody')}</p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl">{t('legal.terms.pointsHeading')}</h2>
+        <p>{t('legal.terms.pointsBody')}</p>
       </section>
 
       <section className="space-y-4">
@@ -183,6 +208,20 @@ export default function TermsOfServicePage() {
             )
           )}
         </p>
+        <p>
+          {interpolateElements(t('legal.terms.availabilityStatus'), {
+            status: (
+              <a
+                href={STATUS_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={linkClasses}
+              >
+                {t('legal.terms.statusHost')}
+              </a>
+            ),
+          })}
+        </p>
       </section>
 
       <section className="space-y-4">
@@ -203,7 +242,7 @@ export default function TermsOfServicePage() {
           {interpolateElements(t('legal.terms.premiumBody'), {
             patreon: (
               <a
-                href="https://www.patreon.com"
+                href={PATREON_PAGE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={linkClasses}
@@ -213,6 +252,7 @@ export default function TermsOfServicePage() {
             ),
           })}
         </p>
+        <p>{t('legal.terms.premiumGrants')}</p>
         <p>{t('legal.terms.premiumCancellation')}</p>
       </section>
 

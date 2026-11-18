@@ -32,13 +32,19 @@ type mockEmoteServiceClient struct {
 	emotes      []EmoteServiceEmote
 	err         error
 	lastChannel string
+	lastUserID  string
 	calls       int
+	// plainCalls counts the GetEmotesForChannel route, which carries no platform
+	// argument, so the two client methods can be told apart.
+	lastPlatform string
+	plainCalls   int
 }
 
 func (m *mockEmoteServiceClient) GetEmotesForChannel(ctx context.Context, channelID string) ([]EmoteServiceEmote, error) {
 	m.mu.Lock()
 	m.lastChannel = channelID
 	m.calls++
+	m.plainCalls++
 	m.mu.Unlock()
 	if m.err != nil {
 		return nil, m.err
@@ -49,6 +55,8 @@ func (m *mockEmoteServiceClient) GetEmotesForChannel(ctx context.Context, channe
 func (m *mockEmoteServiceClient) GetEmotesForChannelWithUser(ctx context.Context, channel, platform, userID, twitchChannel, seventvSetID string) ([]EmoteServiceEmote, error) {
 	m.mu.Lock()
 	m.lastChannel = channel
+	m.lastUserID = userID
+	m.lastPlatform = platform
 	m.calls++
 	m.mu.Unlock()
 	if m.err != nil {
@@ -70,6 +78,8 @@ type mockEmoteCacheStore struct {
 	getStale bool
 	setCalls int
 	setData  []cache.CachedEmote
+	// userCalls counts GetEntryWithUser/SetWithUser, i.e. per-user cache keys.
+	userCalls int
 }
 
 func (m *mockEmoteCacheStore) GetEntry(ctx context.Context, channel string) (cache.Entry, error) {
@@ -92,6 +102,9 @@ func (m *mockEmoteCacheStore) Delete(ctx context.Context, channel string) error 
 }
 
 func (m *mockEmoteCacheStore) GetEntryWithUser(ctx context.Context, channel, userID string) (cache.Entry, error) {
+	m.mu.Lock()
+	m.userCalls++
+	m.mu.Unlock()
 	if m.getErr != nil {
 		return cache.Entry{}, m.getErr
 	}
@@ -101,6 +114,7 @@ func (m *mockEmoteCacheStore) GetEntryWithUser(ctx context.Context, channel, use
 func (m *mockEmoteCacheStore) SetWithUser(ctx context.Context, channel, userID string, emotes []cache.CachedEmote) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.userCalls++
 	m.setCalls++
 	m.setData = emotes
 	return nil
@@ -153,6 +167,35 @@ func TestEnrichAddsEmotesForLaterOccurrences(t *testing.T) {
 	secondPos := msg.Message.Emotes[1].Positions[0][0]
 	if !(firstPos < secondPos) {
 		t.Fatalf("expected emote positions to increase, got %d then %d", firstPos, secondPos)
+	}
+}
+
+// The zero-width flag must survive the emote-service response, the cache shape and
+// the enriched message, or the overlay draws 7TV overlay emotes beside their base.
+func TestEnrichKeepsZeroWidthFlag(t *testing.T) {
+	client := &mockEmoteServiceClient{
+		emotes: []EmoteServiceEmote{
+			{Code: "KEKW", Provider: "7tv", URL: "https://cdn.7tv.app/emote/1/1x.webp"},
+			{Code: "PUNCH", Provider: "7tv", URL: "https://cdn.7tv.app/emote/2/1x.webp", ZeroWidth: true},
+		},
+	}
+
+	enricher := NewEnricher(client, nil, zap.NewNop())
+	msg := &models.UnifiedChatMessage{
+		ChannelID: "channel-123",
+		Message:   models.MessageInfo{Text: "KEKW PUNCH", Emotes: []models.Emote{}},
+	}
+
+	if err := enricher.Enrich(context.Background(), msg); err != nil {
+		t.Fatalf("Enrich returned error: %v", err)
+	}
+
+	got := map[string]bool{}
+	for _, emote := range msg.Message.Emotes {
+		got[emote.Code] = emote.ZeroWidth
+	}
+	if !got["PUNCH"] || got["KEKW"] {
+		t.Fatalf("expected only PUNCH zero-width, got %v", got)
 	}
 }
 

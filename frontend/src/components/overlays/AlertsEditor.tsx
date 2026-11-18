@@ -30,13 +30,13 @@
  * being edited and saves unsaved changes first, because the gateway resolves
  * the test from the saved profiles.
  *
- * Tiering: the defaults (the built-in preset of every event type) and test
- * alerts are free; SAVING profiles is premium (the alerts_editor gate on the
- * PUT, migration 107 and ADR-0070). So without premium the form is shown
- * read-only with the standard upgrade link, and the custom-code section is
- * locked behind the same CTA.
+ * Tiering: editing and saving profiles, custom code, KLIPY GIF search and
+ * test alerts are free (the alerts_editor gate was opened on 2026-11-15,
+ * ADR-0070). Uploading your own files is premium (the media_upload gate on
+ * media-service, migration 128): MediaField disables its upload button
+ * without premium and shows the standard upgrade link.
  *
- * Custom code (premium): per-profile HTML/CSS/JS rendered by the alert box in
+ * Custom code: per-profile HTML/CSS/JS rendered by the alert box in
  * a scripts-only sandboxed iframe. The runtime the frame gets — onAlert(cb),
  * allchat.fill(template, event), data-alert-text / data-alert-image bindings —
  * and the postMessage contract { type: "alert", profile, event } are
@@ -51,7 +51,6 @@ import { SliderControl } from '@/components/appearance/SliderControl'
 import { ToggleSwitch } from '@/components/appearance/ToggleSwitch'
 import { PremiumUpsellLink } from '@/components/PremiumUpsellLink'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -69,9 +68,9 @@ import {
   uploadMedia,
 } from '@/lib/api/media'
 import { overlaysApi } from '@/lib/api/overlays'
+import { useAuthStore } from '@/lib/stores/auth-store'
 import { useTranslations, type TFunction } from '@/lib/i18n'
 import { searchKlipyGifs, type KlipyGif } from '@/lib/klipy'
-import { useFeatureAvailable } from '@/lib/platform-availability'
 import { toastManager } from '@/lib/toast'
 import { ALERT_ALL_EVENTS, ALERT_EVENT_TYPES, type EditableAlertProfile } from '@/lib/types/alert'
 
@@ -118,9 +117,8 @@ export function validateAlertProfile(p: EditableAlertProfile): ProfileErrors {
   return errors
 }
 
-export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPremium: boolean }) {
+export function AlertsEditor({ overlayId }: { overlayId: string }) {
   const t = useTranslations()
-  const featureAvailable = useFeatureAvailable()
   const ids = useId()
   const [profiles, setProfiles] = useState<EditableAlertProfile[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -223,8 +221,7 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
     }
   }
 
-  const locked = !isPremium
-  const saveFirst = !locked && dirty.size > 0
+  const saveFirst = dirty.size > 0
 
   async function sendTest() {
     if (saveFirst && !(await save())) return
@@ -244,9 +241,7 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
     ...(base
       ? [{ value: ALERT_ALL_EVENTS, label: t('overlayEditor.alertsEditor.allEvents') }]
       : []),
-    ...ALERT_EVENT_TYPES.filter(
-      (value) => value !== 'chat_command' || featureAvailable('chatCommands')
-    ).map((value) => ({
+    ...ALERT_EVENT_TYPES.map((value) => ({
       value,
       label: t(`overlayEditor.alertEventTypes.${value}`),
     })),
@@ -254,13 +249,6 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
 
   return (
     <div className="space-y-5">
-      {locked && (
-        <Card className="space-y-1 p-3">
-          <p className="text-sm text-text-sub">{t('overlayEditor.alertsEditor.lockedBody')}</p>
-          <PremiumUpsellLink className="text-sm" />
-        </Card>
-      )}
-
       <div className="flex flex-col gap-1">
         <label htmlFor={`${ids}-type`} className="text-xs text-text-sub">
           {t('overlayEditor.alertsEditor.eventTypeLabel')}
@@ -296,7 +284,7 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
         </p>
       </div>
 
-      <fieldset disabled={locked} className="min-w-0 space-y-5">
+      <div className="min-w-0 space-y-5">
         <ToggleSwitch
           label={t(
             isBase
@@ -305,7 +293,6 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
           )}
           checked={profile.enabled}
           onChange={(enabled) => update({ enabled })}
-          disabled={locked}
         />
 
         {!isBase && (
@@ -342,7 +329,6 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
           value={profile.image_url}
           error={errors.image_url}
           onChange={(image_url) => update({ image_url })}
-          locked={locked}
           inherits={!isBase}
         />
 
@@ -353,7 +339,6 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
           value={profile.sound_url}
           error={errors.sound_url}
           onChange={(sound_url) => update({ sound_url })}
-          locked={locked}
           inherits={!isBase}
         />
 
@@ -384,9 +369,8 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
           step={1}
           unit="%"
           onChange={(volume) => update({ volume })}
-          disabled={locked}
         />
-      </fieldset>
+      </div>
 
       <section aria-labelledby={`${ids}-custom-heading`} className="space-y-3">
         <div>
@@ -395,38 +379,29 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
           </h3>
           <p className="text-xs text-text-sub">{t('overlayEditor.alertsEditor.customBody')}</p>
         </div>
-        {locked ? (
-          <Card className="space-y-1 p-3">
-            <p className="text-sm text-text-sub">{t('overlayEditor.alertsEditor.customLocked')}</p>
-            <PremiumUpsellLink className="text-sm" />
-          </Card>
-        ) : (
-          <>
-            {(
-              [
-                ['custom_html', 'customHtmlLabel'],
-                ['custom_css', 'customCssLabel'],
-                ['custom_js', 'customJsLabel'],
-              ] as const
-            ).map(([field, labelKey]) => (
-              <div key={field} className="flex flex-col gap-1">
-                <label htmlFor={`${ids}-${field}`} className="text-xs text-text-sub">
-                  {t(`overlayEditor.alertsEditor.${labelKey}`)}
-                </label>
-                <Textarea
-                  id={`${ids}-${field}`}
-                  value={profile[field] ?? ''}
-                  onChange={(e) => update({ [field]: e.target.value })}
-                  spellCheck={false}
-                  rows={field === 'custom_css' ? 4 : 6}
-                  className="font-mono text-xs"
-                  aria-invalid={errors.custom_code ? true : undefined}
-                />
-              </div>
-            ))}
-            <FieldError id={`${ids}-custom-error`} error={errors.custom_code} t={t} />
-          </>
-        )}
+        {(
+          [
+            ['custom_html', 'customHtmlLabel'],
+            ['custom_css', 'customCssLabel'],
+            ['custom_js', 'customJsLabel'],
+          ] as const
+        ).map(([field, labelKey]) => (
+          <div key={field} className="flex flex-col gap-1">
+            <label htmlFor={`${ids}-${field}`} className="text-xs text-text-sub">
+              {t(`overlayEditor.alertsEditor.${labelKey}`)}
+            </label>
+            <Textarea
+              id={`${ids}-${field}`}
+              value={profile[field] ?? ''}
+              onChange={(e) => update({ [field]: e.target.value })}
+              spellCheck={false}
+              rows={field === 'custom_css' ? 4 : 6}
+              className="font-mono text-xs"
+              aria-invalid={errors.custom_code ? true : undefined}
+            />
+          </div>
+        ))}
+        <FieldError id={`${ids}-custom-error`} error={errors.custom_code} t={t} />
       </section>
 
       <div className="space-y-2">
@@ -434,7 +409,7 @@ export function AlertsEditor({ overlayId, isPremium }: { overlayId: string; isPr
           type="button"
           className="w-full"
           onClick={() => void save()}
-          disabled={locked || saving || dirty.size === 0}
+          disabled={saving || dirty.size === 0}
         >
           {t(saving ? 'overlayEditor.alertsEditor.saving' : 'overlayEditor.alertsEditor.save')}
         </Button>
@@ -472,15 +447,17 @@ function FieldError({ id, error, t }: { id: string; error?: string; t: TFunction
   )
 }
 
-/** URL input + upload (+ KLIPY search for images) for one profile media field. */
-function MediaField({
+/**
+ * URL input + upload (+ KLIPY search for images) for one media field: an alert
+ * profile's here, a chat command's alert sound in the commands editor.
+ */
+export function MediaField({
   id,
   kind,
   label,
   value,
   error,
   onChange,
-  locked,
   inherits,
 }: {
   id: string
@@ -489,11 +466,12 @@ function MediaField({
   value: string
   error?: string
   onChange: (url: string) => void
-  locked: boolean
   /** An event type's field: left empty, it uses the All events style. */
   inherits: boolean
 }) {
   const t = useTranslations()
+  // Uploads are premium (media_upload gate); the server re-checks.
+  const canUpload = useAuthStore((s) => s.user?.is_premium ?? false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [uploadError, setUploadError] = useState('')
@@ -571,26 +549,31 @@ function MediaField({
             const file = e.target.files?.[0]
             if (file) void upload(file)
           }}
-          disabled={locked}
+          disabled={!canUpload}
         />
         <Button
           type="button"
           variant="outline"
           size="sm"
           onClick={() => fileRef.current?.click()}
-          disabled={locked || progress !== null}
+          disabled={!canUpload || progress !== null}
         >
           {progress !== null
             ? t('overlayEditor.alertsEditor.uploading', { percent: Math.round(progress * 100) })
             : t('overlayEditor.alertsEditor.upload')}
         </Button>
+        {!canUpload && (
+          <p className="text-xs text-text-sub">
+            {t('overlayEditor.alertsEditor.uploadLocked')} <PremiumUpsellLink />
+          </p>
+        )}
       </div>
       {uploadError && (
         <p id={`${id}-upload-error`} role="alert" className="text-xs text-destructive">
           {uploadError}
         </p>
       )}
-      {kind === 'image' && !locked && <KlipySearch onPick={onChange} />}
+      {kind === 'image' && <KlipySearch onPick={onChange} />}
     </div>
   )
 }

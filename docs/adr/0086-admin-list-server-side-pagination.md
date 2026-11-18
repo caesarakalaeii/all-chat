@@ -2,6 +2,7 @@
 
 **Date**: 2026-11-02
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -14,9 +15,9 @@ counts and a platform-ban lookup for every row. As the platform grew, the Users
 and Sources pages became slow to load.
 
 Global search (ADR-0035) made it worse: one query fetched all three full lists
-just to show eight matches per group. ADR-0035 accepted this as "fine at current
-admin scale" and named the remedy for when it stopped scaling. That point has
-been reached.
+just to show eight matches per group. ADR-0035 accepted that full-list load as
+"fine at the admin scale of the day" and kept a server-side search endpoint as
+its documented escape hatch. Both have now been outrun.
 
 ## Decision Drivers
 
@@ -57,7 +58,7 @@ been reached.
   tiebreak, so consecutive pages neither repeat nor skip a row.
 - `q` is a case-insensitive literal substring search. `%`, `_` and `\` are
   escaped, because usernames are full of underscores. Fields searched:
-  - users: username, display name, id, Twitch/Google/Kick id;
+  - users: username, display name, id, twitch_id, google_id, kick_id;
   - overlays: name, id, owner id, owner username;
   - sources: channel name, id and handle, overlay name, owner username.
 - Filters move to the server: users take `filter=active|banned|premium|beta|unconfigured`
@@ -104,8 +105,9 @@ been reached.
 ## Implementation
 
 - auth-service: `repository.UserRepository.ListUsers` / `CountUsers`
-  (`UserListFilter`), `handlers.AdminHandler.ListUsers`, and the shared
-  `pageParams` (also used by the Viewers handler).
+  (`UserListFilter`), `handlers.AdminHandler.ListUsers`, and the `pageParams`
+  helper (duplicated in auth-service and overlay-manager; also used by the
+  Viewers handler).
 - overlay-manager: `OverlayRepository.ListOverlaysWithSourceCount`
   (`OverlayListFilter`), `SourceRepository.ListSourcesWithOverlay`
   (`SourceListFilter`), `handlers.AdminHandler.ListOverlays` / `ListAllSources`.

@@ -29,9 +29,8 @@ import (
 
 // TokenStore defines the interface for storing and retrieving OAuth tokens
 type TokenStore interface {
-	SaveToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error
+	UpdateToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error
 	GetToken(ctx context.Context, userID, channelID string) (*oauth2.Token, error)
-	DeleteToken(ctx context.Context, userID, channelID string) error
 }
 
 // PostgresTokenStore implements TokenStore using PostgreSQL
@@ -50,8 +49,11 @@ func NewPostgresTokenStore(db *pgxpool.Pool, enc *encryption.MultiKeyEncryptor, 
 	}
 }
 
-// SaveToken saves an OAuth token to the database
-func (s *PostgresTokenStore) SaveToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error {
+// UpdateToken writes a refreshed token back to its row. It never inserts: rows are
+// created by auth-service on consent and deleted when the streamer disconnects
+// YouTube, so a refresh that was in flight during a disconnect must not recreate the
+// row. A row that is gone is reported as an error.
+func (s *PostgresTokenStore) UpdateToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error {
 	encAccess, err := s.enc.EncryptString(token.AccessToken)
 	if err != nil {
 		s.logger.Error("Failed to encrypt access token",
@@ -72,20 +74,11 @@ func (s *PostgresTokenStore) SaveToken(ctx context.Context, userID, channelID st
 		return fmt.Errorf("encrypt refresh token: %w", err)
 	}
 
-	query := `
-INSERT INTO youtube_oauth_tokens (user_id, channel_id, access_token, refresh_token, token_type, expiry, encryption_version, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, 1, NOW())
-ON CONFLICT (user_id, channel_id)
-DO UPDATE SET
-access_token = EXCLUDED.access_token,
-refresh_token = EXCLUDED.refresh_token,
-token_type = EXCLUDED.token_type,
-expiry = EXCLUDED.expiry,
-encryption_version = EXCLUDED.encryption_version,
-updated_at = NOW()
-`
-
-	_, err = s.db.Exec(ctx, query,
+	tag, err := s.db.Exec(ctx, `
+UPDATE youtube_oauth_tokens
+SET access_token = $3, refresh_token = $4, token_type = $5, expiry = $6, encryption_version = 1, updated_at = NOW()
+WHERE user_id = $1 AND channel_id = $2
+`,
 		userID,
 		channelID,
 		encAccess,
@@ -93,6 +86,9 @@ updated_at = NOW()
 		token.TokenType,
 		token.Expiry,
 	)
+	if err == nil && tag.RowsAffected() == 0 {
+		err = fmt.Errorf("token row no longer exists (YouTube disconnected)")
+	}
 
 	if err != nil {
 		s.logger.Error("Failed to save OAuth token",
@@ -103,7 +99,7 @@ updated_at = NOW()
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 
-	s.logger.Info("Saved OAuth token",
+	s.logger.Info("Updated OAuth token",
 		zap.String("user_id", userID),
 		zap.String("channel_id", channelID),
 	)
@@ -176,29 +172,4 @@ WHERE user_id = $1 AND channel_id = $2
 	token.Expiry = expiry
 
 	return &token, nil
-}
-
-// DeleteToken removes an OAuth token from the database
-func (s *PostgresTokenStore) DeleteToken(ctx context.Context, userID, channelID string) error {
-	query := `
-		DELETE FROM youtube_oauth_tokens
-		WHERE user_id = $1 AND channel_id = $2
-	`
-
-	_, err := s.db.Exec(ctx, query, userID, channelID)
-	if err != nil {
-		s.logger.Error("Failed to delete OAuth token",
-			zap.String("user_id", userID),
-			zap.String("channel_id", channelID),
-			zap.Error(err),
-		)
-		return fmt.Errorf("failed to delete token: %w", err)
-	}
-
-	s.logger.Info("Deleted OAuth token",
-		zap.String("user_id", userID),
-		zap.String("channel_id", channelID),
-	)
-
-	return nil
 }

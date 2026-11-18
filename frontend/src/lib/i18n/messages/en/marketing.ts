@@ -489,21 +489,18 @@ export const marketing = {
       "Read your own channel through YouTube's official API with your own connection, so unlisted and members-only streams are found automatically, with no link to paste.",
     sharedChatTitle: 'Shared chat',
     sharedChatBody: 'Combine several channels into one shared conversation across your overlays.',
-    alertsOverlayTitle: 'Alert overlays',
-    alertsOverlayBody:
-      'Pop up subs, bits, raids, Super Chats and TikTok gifts on stream as their own OBS source, with a test button to line them up.',
-    alertsEditorTitle: 'Custom alerts editor',
-    alertsEditorBody:
-      'Give every alert its own text, GIF and sound, search GIFs right in the editor, or write your own HTML, CSS and JavaScript for it.',
+    mediaUploadsTitle: 'Upload your own media',
+    mediaUploadsBody:
+      'Upload your own images, GIFs and sounds for your alerts and command alerts. Pasting a link and searching GIFs stay free.',
     goalOverlayTitle: 'Goal overlays',
     goalOverlayBody:
       'A progress bar toward a follower, subscriber, bits or Super Chat goal that fills up live on stream.',
     listOverlayTitle: 'Leaderboard overlays',
     listOverlayBody:
       'Rank your top cheerers, gifters or Super Chatters of the last 30 days on stream, updated with every new one.',
-    chatCommandsTitle: 'Chat commands',
-    chatCommandsBody:
-      'Custom !commands and keyword triggers for every chat: reply as you, clip your Twitch stream on cue, show an image on your alerts overlay, and use variables, web lookups or JavaScript in replies. Replies in YouTube chat are premium.',
+    youtubeCommandRepliesTitle: 'Command replies in YouTube chat',
+    youtubeCommandRepliesBody:
+      'Your chat commands and timers answer in YouTube chat too, not only on Twitch and Kick.',
     customChatBotTitle: 'Your own chat bot',
     customChatBotBody:
       'Connect your own bot account on Twitch, Kick or YouTube and every command reply and timer goes out under your bot’s name instead of yours.',

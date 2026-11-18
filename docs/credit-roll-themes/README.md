@@ -18,7 +18,7 @@ Credit roll themes customize the appearance of your end-of-stream credits displa
 | Purpose | Chat message display | End-of-stream leaderboards |
 | Content | Messages, emotes, badges | Rankings, avatars, statistics |
 | Update Frequency | Real-time (< 500ms) | Static (shown at stream end) |
-| Duration | Continuous | 10-300 seconds, then the roll starts over |
+| Duration | Continuous | At least 10-300 seconds, plus an optional pause on the roll's end, then the roll starts over |
 
 ## Key CSS Selectors
 

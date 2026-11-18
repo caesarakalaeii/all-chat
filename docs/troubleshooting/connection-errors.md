@@ -134,7 +134,8 @@ dial tcp 10.0.0.2:6379: i/o timeout
 **Diagnosis**:
 ```bash
 # Check health endpoint directly
-kubectl exec -n allchat deployment/<service> -- wget -qO- http://localhost:<port>/health/ready
+kubectl port-forward -n allchat deployment/<service> <port>:<port> >/dev/null &
+sleep 1; curl -s http://localhost:<port>/health/ready; kill $!
 
 # Check logs
 kubectl logs -n allchat deployment/<service> --tail=100

@@ -103,7 +103,7 @@ export const docs: LocaleNamespace<'docs'> = {
     messageTypesChatMessage:
       'Eine Chat-Nachricht oder ein Plattform-Event. data ist das vereinheitlichte Nachrichtenobjekt.',
     messageTypesMessageUpdate:
-      'Ein Update zu einer zuvor gesendeten Nachricht (z. B. TikTok-Like-Aggregation). Dieselbe Datenform wie chat_message.',
+      'Ein Update zu einer zuvor gesendeten Nachricht: eine TikTok-Like-Aggregation (Zuordnung über event.aggregation_id) oder eine Chat-Nachricht, deren Medien später ankamen, z. B. eine Discord-GIF-Linkvorschau (Zuordnung über id; ignorieren, wenn die Nachricht nicht mehr angezeigt wird). Dieselbe Datenform wie chat_message.',
     messageTypesConnected: 'Beim Verbinden einmal gesendet: { overlay_id, message }.',
     messageTypesPlatformStatus: 'Verbindungsstatus einer Quell-Plattform.',
     messageTypesPing: 'Herzschlag vom Server. Antworte mit { "type": "pong" }.',

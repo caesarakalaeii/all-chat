@@ -39,7 +39,7 @@ export const commands: LocaleNamespace<'commands'> = {
     kindCommand: 'Befehl',
     kindKeyword: 'Stichwort',
     clips: 'Clippt',
-    image: 'Bild',
+    alert: 'Alert',
     cooldown: '{seconds} s Abklingzeit',
     uses: '{count}× benutzt',
     noReply: 'Keine Antwort im Chat',
@@ -56,6 +56,25 @@ export const commands: LocaleNamespace<'commands'> = {
     vip: 'VIPs und höher',
     moderator: 'Moderatoren und du',
     broadcaster: 'Nur du',
+  },
+  sendFailures: {
+    heading: 'Bot-Nachrichten, die nicht angekommen sind',
+    item: 'Letzte Nachricht im {platform}-Chat, {time}:',
+    dropped: '{platform} hat sie abgelehnt.',
+    platformSays: '{platform} sagt: „{detail}“',
+    reauthBot:
+      'Der All-Chat-Bot hat dort seine Berechtigung verloren. Sag uns auf Discord Bescheid, damit wir ihn neu verbinden, oder stell unter Bot und Absender deinen eigenen Account als Absender ein.',
+    reauthCustom:
+      'Dein Bot-Account hat seine Berechtigung verloren. Verbinde ihn unter Bot und Absender neu.',
+    reauthSelf: 'Dein Account hat seine Berechtigung verloren. Melde dich ab und wieder an.',
+    missingScope: 'Es fehlt eine Berechtigung. Erteile sie oben.',
+    notConnected: 'Es ist kein Account verbunden, der dort posten kann.',
+    offline: 'Dein Stream war nicht live.',
+    quota: 'Das YouTube-Kontingent für heute ist aufgebraucht.',
+    failed: 'Sie konnte nicht gesendet werden. Versuch es später noch einmal.',
+    modHint:
+      'Mach den Bot in deinem Kanal zum Moderator oder VIP: Chat-Beschränkungen wie der Followers-only-Modus, Slow-Mode oder eine Pflicht zur verifizierten Telefonnummer gelten für sie nicht.',
+    clears: 'Das verschwindet, sobald eine Nachricht durchkommt.',
   },
   status: {
     heading: 'Wo Befehle antworten können',
@@ -90,11 +109,18 @@ export const commands: LocaleNamespace<'commands'> = {
       'Ein Wort oder eine Phrase, zum Beispiel clip das. Wird überall in einer Nachricht erkannt.',
     responseLabel: 'Antwort',
     responseHint:
-      'Leer lassen, um nur zu clippen oder ein Bild zu zeigen. Klicke auf eine Variable, um sie einzufügen.',
+      'Leer lassen, um nur zu clippen oder einen Alert zu zeigen. Klicke auf eine Variable, um sie einzufügen.',
     insertVariable: '{token} einfügen',
+    alertHeading: 'Alert im Stream',
+    alertHint:
+      'Erscheint auf deinen Alert-Overlays, sobald der Befehl auslöst, egal aus welchem Chat. Füll aus, was du brauchst. Der Stil „Chat-Befehl“ im Alerts-Editor legt Dauer, Lautstärke und den Text fest, wenn du deinen leer lässt.',
     imageLabel: 'Bild im Stream',
     imageHint:
-      'Ein https-Link zu einem Bild oder GIF. Es erscheint auf deinen Alert-Overlays, sobald der Befehl auslöst, egal aus welchem Chat. Vorlagen funktionieren hier, aber was Zuschauer tippen, erreicht das Bild nie.',
+      'Ein https-Link zu einem Bild oder GIF. Vorlagen funktionieren hier, aber was Zuschauer tippen, erreicht das Bild nie.',
+    soundLabel: 'Alert-Sound',
+    alertTextLabel: 'Alert-Text',
+    alertTextHint:
+      'Ersetzt im Stream den Standardtext des Alerts. Nutzt dieselben Variablen wie die Antwort.',
     imagePreviewAlt: 'Bildvorschau',
     clipLabel: 'Twitch-Clip erstellen',
     clipHint:

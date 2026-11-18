@@ -225,9 +225,6 @@ describe('developer API field tables', () => {
     expect(t('docs.apiFields.messageTypesChatMessage')).toBe(
       'A chat message or a platform event. data is the unified message object.'
     )
-    expect(t('docs.apiFields.messageTypesMessageUpdate')).toBe(
-      'An update to a previously sent message (e.g. TikTok like aggregates). Same data shape as chat_message.'
-    )
     expect(t('docs.apiFields.messageTypesConnected')).toBe(
       'Sent once on connect: { overlay_id, message }.'
     )

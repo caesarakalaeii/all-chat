@@ -71,6 +71,9 @@ type sevenTVEmoteData struct {
 	Flags int         `json:"flags"`
 }
 
+// sevenTVEmoteFlagZeroWidth is the EmoteFlags bit 7TV sets on an overlay emote (1 << 8).
+const sevenTVEmoteFlagZeroWidth = 1 << 8
+
 type sevenTVHost struct {
 	URL   string            `json:"url"`
 	Files []sevenTVHostFile `json:"files"`
@@ -589,10 +592,11 @@ func (c *SevenTVClient) parseEmoteSet(emoteSet sevenTVEmoteSet, channel string) 
 			continue
 		}
 		emotes = append(emotes, models.Emote{
-			Code:     e.Name,
-			URL:      url,
-			Provider: "7tv",
-			Channel:  channel,
+			Code:      e.Name,
+			URL:       url,
+			Provider:  "7tv",
+			Channel:   channel,
+			ZeroWidth: e.Data.Flags&sevenTVEmoteFlagZeroWidth != 0,
 		})
 	}
 	return emotes

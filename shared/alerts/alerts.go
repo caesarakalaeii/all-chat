@@ -35,7 +35,7 @@ import (
 // Alert is the envelope on overlay:{overlay_id}:alerts. It mirrors
 // services/alert-processor/models.Alert key for key; the alert-processor keeps
 // its own copy because its event_data is the message-processor's EventInfo.
-// ImageURL is the one extra: only chat command alerts set it.
+// ImageURL, SoundURL and Text are the extras: only chat command alerts set them.
 type Alert struct {
 	AlertID    string     `json:"alert_id"`
 	OverlayID  string     `json:"overlay_id"`
@@ -45,9 +45,12 @@ type Alert struct {
 	User       User       `json:"user"`
 	Message    string     `json:"message"`
 	OccurredAt time.Time  `json:"occurred_at"`
-	// ImageURL replaces the profile's image for this one alert: a chat command's
-	// own image (ADR-0080). engagement-service publishes those directly.
+	// ImageURL, SoundURL and Text replace the profile's image, sound and rendered
+	// text for this one alert: a chat command's own alert (ADR-0080).
+	// engagement-service publishes those directly; Text is already rendered.
 	ImageURL string `json:"image_url,omitempty"`
+	SoundURL string `json:"sound_url,omitempty"`
+	Text     string `json:"text,omitempty"`
 }
 
 // ChatCommandEvent is the event type of a chat command that shows an image
@@ -120,9 +123,10 @@ type eventDef struct {
 }
 
 // eventDefs is every event type a profile can be set for, using the raw
-// event_type names the listeners publish on chat:raw. Event types the
-// alert-processor forwards but that are not listed (like_aggregate,
-// watch_streak, ...) still reach the overlay, just without a profile.
+// event_type names the listeners publish on chat:raw. Every type listed here
+// passes the alert-processor's consumer; the public types it forwards without
+// a profile (like_aggregate, watch_streak, ...) are listed there
+// (profileLessAlertEvents), and any other type never reaches an alert overlay.
 var eventDefs = []eventDef{
 	{"subscription", "twitch", "{username} just subscribed!", Value{1, "months", "Tier 1"}},
 	{"resubscription", "twitch", "{username} resubscribed for {count} months!", Value{12, "months", "Tier 1 - 12 months"}},
@@ -265,12 +269,20 @@ func RenderText(template string, a Alert) string {
 	return strings.NewReplacer(pairs...).Replace(template)
 }
 
-// Resolve renders p for a.
+// Resolve renders p for a. A chat command alert's own image, sound and text win
+// over the profile's.
 func Resolve(p Profile, a Alert) ResolvedProfile {
 	if a.ImageURL != "" {
 		p.ImageURL = a.ImageURL
 	}
-	return ResolvedProfile{Profile: p, Text: RenderText(p.TextTemplate, a)}
+	if a.SoundURL != "" {
+		p.SoundURL = a.SoundURL
+	}
+	text := a.Text
+	if text == "" {
+		text = RenderText(p.TextTemplate, a)
+	}
+	return ResolvedProfile{Profile: p, Text: text}
 }
 
 // TestAlert builds a synthetic alert for the dashboard's test button: the

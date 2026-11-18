@@ -76,9 +76,15 @@ create an `automod.message.hold` subscription and offers no read-only alternativ
 See ADR-0054 for why it is requested now rather than in a second consent round when
 Approve/Deny lands.
 
-The banner has no "already granted" state: `GET /capabilities` carries no flag for
-this grant, so the CTA stays visible rather than pretending to know. Re-consenting is
-harmless.
+The same opt-in also sits in the **Details** panel, under **Configured Events →
+Twitch opt-ins**, for the owner of an overlay with a Twitch source: a check mark once
+`mod_log_granted` is true, an **Enable** button that starts the same consent
+otherwise. The banner disappears after the grant; that row is what still shows the
+feed is on.
+
+The banner hides once `mod_log_granted` on `GET /overlays/:id/capabilities` is true
+(`shouldOfferModLogOptIn`). That flag is false whenever the lookup is unsure, so the
+opt-in stays reachable; re-consenting is harmless.
 
 ## End-to-end trace
 

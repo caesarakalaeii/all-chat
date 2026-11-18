@@ -40,6 +40,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -236,7 +237,7 @@ func ginLogger(log *zap.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
+		query := sharedmw.RedactQuery(c.Request.URL.RawQuery)
 
 		c.Next()
 
@@ -305,7 +306,7 @@ func rateLimitMiddleware(rl *rateLimiter, log *zap.Logger) gin.HandlerFunc {
 			return
 		}
 
-		key := rateLimitKey(c)
+		key, logKey := rateLimitKey(c)
 		allowed, retryAfter, err := rl.allow(c.Request.Context(), key)
 		if err != nil {
 			log.Error("Rate limiter error, allowing request", zap.Error(err))
@@ -318,7 +319,7 @@ func rateLimitMiddleware(rl *rateLimiter, log *zap.Logger) gin.HandlerFunc {
 				retrySeconds = 1
 			}
 			c.Header("Retry-After", strconv.Itoa(retrySeconds))
-			log.Warn("Rate limit exceeded", zap.String("key", key), zap.Int("retry_after_seconds", retrySeconds))
+			log.Warn("Rate limit exceeded", zap.String("key", logKey), zap.Int("retry_after_seconds", retrySeconds))
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded", "retry_after": retrySeconds})
 			return
 		}
@@ -327,20 +328,24 @@ func rateLimitMiddleware(rl *rateLimiter, log *zap.Logger) gin.HandlerFunc {
 	}
 }
 
-func rateLimitKey(c *gin.Context) string {
+// rateLimitKey returns the Redis bucket key and the form of it that may be
+// logged. The key holds the raw API key or client IP; Redis drops it after the
+// window, but the 429 warning goes to Loki, so the log form keeps neither.
+func rateLimitKey(c *gin.Context) (key, logKey string) {
 	if apiKey := c.GetHeader(apiKeyHeader); apiKey != "" {
-		return "api:" + apiKey
+		return "api:" + apiKey, "api"
 	}
-	return "ip:" + c.ClientIP()
+	ip := c.ClientIP()
+	return "ip:" + ip, "ip:" + sharedmw.AnonymizeIP(ip)
 }
 
 type rateLimiter struct {
 	limit  int
 	window time.Duration
-	client sharedRedis.Client
+	client redis.Cmdable
 }
 
-func newRedisRateLimiter(client sharedRedis.Client, limit int, window time.Duration) *rateLimiter {
+func newRedisRateLimiter(client redis.Cmdable, limit int, window time.Duration) *rateLimiter {
 	return &rateLimiter{
 		limit:  limit,
 		window: window,
@@ -368,27 +373,24 @@ func (rl *rateLimiter) allow(ctx context.Context, key string) (bool, time.Durati
 		return true, 0, nil
 	}
 
+	// The key holds the raw client IP, which the privacy policy keeps only for
+	// one window. INCR and EXPIRE therefore run in one MULTI/EXEC, so the key
+	// can never exist without a TTL. NX keeps the window fixed and gives a key
+	// that somehow has no TTL one on its next hit.
 	redisKey := "rate:" + key
-	count, err := rl.client.Incr(ctx, redisKey).Result()
-	if err != nil {
+	var count *redis.IntCmd
+	var ttl *redis.DurationCmd
+	if _, err := rl.client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		count = pipe.Incr(ctx, redisKey)
+		pipe.ExpireNX(ctx, redisKey, rl.window)
+		ttl = pipe.TTL(ctx, redisKey)
+		return nil
+	}); err != nil {
 		return true, 0, err
 	}
 
-	if count == 1 {
-		if err := rl.client.Expire(ctx, redisKey, rl.window).Err(); err != nil {
-			return true, 0, err
-		}
+	if count.Val() <= int64(rl.limit) {
 		return true, 0, nil
 	}
-
-	if count <= int64(rl.limit) {
-		return true, 0, nil
-	}
-
-	ttl, err := rl.client.TTL(ctx, redisKey).Result()
-	if err != nil || ttl < 0 {
-		ttl = rl.window
-	}
-
-	return false, ttl, nil
+	return false, ttl.Val(), nil
 }

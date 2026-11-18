@@ -925,7 +925,7 @@ Consumer group lag (pending messages).
 
 **Labels**:
 - `stream`
-- `consumer_group`: `message-processors`
+- `consumer_group`: `message-processor`
 
 ---
 

@@ -17,6 +17,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -46,7 +47,8 @@ type BanRequest struct {
 	Reason string `json:"reason"`
 }
 
-// HandleListViewers lists viewer sessions with pagination, search and filters.
+// HandleListViewers lists viewer accounts (sessions and session-less identities,
+// see repository.AdminViewer) with pagination, search and filters.
 // Query params: limit/offset (pagination), q (case-insensitive search over
 // username/display_name/platform_user_id), is_banned and is_premium (bool,
 // applied only when present), platform (exact match).
@@ -71,21 +73,15 @@ func (h *AdminViewerHandler) HandleListViewers(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	sessions, total, err := h.viewerRepo.ListAll(ctx, filter, limit, offset)
+	viewers, total, err := h.viewerRepo.ListAll(ctx, filter, limit, offset)
 	if err != nil {
 		h.log.Error("Failed to list viewers", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list viewers"})
 		return
 	}
 
-	// Don't expose tokens in response
-	for i := range sessions {
-		sessions[i].AccessToken = ""
-		sessions[i].RefreshToken = nil
-	}
-
 	c.JSON(http.StatusOK, gin.H{
-		"viewers": sessions,
+		"viewers": viewers,
 		"total":   total,
 		"limit":   limit,
 		"offset":  offset,
@@ -170,12 +166,13 @@ type SetPremiumRequest struct {
 // at ~10 years, mirroring the streamer side (share-service).
 const maxViewerPremiumGrantSeconds int64 = 10 * 365 * 24 * 60 * 60
 
-// HandleSetViewerPremium grants or revokes premium status for a viewer
+// HandleSetViewerPremium grants or revokes premium status for a durable viewer,
+// keyed by viewer_id so a viewer without a session can be granted too (ADR-0034).
 func (h *AdminViewerHandler) HandleSetViewerPremium(c *gin.Context) {
-	sessionIDStr := c.Param("session_id")
-	sessionID, err := uuid.Parse(sessionIDStr)
+	viewerIDStr := c.Param("viewer_id")
+	viewerID, err := uuid.Parse(viewerIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session ID"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid viewer ID"})
 		return
 	}
 
@@ -200,8 +197,12 @@ func (h *AdminViewerHandler) HandleSetViewerPremium(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if err := h.viewerRepo.SetViewerPremium(ctx, sessionID, req.IsPremium, ttl); err != nil {
-		h.log.Error("Failed to set viewer premium", zap.Error(err), zap.String("session_id", sessionIDStr))
+	if err := h.viewerRepo.SetViewerPremium(ctx, viewerID, req.IsPremium, ttl); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "viewer not found"})
+			return
+		}
+		h.log.Error("Failed to set viewer premium", zap.Error(err), zap.String("viewer_id", viewerIDStr))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update viewer premium status"})
 		return
 	}
@@ -211,13 +212,13 @@ func (h *AdminViewerHandler) HandleSetViewerPremium(c *gin.Context) {
 		action = "revoked"
 	}
 	h.log.Info("Viewer premium status updated",
-		zap.String("session_id", sessionIDStr),
+		zap.String("viewer_id", viewerIDStr),
 		zap.Bool("is_premium", req.IsPremium),
 		zap.Bool("time_limited", ttl != nil),
 	)
 	resp := gin.H{
 		"message":    "Viewer premium " + action + " successfully",
-		"session_id": sessionIDStr,
+		"viewer_id":  viewerIDStr,
 		"is_premium": req.IsPremium,
 	}
 	if ttl != nil && req.IsPremium {

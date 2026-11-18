@@ -16,8 +16,8 @@ All-Chat is a **cloud-native microservices platform** for aggregating and displa
 - ✅ Twitch (EventSub primary; IRC listener deprecated per ADR-0026) | ✅ YouTube (HTTP polling with quota tracking + InnerTube polling) | ✅ Kick (Centrifugo or Pusher, whichever Kick picks; ADR-0077) | ✅ TikTok (Unofficial library) | ✅ Discord (channel relay)
 - 🚧 Beta only: Owncast (ADR-0058, instance URL as channel) | GoodGame (chat websocket, channel key) | Picarto (ADR-0059, unofficial pop-out websocket) | Facebook (ADR-0060, Graph API polling + moderation write path) | Instagram (ADR-0062, Graph API live_comments polling, read-only). The listeners are deployed and the backend is shared, but the frontend offers these platforms only on `beta.allch.at` (`frontend/src/lib/platform-availability.ts`); allch.at hides them. Adding a source is still limited by the ADR-0008 `platform_*` gate (seeded `is_premium=TRUE`, migrations 091-094 and 096; beta testers are granted premium). The gate also honours `early_access` (ADR-0020, beta testers and ambassadors only): keep `platform_facebook` and `platform_instagram` on early access until Meta App Review passes, since until then only Meta app testers can connect. Release to production by removing the platform from `platform-availability.ts`, then flip its gate via the feature-gate admin endpoint to open it beyond premium.
 - 🚧 Early access: Altstream (ADR-0082, official public SSE chat API, read-only). Offered on every host, but on allch.at only to early-access users (beta testers and ambassadors), via `EARLY_ACCESS_PLATFORMS` in `platform-availability.ts`; adding a source is limited by the `platform_altstream` gate, seeded `early_access=TRUE`, `is_premium=FALSE` (migration 117). The listener runs from `:main`. Release by removing `altstream` from `EARLY_ACCESS_PLATFORMS`, then turning `early_access` off on the gate in `/admin/features`.
-- ✅ Alerts overlays (ADR-0070, ADR-0075) are offered on every host; creating one is limited by the `alerts_overlay` premium gate.
-- 🚧 Beta only (feature): the chat commands editor `/commands` (ADR-0079). `BETA_ONLY_FEATURES` in `platform-availability.ts` hides its nav link, onboarding extras entry and `/upgrade` row outside `beta.allch.at`; the page itself works on any host, and the alerts editor offers the `chat_command` event type (command images, ADR-0080) only where the feature is. Its backend (message-processor, engagement-service, auth-service, overlay-manager, and the api-gateway for images) runs from `:main`. Release by removing `chatCommands` and `customChatBot` from `BETA_ONLY_FEATURES`, then turning `early_access` off on the `chat_commands` and `custom_chat_bot` gates.
+- ✅ Alerts overlays (ADR-0070, ADR-0075) and the alerts editor (ADR-0071), including custom HTML/CSS/JS and KLIPY GIF search, are free for everyone on every host: the `alerts_overlay` and `alerts_editor` gates were opened on 2026-11-15. Uploading your own images, GIFs and sounds stays premium through the `media_upload` gate (migration 128) on media-service's presign.
+- ✅ Chat commands `/commands` (ADR-0079, ADR-0080, ADR-0081) are free for everyone on every host: the `chat_commands` gate was opened on 2026-11-15. Replies and timers in YouTube chat stay premium (checked per send on the owner's premium), and connecting your own bot account is limited by the `custom_chat_bot` premium gate (early access off).
 - 🚧 Beta only (overlay kinds): Goal and List overlays (ADR-0072). The same `platform-availability.ts` list hides them outside `beta.allch.at`: the create-overlay kind picker, the onboarding "Optional: go further" entries and the `/upgrade` rows. Existing overlays of these kinds still render in OBS (`/overlay/[id]`) and open in the editor on any host, and creating one is still limited by the `goal_overlay` / `list_overlay` premium gates. Release to production by removing the kind from `BETA_ONLY_OVERLAY_KINDS` in `platform-availability.ts`.
 
 ---
@@ -104,7 +104,7 @@ cd frontend && npm run dev  # Start frontend
 
 Each service has a detailed README:
 - [api-gateway](./services/api-gateway/README.md) - WebSocket server, HTTP routing
-- [auth-service](./services/auth-service/README.md) - OAuth flows, JWT tokens
+- [auth-service](./services/auth-service/README.md) - OAuth flows, JWT tokens; also ships `retention-sweeper`, the 15-minute CronJob that enforces the privacy-policy retention periods (ADR-0089)
 - [emote-service](./services/emote-service/README.md) - 7TV, BTTV, FFZ emote APIs
 - [twitch-listener](./services/twitch-listener/README.md) - IRC client, channel management
 - [twitch-eventsub-listener](./services/twitch-eventsub-listener/README.md) - EventSub webhooks (channel points, moderation)
@@ -115,7 +115,7 @@ Each service has a detailed README:
 - [tiktok-listener](./services/tiktok-listener/README.md) - Unofficial TikTok Live library
 - [tiktok-signer](./services/tiktok-signer/README.md) - Self-hosted TikTok webcast signing (X-Bogus/X-Gnarly via TikTok's own SDK in a headless browser; replaces Euler Stream, ADR-0052)
 - [tiktok-relay](./services/tiktok-relay/README.md) - US-region relay for TikTok's live lookup by handle (Cloud Run, not in the cluster); used by tiktok-listener for accounts that only resolve from the US
-- discord-listener — Discord channel chat relay (`services/discord-listener/`, no README yet)
+- discord-listener — Discord channel chat relay; relay webhook URLs are credentials, encrypted with `TOKEN_ENCRYPTION_KEY_V<n>` and never returned by the API (ADR-0091) (`services/discord-listener/`, no README yet)
 - [owncast-listener](./services/owncast-listener/README.md) - Self-hosted Owncast instances; one websocket per instance URL (ADR-0058)
 - [goodgame-listener](./services/goodgame-listener/README.md) - GoodGame.ru chat websocket; resolves channel key to numeric chat id
 - [picarto-listener](./services/picarto-listener/README.md) - Picarto pop-out chat websocket, defensively parsed (ADR-0059)
@@ -123,7 +123,8 @@ Each service has a detailed README:
 - [facebook-listener](./services/facebook-listener/README.md) - Facebook Live comments via Graph API polling + moderation (ADR-0060)
 - [instagram-listener](./services/instagram-listener/README.md) - Instagram Live comments via Graph API `live_comments` polling, read-only (ADR-0062)
 - [message-processor](./services/message-processor/README.md) - Normalization, emote enrichment
-- [alert-processor](./services/alert-processor/README.md) - Second `chat:raw` consumer (group `alert-processors`): routes event-typed messages to alerts/goal/list overlays on `overlay:{id}:alerts`, persists `alert_events`, scores list leaderboards and pushes debounced `list_update` frames, counts bits/Super Chat goals and polls follower/subscriber goals of connected goal overlays (ADR-0068, ADR-0072)
+- [alert-processor](./services/alert-processor/README.md) - Second `chat:raw` consumer (group `alert-processors`): routes alert event types (an allowlist, so the owner-only `mod_action` log and system warnings never pass) to alerts/goal/list overlays on `overlay:{id}:alerts`, persists `alert_events`, scores list leaderboards and pushes debounced `list_update` frames, counts bits/Super Chat goals and polls follower/subscriber goals of connected goal overlays (ADR-0068, ADR-0072)
+- [media-service](./services/media-service/README.md) - Alert-media uploads (presigned PUT straight to MinIO, `media_objects` registry; presigning needs premium via the `media_upload` gate); sweeps the public bucket for files whose registry row is gone, e.g. with a deleted account (ADR-0088)
 - [overlay-manager](./services/overlay-manager/README.md) - Overlay CRUD, source configuration
 - [source-manager](./services/source-manager/README.md) - Leader election, active source registry
 - share-service — Shareable overlay links; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041); localization contributor tool `/translate` + admin review/export (ADR-0063); UI language gate probe `GET /api/v1/ui-languages` (ADR-0066) (`services/share-service/`, no README yet)
@@ -132,7 +133,7 @@ Each service has a detailed README:
 - [token-refresh-service](./services/token-refresh-service/README.md) - OAuth token refresh
 - [discord-bot](./services/discord-bot/README.md) - TypeScript Discord bot (community ops, not a listener)
 - [engagement-service](./services/engagement-service/README.md) - Cross-platform polls, predictions, and per-overlay viewer points economy (#523); streamer chat commands and keyword triggers with templated/JS replies, `{urlfetch}`, Twitch clips and images on alerts overlays (ADR-0079, ADR-0080)
-- [support-bot](./services/support-bot/README.md) - Discord support/admin agent over a locally hosted OpenAI-compatible LLM (Go, replaces the old claude-CLI TypeScript bot)
+- [support-bot](./services/support-bot/README.md) - Discord support/admin agent on Claude: the Claude Code CLI on a subscription token in prod (bot tools served to it over localhost MCP), else an Anthropic API key, else an OpenAI-compatible gateway; files confirmed bugs as `agent` issues for Caterpillar to fix (ADR-0093)
 
 ### Development Guides
 
@@ -156,13 +157,25 @@ Keep documentation from rotting. The repo root repeatedly accumulated stale, poi
 - The same reasoning applies one directory down, which is where this rule was learned the hard way. Written as a rule about the repo root, it moved the problem rather than solving it: the identical documents reappeared in `docs/` and reached roughly 9,000 lines. They lasted because they cross-link almost only to each other, so the cluster looks referenced from the inside while nothing living points at it. (On 2026-09-02 that cluster was deleted: 18 files — metrics and events write-ups, a documentation-refactoring report, a quota checkpoint, an OAuth checklist, two service-level implementation summaries, and five stale `.txt` files that were either raw YouTube API dumps or offline copies of Google's own docs pages. Their names are deliberately not listed here, because a rule that recites the banned filenames is itself a file that matches them; recover them from git history if you need them. No index of them was left behind, on purpose.)
 - **The default answer is the PR description, not a committed file.** Write the point-in-time account in the pull request or the commit body, where it is dated, attributed and never has to be maintained. `docs/phase-reports/` is the one exception, for a lasting record that genuinely needs to outlive the PR — and it is an exception to argue for, not a default to reach for. If it will not be maintained, it does not go in the tree.
 - Three questions decide what to do with an existing doc. Does it describe a single past change? Delete it. Does it state facts about how the system works today? Fix those facts in place. Does it record a decision and why it was taken? Leave it alone — and if it is stale but still the only record of a rationale, give it a dated deprecation banner as its first line instead of deleting it.
-- `docs/adr/` is exempt and off-limits. ADRs are the historical record by design; a superseded one has its `Status:` updated at most. Never delete one, never banner one.
+- `docs/adr/` describes the current state. An ADR records a decision *and* how the system implements it today: when code changes what an ADR says, fix the ADR body in the same change, fold amendments from later ADRs into it (with a cross-link), and add or bump a `**Revised**: YYYY-MM-DD` line under `**Status**`. A replaced ADR gets `Superseded by ADR-XXXX` and a body that points at its successor; a removed feature gets `Withdrawn`. Never delete an ADR or renumber one.
 
 **Update docs in the same change as the code.** When you change behavior, update the living docs it affects in the same PR: `README.md`, `CLAUDE.md`, `docs/GETTING_STARTED.md`, the relevant `services/*/README.md`, and the ADR index. A doc that contradicts the code is worse than no doc.
 
 **Do not hardcode volatile counts.** Prefer "see `services/`" over "17 services" and "see `docs/adr/`" over "12 ADRs": exact counts drift every time something is added. Where a count is unavoidable, treat it as something to re-verify, not to trust.
 
 **When a doc goes stale, anywhere in the tree:** fix the facts in place if it is a living reference; `git rm` it (recoverable via history) if it is a completed point-in-time artifact. Deleting is the normal outcome and needs no ceremony — no deprecation banner, no tombstone file, no note in an index. When you delete one, fix every inbound link in the same change: use `git grep`, and leave no "see X" pointing at a file that is gone.
+
+---
+
+## Commits and Pull Requests
+
+**Commits and PRs describe the change, never the tool that produced it.** We do not advertise any third-party tool: no editor, assistant, model, bot or service gets credit or a plug in commit messages, squash-merge messages, PR titles or PR bodies. That rules out a `Co-authored-by:` trailer naming such a tool, a "Generated with ..." footer, a robot emoji, and a link to a tool's website. Many tools add these by default; turn that default off rather than deleting the line by hand each time. People are credited as usual.
+
+**Caterpillar is exempt.** It is our own agent: `caterpillar-agent[bot]` authors, co-authors and opens PRs under its own name, and that stays. Its commits must still not credit a third-party tool. Bots that author their own PRs, such as dependabot, keep their name as author or co-author too; that is authorship, not advertising.
+
+GitHub copies every `Co-authored-by:` trailer from a PR's branch commits into the squash commit, so one tainted branch commit taints `main`. Keep the branch commits clean, and read the squash message before merging. Removing a trailer from `main` afterwards means rewriting published history and force-pushing; that has already had to happen more than once.
+
+The `no tool attribution` check (`.github/workflows/no-tool-attribution.yml`) fails a PR whose commit messages, title or body carry such a line. It matches a list of known tools, not every tool there is. It cannot see text typed into the squash dialog at merge time, and admins pushing straight to `main` bypass it.
 
 ---
 
@@ -223,6 +236,7 @@ services/<service-name>/
 - Dependency injection for testability
 - Graceful shutdown (25s timeout)
 - Health checks: `/health/live` (always 200), `/health/ready` (checks DB + Redis)
+- Runtime image: `gcr.io/distroless/static-debian13`, so no shell in the pod: debug with `kubectl port-forward` or `kubectl debug --target`, never `kubectl exec -- sh` (ADR-0092)
 
 ---
 
@@ -232,7 +246,7 @@ services/<service-name>/
 Listeners (Twitch/YouTube/Kick/TikTok/Discord/Owncast/GoodGame/Picarto/Altstream/Facebook/Instagram)
   ↓ publish raw messages
 Redis Streams (chat:raw)
-  ↓ consume via XREADGROUP (group: message-processors)
+  ↓ consume via XREADGROUP (group: message-processor)
 Message Processor
   ├─ Normalize (platform → unified format)
   ├─ Enrich (7TV, BTTV, FFZ emotes)

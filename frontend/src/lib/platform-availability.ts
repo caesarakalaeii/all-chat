@@ -15,11 +15,7 @@ import type { OverlayType } from '@/lib/types/overlay'
  * (`platform_*`, `alerts_overlay`, `goal_overlay`, `list_overlay`) still decide
  * server-side who may add a source or create an overlay.
  *
- * App features work the same way: a beta-only feature (chat commands, ADR-0079)
- * loses its nav link, onboarding extras entry and /upgrade row outside beta,
- * while its page still works for anyone who opens the URL.
- *
- * Release a platform, an overlay kind or a feature to production by removing it here.
+ * Release a platform or an overlay kind to production by removing it here.
  */
 const BETA_ONLY_PLATFORMS: Partial<Record<string, true>> = {
   owncast: true,
@@ -45,14 +41,6 @@ const BETA_ONLY_OVERLAY_KINDS: Partial<Record<OverlayType, true>> = {
   list: true,
 }
 
-/** App features (not platforms or overlay kinds) offered only on the beta host. */
-export type BetaFeature = 'chatCommands' | 'customChatBot'
-
-const BETA_ONLY_FEATURES: Partial<Record<BetaFeature, true>> = {
-  chatCommands: true,
-  customChatBot: true,
-}
-
 const BETA_HOST = 'beta.allch.at'
 
 const noopSubscribe = () => () => {}
@@ -70,11 +58,16 @@ function useOnBetaHost(): boolean {
   )
 }
 
+/** Whether the signed-in user has early access (beta tester or ambassador, ADR-0020). */
+function useEarlyAccess(): boolean {
+  const user = useAuthStore((s) => s.user)
+  return !!(user?.is_beta_tester || user?.is_ambassador)
+}
+
 /** Returns a predicate telling whether a platform may be offered on this host. */
 export function usePlatformAvailable(): (platform: string) => boolean {
   const onBeta = useOnBetaHost()
-  const user = useAuthStore((s) => s.user)
-  const earlyAccess = !!(user?.is_beta_tester || user?.is_ambassador)
+  const earlyAccess = useEarlyAccess()
   return (platform) =>
     onBeta ||
     (BETA_ONLY_PLATFORMS[platform] !== true &&
@@ -85,10 +78,4 @@ export function usePlatformAvailable(): (platform: string) => boolean {
 export function useOverlayKindAvailable(): (kind: OverlayType) => boolean {
   const onBeta = useOnBetaHost()
   return (kind) => onBeta || BETA_ONLY_OVERLAY_KINDS[kind] !== true
-}
-
-/** Returns a predicate telling whether an app feature may be offered on this host. */
-export function useFeatureAvailable(): (feature: BetaFeature) => boolean {
-  const onBeta = useOnBetaHost()
-  return (feature) => onBeta || BETA_ONLY_FEATURES[feature] !== true
 }

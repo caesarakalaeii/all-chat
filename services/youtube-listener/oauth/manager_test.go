@@ -32,7 +32,7 @@ type MockTokenStore struct {
 	mock.Mock
 }
 
-func (m *MockTokenStore) SaveToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error {
+func (m *MockTokenStore) UpdateToken(ctx context.Context, userID, channelID string, token *oauth2.Token) error {
 	args := m.Called(ctx, userID, channelID, token)
 	return args.Error(0)
 }
@@ -43,11 +43,6 @@ func (m *MockTokenStore) GetToken(ctx context.Context, userID, channelID string)
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*oauth2.Token), args.Error(1)
-}
-
-func (m *MockTokenStore) DeleteToken(ctx context.Context, userID, channelID string) error {
-	args := m.Called(ctx, userID, channelID)
-	return args.Error(0)
 }
 
 func TestNewManager(t *testing.T) {
@@ -114,7 +109,7 @@ func TestGetToken_ExpiredToken_ShouldRefresh(t *testing.T) {
 	}
 
 	store.On("GetToken", mock.Anything, "user-123", "channel-456").Return(expiredToken, nil)
-	store.On("SaveToken", mock.Anything, "user-123", "channel-456", mock.AnythingOfType("*oauth2.Token")).Return(nil)
+	store.On("UpdateToken", mock.Anything, "user-123", "channel-456", mock.AnythingOfType("*oauth2.Token")).Return(nil)
 
 	// Note: In real test, we'd need to mock the OAuth2 token source
 	// For now, this test documents the expected behavior
@@ -125,26 +120,5 @@ func TestGetToken_ExpiredToken_ShouldRefresh(t *testing.T) {
 	refreshedToken, err := manager.GetToken(context.Background(), "user-123", "channel-456")
 	assert.NoError(t, err)
 	assert.NotNil(t, refreshedToken)
-	store.AssertExpectations(t)
-}
-
-func TestSaveToken(t *testing.T) {
-	logger := zap.NewNop()
-	store := &MockTokenStore{}
-
-	token := &oauth2.Token{
-		AccessToken:  "access-token",
-		RefreshToken: "refresh-token",
-		TokenType:    "Bearer",
-		Expiry:       time.Now().Add(1 * time.Hour),
-	}
-
-	store.On("SaveToken", mock.Anything, "user-123", "channel-456", token).Return(nil)
-
-	manager := NewManager("client-id", "client-secret", "http://localhost/callback", false, store, logger)
-
-	err := manager.SaveToken(context.Background(), "user-123", "channel-456", token)
-
-	assert.NoError(t, err)
 	store.AssertExpectations(t)
 }

@@ -51,11 +51,12 @@ const (
 // Messages is the transcript at the point the loop returned, so a caller that parks
 // a busy run can resume it instead of starting over.
 type Result struct {
-	Text       string
-	Effects    []tool.ToolEffect
-	Stop       StopReason
-	Iterations int
-	Messages   []llm.Message
+	Text        string
+	Effects     []tool.ToolEffect
+	Attachments []tool.Attachment // files to send with the answer (send_image)
+	Stop        StopReason
+	Iterations  int
+	Messages    []llm.Message
 }
 
 // Config tunes the loop.
@@ -113,15 +114,16 @@ func Run(ctx context.Context, cfg Config, client llm.ChatClient, reg *tool.Regis
 	det := newLoopDetector(cfg.LoopWindow, cfg.RepeatThreshold)
 
 	var (
-		lastText  string
-		effects   []tool.ToolEffect
-		noText    int
-		busyWaits int
+		lastText    string
+		effects     []tool.ToolEffect
+		attachments []tool.Attachment
+		noText      int
+		busyWaits   int
 	)
 
 	for iter := 0; iter < cfg.MaxIterations; iter++ {
 		if err := ctx.Err(); err != nil {
-			return Result{Text: lastText, Effects: effects, Stop: StopCancelled, Iterations: iter, Messages: messages}, err
+			return Result{Text: lastText, Effects: effects, Attachments: attachments, Stop: StopCancelled, Iterations: iter, Messages: messages}, err
 		}
 
 		req := llm.ChatRequest{Model: cfg.Model, Messages: messages, MaxTokens: cfg.MaxTokens}
@@ -146,15 +148,15 @@ func Run(ctx context.Context, cfg Config, client llm.ChatClient, reg *tool.Regis
 						zap.Int("wait", busyWaits), zap.Int("max_waits", cfg.BusyMaxWaits))
 				}
 				if serr := sleepCtx(ctx, cfg.BusyRetryDelay); serr != nil {
-					return Result{Text: lastText, Effects: effects, Stop: StopCancelled, Iterations: iter, Messages: messages}, serr
+					return Result{Text: lastText, Effects: effects, Attachments: attachments, Stop: StopCancelled, Iterations: iter, Messages: messages}, serr
 				}
 				iter-- // this iteration produced nothing; do not burn the budget
 				continue
 			}
-			return Result{Text: lastText, Effects: effects, Stop: StopError, Iterations: iter, Messages: messages}, err
+			return Result{Text: lastText, Effects: effects, Attachments: attachments, Stop: StopError, Iterations: iter, Messages: messages}, err
 		}
 		if len(resp.Choices) == 0 {
-			return Result{Text: lastText, Effects: effects, Stop: StopError, Iterations: iter, Messages: messages},
+			return Result{Text: lastText, Effects: effects, Attachments: attachments, Stop: StopError, Iterations: iter, Messages: messages},
 				fmt.Errorf("llm returned no choices")
 		}
 		busyWaits = 0 // capacity returned; reset the budget for the next pause
@@ -172,10 +174,10 @@ func Run(ctx context.Context, cfg Config, client llm.ChatClient, reg *tool.Regis
 		if len(msg.ToolCalls) == 0 {
 			if strings.TrimSpace(text) == "" &&
 				(choice.FinishReason == llm.FinishLength || choice.FinishReason == llm.FinishMaxTokens) {
-				return Result{Text: lastText, Effects: effects, Stop: StopError, Iterations: iter + 1, Messages: messages},
+				return Result{Text: lastText, Effects: effects, Attachments: attachments, Stop: StopError, Iterations: iter + 1, Messages: messages},
 					fmt.Errorf("llm response truncated (max_tokens) with no content")
 			}
-			return Result{Text: lastText, Effects: effects, Stop: StopEndTurn, Iterations: iter + 1, Messages: messages}, nil
+			return Result{Text: lastText, Effects: effects, Attachments: attachments, Stop: StopEndTurn, Iterations: iter + 1, Messages: messages}, nil
 		}
 
 		// Track no-progress (tool calls but no assistant text).
@@ -211,6 +213,9 @@ func Run(ctx context.Context, cfg Config, client llm.ChatClient, reg *tool.Regis
 			if dr.Effect != nil {
 				effects = append(effects, *dr.Effect)
 			}
+			if dr.Attachment != nil {
+				attachments = append(attachments, *dr.Attachment)
+			}
 		}
 
 		messages = truncateInLoop(messages, cfg.MaxInLoopMessages)
@@ -220,14 +225,14 @@ func Run(ctx context.Context, cfg Config, client llm.ChatClient, reg *tool.Regis
 				cfg.Log.Warn("agent loop aborting: no textual progress",
 					zap.Int("iterations", iter+1), zap.Int("no_text_iters", noText))
 			}
-			return Result{Text: lastText, Effects: effects, Stop: StopNoProgress, Iterations: iter + 1, Messages: messages}, nil
+			return Result{Text: lastText, Effects: effects, Attachments: attachments, Stop: StopNoProgress, Iterations: iter + 1, Messages: messages}, nil
 		}
 	}
 
 	if cfg.Log != nil {
 		cfg.Log.Warn("agent loop hit max iterations", zap.Int("max", cfg.MaxIterations))
 	}
-	return Result{Text: lastText, Effects: effects, Stop: StopMaxIterations, Iterations: cfg.MaxIterations, Messages: messages}, nil
+	return Result{Text: lastText, Effects: effects, Attachments: attachments, Stop: StopMaxIterations, Iterations: cfg.MaxIterations, Messages: messages}, nil
 }
 
 // sleepCtx waits for d or until ctx is cancelled.

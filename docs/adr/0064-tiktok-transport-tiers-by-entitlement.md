@@ -6,6 +6,7 @@ platform-expansion records. Content otherwise unchanged.)**
 
 **Date**: 2026-09-17
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -14,7 +15,7 @@ TikTok chat ingest has one primary transport: the listener's own Node
 WebSocket, signed by the self-hosted signer (ADR-0052) and pinned to the
 capture's proxy lane. Lab validation on 2026-09-16 showed it holds sustained
 streams, but its connect handshake is exposed to TikTok session scoring —
-the "Unexpected server response: 200" flap (transport plan, phase 1). Fast
+the "Unexpected server response: 200" flap. Fast
 retries clear most flaps; the ones that do not clear currently park the room
 in escalating error backoff with **no delivery at all** for the duration.
 
@@ -50,9 +51,10 @@ primary-tier health"). While the fallback is delivering, the primary is not
 connected, so its health is unobservable — the sketched condition can never be
 evaluated honestly. A fallback stint ends instead on: the room's stream ends
 (relay `ws_closed`), the tab dies (`tap_error`), the signer refuses the room
-(404 — redeployed without the gate), or a max-duration ceiling
-(`TIKTOK_FALLBACK_MAX_DURATION_MS`, default 6h). In every case the room
-returns to the poller and retries the primary WS with a fresh flap budget.
+(`rejected` — the signer answered 404, e.g. redeployed without the gate), or a
+max-duration ceiling (`TIKTOK_FALLBACK_MAX_DURATION_MS`, default 6h). In every
+case the room returns to the poller and retries the primary WS with a fresh
+flap budget.
 
 ## Enforcement
 
@@ -66,9 +68,9 @@ Two independent switches, both off by default:
 Either alone changes nothing observable.
 
 Metrics: `tiktok_fallback_promotions_total{username,outcome}` (promoted /
-not_premium / relay_unavailable) and `tiktok_fallback_deliveries_total
-{username,outcome}` (delivered / no_messages / decode_failure /
-replay_error).
+not_premium / check_failed / relay_unavailable) and
+`tiktok_fallback_deliveries_total{username,outcome}` (delivered / no_messages /
+decode_failure / replay_error).
 
 ## Consequences
 

@@ -44,7 +44,7 @@ func (r *CreditRollRepository) GetByOverlayID(ctx context.Context, overlayID str
 		       include_memberships, include_follows,
 		       include_treasure_chests, include_shares, include_likes,
 		       leaderboard_top_n, leaderboard_sort_by,
-		       scroll_speed, display_duration_seconds, background_opacity, theme,
+		       scroll_speed, display_duration_seconds, restart_delay_seconds, background_opacity, theme,
 		       clips_enabled, clips_max_count, clips_fallback_days, clips_muted,
 		       custom_css, texts, font_scales,
 		       created_at, updated_at
@@ -60,7 +60,7 @@ func (r *CreditRollRepository) GetByOverlayID(ctx context.Context, overlayID str
 		&config.IncludeMemberships, &config.IncludeFollows,
 		&config.IncludeTreasureChests, &config.IncludeShares, &config.IncludeLikes,
 		&config.LeaderboardTopN, &config.LeaderboardSortBy,
-		&config.ScrollSpeed, &config.DisplayDurationSeconds, &config.BackgroundOpacity, &config.Theme,
+		&config.ScrollSpeed, &config.DisplayDurationSeconds, &config.RestartDelaySeconds, &config.BackgroundOpacity, &config.Theme,
 		&config.ClipsEnabled, &config.ClipsMaxCount, &config.ClipsFallbackDays, &config.ClipsMuted,
 		&config.CustomCSS, &config.Texts, &config.FontScales,
 		&config.CreatedAt, &config.UpdatedAt,
@@ -85,9 +85,9 @@ func (r *CreditRollRepository) Update(ctx context.Context, config *models.Credit
 		    leaderboard_top_n = $14, leaderboard_sort_by = $15,
 		    scroll_speed = $16, display_duration_seconds = $17, background_opacity = $18, theme = $19,
 		    clips_enabled = $20, clips_max_count = $21, clips_fallback_days = $22, clips_muted = $23,
-		    custom_css = $24, texts = $25, font_scales = $26,
+		    custom_css = $24, texts = $25, font_scales = $26, restart_delay_seconds = $27,
 		    updated_at = NOW()
-		WHERE id = $27
+		WHERE id = $28
 	`
 
 	_, err := r.db.Exec(ctx, query,
@@ -99,7 +99,7 @@ func (r *CreditRollRepository) Update(ctx context.Context, config *models.Credit
 		config.LeaderboardTopN, config.LeaderboardSortBy,
 		config.ScrollSpeed, config.DisplayDurationSeconds, config.BackgroundOpacity, config.Theme,
 		config.ClipsEnabled, config.ClipsMaxCount, config.ClipsFallbackDays, config.ClipsMuted,
-		config.CustomCSS, config.Texts, config.FontScales,
+		config.CustomCSS, config.Texts, config.FontScales, config.RestartDelaySeconds,
 		config.ID,
 	)
 

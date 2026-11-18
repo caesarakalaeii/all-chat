@@ -28,6 +28,12 @@ func TestOverlayBroadcastFilter(t *testing.T) {
 			want:      wsconn.BroadcastFilter{OwnerOnly: true},
 		},
 		{
+			name:      "an ad_break frame is owner-only (a streamer cue an OBS source must not render)",
+			eventType: "ad_break",
+			msgType:   models.WSMessageTypeChatMessage,
+			want:      wsconn.BroadcastFilter{OwnerOnly: true},
+		},
+		{
 			name:      "an ordinary chat frame reaches every non-engagement socket",
 			eventType: "chat_message",
 			msgType:   models.WSMessageTypeChatMessage,
@@ -62,7 +68,7 @@ func TestOverlayBroadcastFilter(t *testing.T) {
 	}
 }
 
-func TestIsModerationFrame(t *testing.T) {
+func TestIsOwnerOnlyFrame(t *testing.T) {
 	tests := []struct {
 		name      string
 		eventType string
@@ -71,6 +77,11 @@ func TestIsModerationFrame(t *testing.T) {
 		{
 			name:      "mod_action is the moderation frame type the message-processor publishes",
 			eventType: "mod_action",
+			want:      true,
+		},
+		{
+			name:      "ad_break is a streamer cue delivered to the owner only",
+			eventType: "ad_break",
 			want:      true,
 		},
 		{
@@ -92,8 +103,8 @@ func TestIsModerationFrame(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isModerationFrame(tt.eventType); got != tt.want {
-				t.Errorf("isModerationFrame(%q) = %v, want %v", tt.eventType, got, tt.want)
+			if got := isOwnerOnlyFrame(tt.eventType); got != tt.want {
+				t.Errorf("isOwnerOnlyFrame(%q) = %v, want %v", tt.eventType, got, tt.want)
 			}
 		})
 	}
@@ -107,7 +118,7 @@ func TestShouldBufferForReplay(t *testing.T) {
 		msgType       models.WSMessageType
 		overlayID     string
 		liveConnCount int
-		isModFrame    bool
+		isOwnerOnly   bool
 		want          bool
 	}{
 		{
@@ -157,17 +168,17 @@ func TestShouldBufferForReplay(t *testing.T) {
 			msgType:       models.WSMessageTypeChatMessage,
 			overlayID:     "ov",
 			liveConnCount: 0,
-			isModFrame:    true,
+			isOwnerOnly:   true,
 			want:          false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldBufferForReplay(tt.msgType, tt.overlayID, testOverlayID, tt.liveConnCount, tt.isModFrame)
+			got := shouldBufferForReplay(tt.msgType, tt.overlayID, testOverlayID, tt.liveConnCount, tt.isOwnerOnly)
 			if got != tt.want {
 				t.Errorf("shouldBufferForReplay(%q, %q, %q, %d, %v) = %v, want %v",
-					tt.msgType, tt.overlayID, testOverlayID, tt.liveConnCount, tt.isModFrame, got, tt.want)
+					tt.msgType, tt.overlayID, testOverlayID, tt.liveConnCount, tt.isOwnerOnly, got, tt.want)
 			}
 		})
 	}

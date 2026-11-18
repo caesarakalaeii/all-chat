@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"net/url"
 	"os"
 	"strconv"
@@ -43,6 +44,7 @@ const (
 	envPresignTTL  = "MEDIA_PRESIGN_EXPIRY"
 	envMaxObjects  = "MEDIA_MAX_OBJECTS_PER_USER"
 	envRegion      = "MINIO_REGION"
+	envSweepEvery  = "MEDIA_ORPHAN_SWEEP_INTERVAL"
 	defaultBucket  = "allchat-media"
 	defaultBaseURL = "https://media.allch.at"
 )
@@ -59,6 +61,9 @@ type Config struct {
 	// Region is the S3 region presigned URLs are signed for. Setting it keeps
 	// presigning offline (no bucket-location lookup through the public host).
 	Region string
+	// OrphanSweepInterval is how often objects without a registry row are removed
+	// from the bucket (ADR-0088), so a deleted account's files stop being public.
+	OrphanSweepInterval time.Duration
 }
 
 // LoadConfig reads the storage settings from the environment. An empty
@@ -95,6 +100,12 @@ func LoadConfig() (Config, error) {
 		return Config{}, fmt.Errorf("%s: %w", envMaxObjects, err)
 	}
 	cfg.MaxObjectsPerUser = maxObjects
+
+	sweepEvery, err := time.ParseDuration(envDefault(envSweepEvery, "15m"))
+	if err != nil || sweepEvery <= 0 {
+		return Config{}, fmt.Errorf("%s must be a positive duration, got %q", envSweepEvery, os.Getenv(envSweepEvery))
+	}
+	cfg.OrphanSweepInterval = sweepEvery
 
 	return cfg, nil
 }
@@ -173,6 +184,24 @@ func (s *MinioStore) Remove(ctx context.Context, objectKey string) error {
 
 // DisabledStore is the no-MinIO fallback: every media route serves 503
 // through it.
+// Keys lists every object key in the bucket, page by page as the caller consumes them.
+func (s *MinioStore) Keys(ctx context.Context) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		// Cancelling stops the listing goroutine minio-go starts when the caller stops early.
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Recursive: true}) {
+			if obj.Err != nil {
+				yield("", fmt.Errorf("list %s: %w", s.bucket, obj.Err))
+				return
+			}
+			if !yield(obj.Key, nil) {
+				return
+			}
+		}
+	}
+}
+
 type DisabledStore struct{}
 
 func (s DisabledStore) Available() bool { return false }

@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-13
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -23,8 +24,8 @@ fire a notification (which would cause demand-refresh storms / source flapping).
 The contract was silently incomplete for Twitch. The YouTube (InnerTube) and Kick listeners
 heartbeat via source-manager's `ActivateSource` every poll cycle, but:
 
-- The **Twitch IRC listener** used to keep Twitch sources fresh, but it is now in enforce mode
-  (ADR-0015 deprecation cutoff) and joins nothing (`suppressed_sources`, `status_updates: 0`).
+- The **Twitch IRC listener** used to keep Twitch sources fresh, but it is now in
+  enforce mode (ADR-0026) and joins nothing (`suppressed_sources`, `status_updates: 0`).
 - The **Twitch EventSub listener** only ever *read* `overlay_chat_sources`; it never
   heartbeated.
 
@@ -100,6 +101,6 @@ deliberately not a recovery, so the initial connect does not trigger a spurious 
 
 ## Related
 
-- ADR-0007 (leadership rebalancing), ADR-0015 (Twitch IRC → EventSub migration), migration 059
-  (`059_scope_source_change_notify.sql`).
+- ADR-0007 (leadership rebalancing), ADR-0026 (Twitch IRC deprecation, which removed the
+  IRC listener's heartbeat role), migration 059 (`059_scope_source_change_notify.sql`).
 - Confirmed root cause + production timeline: `.planning/debug/` and the incident on 2026-07-13.

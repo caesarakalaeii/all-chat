@@ -281,6 +281,22 @@ export const moderationApi = {
   },
 
   /**
+   * Fetch the Twitch OAuth re-consent URL for the ad-break opt-in: the
+   * `channel:read:ads` scope that lets the monitor receive `channel.ad_break.begin`
+   * events and raise a notice in the activity feed when a break starts.
+   *
+   * Like `modlog`, `ads` is not a delegatable moderation action — it reads the
+   * broadcaster's own channel — so it rides the owner's overlay-scoped consent endpoint
+   * with its own action name rather than joining the ModerationAction union.
+   */
+  async getTwitchAdBreaksConsentUrl(overlayId: string): Promise<string> {
+    const res = await apiClient.get<ConsentUrlResponse>(
+      `/api/v1/auth/twitch/moderation/${overlayId}?actions=ads`
+    )
+    return res.auth_url
+  },
+
+  /**
    * Fetch the Kick OAuth re-consent URL to enable moderation. Kick splits moderation
    * across two scopes — `moderation:ban` for timeout/ban/unban and
    * `moderation:chat_message:manage` for single-message delete — and auth-service asks

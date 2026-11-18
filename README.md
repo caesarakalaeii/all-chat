@@ -82,11 +82,11 @@ The dock shows Chat and Activity as tabs. To see both at once, pick **Both**, wh
 
 **One account, several overlays.** Each overlay has its own mix of chat sources, its own theme, its own OBS URL and its own monitor. For example, one overlay for Twitch and TikTok on a gaming stream and a YouTube-only one for a podcast.
 
-**Alert overlays (Premium).** Create an overlay of kind **Alerts** to get an alert box as its own OBS browser source: subs, bits, raids, follows, Super Chats, memberships and TikTok gifts pop up one at a time with their text, image or GIF and sound, then the source goes empty again. It uses the same chat sources as a chat overlay. In the overlay editor, the **Alerts** section opens on **All events (default style)**: one image or GIF (search KLIPY, paste a URL or upload), sound, duration and volume for every alert. Pick an event type to give it its own text (with `{username}`, `{amount}`, `{count}` and `{message}` placeholders) or its own media; fields it leaves empty use the default style. **Send test alert** plays the event you are editing in the editor preview and in OBS, and saves unsaved changes first. Premium can also write custom HTML, CSS and JavaScript per alert; it runs in an isolated sandbox on the overlay.
+**Alert overlays.** Free for everyone. Create an overlay of kind **Alerts** to get an alert box as its own OBS browser source: subs, bits, raids, follows, Super Chats, memberships and TikTok gifts pop up one at a time with their text, image or GIF and sound, then the source goes empty again. It uses the same chat sources as a chat overlay. In the overlay editor, the **Alerts** section opens on **All events (default style)**: one image or GIF (search KLIPY, paste a URL or upload), sound, duration and volume for every alert. Pick an event type to give it its own text (with `{username}`, `{amount}`, `{count}` and `{message}` placeholders) or its own media; fields it leaves empty use the default style. **Send test alert** plays the event you are editing in the editor preview and in OBS, and saves unsaved changes first. You can also write custom HTML, CSS and JavaScript per alert; it runs in an isolated sandbox on the overlay. Uploading your own images, GIFs and sounds is Premium; searching KLIPY and pasting a URL are free.
 
 **Goal and list overlays (Premium, beta).** Offered on beta.allch.at only for now. A **Goal** overlay is a progress bar toward a Twitch follower, YouTube subscriber, Twitch bits or YouTube Super Chat goal: follower and subscriber counts are read from the platform about once a minute while the overlay is open in OBS (YouTube polls spend the shared, accounted Data API quota), bits and Super Chats are counted from events on top of a starting value you can set and reset. A **List** overlay ranks your top cheerers, gifters or Super Chatters of the last 30 days and re-ranks live. Both are configured in their own editor section and use the overlay's chat sources.
 
-**Chat commands (beta).** Offered on beta.allch.at only for now, under **Commands** in the top bar. Define `!commands` and keyword triggers once and they work in every chat your overlays carry: replies go to the chat the message came from, sent by the All-Chat Bot or, if you prefer, your own account, and a trigger can clip your live Twitch stream (say "clip that" in any chat). With premium you can connect your own bot account on Twitch, Kick or YouTube so replies carry its name. Replies are templates: `{user}`, `{touser}`, `{query}`, `{1}`…`{9}`, `{count}`, `{random 1 6}`, `{pick a | b}`, `{time Europe/Berlin}`, `{clip}`, `{urlfetch https://…}` to insert what a web address answers (public https only), plus `{js …}` for JavaScript (sandboxed, 100 ms; it can parse a urlfetch result). A command can also show an image (a GIF, or one fetched from an API) on your alerts overlays, triggered from any chat. Each command can be limited to subscribers, VIPs, moderators or yourself and has a cooldown. **Timers** post a message every X minutes, after every X chat messages, or every X minutes once at least Y messages came in. Replies and timers in Twitch and Kick chat are free; in YouTube chat they are premium because each one spends YouTube API quota. TikTok and Discord chats can trigger clips but cannot be replied to. See [ADR-0079](./docs/adr/0079-streamer-chat-commands-in-engagement-service.md), [ADR-0080](./docs/adr/0080-chat-command-urlfetch-and-images.md) and [ADR-0081](./docs/adr/0081-chat-command-bot-sender-custom-bots-and-timers.md).
+**Chat commands.** Free for everyone, under **Commands** in the top bar. Define `!commands` and keyword triggers once and they work in every chat your overlays carry: replies go to the chat the message came from, sent by the All-Chat Bot or, if you prefer, your own account, and a trigger can clip your live Twitch stream (say "clip that" in any chat). With premium you can connect your own bot account on Twitch, Kick or YouTube so replies carry its name. Replies are templates: `{user}`, `{touser}`, `{query}`, `{1}`…`{9}`, `{count}`, `{random 1 6}`, `{pick a | b}`, `{time Europe/Berlin}`, `{clip}`, `{urlfetch https://…}` to insert what a web address answers (public https only), plus `{js …}` for JavaScript (sandboxed, 100 ms; it can parse a urlfetch result). Each command can also be its own alert on your alerts overlays, triggered from any chat: an image (a GIF, or one fetched from an API), a sound (uploading one is Premium) and its own alert text, in any combination. Each command can be limited to subscribers, VIPs, moderators or yourself and has a cooldown. **Timers** post a message every X minutes, after every X chat messages, or every X minutes once at least Y messages came in. Replies and timers in Twitch and Kick chat are free; in YouTube chat they are premium because each one spends YouTube API quota. TikTok and Discord chats can trigger clips but cannot be replied to. See [ADR-0079](./docs/adr/0079-streamer-chat-commands-in-engagement-service.md), [ADR-0080](./docs/adr/0080-chat-command-urlfetch-and-images.md) and [ADR-0081](./docs/adr/0081-chat-command-bot-sender-custom-bots-and-timers.md).
 
 **Your moderators can use it too.** Under **Moderators** in the overlay editor you can invite the
 people who already moderate for you (Premium). You get a private link to send them; they accept it
@@ -153,6 +153,8 @@ scratch? See the **[CSS Customization Guide](./docs/CSS_CUSTOMIZATION.md)** or t
 - Send messages with your existing platform account
 - Full emote autocomplete (7TV, BTTV, FFZ) with `:` prefix
 - Auto-reconnects if your connection drops — never miss a message
+
+**Leaving?** Sign in on [allch.at/settings/viewer](https://allch.at/settings/viewer) and use **Delete my viewer data**: it erases your viewer identity, linked platforms, cosmetics, points, votes and predictions, including the ones you collected by chat command without signing in.
 
 ---
 
@@ -226,7 +228,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Centrifugo/Pusher, TikTok WS, 
 | Service | Role |
 |---------|------|
 | `api-gateway` | WebSocket server for overlays, HTTP routing, OAuth callbacks |
-| `auth-service` | Authentication, sessions, OAuth flows (Twitch, YouTube, Kick, Discord) |
+| `auth-service` | Authentication, sessions, OAuth flows (Twitch, YouTube, Kick, Discord); its image also ships the `retention-sweeper` CronJob that deletes data past the privacy-policy retention periods (ADR-0089) |
 | `emote-service` | 7TV, BTTV, FFZ, and native emote resolution |
 | `twitch-listener` | Twitch IRC chat ingestion (⚠️ deprecated, ADR-0026 — migrating to `twitch-eventsub-listener`) |
 | `twitch-eventsub-listener` | Twitch EventSub webhooks (channel points, moderation, raids) |
@@ -239,6 +241,7 @@ Platform Listeners (Twitch IRC, YouTube API, Kick Centrifugo/Pusher, TikTok WS, 
 | `discord-listener` | Discord channel chat relay |
 | `message-processor` | Message normalization, emote enrichment, overlay routing |
 | `alert-processor` | Event alerts: a second `chat:raw` consumer that routes events to alerts/goal/list overlays, scores leaderboards, and keeps goal counts (event counters + follower/subscriber polls while connected) (ADR-0068, ADR-0072) |
+| `media-service` | Alert-media uploads (Premium, `media_upload` gate): presigned uploads straight to MinIO, the `media_objects` registry, and a sweep that removes files whose registry row is gone, e.g. with a deleted account (ADR-0068, ADR-0088) |
 | `overlay-manager` | Overlay CRUD, source configuration, settings |
 | `source-manager` | Leader election, active source tracking, demand coordination |
 | `share-service` | Shareable overlay link generation; admin premium/beta-tester/ambassador role grants + feature gates; public ambassador showcase (ADR-0041) |
@@ -313,6 +316,7 @@ Architecture decisions are documented as ADRs in [`docs/adr/`](./docs/adr/README
 - **ADR-0026**: Two-phase deprecation of the Twitch IRC listener — `warn` nudges connected sources to re-add their Twitch source (in-overlay notice), `enforce` stops joining channels
 - **ADR-0046**: Twitch chat notices via `channel.chat.notification` — watch streaks and announcements carry the chatter's own message on no other subscription, so they were silently dropped; notices are routed by type, skipping the five a dedicated subscription already delivers
 - **ADR-0048**: Delegated overlay moderators — a moderator acts with their OWN platform credential (never the streamer's, no fallback), so the platform re-checks their role per call; Discord is the exception (the shared bot always acts, so All-Chat verifies guild permissions live) and premium is keyed on the overlay owner
+- **ADR-0088**: Account and viewer data erasure — account deletion succeeds for everyone and also erases the user's own viewer identity, viewers can delete their own data (including votes and points collected by chat command without signing in), and uploaded files leave the public bucket within one sweep interval
 - **ADR-0027**: Time-limited admin premium grants — an optional expiry on the admin override (streamer + viewer) that reverts on its own; recompute ignores an expired override, and a single-replica payment-service sweep clears lapsed grants
 
 ### Documentation
@@ -367,6 +371,7 @@ Built on the shoulders of:
 ## Support
 
 - [Back us on Patreon](https://patreon.com/all_chat) — unlock premium (streamer €5 / viewer €2)
+- [Status page](https://status.allch.at): live and 30-day availability, measured every minute
 - [Discord community](https://discord.gg/xCGBSuz39P)
 - [GitHub Issues](https://github.com/caesarakalaeii/all-chat/issues)
 - [GitHub Discussions](https://github.com/caesarakalaeii/all-chat/discussions)

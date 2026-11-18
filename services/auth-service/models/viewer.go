@@ -38,10 +38,6 @@ type ViewerSession struct {
 	MessageCount1Hour   int        `json:"message_count_1hour"`    // Messages in last 1 hour
 	RateLimitReset1Min  *time.Time `json:"rate_limit_reset_1min"`  // 1-minute counter reset
 	RateLimitReset1Hour *time.Time `json:"rate_limit_reset_1hour"` // 1-hour counter reset
-	IsPremium           bool       `json:"is_premium"`             // Whether viewer has premium access
-	PremiumExpiresAt    *time.Time `json:"premium_expires_at"`     // ADR-0027: time-limited admin premium deadline (NULL = permanent)
-	ViewerID            *uuid.UUID `json:"viewer_id"`              // Linked viewer identity ID
-	UserID              *string    `json:"user_id"`                // Linked streamer account (viewer_sessions.user_id, migration 040); NULL when the viewer has no streamer account
 	IsBanned            bool       `json:"is_banned"`              // Whether viewer is banned
 	BannedAt            *time.Time `json:"banned_at"`              // When viewer was banned
 	BannedReason        *string    `json:"banned_reason"`          // Reason for ban
@@ -79,6 +75,8 @@ type ViewerInfo struct {
 	Username    string    `json:"username"`     // Platform username
 	DisplayName string    `json:"display_name"` // Display name
 	AvatarURL   *string   `json:"avatar_url"`   // Profile picture URL
+	IsPremium   bool      `json:"is_premium"`   // Current viewers.is_premium, not the sign-in snapshot in the JWT
+	TosAccepted bool      `json:"tos_accepted"` // FALSE = the Terms acceptance prompt is shown (migration 126)
 }
 
 // ViewerJWTClaims represents JWT claims for viewer sessions

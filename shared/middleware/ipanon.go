@@ -26,11 +26,11 @@ import "net"
 //
 //	"192.168.1.42"   → "192.168.1.0"
 //	"2001:db8::1"    → "2001:db8::"
-//	"invalid"        → "invalid"
+//	"1.2.3.4:5678"   → ""  (anything unparseable is dropped, never passed through)
 func AnonymizeIP(raw string) string {
 	ip := net.ParseIP(raw)
 	if ip == nil {
-		return raw
+		return ""
 	}
 
 	if v4 := ip.To4(); v4 != nil {

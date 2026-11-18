@@ -439,3 +439,100 @@ func TestHandleUpdateSourceConfig_RejectsSourceFromAnotherOverlay(t *testing.T) 
 	assert.Equal(t, http.StatusNotFound, w.Code,
 		"the source must belong to the overlay in the path")
 }
+
+// config.relay_webhook_url is server-owned (ADR-0091): discord-listener provisions it and posts
+// chat to it, so a client that could set it would make the listener POST to any URL it likes.
+func TestHandleAddSource_Discord_DropsClientRelayWebhook(t *testing.T) {
+	var captured *models.ChatSource
+	h := discordTestHandler(
+		&mockDiscordChannelResolver{guilds: map[string]string{"my-chan": "attacker-guild"}},
+		&mockDiscordGuildOwnership{owned: map[string]bool{"attacker|attacker-guild": true}},
+		&captured,
+	)
+
+	w := postDiscordSource(h, map[string]interface{}{
+		"platform":   "discord",
+		"channel_id": "my-chan",
+		"config": map[string]interface{}{
+			"guild_id":          "attacker-guild",
+			"relay_webhook_url": "http://169.254.169.254/latest/meta-data",
+		},
+	})
+
+	assert.Equal(t, http.StatusCreated, w.Code)
+	if assert.NotNil(t, captured) {
+		assert.NotContains(t, captured.Config, "relay_webhook_url")
+	}
+	assert.NotContains(t, w.Body.String(), "relay_webhook_url")
+}
+
+// patchDiscordRelay drives a PATCH against a stored Discord source and returns the config the
+// handler wrote.
+func patchDiscordRelay(t *testing.T, storedConfig, requested map[string]interface{}) map[string]interface{} {
+	t.Helper()
+	h := discordTestHandler(
+		&mockDiscordChannelResolver{guilds: map[string]string{"chan-a": "attacker-guild", "chan-b": "attacker-guild"}},
+		&mockDiscordGuildOwnership{owned: map[string]bool{"attacker|attacker-guild": true}},
+		nil,
+	)
+	var written map[string]interface{}
+	h.sourceRepo = &mockSourceRepositoryWithConfig{
+		getByIDFunc: func(context.Context, string) (*models.ChatSource, error) {
+			return &models.ChatSource{
+				ID: "source-id", OverlayID: "overlay-id", Platform: "discord", ChannelID: "chan-a", Config: storedConfig,
+			}, nil
+		},
+		updateConfigFunc: func(_ context.Context, _ string, config map[string]interface{}) error {
+			written = config
+			return nil
+		},
+	}
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.PATCH("/overlays/:id/sources/:source_id", func(c *gin.Context) {
+		c.Set("user_id", "attacker")
+		h.HandleUpdateSourceConfig(c)
+	})
+	body, _ := json.Marshal(map[string]interface{}{"config": requested})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PATCH", "/overlays/overlay-id/sources/source-id", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PATCH = %d: %s", w.Code, w.Body.String())
+	}
+	return written
+}
+
+func TestHandleUpdateSourceConfig_IgnoresClientRelayWebhook(t *testing.T) {
+	written := patchDiscordRelay(t,
+		map[string]interface{}{"guild_id": "attacker-guild", "relay_enabled": false},
+		map[string]interface{}{
+			"guild_id":          "attacker-guild",
+			"relay_enabled":     true,
+			"relay_channel_id":  "chan-a",
+			"relay_webhook_url": "http://169.254.169.254/latest/meta-data",
+		})
+
+	assert.NotContains(t, written, "relay_webhook_url")
+}
+
+// The editor never sees the webhook, so a save (which replaces the whole config) must carry the
+// stored one over, or every save would make discord-listener provision it again.
+func TestHandleUpdateSourceConfig_KeepsStoredRelayWebhookForTheSameChannel(t *testing.T) {
+	written := patchDiscordRelay(t,
+		map[string]interface{}{"relay_enabled": true, "relay_channel_id": "chan-a", "relay_webhook_url": "stored-ciphertext"},
+		map[string]interface{}{"relay_enabled": true, "relay_channel_id": "chan-a", "relay_webhook_url": "client-value"})
+
+	assert.Equal(t, "stored-ciphertext", written["relay_webhook_url"])
+}
+
+// A webhook posts into one channel; moving the relay must not keep posting into the old one.
+func TestHandleUpdateSourceConfig_DropsStoredRelayWebhookWhenTheChannelChanges(t *testing.T) {
+	written := patchDiscordRelay(t,
+		map[string]interface{}{"relay_enabled": true, "relay_channel_id": "chan-a", "relay_webhook_url": "stored-ciphertext"},
+		map[string]interface{}{"relay_enabled": true, "relay_channel_id": "chan-b"})
+
+	assert.NotContains(t, written, "relay_webhook_url",
+		"discord-listener provisions a webhook in the new channel when none is stored")
+}

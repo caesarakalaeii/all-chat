@@ -21,7 +21,7 @@
 import clsx from 'clsx'
 import { Button } from '@/components/ui/button'
 import { ArrowDown, ArrowUp, Filter, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ChatRow, type ChatRowModeration } from '@/components/overlay/ChatRow'
 import { DEFAULT_VIEW_PREFS, type MonitorViewPrefs } from '@/app/overlay/[id]/view/viewPrefs'
@@ -151,16 +151,23 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
     pinnedRef.current = true
   }, [newestFirst])
 
-  useEffect(() => {
+  // Follow the live edge while pinned. Runs on every render of new rows and
+  // again whenever an image or video in the feed finishes loading (the scroll
+  // container's onLoad/onLoadedMetadata): an attachment takes no space until it
+  // has loaded, so the pass on arrival alone left it below the fold.
+  const followLiveEdge = useCallback(() => {
     const el = scrollRef.current
     if (el && pinnedRef.current) el.scrollTop = newestFirst ? 0 : el.scrollHeight
-  }, [visible, newestFirst])
+  }, [newestFirst])
+
+  useEffect(() => {
+    followLiveEdge()
+  }, [visible, followLiveEdge])
 
   const resumeLive = () => {
     pinnedRef.current = true
     setPaused(null)
-    const el = scrollRef.current
-    if (el) el.scrollTop = newestFirst ? 0 : el.scrollHeight
+    followLiveEdge()
   }
 
   // Toggle the 1:1 filter to the clicked chatter (click the name again to clear)
@@ -215,7 +222,13 @@ export function ChatPanel({ items, prefs, capabilities, moderation }: ChatPanelP
           </Button>
         </div>
       )}
-      <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        onLoad={followLiveEdge}
+        onLoadedMetadata={followLiveEdge}
+        className="min-h-0 flex-1 overflow-y-auto"
+      >
         {visible.length === 0 ? (
           <p className="px-3 py-6 text-center text-sm text-text-dim">
             {userFilter

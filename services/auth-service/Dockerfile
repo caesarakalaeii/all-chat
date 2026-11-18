@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.27.3-alpine AS builder
+FROM golang:1.27.4-alpine AS builder
 
 WORKDIR /app
 
@@ -19,21 +19,21 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/auth-service ./cm
 # Build key-rotator sweeper (D-03/D-06 — idempotent per-table re-encryption job)
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/key-rotator ./cmd/key-rotator
 
-# Runtime stage
-FROM alpine:3.24
+# Build retention-sweeper (ADR-0089 — deletes rows past the privacy-policy retention periods)
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/retention-sweeper ./cmd/retention-sweeper
 
-RUN apk --no-cache add ca-certificates && \
-    addgroup -g 1000 appuser && adduser -D -u 1000 -G appuser appuser
+# Runtime stage: distroless static (ADR-0092). No shell or package manager;
+# ships CA certificates and tzdata. UID 1000 matches runAsUser in the k8s manifests.
+FROM gcr.io/distroless/static-debian13
 
 WORKDIR /app
 
 COPY --from=builder /app/auth-service .
 COPY --from=builder /app/key-rotator /app/key-rotator
+COPY --from=builder /app/retention-sweeper /app/retention-sweeper
 COPY LICENSE ./LICENSE
 
-RUN chown -R appuser:appuser /app
-
-USER appuser
+USER 1000:1000
 
 EXPOSE 8081
 

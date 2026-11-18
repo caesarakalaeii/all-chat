@@ -2,13 +2,14 @@
 
 **Date**: 2026-08-16
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
 
 Every color in the overlay editor's appearance panels (message, username,
 timestamp, bubble background, overlay background, bubble border, pronoun pill,
-five platform accents) is stored in `visual_settings` as a 6-digit hex and
+eleven platform accents) is stored in `visual_settings` as a 6-digit hex and
 emitted by `visualSettingsToCss` as a `--chat-*` / `--platform-*` custom
 property. Only the two background colors had an opacity control, and that
 opacity lived in a **sibling field** (`overlayBgOpacity`, `bubbleBgOpacity`,
@@ -51,6 +52,13 @@ opacity fields are introduced.**
   folds a stored value into the slider position (`withLegacyOpacity`) and patches
   the field to `undefined` when the color changes, so a setting is never dimmed
   twice.
+
+  The same pattern has since been joined by `bubbleUserColorOpacity`
+  (`visual_settings.bubbleUserColorOpacity`, still a separate decimal-string
+  field), and the inline-style path under
+  `frontend/src/lib/utils/visual-inline-styles.ts` still consumes
+  it for flat (non-8-digit) fills. That is the same reader-vs-writer split the
+  decision set out to close; it was not folded in on this pass.
 
 Alternatives considered: adding a `*Opacity` field per color (≈10 new keys, and
 `visualSettingsToCss` would have to compose `rgba()` anyway to reach themes —

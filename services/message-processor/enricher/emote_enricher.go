@@ -41,9 +41,10 @@ type EmoteServiceClient interface {
 
 // EmoteServiceEmote represents an emote from the Emote Service
 type EmoteServiceEmote struct {
-	Code     string `json:"code"`
-	URL      string `json:"url"`
-	Provider string `json:"provider"`
+	Code      string `json:"code"`
+	URL       string `json:"url"`
+	Provider  string `json:"provider"`
+	ZeroWidth bool   `json:"zero_width,omitempty"`
 }
 
 // EmoteServiceResponse is the response from Emote Service
@@ -231,8 +232,16 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	// request logs and testgen counters instead.
 	synthetic := isSynthetic(msg.Metadata)
 
+	// A per-user cache entry holds a full copy of the channel's emote set, so it
+	// is only worth writing when the chatter can actually have personal emotes.
+	// Drop the user id otherwise and share the channel-level entry.
+	userID := msg.User.ID
+	if synthetic || !hasPersonalEmotes(msg.Platform) {
+		userID = ""
+	}
+
 	// Fetch emotes for the channel (with user context if available)
-	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, msg.User.ID, twitchChannel, seventvSetID, synthetic)
+	thirdPartyEmotes, err := e.fetchEmotes(ctx, channelIdentifier, msg.Platform, userID, twitchChannel, seventvSetID, synthetic)
 	if err != nil {
 		// Don't fail the message if emote enrichment fails
 		e.logger.Warn("Failed to fetch emotes, skipping enrichment",
@@ -265,6 +274,7 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 					Provider:  emote.Provider,
 					URL:       emote.URL,
 					Positions: [][]int{position},
+					ZeroWidth: emote.ZeroWidth,
 				})
 			}
 		}
@@ -338,7 +348,14 @@ func (e *Enricher) fetchFromService(ctx context.Context, channel, platform, user
 	var thirdPartyEmotes []EmoteServiceEmote
 	var err error
 
-	if userID != "" || twitchChannel != "" || seventvSetID != "" {
+	// GetEmotesForChannel takes no platform argument, so it may only serve a
+	// request with nothing for emote-service to branch on. A non-Twitch platform
+	// alone is enough: emote-service uses it to add Twitch globals, to fall back
+	// to the "global" BTTV/FFZ set instead of looking those providers up by a
+	// platform id, and to pick the 7TV channel-connection path. Routing such a
+	// request down the plain call drops the platform and degrades all three
+	// silently.
+	if userID != "" || twitchChannel != "" || seventvSetID != "" || isNonTwitchPlatform(platform) {
 		thirdPartyEmotes, err = e.client.GetEmotesForChannelWithUser(ctx, channel, platform, userID, twitchChannel, seventvSetID)
 	} else {
 		thirdPartyEmotes, err = e.client.GetEmotesForChannel(ctx, channel)
@@ -446,6 +463,32 @@ func (e *Enricher) refreshAsync(channel, platform, userID, twitchChannel string)
 	}()
 }
 
+// hasPersonalEmotes reports whether a chatter on this platform can have a
+// personal emote set we are able to resolve. 7TV is the only provider of
+// per-user emotes, via /v3/users/{platform}/{id} (FetchUserEmotes in
+// emote-service), and that lookup accepts only Twitch and Kick chatter ids
+// (an unlinked Kick id is a 404, a TikTok username or a YouTube chatter id is
+// always a 400). For every other platform the merged response is
+// byte-identical to the channel-level one, so a per-user cache key stored a
+// redundant full-size copy of the channel emote set (~100-230 KB) per chatter
+// per channel for 13h, which filled Redis (AllChatRedisMemoryNearLimit,
+// 2026-11-18).
+//
+// This is about CHATTER ids only. The same 7TV endpoint does serve YouTube and
+// Kick CHANNEL connections — see fetchPlatformConnectionEmotes in
+// emote-service — so the channel lookup is unaffected by this predicate.
+func hasPersonalEmotes(platform string) bool {
+	return platform == "twitch" || platform == "kick"
+}
+
+// isNonTwitchPlatform reports whether emote-service has platform-specific
+// handling to do for this request. It mirrors the identically named condition
+// in emote-service's own handler (handlers/emote.go), including treating an
+// unknown platform as nothing to branch on.
+func isNonTwitchPlatform(platform string) bool {
+	return platform != "" && platform != "twitch"
+}
+
 // isSynthetic reports whether a message originates from a synthetic source —
 // the overlay-editor mock messages or the public test-stream generator. Both
 // set a metadata flag at build time (buildMockMessage in cmd/main.go,
@@ -471,9 +514,10 @@ func convertToCached(emotes []EmoteServiceEmote) []cache.CachedEmote {
 	converted := make([]cache.CachedEmote, 0, len(emotes))
 	for _, emote := range emotes {
 		converted = append(converted, cache.CachedEmote{
-			Code:     emote.Code,
-			Provider: emote.Provider,
-			URL:      emote.URL,
+			Code:      emote.Code,
+			Provider:  emote.Provider,
+			URL:       emote.URL,
+			ZeroWidth: emote.ZeroWidth,
 		})
 	}
 	return converted

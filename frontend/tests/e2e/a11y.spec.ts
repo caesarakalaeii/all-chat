@@ -167,7 +167,15 @@ test.describe('a11y smoke (axe, WCAG 2.2 AA)', () => {
   })
 
   test('settings page', async ({ page }, testInfo) => {
-    await mockAuthedApi(page)
+    // Populated connected platforms card, so its disconnect buttons are scanned too.
+    await mockAuthedApi(page, {
+      '**/api/v1/auth/me/connections': {
+        connections: [
+          { platform: 'twitch', accounts: ['smoke_channel'], is_login: true },
+          { platform: 'youtube', accounts: ['UCsmokeChannel'], is_login: false },
+        ],
+      },
+    })
     await page.goto('/settings')
     await expect(page.getByText(USER.username)).toBeVisible({ timeout: 20_000 })
     await expectNoNewA11yViolations(page, 'settings', testInfo)

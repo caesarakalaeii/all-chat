@@ -668,20 +668,3 @@ func (r *DeviceTokenRepository) RevokeDeviceTokenByID(ctx context.Context, devic
 	}
 	return nil
 }
-
-// SweepExpiredLinkRequests deletes pending rows that will never complete.
-//
-// Unlike device_tokens, an abandoned link request has no value at all once it expires —
-// it holds no credential and nothing references it — so it is deleted rather than kept.
-// Rows that DID mint a token are retained regardless of age, because they are the audit
-// trail for that token.
-func (r *DeviceTokenRepository) SweepExpiredLinkRequests(ctx context.Context) (int64, error) {
-	tag, err := r.db.Exec(ctx, `
-		DELETE FROM device_link_requests
-		 WHERE device_token_id IS NULL
-		   AND expires_at < NOW() - INTERVAL '1 hour'`)
-	if err != nil {
-		return 0, fmt.Errorf("SweepExpiredLinkRequests: %w", err)
-	}
-	return tag.RowsAffected(), nil
-}

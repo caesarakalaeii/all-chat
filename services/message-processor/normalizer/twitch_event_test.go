@@ -87,7 +87,6 @@ func TestNormalizeEvent_TwitchSubscriptionWithoutMonths(t *testing.T) {
 		ChannelID: "xqc",
 		UserID:    "12345",
 		Username:  "viewer123",
-		Text:      "Subscribed at 1000",
 		Timestamp: time.Now(),
 		Tags:      map[string]string{},
 		EventType: "subscription",

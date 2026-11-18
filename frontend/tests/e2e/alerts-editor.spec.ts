@@ -281,12 +281,18 @@ test.describe('Alerts editor', () => {
     await expect(sandbox.locator('#custom')).toHaveCSS('color', 'rgb(255, 215, 0)')
   })
 
-  test('without premium the editor is read-only behind the upgrade link', async ({ page }) => {
+  test('without premium only uploads are locked behind the upgrade link', async ({ page }) => {
     await boot(page, { premium: false })
-    await expect(page.getByLabel('Image or GIF')).toBeDisabled()
-    await expect(page.getByText('Custom alert code is a Premium feature.')).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Save alerts' })).toBeDisabled()
-    // Test alerts stay free.
+    // Editing, custom code and test alerts are free.
+    await expect(page.getByLabel('Image or GIF')).toBeEnabled()
+    await expect(page.getByLabel('JavaScript')).toBeEditable()
     await expect(page.getByRole('button', { name: 'Send test alert' })).toBeEnabled()
+    // Uploading your own files is premium (media_upload gate).
+    for (const upload of await page.getByRole('button', { name: 'Upload file' }).all()) {
+      await expect(upload).toBeDisabled()
+    }
+    await expect(
+      page.getByText('Uploading your own files is a Premium feature.').first()
+    ).toBeVisible()
   })
 })

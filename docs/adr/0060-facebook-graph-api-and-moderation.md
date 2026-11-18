@@ -1,6 +1,7 @@
 # ADR-0060: Facebook via Graph API polling with a dual-scope page credential and a moderation write path
 
 **Date**: 2026-09-08
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Status**: Accepted
 **Deciders**: caesarakalaeii
 
@@ -126,8 +127,12 @@ covers the rest.
 ## Consequences
 
 - Adding Facebook costs one listener, one normalizer, one OAuth provider, one
-  migration and one moderation client — the same surface as any other
-  platform — **minus** the quota ledger and **minus** token refresh.
+  migration and one moderation client — the same surface as any other platform
+  — **minus** the quota ledger and **minus** token refresh. The frontend still
+  hides the platform outside beta.allch.at (`BETA_ONLY_PLATFORMS` in
+  `frontend/src/lib/platform-availability.ts`); release means removing it there
+  and flipping `platform_facebook` in `/admin/features` once Meta App Review
+  has passed.
 - A streamer who declines `pages_manage_engagement` on the granular consent
   screen still gets working ingest (read scope granted); their moderation
   controls report `missing_scope` and their fix is re-consent, which re-runs

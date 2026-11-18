@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-18
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -75,6 +76,10 @@ Negative / trade-offs:
   stops scaling.
 
 Follow-up:
+- Applications connect to `allchat-cluster-rw` directly
+  (`../caesar-deployment/apps/workloads/all-chat/configmap.yaml:8`); no CNPG
+  `Pooler` is deployed anywhere in the cluster manifests, and the per-pod pool
+  budget above is the only control in place.
 - If the service/replica count keeps growing, put a **PgBouncer** in front of
   the cluster (CNPG `Pooler`, transaction mode) so client pool sizes are
   decoupled from actual backend connections. Not done now because pgx defaults

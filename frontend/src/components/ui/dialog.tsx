@@ -75,7 +75,10 @@ function DialogBackdrop({
 }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Backdrop>) {
   return (
     <DialogPrimitive.Backdrop
-      className={cn('fixed inset-0 z-40 bg-black/60 backdrop-blur-[8px]', className)}
+      // z-50, not z-40: the sticky navs and the cookie banner sit at z-50, so a
+      // lower backdrop left them bright and clickable above an open dialog. The
+      // portal mounts at the end of <body>, so an equal z-index paints on top.
+      className={cn('fixed inset-0 z-50 bg-black/60 backdrop-blur-[8px]', className)}
       {...props}
     />
   )

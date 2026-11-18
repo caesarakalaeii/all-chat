@@ -621,6 +621,14 @@ func (n *TwitchNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID 
 		}
 		eventValue = &models.EventValue{Amount: 1, Currency: "gift", DisplayText: text}
 
+	case "ad_break":
+		seconds := eventDataInt(raw.EventData, "duration_seconds")
+		eventValue = &models.EventValue{
+			Amount:      float64(seconds),
+			Currency:    "seconds",
+			DisplayText: formatAdBreakDuration(seconds),
+		}
+
 	case "announcement", "unraid", "twitch_notice":
 		// Nothing to quantify — the message text (announcement body) or Twitch's system_message
 		// carries the whole meaning, so no value pill is rendered.
@@ -681,6 +689,20 @@ func formatThousands(n int) string {
 		b.WriteString(s[i : i+3])
 	}
 	return b.String()
+}
+
+// formatAdBreakDuration renders an ad break length the way Twitch's ad menu offers them: "30s",
+// "1m 30s", "3m".
+func formatAdBreakDuration(seconds int) string {
+	m, s := seconds/60, seconds%60
+	switch {
+	case m == 0:
+		return fmt.Sprintf("%ds", s)
+	case s == 0:
+		return fmt.Sprintf("%dm", m)
+	default:
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
 }
 
 // channelPointsDisplayText is the value pill of a redemption: "Hydrate (500 points)".

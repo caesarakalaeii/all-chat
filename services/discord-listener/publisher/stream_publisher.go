@@ -56,6 +56,9 @@ type RawMessage struct {
 	EventType   string                 `json:"event_type,omitempty"`
 	EventData   map[string]interface{} `json:"event_data,omitempty"`
 	Timestamp   time.Time              `json:"timestamp"`
+	// IsUpdate marks a republished message whose media arrived late (Discord link
+	// preview); message-processor replaces the overlay row instead of adding one.
+	IsUpdate bool `json:"is_update,omitempty"`
 }
 
 // Attachment is a renderable image/GIF/video item carried alongside a chat

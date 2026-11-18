@@ -9,6 +9,10 @@ const nextConfig = {
 
   // Strict mode for better development
   reactStrictMode: true,
+  // The dev-server indicator ("N" badge, "N Issues" pill) is dev-only chrome that
+  // would land in every Playwright screenshot, including the overlay editor's preview
+  // iframe, where no test-side CSS reaches it. Off when Playwright starts the server.
+  ...(process.env.PLAYWRIGHT_DEV_SERVER === '1' ? { devIndicators: false } : {}),
 
   // Generate unique build ID to prevent Server Action mismatches
   generateBuildId: async () => {
@@ -69,7 +73,10 @@ const nextConfig = {
       // analytics.allch.at hosts the self-hosted Umami tracker
       // (components/Analytics.tsx); without it the tracker script is CSP-blocked
       // and no page views or custom events are recorded.
-      "script-src 'self' 'unsafe-inline' https://analytics.allch.at",
+      // 'unsafe-eval' in development only: React's dev build needs eval() for its
+      // debugging features and logs an error without it on every page (which also
+      // shows Next's "1 Issue" pill in dev renders and the visual baselines).
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'"} https://analytics.allch.at`,
       // worker-src governs Web Worker/SharedWorker creation. The overlay
       // editor's self-hosted Monaco (/monaco/vs, ADR-0040) runs its CSS
       // language services — validation, autocomplete — in workers that Monaco

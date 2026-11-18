@@ -24,6 +24,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -58,10 +59,12 @@ type Deps struct {
 	Policy   *access.Policy
 	Registry *tool.Registry
 	LLM      llm.ChatClient
-	Memory   *memory.Repository
-	Redactor *redact.Redactor
-	AgentCfg agent.Config
-	Log      *zap.Logger
+	// ClaudeCode, when set, answers instead of the in-process loop and LLM.
+	ClaudeCode *agent.ClaudeCode
+	Memory     *memory.Repository
+	Redactor   *redact.Redactor
+	AgentCfg   agent.Config
+	Log        *zap.Logger
 }
 
 // Bot is the Discord adapter.
@@ -71,6 +74,7 @@ type Bot struct {
 	policy   *access.Policy
 	reg      *tool.Registry
 	llm      llm.ChatClient
+	cc       *agent.ClaudeCode
 	mem      *memory.Repository
 	redactor *redact.Redactor
 	spam     *moderation.SpamDetector
@@ -96,6 +100,7 @@ func New(d Deps) (*Bot, error) {
 		policy:   d.Policy,
 		reg:      d.Registry,
 		llm:      d.LLM,
+		cc:       d.ClaudeCode,
 		mem:      d.Memory,
 		redactor: d.Redactor,
 		spam:     moderation.NewSpamDetector(moderation.Options{}),
@@ -219,10 +224,11 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate, in
 		return
 	}
 
-	answer := b.answer(s, authorID, channelID, question, history)
+	answer, files := b.answer(s, authorID, channelID, question, history)
 
 	if inThread {
 		b.deliver(s, channelID, answer)
+		b.sendFiles(s, channelID, files)
 		return
 	}
 	// Start a thread from the user's message and answer there.
@@ -234,10 +240,12 @@ func (b *Bot) handleMessage(s *discordgo.Session, m *discordgo.MessageCreate, in
 	if err != nil {
 		b.log.Warn("failed to start thread; replying in channel", zap.Error(err))
 		b.deliver(s, channelID, answer)
+		b.sendFiles(s, channelID, files)
 		return
 	}
 	b.botThreads.Store(th.ID, struct{}{})
 	b.deliver(s, th.ID, answer)
+	b.sendFiles(s, th.ID, files)
 }
 
 func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
@@ -263,7 +271,7 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 	})
 
 	uid := interactionUserID(i)
-	answer := b.answer(s, uid, i.ChannelID, question, nil)
+	answer, files := b.answer(s, uid, i.ChannelID, question, nil)
 
 	chunks := chunkMessage(answer)
 	first := answer
@@ -289,6 +297,7 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 		for _, c := range chunks[min(1, len(chunks)):] {
 			_, _ = s.ChannelMessageSend(i.ChannelID, c)
 		}
+		b.sendFiles(s, i.ChannelID, files)
 		return
 	}
 	b.botThreads.Store(th.ID, struct{}{})
@@ -296,12 +305,13 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 	for _, c := range chunks[min(1, len(chunks)):] {
 		_, _ = s.ChannelMessageSend(th.ID, c)
 	}
+	b.sendFiles(s, th.ID, files)
 }
 
 // answer runs the agent loop for a question and returns the delivery-ready text.
 // A busy (429) failure parks the request instead of discarding it; busyReply is
 // returned immediately in that case.
-func (b *Bot) answer(s *discordgo.Session, uid, channelID, question string, history []string) string {
+func (b *Bot) answer(s *discordgo.Session, uid, channelID, question string, history []string) (string, []tool.Attachment) {
 	mode := b.policy.ModeFor(uid)
 
 	var memStrings []string
@@ -325,10 +335,10 @@ func (b *Bot) answer(s *discordgo.Session, uid, channelID, question string, hist
 	res, err := b.runAgent(mode, uid, channelID, messages)
 	if err != nil {
 		if out, handled := b.busyOrError(err, res, mode, uid, channelID, s); handled {
-			return out
+			return out, nil
 		}
 	}
-	return b.finalize(mode, res)
+	return b.finalize(mode, res), res.Attachments
 }
 
 // busyOrError distinguishes a busy failure (park + busyReply) from other errors.
@@ -373,6 +383,9 @@ func (b *Bot) resumeParked(ctx context.Context, r *parkedRequest, expired bool) 
 		return
 	}
 	send(b.finalize(r.mode, res))
+	if b.session != nil {
+		b.sendFiles(b.session, r.channelID, res.Attachments)
+	}
 }
 
 // fallbackReply maps non-busy errors to the user-facing failure text.
@@ -406,6 +419,9 @@ func (b *Bot) runAgentCtx(ctx context.Context, mode access.Mode, uid, channelID 
 		zap.String("mode", mode.String()),
 		zap.String("discord_uid", uid),
 		zap.Int("transcript_len", len(messages)))
+	if b.cc != nil {
+		return b.cc.Run(ctx, tctx, messages)
+	}
 	return agent.Run(ctx, b.agentCfg, b.llm, b.reg, tctx, messages)
 }
 
@@ -512,12 +528,36 @@ func (b *Bot) fetchHistory(s *discordgo.Session, channelID string) []string {
 	if err != nil {
 		return nil
 	}
-	// ChannelMessages returns newest-first; reverse to chronological.
-	out := make([]string, 0, len(msgs))
-	for i := len(msgs) - 1; i >= 0; i-- {
-		msg := msgs[i]
-		if msg.Author == nil || strings.TrimSpace(msg.Content) == "" {
-			continue
+	return threadHistory(b.starterMessage(s, channelID), msgs)
+}
+
+// starterMessage returns the message a thread was started from, or nil. A thread
+// started from a message shares that message's ID, and the message itself lives in
+// the parent channel, so ChannelMessages on the thread never returns it.
+func (b *Bot) starterMessage(s *discordgo.Session, threadID string) *discordgo.Message {
+	ch, err := s.State.Channel(threadID)
+	if err != nil || ch == nil {
+		if ch, err = s.Channel(threadID); err != nil {
+			return nil
+		}
+	}
+	if ch.ParentID == "" {
+		return nil
+	}
+	msg, err := s.ChannelMessage(ch.ParentID, threadID)
+	if err != nil {
+		return nil
+	}
+	return msg
+}
+
+// threadHistory renders a thread as chronological "[name]: text" lines, starting with
+// the message the thread was started from. msgs is newest-first, as Discord returns it.
+func threadHistory(starter *discordgo.Message, msgs []*discordgo.Message) []string {
+	out := make([]string, 0, len(msgs)+1)
+	add := func(msg *discordgo.Message) {
+		if msg == nil || msg.Author == nil || strings.TrimSpace(msg.Content) == "" {
+			return
 		}
 		name := msg.Author.Username
 		if msg.Author.Bot {
@@ -525,7 +565,35 @@ func (b *Bot) fetchHistory(s *discordgo.Session, channelID string) []string {
 		}
 		out = append(out, "["+name+"]: "+msg.Content)
 	}
+	add(starter)
+	for i := len(msgs) - 1; i >= 0; i-- {
+		add(msgs[i])
+	}
 	return out
+}
+
+// maxAttachments caps the images sent with one answer.
+const maxAttachments = 3
+
+// sendFiles posts the answer's attachments (send_image screenshots) as one message
+// after the text. A file that cannot be read is skipped and logged, never fatal.
+func (b *Bot) sendFiles(s *discordgo.Session, channelID string, atts []tool.Attachment) {
+	var files []*discordgo.File
+	for _, a := range atts[:min(len(atts), maxAttachments)] {
+		f, err := os.Open(a.Path)
+		if err != nil {
+			b.log.Warn("attachment unreadable", zap.String("path", a.Path), zap.Error(err))
+			continue
+		}
+		defer f.Close()
+		files = append(files, &discordgo.File{Name: a.Name, ContentType: "image/png", Reader: f})
+	}
+	if len(files) == 0 {
+		return
+	}
+	if _, err := s.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{Files: files}); err != nil {
+		b.log.Warn("failed to send attachments", zap.Error(err))
+	}
 }
 
 func (b *Bot) deliver(s *discordgo.Session, channelID, text string) {

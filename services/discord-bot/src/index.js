@@ -2,6 +2,7 @@
 import { initTracing } from './tracing.js';
 initTracing();
 
+import http from 'node:http';
 import { Client, GatewayIntentBits, EmbedBuilder } from 'discord.js';
 import { createClient } from 'redis';
 import axios from 'axios';
@@ -14,6 +15,13 @@ const REDIS_PORT = process.env.REDIS_PORT || 6379;
 const YOUTUBE_LISTENER_URL = process.env.YOUTUBE_LISTENER_URL || 'http://localhost:8086';
 const STATUS_UPDATE_INTERVAL = parseInt(process.env.STATUS_UPDATE_INTERVAL || '600000'); // 10 minutes default
 const GRAFANA_PANEL_URL = process.env.GRAFANA_PANEL_URL || null; // Optional Grafana panel embed URL
+const HEALTH_PORT = parseInt(process.env.HEALTH_PORT || '8080');
+// How long the Redis subscriber may stay not-ready before /health/live fails
+// and the kubelet restarts the pod. node-redis can wait forever on its
+// reconnect handshake (seen with tiktok-listener on 2026-11-04), and a stuck
+// subscriber silently drops every quota alert. Long enough to ride out a
+// Redis failover.
+const REDIS_UNREADY_LIVENESS_MS = 120_000;
 
 // Validate required env vars
 if (!DISCORD_TOKEN || !DISCORD_CHANNEL_ID) {
@@ -26,7 +34,7 @@ const discordClient = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// Initialize Redis clients (separate for pub/sub and regular commands)
+// Initialize Redis subscriber for quota alerts
 const redisSubscriber = createClient({
   socket: {
     host: REDIS_HOST,
@@ -34,16 +42,30 @@ const redisSubscriber = createClient({
   }
 });
 
-const redisClient = createClient({
-  socket: {
-    host: REDIS_HOST,
-    port: REDIS_PORT
-  }
-});
-
-// Error handlers
 redisSubscriber.on('error', (err) => console.error('Redis Subscriber Error:', err));
-redisClient.on('error', (err) => console.error('Redis Client Error:', err));
+
+// When the liveness probe first saw the subscriber not ready; null while ready.
+let redisUnreadySince = null;
+
+http.createServer((req, res) => {
+  if (req.url !== '/health/live' || req.method !== 'GET') {
+    res.writeHead(404);
+    res.end();
+    return;
+  }
+  if (redisSubscriber.isReady) {
+    redisUnreadySince = null;
+  } else {
+    redisUnreadySince ??= Date.now();
+  }
+  const unreadyMs = redisUnreadySince === null ? 0 : Date.now() - redisUnreadySince;
+  const alive = unreadyMs < REDIS_UNREADY_LIVENESS_MS;
+  if (!alive) {
+    console.error(`Redis subscriber not ready for ${unreadyMs} ms, failing liveness`);
+  }
+  res.writeHead(alive ? 200 : 503, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ status: alive ? 'ok' : 'redis unavailable', redis_unready_ms: unreadyMs }));
+}).listen(HEALTH_PORT);
 
 // Store message IDs for editing instead of spamming
 let statusMessageId = null;
@@ -422,7 +444,6 @@ async function reclaimMessage(channel, matchesEmbed, label) {
 async function start() {
   try {
     // Connect to Redis
-    await redisClient.connect();
     await redisSubscriber.connect();
     console.log('✅ Connected to Redis');
 
@@ -490,7 +511,6 @@ async function shutdown() {
   try {
     await redisSubscriber.unsubscribe('quota:alerts');
     await redisSubscriber.quit();
-    await redisClient.quit();
     discordClient.destroy();
     console.log('✅ Graceful shutdown complete');
   } catch (error) {

@@ -283,7 +283,8 @@ func main() {
 
 		// Determine message type based on channel
 		// Main channel: overlay:{id} -> regular messages/events
-		// Update channel: overlay:{id}:updates -> TikTok like aggregate updates
+		// Update channel: overlay:{id}:updates -> TikTok like aggregate updates and
+		// chat messages whose media arrived late (Discord link previews)
 		msgType := models.WSMessageTypeChatMessage
 		switch {
 		case strings.HasSuffix(channel, ":updates"):
@@ -451,7 +452,6 @@ func main() {
 		log.Warn("TWITCH_CLIENT_SECRET not set - badge API will not auto-refresh tokens and may fail")
 	}
 
-	// Create handlers
 	proxyHandler := handlers.NewProxyHandler(registry)
 	healthHandler := handlers.NewHealthHandler(registry)
 	badgeHandler := handlers.NewTwitchBadgeHandler(log, twitchClientID, twitchClientSecret)
@@ -477,7 +477,6 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// Create router
 	router := gin.New()
 
 	// M3: restrict trusted proxies so c.ClientIP() (used by the global + auth
@@ -551,8 +550,6 @@ func main() {
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// Static pages (no auth required)
-	router.StaticFile("/legal/terms", "./static/legal/terms.html")
-	router.StaticFile("/legal/privacy", "./static/legal/privacy.html")
 	router.StaticFile("/obs-badge", "./static/obs-badge.html")
 
 	// WebSocket endpoint for overlay owners/OBS (triggers YouTube polling)
@@ -735,8 +732,13 @@ func main() {
 	{
 		// Auth service - protected routes
 		protectedAPI.GET("/auth/me", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest)  // DSGVO Art. 20 data portability
-		protectedAPI.PATCH("/auth/me/onboarding", proxyHandler.ForwardRequest) // first-run setup guide state
+		protectedAPI.GET("/auth/me/data-export", proxyHandler.ForwardRequest)     // DSGVO Art. 20 data portability
+		protectedAPI.PATCH("/auth/me/onboarding", proxyHandler.ForwardRequest)    // first-run setup guide state
+		protectedAPI.POST("/auth/me/tos-acceptance", proxyHandler.ForwardRequest) // post-login Terms of Service acceptance
+		// Connected platforms (Settings): list, and disconnect a linked platform, which
+		// deletes its OAuth tokens and revokes them at the provider. Session-only in auth-service.
+		protectedAPI.GET("/auth/me/connections", proxyHandler.ForwardRequest)
+		protectedAPI.DELETE("/auth/me/connections/:platform", proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.POST("/auth/stop-impersonation", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/me", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
@@ -796,17 +798,7 @@ func main() {
 		protectedAPI.DELETE("/auth/chat-bots/custom/:platform", proxyHandler.ForwardRequest)
 		protectedAPI.DELETE("/auth/chat-bots/allchat/:platform", proxyHandler.ForwardRequest)
 
-		// Viewer protected routes
-		protectedAPI.GET("/auth/viewer/me", proxyHandler.ForwardRequest)
-		// AuthCookieForward so the handler can blacklist the viewer token on logout
-		// (audit #18); harmless when the viewer authenticated via the Authorization
-		// bearer header (the common case — viewer tokens live in localStorage).
-		protectedAPI.POST("/auth/viewer/logout", localmiddleware.AuthCookieForward(), proxyHandler.ForwardRequest)
-		protectedAPI.POST("/auth/viewer/chat/send", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
-		protectedAPI.PATCH("/auth/viewer/cosmetics", proxyHandler.ForwardRequest)
-		protectedAPI.GET("/auth/viewer/linked-platforms", proxyHandler.ForwardRequest)
-		protectedAPI.DELETE("/auth/viewer/linked-platforms/:platform", proxyHandler.ForwardRequest)
+		registerViewerRoutes(protectedAPI, proxyHandler.ForwardRequest)
 
 		// Overlay manager routes (all protected)
 		protectedAPI.GET("/overlays", proxyHandler.ForwardRequest)
@@ -1022,10 +1014,7 @@ func main() {
 		adminAPI.GET("/stats", proxyHandler.ForwardRequest)
 
 		// Viewer management (-> auth-service)
-		adminAPI.GET("/viewers", proxyHandler.ForwardRequest)
-		adminAPI.POST("/viewers/:session_id/ban", proxyHandler.ForwardRequest)
-		adminAPI.POST("/viewers/:session_id/unban", proxyHandler.ForwardRequest)
-		adminAPI.POST("/viewers/:session_id/premium", proxyHandler.ForwardRequest)
+		registerAdminViewerRoutes(adminAPI, proxyHandler.ForwardRequest)
 
 		// Overlay management (-> overlay-manager)
 		adminAPI.GET("/overlays", proxyHandler.ForwardRequest)
@@ -1061,7 +1050,6 @@ func main() {
 	// Get port from environment
 	port := getEnvOrDefault("PORT", "8080")
 
-	// Create HTTP server
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      router,
@@ -1111,12 +1099,18 @@ func main() {
 // the owner-only gate off.
 const modActionEventType = "mod_action"
 
-// isModerationFrame reports whether a unified-message event type identifies a
-// moderation/AutoMod frame. Such frames may carry the full text AutoMod withheld
-// from chat, so they are broadcast only to verified owner sockets and never
-// written to the replay buffer.
-func isModerationFrame(eventType string) bool {
-	return eventType == modActionEventType
+// adBreakEventType is a Twitch ad break starting. Nothing in it is confidential,
+// but it is a cue for the streamer: an anonymous OBS source would render it on
+// stream, and a replay of it to a reconnecting monitor would announce an ad
+// break that ended long ago.
+const adBreakEventType = "ad_break"
+
+// isOwnerOnlyFrame reports whether a unified-message event type is delivered only
+// to verified owner sockets and never written to the replay buffer: moderation and
+// AutoMod frames (which may carry the full text AutoMod withheld from chat) and ad
+// breaks.
+func isOwnerOnlyFrame(eventType string) bool {
+	return eventType == modActionEventType || eventType == adBreakEventType
 }
 
 // overlayBroadcastFilter decides who may receive a frame published on the
@@ -1132,7 +1126,7 @@ func isModerationFrame(eventType string) bool {
 func overlayBroadcastFilter(eventType string, msgType models.WSMessageType) wsconn.BroadcastFilter {
 	return wsconn.BroadcastFilter{
 		EngagementFrame: msgType == models.WSMessageTypePollUpdate || msgType == models.WSMessageTypePredictionUpdate,
-		OwnerOnly:       isModerationFrame(eventType),
+		OwnerOnly:       isOwnerOnlyFrame(eventType),
 	}
 }
 
@@ -1147,13 +1141,14 @@ func overlayBroadcastFilter(eventType string, msgType models.WSMessageType) wsco
 // they are ephemeral refetch signals that clients re-hydrate over HTTP on
 // reconnect. They must never enter the chat replay buffer.
 //
-// Moderation/AutoMod frames are excluded for a security reason: the buffer is
-// replayed to EVERY socket on connect, including anonymous OBS ones, so
-// buffering a held message would leak the exact text the owner-only broadcast
-// just protected — and leak it later, out of context, which is worse.
-func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOverlayID string, liveConnCount int, isModFrame bool) bool {
+// Owner-only frames are excluded. For moderation/AutoMod frames the reason is
+// security: the buffer is replayed to EVERY socket on connect, including
+// anonymous OBS ones, so buffering a held message would leak the exact text the
+// owner-only broadcast just protected — and leak it later, out of context, which
+// is worse. Ad breaks are stale by the time anything replays them.
+func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOverlayID string, liveConnCount int, isOwnerOnly bool) bool {
 	return liveConnCount == 0 &&
-		!isModFrame &&
+		!isOwnerOnly &&
 		overlayID != testStreamOverlayID &&
 		msgType != models.WSMessageTypePollUpdate &&
 		msgType != models.WSMessageTypePredictionUpdate

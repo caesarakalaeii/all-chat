@@ -65,8 +65,8 @@ interface SourceRow {
   owner_username?: string
   user_id: string
 }
+// One platform account; an identity that never signed in has no username (ADR-0034).
 interface ViewerRow {
-  id: string
   platform: string
   username: string
   display_name: string
@@ -240,14 +240,18 @@ export default function AdminSearchPage() {
             <ResultGroup title={t('admin.search.groupViewers')} count={totals.viewers}>
               {viewers.map((v) => (
                 <Link
-                  key={v.id}
-                  href={`/admin/viewers?q=${encodeURIComponent(v.username)}`}
+                  key={`${v.platform}:${v.platform_user_id}`}
+                  href={`/admin/viewers?q=${encodeURIComponent(v.username || v.platform_user_id)}`}
                   className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-surface-2"
                 >
                   <PlatformBadge platform={v.platform} size="sm" />
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-medium text-text">{v.display_name}</div>
-                    <div className="truncate text-xs text-text-sub">@{v.username}</div>
+                    <div className="truncate text-sm font-medium text-text">
+                      {v.display_name || v.platform_user_id}
+                    </div>
+                    {v.username && (
+                      <div className="truncate text-xs text-text-sub">@{v.username}</div>
+                    )}
                   </div>
                 </Link>
               ))}

@@ -250,8 +250,8 @@ kubectl --context default get deployment youtube-listener-innertube -n allchat \
 
 ```bash
 # auth-service health (DB + Redis readiness):
-kubectl --context default exec -n allchat deploy/auth-service -- \
-  wget -qO- http://localhost:8081/health/ready
+kubectl --context default port-forward -n allchat deploy/auth-service 8081:8081 >/dev/null &
+sleep 1; curl -s http://localhost:8081/health/ready; kill $!
 # Expected: HTTP 200 with {"status":"ok","db":"ok","redis":"ok"} or equivalent
 
 # Scan recent logs for PostgreSQL auth failures:
@@ -337,8 +337,8 @@ pods enter `CrashLoopBackOff` due to DB connection failures:
 5. **Validate:**
 
    ```bash
-   kubectl --context default exec -n allchat deploy/auth-service -- \
-     wget -qO- http://localhost:8081/health/ready
+   kubectl --context default port-forward -n allchat deploy/auth-service 8081:8081 >/dev/null &
+   sleep 1; curl -s http://localhost:8081/health/ready; kill $!
    # Expected: HTTP 200
    ```
 

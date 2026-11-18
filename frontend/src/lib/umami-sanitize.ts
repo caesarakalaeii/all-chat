@@ -24,17 +24,22 @@
  *
  *   1. High cardinality — every overlay is a unique path (`/overlays/<uuid>`),
  *      so the stats fragment into thousands of one-hit URLs that aren't useful.
- *   2. Secrets in analytics — OAuth callbacks carry tokens in the URL, e.g.
- *      `/auth/callback#access_token=...` (a JWT, in the hash) and
- *      `/chat/auth-success?code=...&streamer=...` (a one-time code, in the query).
+ *   2. Secrets and identifiers in analytics — URLs carry bearer tokens
+ *      (`/overlay/<id>?tts_token=<jwt>`, `/auth/callback#access_token=...`),
+ *      one-time codes (`/chat/auth-success?code=...`), usernames
+ *      (`?existing_username=`, `?streamer=`) and admin lookups (`?user=`,
+ *      `?overlay=`), and new params like these appear with new features.
  *
  * This module is wired into the tracker via `data-before-send` (see
  * `components/Analytics.tsx`). Umami resolves the callback as `window[name]` at
  * send time and transmits whatever payload we return (a falsy return cancels the
  * event). We rewrite the `url` and `referrer` fields:
  *
- *   - collapse any UUID path segment to `:id`
- *   - drop token/identity-bearing query params (keeping `utm_*` for attribution)
+ *   - keep only `utm_*` query params (campaign attribution) and drop every
+ *     other one. This is an allowlist on purpose: a denylist misses each new
+ *     param that carries a token or an identifier, and the miss is silent.
+ *   - collapse every UUID anywhere in the result (path or kept query value)
+ *     to `:id`
  *   - strip the hash defensively (the tracker also has `data-exclude-hash` set,
  *     which removes it race-free before this even runs)
  */
@@ -43,27 +48,15 @@
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
 
 /**
- * Query params that may carry tokens, one-time codes, redirect targets, or
- * identifying values. Page-view URLs never need them — the typed custom events
- * in `lib/analytics.ts` carry the useful, aggregate signal instead. Anything not
- * listed here (notably `utm_*` campaign params) is preserved.
+ * The only query params a page-view URL keeps: Umami reads `utm_*` for its
+ * campaign report. Everything else is dropped; the typed custom events in
+ * `lib/analytics.ts` carry the useful, aggregate signal instead.
  */
-const SENSITIVE_QUERY_KEYS: ReadonlySet<string> = new Set([
-  'access_token',
-  'refresh_token',
-  'token',
-  'id_token',
-  'code',
-  'state',
-  'streamer',
-  'redirect_to',
-  'source_added',
-  'error',
-  'error_description',
-])
+const KEPT_QUERY_PREFIX = 'utm_'
 
 /**
- * Normalise a tracked URL (or referrer) so it carries no UUIDs or secrets.
+ * Normalise a tracked URL (or referrer) so it carries no UUIDs, no hash and
+ * no query params other than `utm_*`.
  * Accepts relative (`/p?q#h`) and absolute (`https://host/p?q#h`) forms.
  */
 export function sanitizeUrl(raw: string): string {
@@ -72,14 +65,9 @@ export function sanitizeUrl(raw: string): string {
   const path = queryStart === -1 ? noHash : noHash.slice(0, queryStart)
   const search = queryStart === -1 ? '' : noHash.slice(queryStart + 1)
 
-  const cleanPath = path.replace(UUID_PATTERN, ':id')
-  if (search === '') return cleanPath
-
-  const kept = search.split('&').filter((pair) => {
-    const key = pair.split('=', 1)[0]
-    return key.length > 0 && !SENSITIVE_QUERY_KEYS.has(key)
-  })
-  return kept.length > 0 ? `${cleanPath}?${kept.join('&')}` : cleanPath
+  const kept = search.split('&').filter((pair) => pair.startsWith(KEPT_QUERY_PREFIX))
+  const result = kept.length > 0 ? `${path}?${kept.join('&')}` : path
+  return result.replace(UUID_PATTERN, ':id')
 }
 
 /** Subset of the Umami event payload we touch; other fields pass through unchanged. */

@@ -63,6 +63,7 @@ Welcome to the All-Chat documentation hub. This directory contains comprehensive
 **Feature Guides** (`features/`):
 - [message-deletion.md](./features/message-deletion.md) - Cross-platform deletion sync
 - [twitch-moderation-events.md](./features/twitch-moderation-events.md) - Twitch moderator actions + AutoMod holds in the monitor
+- [twitch-ad-breaks.md](./features/twitch-ad-breaks.md) - Twitch ad break notices in the monitor
 - [passive-overlay-irl.md](./features/passive-overlay-irl.md) - Render-only overlay for IRL disconnect protection
 
 ---

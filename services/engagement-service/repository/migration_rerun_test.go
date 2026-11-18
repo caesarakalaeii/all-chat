@@ -43,8 +43,7 @@ import (
 )
 
 func TestP0_1_MigrationRerunWithMultiOverlayData(t *testing.T) {
-	psql, err := exec.LookPath("psql")
-	if err != nil {
+	if _, err := exec.LookPath("psql"); err != nil {
 		t.Skip("requires psql on PATH to re-apply the migration batch")
 	}
 	pool := newTestDB(t)
@@ -81,6 +80,38 @@ func TestP0_1_MigrationRerunWithMultiOverlayData(t *testing.T) {
 	// Re-apply the engagement migration batch (069+) exactly as run-migrations.sh does.
 	// On the pre-fix code this aborts rebuilding a global unique over the rows above; on
 	// the fixed code every CREATE ... IF NOT EXISTS short-circuits on the per-scope name.
+	replayMigrations(t, "069")
+}
+
+// Regression test for the 2026-11-04 rollout outage: 114 dropped and re-added
+// chat_commands_does_something with its own (image-era) predicate on every replay, so the
+// first command that only plays a sound or only shows alert text (allowed since 123)
+// failed the re-check and every migration init container crash-looped.
+func TestMigrationRerunWithAlertOnlyChatCommands(t *testing.T) {
+	if _, err := exec.LookPath("psql"); err != nil {
+		t.Skip("requires psql on PATH to re-apply the migration batch")
+	}
+	pool := newTestDB(t)
+	ctx := context.Background()
+
+	var userID uuid.UUID
+	require.NoError(t, pool.QueryRow(ctx, `SELECT user_id FROM overlays WHERE id = $1`, seedOverlay(t, pool)).Scan(&userID))
+	_, err := pool.Exec(ctx,
+		`INSERT INTO chat_commands (user_id, kind, trigger, sound_url) VALUES ($1, 'command', '!sound', 'https://example.com/a.mp3')`, userID)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx,
+		`INSERT INTO chat_commands (user_id, kind, trigger, alert_text) VALUES ($1, 'command', '!text', 'hi {user}')`, userID)
+	require.NoError(t, err)
+
+	replayMigrations(t, "113")
+}
+
+// replayMigrations re-applies every up-migration whose file name sorts at or after from,
+// exactly as run-migrations.sh does on each pod start, and fails on the first error.
+func replayMigrations(t *testing.T, from string) {
+	t.Helper()
+	psql, err := exec.LookPath("psql")
+	require.NoError(t, err)
 	host := envOr("DATABASE_HOST", "localhost")
 	port := envOr("DATABASE_PORT", "5432")
 	user := envOr("DATABASE_USER", "allchat")
@@ -93,22 +124,18 @@ func TestP0_1_MigrationRerunWithMultiOverlayData(t *testing.T) {
 	replayed := 0
 	for _, f := range files {
 		base := filepath.Base(f)
-		if strings.HasSuffix(base, "_down.sql") {
-			continue
-		}
-		// 3-digit zero-padded prefixes sort lexically; replay only the engagement batch
-		// (the P0-1 landmine lives in 069+) to keep the blast radius tight.
-		if base < "069" {
+		// 3-digit zero-padded prefixes sort lexically.
+		if strings.HasSuffix(base, "_down.sql") || base < from {
 			continue
 		}
 		cmd := exec.Command(psql, "-h", host, "-p", port, "-U", user, "-d", dbname,
 			"-v", "ON_ERROR_STOP=1", "-q", "-f", f)
 		cmd.Env = env
 		out, cerr := cmd.CombinedOutput()
-		require.NoErrorf(t, cerr, "re-applying %s over multi-overlay data must succeed:\n%s", base, out)
+		require.NoErrorf(t, cerr, "re-applying %s over existing data must succeed:\n%s", base, out)
 		replayed++
 	}
-	require.Positive(t, replayed, "expected to re-apply at least the engagement migrations")
+	require.Positive(t, replayed, "expected to re-apply at least one migration")
 }
 
 // --- fixtures ---

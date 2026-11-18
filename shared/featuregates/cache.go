@@ -171,6 +171,21 @@ const (
 	// feature ships to beta testers first. The All-Chat Bot itself (the default
 	// sender) is admin-managed and NOT gated by this — it is product, not upsell.
 	GateCustomChatBot = "custom_chat_bot"
+
+	// GateTwitchAdBreaks gates opting a channel into Twitch ad break notices in the
+	// monitor (the channel:read:ads consent), mounted by auth-service on the Twitch
+	// re-consent when ?actions= carries "ads". Seeded is_premium=FALSE (migration 127):
+	// it ships open and exists so it can be narrowed without a deploy. A flip stops new
+	// grants only; channels that already granted keep their notices.
+	GateTwitchAdBreaks = "twitch_ad_breaks"
+
+	// GateMediaUpload gates uploading your own images, GIFs and sounds
+	// (POST /api/v1/media/presign, mounted by media-service, ADR-0088). Seeded
+	// is_premium=TRUE (migration 128): uploads take object storage, so they stay
+	// premium while alerts and chat commands themselves are free. Pasting a URL,
+	// the built-in presets and KLIPY GIF search need no upload. Listing and
+	// deleting your own uploads are never gated.
+	GateMediaUpload = "media_upload"
 )
 
 // rolloutPlatformGates maps a platform slug to its source-add rollout gate

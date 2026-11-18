@@ -26,10 +26,12 @@ import (
 	"time"
 
 	"github.com/caesar/all-chat/services/media-service/handlers"
+	"github.com/caesar/all-chat/services/media-service/orphans"
 	"github.com/caesar/all-chat/services/media-service/repository"
 	"github.com/caesar/all-chat/services/media-service/storage"
 	sharedAuth "github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/database"
+	"github.com/caesar/all-chat/shared/featuregates"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/tracing"
@@ -104,6 +106,7 @@ func main() {
 	// The degraded path leaves authRedis a true nil interface, which the
 	// middleware skips.
 	var authRedis redis.UniversalClient
+	var gateRedis *redis.Client
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     fmt.Sprintf("%s:%s", getEnv("REDIS_HOST", "localhost"), getEnv("REDIS_PORT", "6379")),
 		Password: getEnv("REDIS_PASSWORD", ""),
@@ -114,6 +117,7 @@ func main() {
 	} else {
 		log.Info("Connected to Redis")
 		authRedis = redisClient
+		gateRedis = redisClient
 		defer redisClient.Close()
 	}
 
@@ -124,27 +128,31 @@ func main() {
 	if err != nil {
 		log.Fatal("Invalid media storage configuration", zap.Error(err))
 	}
+	mediaRepo := repository.NewMediaRepository(dbPool)
+	sweepCtx, stopSweep := context.WithCancel(context.Background())
+	defer stopSweep()
+
 	var objectStore handlers.ObjectStore
 	if storageCfg.Endpoint == "" {
 		log.Warn("MINIO_ENDPOINT not set — media routes will serve 503")
 		objectStore = storage.DisabledStore{}
+	} else if minioStore, err := storage.NewMinioStore(storageCfg); err != nil {
+		// minio.New only parses the endpoint; an error here is a malformed
+		// MINIO_ENDPOINT. Degrade to 503s instead of crash-looping: the
+		// rest of the stack does not depend on this service.
+		log.Error("Failed to build MinIO client — media routes will serve 503", zap.Error(err))
+		objectStore = storage.DisabledStore{}
 	} else {
-		objectStore, err = storage.NewMinioStore(storageCfg)
-		if err != nil {
-			// minio.New only parses the endpoint; an error here is a malformed
-			// MINIO_ENDPOINT. Degrade to 503s instead of crash-looping: the
-			// rest of the stack does not depend on this service.
-			log.Error("Failed to build MinIO client — media routes will serve 503", zap.Error(err))
-			objectStore = storage.DisabledStore{}
-		} else {
-			log.Info("MinIO object store configured",
-				zap.String("endpoint", storageCfg.Endpoint),
-				zap.String("bucket", storageCfg.Bucket),
-			)
-		}
+		objectStore = minioStore
+		log.Info("MinIO object store configured",
+			zap.String("endpoint", storageCfg.Endpoint),
+			zap.String("bucket", storageCfg.Bucket),
+		)
+		// Files whose registry row is gone (deleted by the user, or with the account)
+		// leave the public-read bucket within one interval (ADR-0088).
+		go orphans.Run(sweepCtx, storageCfg.OrphanSweepInterval, minioStore, mediaRepo, log)
 	}
 
-	mediaRepo := repository.NewMediaRepository(dbPool)
 	mediaHandler := handlers.NewMediaHandler(mediaRepo, objectStore, handlers.MediaConfig{
 		PublicBaseURL:     storageCfg.PublicBaseURL,
 		PresignExpiry:     storageCfg.PresignExpiry,
@@ -159,9 +167,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
-		SkipPaths: []string{"/health/live", "/health/ready"},
-	}))
+	router.Use(middleware.GinAccessLog())
 
 	router.GET("/health/live", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "alive"})
@@ -185,7 +191,15 @@ func main() {
 
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	registerMediaRoutes(router, userKeyChain, authRedis, mediaHandler)
+	// Without Redis the cache still loads from the database and polls; it only
+	// loses instant invalidation on an admin flip.
+	gateCache := featuregates.NewFeatureGateCache(dbPool, gateRedis, log)
+	if err := gateCache.Start(context.Background()); err != nil {
+		log.Fatal("Failed to start feature gate cache", zap.Error(err))
+	}
+	requireUpload := middleware.RequirePremium(dbPool, gateCache, featuregates.GateMediaUpload, log)
+
+	registerMediaRoutes(router, userKeyChain, authRedis, mediaHandler, requireUpload)
 
 	srv := &http.Server{
 		Addr:         ":" + config.Port,

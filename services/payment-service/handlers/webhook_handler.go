@@ -98,7 +98,7 @@ func (h *WebhookHandler) Handle(c *gin.Context) {
 		return
 	}
 
-	status, isPremium, err := h.entitlement.Apply(ctx, snap, userID, viewerID, body)
+	status, isPremium, err := h.entitlement.Apply(ctx, snap, userID, viewerID)
 	if err != nil {
 		h.logger.Error("Failed to apply Patreon webhook", zap.String("event", event), zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to apply"})

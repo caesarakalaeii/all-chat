@@ -37,8 +37,32 @@ type mockViewerIdentityRepo struct {
 	linkViewerToUser      func(ctx context.Context, platform, platformUserID, userID string) error
 	getIsPremium          func(ctx context.Context, viewerID uuid.UUID) (bool, error)
 	getLinked             func(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
-	unlinkPlatform        func(ctx context.Context, viewerID uuid.UUID, platform string) error
+	unlinkPlatform        func(ctx context.Context, viewerID uuid.UUID, platform string) ([]repository.RemovedToken, error)
 	migratePlatformUserID func(ctx context.Context, platform, oldID, newID string) error
+	eraseViewer           func(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) ([]repository.LinkedPlatform, error)
+	getTosAccepted        func(ctx context.Context, viewerID uuid.UUID) (bool, error)
+	acceptTos             func(ctx context.Context, viewerID uuid.UUID) error
+}
+
+func (m *mockViewerIdentityRepo) EraseViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) ([]repository.LinkedPlatform, error) {
+	if m.eraseViewer != nil {
+		return m.eraseViewer(ctx, viewerID, platform, platformUserID)
+	}
+	return nil, nil
+}
+
+func (m *mockViewerIdentityRepo) GetViewerTosAccepted(ctx context.Context, viewerID uuid.UUID) (bool, error) {
+	if m.getTosAccepted != nil {
+		return m.getTosAccepted(ctx, viewerID)
+	}
+	return true, nil
+}
+
+func (m *mockViewerIdentityRepo) AcceptViewerTos(ctx context.Context, viewerID uuid.UUID) error {
+	if m.acceptTos != nil {
+		return m.acceptTos(ctx, viewerID)
+	}
+	return nil
 }
 
 func (m *mockViewerIdentityRepo) GetOrCreateViewerByPlatform(ctx context.Context, platform, platformUserID string) (uuid.UUID, error) {
@@ -76,11 +100,11 @@ func (m *mockViewerIdentityRepo) GetLinkedPlatforms(ctx context.Context, viewerI
 	return nil, nil
 }
 
-func (m *mockViewerIdentityRepo) UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error {
+func (m *mockViewerIdentityRepo) UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) ([]repository.RemovedToken, error) {
 	if m.unlinkPlatform != nil {
 		return m.unlinkPlatform(ctx, viewerID, platform)
 	}
-	return nil
+	return nil, nil
 }
 
 func (m *mockViewerIdentityRepo) MigratePlatformUserID(ctx context.Context, platform, oldID, newID string) error {
@@ -327,7 +351,7 @@ func TestHandleUnlinkPlatform_Success(t *testing.T) {
 	viewerID := uuid.New()
 	unlinkCalled := false
 	mock := &mockViewerIdentityRepo{
-		unlinkPlatform: func(_ context.Context, id uuid.UUID, platform string) error {
+		unlinkPlatform: func(_ context.Context, id uuid.UUID, platform string) ([]repository.RemovedToken, error) {
 			unlinkCalled = true
 			if id != viewerID {
 				t.Errorf("unexpected viewerID: %v", id)
@@ -335,7 +359,7 @@ func TestHandleUnlinkPlatform_Success(t *testing.T) {
 			if platform != "youtube" {
 				t.Errorf("unexpected platform: %s", platform)
 			}
-			return nil
+			return nil, nil
 		},
 	}
 	r, _ := newLinkedPlatformsRouter(mock)
@@ -372,8 +396,8 @@ func TestHandleUnlinkPlatform_CannotUnlinkCurrentPlatform_Returns400(t *testing.
 func TestHandleUnlinkPlatform_LastPlatform_Returns409(t *testing.T) {
 	viewerID := uuid.New()
 	mock := &mockViewerIdentityRepo{
-		unlinkPlatform: func(_ context.Context, _ uuid.UUID, _ string) error {
-			return repository.ErrLastPlatform
+		unlinkPlatform: func(_ context.Context, _ uuid.UUID, _ string) ([]repository.RemovedToken, error) {
+			return nil, repository.ErrLastPlatform
 		},
 	}
 	r, _ := newLinkedPlatformsRouter(mock)
@@ -392,8 +416,8 @@ func TestHandleUnlinkPlatform_LastPlatform_Returns409(t *testing.T) {
 func TestHandleUnlinkPlatform_NotLinked_Returns404(t *testing.T) {
 	viewerID := uuid.New()
 	mock := &mockViewerIdentityRepo{
-		unlinkPlatform: func(_ context.Context, _ uuid.UUID, _ string) error {
-			return repository.ErrNotFound
+		unlinkPlatform: func(_ context.Context, _ uuid.UUID, _ string) ([]repository.RemovedToken, error) {
+			return nil, repository.ErrNotFound
 		},
 	}
 	r, _ := newLinkedPlatformsRouter(mock)

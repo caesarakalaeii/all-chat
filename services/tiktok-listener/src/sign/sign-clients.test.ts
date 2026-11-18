@@ -16,8 +16,27 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fallbackPromotionAvailable, pickSignClients } from './sign-clients.js';
+
+// The PureNodeSigner's default fetch is undici's; stubbing it here lets the
+// budget be observed through real sign() calls without a test-only injection
+// seam on SignClientDeps, which carries production construction inputs only.
+vi.mock('undici', () => ({
+  request: vi.fn(async () => ({
+    statusCode: 200,
+    headers: {},
+    body: {
+      text: async () =>
+        JSON.stringify({
+          wsUrl: 'wss://webcast-ws.eu.tiktok.com/webcast/im/ws_proxy/?room_id=111&cursor=abc',
+          cookieHeader: 'ttwid=1',
+          roomId: '111',
+          userAgent: 'viewer-ua'
+        })
+    }
+  }))
+}));
 
 /**
  * The mode-gated signer-construction rules (PR 2 plan ruling 6) and the
@@ -50,6 +69,23 @@ describe('pickSignClients', () => {
       expect(clients.selfSigner, mode).toBeDefined();
       expect(clients.pureNodeSigner, mode).toBeUndefined();
     }
+  });
+
+  it('gives the PureNodeSigner the configured per-pod WS-connect budget', async () => {
+    // The budget is enforced per pod but spent against ONE leased session,
+    // so a two-replica rollout must be able to halve it. Asserted through
+    // the signer's own refusal point rather than a field: the budget is
+    // only meaningful as "the Nth connect this hour is refused".
+    const { pureNodeSigner } = pickSignClients('pure-node', {
+      ...URL_DEPS,
+      maxWsConnectsPerHour: 2
+    });
+    const connect = (roomId: string): Promise<unknown> =>
+      pureNodeSigner!.sign({ roomId, username: 'someone', userAgent: 'test-ua' });
+
+    await connect('a');
+    await connect('b');
+    await expect(connect('c')).rejects.toThrow(/WS connect budget exhausted/);
   });
 
   it('no signer URL constructs nothing, in every mode', () => {
