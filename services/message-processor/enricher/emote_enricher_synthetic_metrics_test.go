@@ -282,3 +282,40 @@ func TestUnresolvableChatterSharesChannelCacheKey(t *testing.T) {
 		}
 	}
 }
+
+// Dropping the chatter id for the cache key must not also drop the platform
+// from the outbound request. emote-service branches on platform in three
+// places — the Twitch-global fetch, the BTTV/FFZ "global" lookup fallback and
+// the 7TV channel-connection path — and GetEmotesForChannel carries no
+// platform argument, so routing such a chatter down it degrades emote
+// resolution silently rather than failing. Covers the platforms that lose
+// their user id (see hasPersonalEmotes); the ones that keep it reach the
+// user-aware call through the user id itself.
+func TestUnresolvableChatterStillSendsPlatformToEmoteService(t *testing.T) {
+	for _, platform := range []string{"tiktok", "youtube"} {
+		store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
+		e := NewEnricher(client, store, zap.NewNop())
+
+		msg := &models.UnifiedChatMessage{
+			Platform:  platform,
+			ChannelID: "bardeado_2001",
+			User:      models.UserInfo{ID: "_delci0"},
+			Message:   models.MessageInfo{Text: "KEKW"},
+			Metadata:  map[string]interface{}{},
+		}
+		if err := e.Enrich(context.Background(), msg); err != nil {
+			t.Fatalf("%s: Enrich returned error: %v", platform, err)
+		}
+
+		if client.plainCalls != 0 {
+			t.Errorf("%s: used the platform-less channel route %d times, want 0", platform, client.plainCalls)
+		}
+		if client.lastPlatform != platform {
+			t.Errorf("%s: emote service got platform %q, want %q", platform, client.lastPlatform, platform)
+		}
+		if client.lastUserID != "" {
+			t.Errorf("%s: sent user %q to the emote service, want none", platform, client.lastUserID)
+		}
+	}
+}

@@ -34,12 +34,20 @@ type mockEmoteServiceClient struct {
 	lastChannel string
 	lastUserID  string
 	calls       int
+	// lastPlatform is the platform the request carried, and plainCalls counts
+	// the GetEmotesForChannel route, which has no platform argument at all.
+	// Both are needed to tell the two client methods apart: emote-service
+	// branches on platform (Twitch globals, the BTTV/FFZ "global" fallback and
+	// the 7TV connection lookup), so a request that loses it degrades silently.
+	lastPlatform string
+	plainCalls   int
 }
 
 func (m *mockEmoteServiceClient) GetEmotesForChannel(ctx context.Context, channelID string) ([]EmoteServiceEmote, error) {
 	m.mu.Lock()
 	m.lastChannel = channelID
 	m.calls++
+	m.plainCalls++
 	m.mu.Unlock()
 	if m.err != nil {
 		return nil, m.err
@@ -51,6 +59,7 @@ func (m *mockEmoteServiceClient) GetEmotesForChannelWithUser(ctx context.Context
 	m.mu.Lock()
 	m.lastChannel = channel
 	m.lastUserID = userID
+	m.lastPlatform = platform
 	m.calls++
 	m.mu.Unlock()
 	if m.err != nil {
