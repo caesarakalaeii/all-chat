@@ -224,33 +224,35 @@ func TestSyntheticMessagesUseChannelCacheKey(t *testing.T) {
 	}
 }
 
-// Real users can carry personal (7TV) emotes, so they keep per-user keys.
+// Twitch and Kick chatters can carry personal (7TV) emotes, so they keep
+// per-user keys.
 func TestRealMessageUsesPerUserCacheKey(t *testing.T) {
-	store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
-	client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
-	e := NewEnricher(client, store, zap.NewNop())
+	for _, platform := range []string{"twitch", "kick"} {
+		store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
+		e := NewEnricher(client, store, zap.NewNop())
 
-	msg := &models.UnifiedChatMessage{
-		Platform:  "twitch",
-		ChannelID: "caesarlp",
-		User:      models.UserInfo{ID: "real-user"},
-		Message:   models.MessageInfo{Text: "KEKW"},
-		Metadata:  map[string]interface{}{},
-	}
-	if err := e.Enrich(context.Background(), msg); err != nil {
-		t.Fatalf("Enrich returned error: %v", err)
-	}
-	if store.userCalls != 2 || client.lastUserID != "real-user" {
-		t.Fatalf("real message: userCalls=%d lastUserID=%q, want 2 and %q", store.userCalls, client.lastUserID, "real-user")
+		msg := &models.UnifiedChatMessage{
+			Platform:  platform,
+			ChannelID: "caesarlp",
+			User:      models.UserInfo{ID: "real-user"},
+			Message:   models.MessageInfo{Text: "KEKW"},
+			Metadata:  map[string]interface{}{},
+		}
+		if err := e.Enrich(context.Background(), msg); err != nil {
+			t.Fatalf("%s: Enrich returned error: %v", platform, err)
+		}
+		if store.userCalls != 2 || client.lastUserID != "real-user" {
+			t.Errorf("%s: userCalls=%d lastUserID=%q, want 2 and %q", platform, store.userCalls, client.lastUserID, "real-user")
+		}
 	}
 }
 
-// Only a Twitch identity resolves a 7TV personal set, so a real chatter on any
-// other platform must share the channel key too — see hasPersonalEmotes. Keyed
-// per user, each stored a redundant copy of the channel set and filled Redis
-// (AllChatRedisMemoryNearLimit, 2026-11-18).
-func TestNonTwitchChatterSharesChannelCacheKey(t *testing.T) {
-	for _, platform := range []string{"tiktok", "youtube", "kick"} {
+// 7TV cannot resolve a TikTok or YouTube chatter, so those share the channel
+// key — see hasPersonalEmotes. Keyed per user, each stored a redundant copy of
+// the channel set and filled Redis (AllChatRedisMemoryNearLimit, 2026-11-18).
+func TestUnresolvableChatterSharesChannelCacheKey(t *testing.T) {
+	for _, platform := range []string{"tiktok", "youtube"} {
 		store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
 		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
 		e := NewEnricher(client, store, zap.NewNop())

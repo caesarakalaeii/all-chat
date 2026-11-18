@@ -459,18 +459,19 @@ func (e *Enricher) refreshAsync(channel, platform, userID, twitchChannel string)
 // hasPersonalEmotes reports whether a chatter on this platform can have a
 // personal emote set we are able to resolve. 7TV is the only provider of
 // per-user emotes, via /v3/users/{platform}/{id} (FetchUserEmotes in
-// emote-service), and that lookup resolves a chatter only from a Twitch
-// identity — a TikTok username or a YouTube chatter id is always a 400. The
-// merged response is then byte-identical to the channel-level one, so a
-// per-user cache key stored a redundant full-size copy of the channel emote
-// set (~100-230 KB) per chatter per channel for 13h, which filled Redis
-// (AllChatRedisMemoryNearLimit, 2026-11-18).
+// emote-service), and that lookup accepts only Twitch and Kick chatter ids
+// (an unlinked Kick id is a 404, a TikTok username or a YouTube chatter id is
+// always a 400). For every other platform the merged response is
+// byte-identical to the channel-level one, so a per-user cache key stored a
+// redundant full-size copy of the channel emote set (~100-230 KB) per chatter
+// per channel for 13h, which filled Redis (AllChatRedisMemoryNearLimit,
+// 2026-11-18).
 //
 // Note this is about CHATTER ids only. The same 7TV endpoint does serve
 // YouTube and Kick CHANNEL connections — see fetchPlatformConnectionEmotes in
 // emote-service — so the channel lookup is unaffected by this predicate.
 func hasPersonalEmotes(platform string) bool {
-	return platform == "twitch"
+	return platform == "twitch" || platform == "kick"
 }
 
 // isSynthetic reports whether a message originates from a synthetic source —
