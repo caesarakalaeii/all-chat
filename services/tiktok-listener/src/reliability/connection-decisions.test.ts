@@ -25,6 +25,7 @@ import {
   nextFlapRetryDelayMs,
   NoLaneCache,
   NO_LANE_CACHE_TTL_MS,
+  parkBlocksConnect,
   SILENT_FAILURE_PARK_BASE_MS,
   SILENT_FAILURE_PARK_MAX_MS,
   SILENT_FAILURE_STREAK_THRESHOLD,
@@ -33,6 +34,33 @@ import {
   WS_FLAP_RETRY_DELAY_MS
 } from './connection-decisions.js';
 import { SignatureFailure } from '../sign/signer.js';
+
+describe('parkBlocksConnect', () => {
+  // A budget-refused room is parked until the signer's window slides and is
+  // already promised the slot that frees then (PureNodeSigner's connectQueue).
+  // The poller honours that park, but the demand path did not: when a demand
+  // snapshot briefly dropped a parked room and re-added it, handleDemandUpdate
+  // re-acquired leadership and dialled straight away, spending a second slot
+  // on a room that already held one (prod 2026-11-18 00:03:51 -> 00:08:49,
+  // cotermatha refused twice in five minutes inside its own 20-minute park).
+
+  it('blocks a connect while the room is parked', () => {
+    expect(parkBlocksConnect(20 * 60_000)).toBe(true);
+  });
+
+  it('blocks a connect with a single millisecond of park left', () => {
+    expect(parkBlocksConnect(1)).toBe(true);
+  });
+
+  it('allows a connect once the park has elapsed', () => {
+    expect(parkBlocksConnect(0)).toBe(false);
+  });
+
+  it('allows a connect for a room that was never parked', () => {
+    // parkRemainingMs answers 0 for unknown rooms; they must dial normally.
+    expect(parkBlocksConnect(0)).toBe(false);
+  });
+});
 
 describe('connectionCeilingReached', () => {
   // The ceiling check is what stops a pod from opening more Euler-proxied
