@@ -43,6 +43,11 @@ type twoKeyCacheStore struct {
 	// emotes still resets the key's TTL in Redis, so contents alone cannot show
 	// whether the channel entry was left alone.
 	channelWrites int
+	// channelStale is the channel key's own freshness, independent of any
+	// per-user key's: the two carry different TTLs (6h vs 1h), so the channel
+	// half can be the stale one. A Set clears it, the way a rewrite in Redis
+	// sets a new soft expiry.
+	channelStale bool
 }
 
 func newTwoKeyCacheStore() *twoKeyCacheStore {
@@ -55,13 +60,14 @@ func (s *twoKeyCacheStore) GetEntry(ctx context.Context, channel string) (cache.
 	if s.channel == nil {
 		return cache.Entry{}, cache.ErrCacheMiss
 	}
-	return cache.Entry{Emotes: s.channel}, nil
+	return cache.Entry{Emotes: s.channel, Stale: s.channelStale}, nil
 }
 
 func (s *twoKeyCacheStore) Set(ctx context.Context, channel string, emotes []cache.CachedEmote) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.channel = emotes
+	s.channelStale = false
 	s.channelWrites++
 	return nil
 }
@@ -327,4 +333,84 @@ func TestTwitchOnlyChannelCachesAfterFirstMessage(t *testing.T) {
 		t.Fatalf("a repeat chatter must be served from cache: expected 1 upstream fetch "+
 			"across the two messages, got %d", extra)
 	}
+}
+
+// TestStaleChannelHalfIsRefreshedOnItsOwnKey pins that a stale channel half
+// heals.
+//
+// A per-user read reports stale if EITHER half is, and the channel half is the
+// one that goes stale first in practice (6h soft TTL against the per-user key's
+// 1h, and the per-user key is rewritten on every refresh). A refresh carrying a
+// user id finds the channel entry present-but-stale — not ErrCacheMiss — so it
+// writes only the per-user half and leaves the channel key untouched. The
+// single-flight guard in refreshAsync only dedups CONCURRENT refreshes, so every
+// serial message past the channel entry's soft expiry starts another one:
+// emote-service rate-limits message-processor's whole pod at 60 req/min, and a
+// warm channel exceeds that within a minute of its channel entry going stale.
+func TestStaleChannelHalfIsRefreshedOnItsOwnKey(t *testing.T) {
+	store := newTwoKeyCacheStore()
+	store.channel = []cache.CachedEmote{
+		{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+	}
+	store.channelStale = true
+	store.perUser["chatter-one"] = []cache.CachedEmote{
+		{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"},
+	}
+	client := &userAwareEmoteClient{
+		channel: []EmoteServiceEmote{
+			{Code: "KEKW", Provider: "7tv", URL: "https://example/kekw"},
+		},
+		personal: map[string][]EmoteServiceEmote{
+			"chatter-one": {{Code: "MyPersonalEmote", Provider: "7tv", URL: "https://example/mine"}},
+		},
+	}
+	e := NewEnricher(client, store, zap.NewNop())
+
+	message := func() *models.UnifiedChatMessage {
+		return &models.UnifiedChatMessage{
+			Platform:  "twitch",
+			ChannelID: "caesarlp",
+			User:      models.UserInfo{ID: "chatter-one"},
+			Message:   models.MessageInfo{Text: "KEKW MyPersonalEmote"},
+			Metadata:  map[string]interface{}{},
+		}
+	}
+
+	first := message()
+	if err := e.Enrich(context.Background(), first); err != nil {
+		t.Fatalf("first Enrich returned error: %v", err)
+	}
+	// The stale entry is served without blocking, so the refresh is still in
+	// flight here; wait for it to rewrite the channel key.
+	if !waitFor(func() bool { return store.channelWriteCount() > 0 }) {
+		t.Fatal("a stale channel half was never refreshed on its own key; " +
+			"it stays stale for its whole 12h grace and every message re-fetches")
+	}
+	if !waitFor(func() bool { return !store.channelIsStale() }) {
+		t.Fatal("the channel refresh did not clear the channel half's staleness")
+	}
+
+	// With both halves fresh again, further messages are served entirely from
+	// cache.
+	callsAfterRefresh := client.callCount()
+	for i := 0; i < 5; i++ {
+		msg := message()
+		if err := e.Enrich(context.Background(), msg); err != nil {
+			t.Fatalf("Enrich %d returned error: %v", i, err)
+		}
+		if len(msg.Message.Emotes) != 2 {
+			t.Fatalf("message %d resolved %d emotes (%#v), want the channel's and the chatter's",
+				i, len(msg.Message.Emotes), msg.Message.Emotes)
+		}
+	}
+	if extra := client.callCount() - callsAfterRefresh; extra != 0 {
+		t.Fatalf("five cache-hit messages made %d upstream fetches, want 0: "+
+			"a channel half that cannot heal re-fetches once per message", extra)
+	}
+}
+
+func (s *twoKeyCacheStore) channelIsStale() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.channelStale
 }
