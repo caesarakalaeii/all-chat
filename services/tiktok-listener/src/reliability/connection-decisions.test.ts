@@ -21,6 +21,7 @@ import {
   connectionCeilingReached,
   budgetRefusalRetryAfterMs,
   isBudgetRefusalError,
+  parkBlocksConnect,
   isWsFlapError,
   nextFlapRetryDelayMs,
   NoLaneCache,
@@ -250,5 +251,19 @@ describe('isBudgetRefusalError', () => {
     const wrapped = { info: 'WebSocket Error after connecting', exception: new Error('socket hang up') };
     expect(isBudgetRefusalError(wrapped)).toBe(false);
     expect(budgetRefusalRetryAfterMs(wrapped)).toBe(0);
+  });
+});
+
+describe('parkBlocksConnect', () => {
+  it('blocks a connect while the park has time left', () => {
+    expect(parkBlocksConnect(47 * 60_000)).toBe(true);
+    expect(parkBlocksConnect(1)).toBe(true);
+  });
+
+  it('allows a connect once the park has elapsed', () => {
+    // parkRemainingMs clamps at 0, so 0 is the only "no park" value the
+    // call site can produce — an elapsed park and a room that was never
+    // parked are indistinguishable here, and both may dial.
+    expect(parkBlocksConnect(0)).toBe(false);
   });
 });
