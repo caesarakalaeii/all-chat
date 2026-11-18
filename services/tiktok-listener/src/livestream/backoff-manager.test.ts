@@ -244,12 +244,6 @@ describe('BackoffManager connection-state teardown', () => {
     vi.restoreAllMocks();
   });
 
-  // A park is a promise about the SIGNER's rolling hour, not about this pod's
-  // connection: PureNodeSigner.takeConnectSlot has already queued the refused
-  // room for the next slot to free. Teardown forgetting it lets the very next
-  // demand snapshot re-dial into the same window and spend a second of the
-  // pod's twelve hourly slots on one room (prod 2026-11-18: cotermatha refused
-  // at 00:03:51 for 20 minutes, torn down at 00:08:19, re-refused at 00:08:49).
   it('keeps a live park', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
@@ -263,10 +257,8 @@ describe('BackoffManager connection-state teardown', () => {
     expect(mgr.parkRemainingMs('parked')).toBe(0);
   });
 
-  // The poller gates its status checks on shouldCheckNow, which reads
-  // nextCheckTime. Preserving parkedUntil without it would leave the room
-  // eligible for an immediate check — and a live room checked live is a room
-  // dialled, which is the slot we are trying not to spend.
+  // Preserving parkedUntil without nextCheckTime would leave the room eligible
+  // for an immediate check, and a room checked live is a room dialled.
   it('still defers the next check of a parked room', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
@@ -280,9 +272,8 @@ describe('BackoffManager connection-state teardown', () => {
     expect(mgr.shouldCheckNow('parked')).toBe(true);
   });
 
-  // Only the park survives. The offline streak and the error curve describe
-  // the connection that just ended, and a room re-added later must start
-  // those from scratch.
+  // Only the park survives: the error curve describes the connection that just
+  // ended, and a room re-added later must start it from scratch.
   it('drops the error curve of a parked room', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
@@ -296,8 +287,8 @@ describe('BackoffManager connection-state teardown', () => {
     expect(mgr.getState('parked')!.consecutiveErrors).toBe(0);
   });
 
-  // A room with no live park must leave nothing behind, or the manager grows
-  // an entry per torn-down room for the lifetime of the pod.
+  // Without this the manager grows an entry per torn-down room for the
+  // lifetime of the pod.
   it('forgets a room whose park has already elapsed', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
@@ -321,9 +312,8 @@ describe('BackoffManager connection-state teardown', () => {
     expect(mgr.getAllUsernames()).not.toContain('plain');
   });
 
-  // The operator-facing counterpart: /api/reset-backoff and /api/retry call
-  // removeState precisely to override a park by hand, so it must stay a full
-  // delete.
+  // /api/reset-backoff and /api/retry call removeState precisely to override a
+  // park by hand, so it must stay a full delete.
   it('leaves removeState clearing a live park outright', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);

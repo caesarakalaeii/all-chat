@@ -311,7 +311,7 @@ export class BackoffManager {
    *
    * This is the operator's override: /api/retry and /api/reset-backoff call
    * it to clear a room's backoff by hand, and a parked room is exactly the
-   * one they reach for it. Teardown wants forgetConnectionState instead.
+   * one they reach for it. Teardown wants forgetConnectionState.
    *
    * @param username TikTok username
    */
@@ -339,8 +339,6 @@ export class BackoffManager {
    *
    * The park keeps nextCheckTime with it: the poller gates on shouldCheckNow,
    * and a room left eligible for an immediate check is a room dialled.
-   * Everything else is the ended connection's: the offline streak and the
-   * error curve, which a room re-added later must start from scratch.
    *
    * @param username TikTok username
    */

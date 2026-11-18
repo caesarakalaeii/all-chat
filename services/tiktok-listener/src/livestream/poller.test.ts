@@ -88,9 +88,7 @@ describe('LiveStreamPoller target removal', () => {
   });
 
   // The poller target goes away on every teardown — leadership loss, rebalance
-  // release, demand removal — and index.ts routes disconnectFromStream through
-  // here. A budget park outlives all of them: it is owed to the signer's
-  // rolling hour, not to the connection (prod 2026-11-18, cotermatha).
+  // release, demand removal — and a budget park outlives all of them.
   it('keeps a live budget park when the target is removed', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     vi.spyOn(Math, 'random').mockReturnValue(0.5);

@@ -1713,10 +1713,7 @@ class TikTokListenerService {
       stream.connection.disconnect();
       this.activeStreams.delete(username);
 
-      // Clear backoff state (the poller target went above). A live park
-      // survives: PureNodeSigner has already queued this room for the next
-      // connect slot to free, and re-dialling before then spends a second of
-      // the pod's hourly budget on a room that already holds a promise.
+      // Clear backoff state (the poller target went above); a live park survives.
       this.backoffManager.forgetConnectionState(username);
       this.statusChecker.clearCache(username);
       // The heartbeat-forced path does not come through here (it disconnects
