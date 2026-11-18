@@ -1,91 +1,30 @@
 # ADR-0056: The shadcn token vocabulary is the design-system contract
 
 **Date**: 2026-08-31
-**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Status**: Accepted
+**Revised**: 2026-11-18
 **Deciders**: caesarakalaeii
 
-(ADR numbering is shared with the caesar-deployment repo, so this is 0056. The
-slug `shadcn-token-vocabulary-as-the-design-system-contract` is the stable
-identifier; if the number has to move, the slug does not.)
+## Context
 
-## Context and Problem Statement
-
-`frontend/` is configured for shadcn — `components.json` pins the `base-nova`
-style, `shadcn@4` is a devDependency, `@base-ui/react` is a dependency, and
-`src/components/ui/` holds primitives copied from the registry. The design
-system was documented in `frontend/DESIGN_SYSTEM.md`.
-
-None of it was connected.
-
-**The primitives were half-installed.** shadcn registry components are written
-against a fixed token vocabulary: `bg-primary`, `text-muted-foreground`,
-`border-input`, `ring-ring`, `bg-destructive`. `src/app/globals.css` defines a
-different vocabulary — `--color-bg`, `--color-surface`, `--color-text`,
-`--color-text-sub` — and defined **none** of the shadcn names. The components
-were pulled from the registry; the CSS variable block they depend on was never
-merged in.
-
-Tailwind has no unknown-class error. A utility whose token does not exist is
-simply not emitted. So the failure was completely silent: the build passed, the
-types passed, ESLint passed, Prettier happily sorted the dead classes, and code
-review saw class names that read exactly like working ones. Compiling
-`globals.css` with the real Tailwind compiler and grepping the output showed
-**119 utility usages across 23 files that produced no CSS at all**:
-
-| Symptom                           | Reality                                                                                                                                         |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ui/button.tsx` — 27 dead classes | The default `<Button>` had **no background**. `variant="destructive"` had no colour. The focus ring (`focus-visible:ring-ring`) did not render. |
-| `text-destructive` — 35 usages    | Error copy rendered in ordinary body colour on admin and settings pages.                                                                        |
-| `bg-surface-alt`, `bg-subtle`     | Tokens that never existed in any vocabulary. Every hover state using them was inert.                                                            |
-
-**So nobody used the primitives.** With a `<Button>` that looked broken, the
-codebase grew its own: at audit time, **146 raw `<button>` elements against 33
-files importing `Button`**, and **79 raw `<input>` elements against 10
-importing `Input`**, 66 distinct hand-written button styles and 24 input
-styles, four background tokens, five focus treatments, four padding scales.
-Components grew private mini design systems: `EngagementControls.tsx` declared
-its own `primaryButtonClass` / `secondaryButtonClass` / `inputClass` constants.
-With no status tokens defined, **329 raw Tailwind palette classes**
-(`text-red-400`, `text-amber-300`, …) stood in across 14 different hues, none
-contrast-checked.
-
-**And the documentation pointed the wrong way.** `DESIGN_SYSTEM.md` described a
-slate-based palette on `#0f172a` from an abandoned direction; `globals.css` had
-long since moved to an oklch neutral scale on `#020204`. The ESLint rule meant
-to enforce the system told authors to _"use `slate-*` instead of `gray-*`"_ —
-advice for a palette that is not in the theme either. An agent reading the repo
-got three mutually contradicting answers about what colour to use.
-
-The common cause is not carelessness. It is that **no mechanism could tell a
-real token from an imaginary one**, so every guardrail in the repo — types,
-lint, review, formatter — was blind to the one mistake that mattered.
-
-## Decision Drivers
-
-- A design token that does not exist must fail loudly, in CI, at the moment it
-  is written.
-- An unmodified component from the shadcn registry must render correctly. If
-  every `shadcn add` needs a manual translation pass, the registry is worthless
-  and the CLI, the MCP server and `shadcn diff` are all dead weight.
-- One palette. Adding a compatibility layer must not fork the colour system.
-- Overlay surfaces rendered in OBS are broadcast art with their own rules and
-  must not be dragged into the chrome's contract.
-
-## Considered Options
-
-1. **Translate the registry to the project vocabulary.** Rewrite each primitive
-   to use `bg-surface` / `text-text-sub` on the way in.
-2. **Replace the project vocabulary with shadcn's.** Rename `--color-surface` to
-   `--color-card` everywhere, delete the old names.
-3. **Alias the shadcn names onto the existing tokens.** Keep `--color-bg` and
-   friends as the source of truth; add the shadcn names as `var()` aliases.
+The frontend is configured for shadcn (`components.json`, primitives copied
+into `src/components/ui/`), but the registry's fixed token vocabulary
+(`bg-primary`, `text-muted-foreground`, `bg-destructive`, ...) was never
+merged into `globals.css`, which defines a different vocabulary and none of
+the shadcn names. Tailwind has no unknown-class error, so the failure was
+silent: 119 utility usages across 23 files emitted no CSS (the default
+`<Button>` had no background, `text-destructive` rendered error copy in body
+colour), nobody used the primitives (146 raw `<button>` elements against 33
+files importing `Button`), status colour was carried by 329 raw palette
+classes across 14 hues, and `DESIGN_SYSTEM.md` described a palette from an
+abandoned direction. Common cause: no mechanism could tell a real token from
+an imaginary one.
 
 ## Decision
 
-**Option 3.** `src/app/globals.css` gains a _shadcn compatibility layer_: a
-block of `--color-*` aliases mapping the registry's vocabulary onto the tokens
-this project already defines.
+**Adopt the shadcn vocabulary as the design-system contract via a
+compatibility layer in `globals.css`: a block of `--color-*` aliases mapping
+the registry's names onto the tokens this project already defines.**
 
 ```css
 --color-background: var(--color-bg);
@@ -97,124 +36,56 @@ this project already defines.
 /* … */
 ```
 
-The mapping is **one-directional and value-free**: the aliases never carry a
-colour of their own, only a `var()` pointing at a real token. That is the
-property that keeps one palette instead of two. An alias given its own value
-forks the design system, which is precisely the failure this ADR exists to end.
+The mapping is one-directional and value-free: aliases never carry a colour of
+their own, only a `var()` pointing at a real token. An alias with its own value
+forks the palette, which is the failure this ADR ends. Four status tokens
+(`--color-destructive`, `--color-success`, `--color-warning`, `--color-info`)
+are added as absolute `oklch()` values, because no neutral or platform hue
+carries the meaning; they are read as text on all three backdrops, so each
+clears 4.5:1 against the lightest of them.
 
-Four **status tokens** are added as absolute `oklch()` values, because no
-neutral or platform hue carries the meaning: `--color-destructive`,
-`--color-success`, `--color-warning`, `--color-info`. They are read as _text_ on
-all three backdrops, so each is tuned to clear 4.5:1 against the lightest of
-them (`--color-surface-2`), not merely against `--color-bg`. They exist so that
-nothing needs to reach for a raw palette colour again.
-
-Two semantic choices are load-bearing and easy to get backwards:
-
-- `--color-popover` maps to `--color-surface`, **not** `--color-surface-2`, so
-  that `--color-accent` (surface-2) reads as a visible step _on top of_ a
-  popover. Pointing both at surface-2 makes every menu-item hover invisible.
-- shadcn's _accent_ is not a brand accent. It is the hover/selected background
-  for menu items, list rows and toggles.
+Load-bearing semantics: `--color-popover` maps to `--color-surface` (not
+surface-2) so `--color-accent` reads as a visible step on a popover, and
+shadcn's *accent* is a hover/selected background, not a brand accent.
 
 ### Enforcement
 
 `frontend/src/__tests__/design-tokens.test.ts` compiles `globals.css` with the
-**real Tailwind compiler** and scans `src/` with the **real Tailwind scanner**
-— not a regex approximation of either — then asserts that every candidate shaped
-like a token utility emits CSS. The verdict is exactly what the production build
-would emit.
-
-There is deliberately **no suppressions baseline**. The check is at zero and a
-dead token is always a bug, never debt worth carrying. This is the opposite
-choice from the a11y gate (`eslint.a11y.suppressions.json`), and for a reason:
-an a11y violation is a real control that could be improved, while a dead token
-is a class that does nothing at all.
-
-The contrast lock in `src/app/__tests__/token-contrast.test.ts` is extended to
-assert every alias _resolves to the token it claims to alias_, so a rename on
-either side fails there rather than compiling to an empty rule.
+real Tailwind compiler and scans `src/` with the real Tailwind scanner, then
+asserts every candidate shaped like a token utility emits CSS. There is
+deliberately no suppressions baseline: a dead token is always a bug. The
+contrast lock in `src/app/__tests__/token-contrast.test.ts` asserts every alias
+resolves to the token it claims to alias.
 
 ### Scope boundary
 
-> **Amendment, 2026-08-31.** This section originally excluded all of
-> `src/app/overlay/**`. That was wrong, and the error was in the rule rather
-> than the reasoning: `/overlay/[id]/view` is the streamer's **monitor page**
-> (chat plus moderation controls), `/overlay/[id]/participate` is a
-> **viewer-facing web page**, and `/overlay/[id]/poll` and
-> `/overlay/[id]/prediction` render viewer widgets: ordinary app chrome that an
-> over-broad glob was letting out of the design system. The exclusion lists the
-> OBS render routes individually; add one only if it genuinely renders
-> transparent into OBS.
->
-> A second bug surfaced while fixing the first: written as
-> `src/app/overlay/[id]/page.tsx`, the pattern excludes nothing at all —
-> square brackets are a glob **character class**, so it matches
-> `overlay/i/page.tsx` and `overlay/d/page.tsx` and never the real route. The
-> patterns use `*` for the dynamic segment. This is the same shape of failure
-> as the dead tokens: a rule that reads correctly and silently does nothing.
-
 The OBS render surfaces, the embed preview and the marketplace theme preview
-are **broadcast art rendered inside OBS**, not app chrome:
-user-themable, composited over arbitrary gameplay footage, and already carved
-out of the app's guarantees by the scope note in `token-contrast.test.ts` and
-the separate floor in `tests/e2e/theme-contrast.spec.ts`. The chrome's neutral
-tokens are the wrong vocabulary for a credits roll that has to read over
-someone's stream, so the palette rule is not enforced there. The other rules
-(no template `className`s, `focus-visible:`) still are.
-
-### Registry files stay verbatim
-
-Primitives added by the CLI are kept byte-identical to upstream so
-`npx shadcn@4 diff` stays meaningful. Local styling belongs in the call site's
-`className`. Where the registry legitimately uses `focus:` — listbox items,
-which Base UI focuses for pointer highlighting too, and `focus:z-10` stacking
-fixes — the _ESLint config_ exempts `src/components/ui/**` rather than the files
-carrying disable comments, which would defeat the diff.
+are broadcast art, not app chrome (the exclusion lists the OBS render routes
+individually — written as `src/app/overlay/[id]/page.tsx` a pattern matches
+nothing, since square brackets are a glob character class; the patterns use
+`*` for the dynamic segment). The palette rule is not enforced there; the
+other rules (no template `className`s, `focus-visible:`) still are. Registry
+primitives stay byte-identical to upstream so `npx shadcn@4 diff` stays
+meaningful; where the registry legitimately uses `focus:`, the ESLint config
+exempts `src/components/ui/**`.
 
 ## Consequences
 
-**Good.** An unmodified registry component now renders correctly, which makes
-`shadcn add`, `shadcn diff` and the shadcn MCP server usable — verified by
-adding `tabs`, `select`, `toggle-group`, `textarea`, `label` and `separator`
-with zero edits. The 119 dead utilities became live CSS: buttons have
-backgrounds, error text is red, focus rings render. The class of bug is closed
-in CI rather than documented as a caution.
+- An unmodified registry component renders correctly (verified by adding
+  several primitives with zero edits); dead utilities became live CSS; the
+  bug class is closed in CI.
+- A visible change to the live UI, not a refactor. The alias block is
+  indirection (chasing `bg-primary` means following `--color-primary` ->
+  `--color-twitch`), the price of not forking the palette.
+- Open work: the call-site migration (raw controls to primitives) and the raw
+  palette migration. The premium pass is done (`--color-premium`, warmer than
+  `--color-warning`, since as raw `amber-400` the two were nearly the same
+  paint); the palette rule currently bans only `gray-*`/`slate-*`.
 
-**Bad / risky.** This is a **visible change to the live UI**, not a refactor:
-controls that silently rendered unstyled now render styled — including every
-hand-rolled control that happened to use a shadcn token name, which is most of
-the reason the change is worth making and all of the reason it needs looking
-at. Some of those
-surfaces had never been seen correct. The alias block is also indirection — a
-reader chasing `bg-primary` must follow `--color-primary` → `--color-twitch`
-before reaching a colour, which is the price of not forking the palette.
-
-**Deferred, deliberately: the call-site migration.** This ADR landed the
-foundation only (tokens, gates, primitives, docs). That was a sequencing
-decision, not an oversight: the i18n migration (issue #801) was in flight and
-rewrote the text and aria-labels of exactly the elements a control migration
-rewrites the tags of, so migrating call sites here first would have collided
-with it on every hunk. #801 has since landed on `main`; the call-site migration
-of the remaining raw controls remains open work.
-
-**Deferred.** The raw palette classes are being migrated in semantic passes
-rather than mechanically, because each needs a judgement a rewrite gets wrong.
-The **premium** pass is done: amber meaning "paid feature" was the largest
-cluster and now has its own `--color-premium` token, deliberately warmer than
-`--color-warning` (hue 65 vs 80) because written as `amber-400` the two were
-nearly the same paint — a "costs money" marker and a "something may go wrong"
-marker were indistinguishable side by side. The **warning** cluster (maintenance,
-beta, theme-import errors; raw `amber-*`/`yellow-*` usage remains in admin,
-dashboard and overlay-editor surfaces) and the full raw-palette rewrite are
-still open. The palette rule currently bans only `gray-*`/`slate-*`, which is
-at zero in app chrome; widening it to the full palette should follow the
-ratchet pattern the a11y gate already uses.
-
-## Links
+## References
 
 - `frontend/DESIGN_SYSTEM.md` — the design system this ADR makes true
 - `.claude/skills/shadcn-ui/SKILL.md` — the agent-facing procedure
-- ADR-0008 — feature gates (premium toggle, release step 1)
-- ADR-0040 — self-hosting Monaco, the earlier case of a silent CSP/asset failure
-- ADR-0053 — theme consolidation, on the overlay-theme side of the scope boundary
+- ADR-0008 (feature gates), ADR-0040 (self-hosted Monaco, the earlier silent
+  asset failure), ADR-0053 (theme consolidation, the overlay-theme side of the
+  scope boundary)

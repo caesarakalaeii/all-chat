@@ -17,7 +17,7 @@
  */
 
 /**
- * Warm a target-room viewer tab on the signer (PR 3 of the pure-Node
+ * Warm a target-room viewer tab on the signer (the pure-Node
  * transport).
  *
  * POST /v1/sign on the viewer path opens (or reuses) a real tab on the

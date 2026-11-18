@@ -1,164 +1,87 @@
-# ADR-0068: Event Alerts Platform — Alert Overlay Kinds, a Separate chat:raw Consumer, and Presigned-Upload Alert Media
+# ADR-0068: Event Alerts Platform
 
 **Date**: 2026-10-01
 **Status**: Accepted
 **Revised**: 2026-11-13 (`overlay:{id}:updates` also carries Discord messages republished with late link-preview media); 2026-11-03 (brought in line with the current implementation; alert media now backed up off-cluster; the consumer passes only alert event types, so the owner-only moderation log never reaches alert overlays)
 **Deciders**: All-Chat Platform Team
 
-## Context and Problem Statement
+## Context
 
-All-Chat's overlays are chat renderers: the message-processor normalizes `chat:raw` stream
-entries and delivers them to `overlay:{id}` (with `overlay:{id}:updates` for TikTok like
-aggregates and for Discord messages whose link-preview media arrived late). Streamers also want to *celebrate*
-platform events — a Twitch sub or cheer, a YouTube Super Chat, a TikTok gift — as on-screen
-alerts, goal bars, and top-supporter lists, optionally with their own attached media (sounds,
-images, GIFs, short clips).
+Overlays were chat renderers only: message-processor normalizes `chat:raw` into
+`overlay:{id}` (plus `overlay:{id}:updates` for TikTok like aggregates and Discord
+messages with late link-preview media). Streamers want platform events (Twitch subs and
+cheers, YouTube Super Chats, TikTok gifts) as alerts, goal bars and top-supporter lists,
+optionally with attached media; the data already flowed through `chat:raw` as event-typed
+messages the processor normalized to `EventInfo` but then treated as chat lines to filter
+or demote. Constraints: reuse the completed per-platform listeners; do not couple the
+chat pipeline (the most-trafficked correctness surface) to a celebration feature;
+deliveries must be re-runnable after a crash; media bytes must not flow through Go pods
+yet stay playable by anonymous OBS; existing overlays keep behaving as chat.
 
-The event data already exists in the pipeline. Listeners publish event-typed `RawChatMessage`s
-into `chat:raw` (EventSub's channel_points/subscription/mystery_gift/resubscription/raid/bits/
-follow, YouTube's super_chat/subscriber/membership_gift, TikTok's gift/follow/share), and the
-message-processor already normalizes them into `EventInfo` — but then treats them as
-chat-line candidates to filter or demote. Nothing routes them to a rendering surface that is
-not a chat overlay, nothing keeps event history, and no service can hold uploaded media.
+## Considered options
 
-## Decision Drivers
+- A separate `alert-processor` consuming the existing `chat:raw` with its own consumer
+  group (chosen): zero listener and chat-path changes, normalizers reused through a
+  one-directional import, at-least-once semantics from ADR-0002. Cost: a cheap second
+  reader on `chat:raw` (skips pure chat immediately) and idempotency required at every
+  write.
+- Extend the message-processor: one less service, but alert persistence, publishing and
+  leaderboard concerns join the chat path, so a regression there takes chat down and
+  scaling couples to chat throughput.
+- Listeners publish a dedicated `alerts:raw` stream: consumers see only events, but every
+  listener (three languages) gains a second publish path to maintain forever, with two
+  copies of each event in Redis.
+- Alert overlays poll a REST API: latency becomes the poll interval, offline overlays
+  miss by design, and the API still needs its own store.
 
-- **The listeners are done.** Event ingestion per platform is complete and working; a new
-  event pipeline must reuse it, not re-derive it (per-platform API polling for events is a
-  quota and auth cost the listener path has already paid once).
-- **The chat pipeline must not grow a second job.** The message-processor's
-  filter/demote/drop path is the system's most-trafficked correctness surface; alert
-  routing inside it couples a chat regression to a celebration feature.
-- **Alerts must survive a restart of anything downstream.** An alert that animates must
-  also exist in history, and a half-finished delivery must be safely re-runnable.
-- **Alert media bytes must not flow through Go pods** (memory, timeouts, and bandwidth
-  for 10 MiB clips on every upload), yet must be playable by OBS without authentication.
-- **New overlay kinds must not break the overlays that exist.** Every existing overlay is a
-  chat overlay and must stay one by default.
+## Decision
 
-## Considered Options
+Option 1, with four parts:
 
-1. **A separate `alert-processor` service consuming the existing `chat:raw` stream with its
-   own consumer group (chosen)**
-   - Reuses the stream and the listeners as-is; reuses the message-processor's normalizers
-     via a one-directional import; gets at-least-once semantics from the ADR-0002
-     consumer-group pattern; fails and scales independently of the chat path.
-   - ✅ Pros: zero listener changes, zero chat-path changes, one service owns alert concerns.
-   - ❌ Cons: a second reader on `chat:raw` (cheap: it skips pure-chat entries immediately);
-     at-least-once redelivery must be made idempotent at every write (history insert,
-     leaderboard score).
-
-2. **Extend the message-processor to also route events to alert overlays**
-   - ✅ Pros: one less service, one deployment.
-   - ❌ Cons: the chat pipeline gains alert persistence, Redis publishing and leaderboard
-     concerns — a regression there takes chat down too; scaling for alert fan-out couples to
-     chat throughput; the demote/drop logic and the alert history contract diverge in one
-     codebase.
-
-3. **Listeners publish a second, dedicated `alerts:raw` stream**
-   - ✅ Pros: alert consumers see only events.
-   - ❌ Cons: every listener gains a second publish path (three languages, three webhook
-     surfaces) — precisely the churn this platform set out to avoid; two copies of each
-     event exist in Redis; the duplication must be maintained per platform forever.
-
-4. **Alert overlays poll an events REST API**
-   - ✅ Pros: no new consumer.
-   - ❌ Cons: alert latency becomes the poll interval; an offline overlay misses events by
-     design; the API needs its own store anyway, so the consumer problem is not solved,
-     only moved.
-
-## Decision Outcome
-
-**Chosen**: Option 1, together with the pieces it needs:
-
-1. **Overlay kinds.** `overlays.overlay_type` ('chat' | 'alerts' | 'goal' | 'list', default
-   'chat', CHECK-constrained — migration 100). Existing overlays keep behaving exactly as
-   before; `alerts` is the event alert box, `goal` the goal bar, `list` the ranked list
-   (e.g. recent followers, top supporters).
-2. **The alert-processor** (`services/alert-processor/`, issue #951): consumes `chat:raw`
-   with consumer group `alert-processors` (distinct from the message-processor's group),
-   passes only alert event types (an allowlist: every type with an alert profile plus
-   the public events alert overlays render without one) and ACKs the rest, so pure chat,
-   deletions, the owner-only moderation log (`mod_action`, which carries AutoMod-held
-   text) and system warnings never reach an alert overlay, then
-   normalizes via the message-processor's own normalizer dispatch
-   (one-directional import; the message-processor never imports alert-processor), routes
-   through a UNION of `overlay_chat_sources` and accepted `share_requests` filtered to
-   `overlay_type IN ('alerts','goal','list')`, and per overlay: persists to `alert_events`,
-   publishes the alert envelope to Pub/Sub `overlay:{id}:alerts` (the sibling of the
-   gateway's `:poll`/`:prediction` engagement channels, ADR-0070), and scores
-   amount-bearing events on `list` leaderboards
-   (`overlay:{id}:leaderboard:{bits|gifts|super_chat}`, 30-day rolling TTL).
-3. **Idempotency as a first-class contract.** ACK only after persist + publish succeed;
-   the alert id is a deterministic UUIDv5 of (platform, channel, message id, overlay id)
-   with `ON CONFLICT DO NOTHING`, so a redelivered entry cannot double-write history; the
-   leaderboard write claims its contribution per alert id inside one atomic Lua script
-   (SET NX + ZINCRBY), so redelivery cannot double-count a board either.
-4. **Alert media as a presigned-upload registry** (issues #948, #949): a single-node
-   MinIO instance (bucket `allchat-media`, public-read behind `media.allch.at`) holds the
-   bytes; media-service issues presigned PUTs so uploads go **directly** to MinIO, and
-   indexes issued keys in `media_objects` (migration 099). Object keys are
-   `{user_id}/{uuid}/{filename}` — the random uuid segment makes public-read URLs
-   unguessable, the `user_id` prefix scopes ownership checks on delete. Single-node MinIO
-   (now the pgsty/silo fork) defers distribution, replication and lifecycle management;
-   they are follow-ups, as is moving the bucket off the hand-provisioned instance (issue
-   #948). The bucket is backed up: a nightly `mc mirror` CronJob in caesar-deployment
-   (`backup-offsite-mirror`) copies it to Hetzner Object Storage and Backblaze B2, with
-   versioned targets so a deletion stays recoverable for 30 days (see ADR-0003 → Backups).
+1. `overlays.overlay_type` ('chat' | 'alerts' | 'goal' | 'list', default 'chat',
+   CHECK-constrained, migration 100); existing overlays keep chat behavior, `alerts` is
+   the event alert box, `goal` the bar, `list` the ranked list.
+2. The alert-processor consumes `chat:raw` (group `alert-processors`), passes only alert
+   event types (an allowlist: profiled types plus the public events rendered without a
+   profile) and ACKs the rest, so pure chat, deletions, the owner-only moderation log
+   (`mod_action`, which carries AutoMod-held text) and system warnings never reach an
+   alert overlay; normalizes via the message-processor's normalizer dispatch
+   (one-directional); routes through a UNION of `overlay_chat_sources` and accepted
+   `share_requests` filtered to the alert kinds; per overlay persists to `alert_events`,
+   publishes to `overlay:{id}:alerts`, and scores amount-bearing events on `list`
+   leaderboards (`overlay:{id}:leaderboard:{bits|gifts|super_chat}`, 30-day rolling TTL).
+3. Idempotency: ACK only after persist and publish; the alert id is a deterministic
+   UUIDv5 of (platform, channel, message id, overlay id) with `ON CONFLICT DO NOTHING`,
+   and the leaderboard claim is a per-alert-id atomic Lua script (SET NX + ZINCRBY), so
+   redelivery double-writes nothing.
+4. Media as a presigned-upload registry: single-node MinIO (bucket `allchat-media`,
+   public-read behind `media.allch.at`) holds the bytes; media-service issues presigned
+   PUTs that go straight to MinIO and indexes keys in `media_objects`; keys are
+   `{user_id}/{uuid}/{filename}` (unguessable via the uuid, ownership-scoped by the
+   prefix). Distribution and replication stay follow-ups. A nightly `mc mirror` CronJob
+   mirrors the bucket to Hetzner Object Storage and Backblaze B2 (ADR-0003).
 
 ## Consequences
 
-### Positive
-
-- Alert features (new overlay kinds, new event types, new media) land without touching the
-  chat pipeline or any listener; a broken alert-processor degrades to "no alerts", never to
-  "no chat".
-- Event history (`alert_events`, one row per routed overlay delivery) makes goal counts,
-  list overlays and post-hoc questions answerable from Postgres rather than from a replay.
-- The delivery contract is the same channel naming convention the gateway already
-  subscribes overlays with; wiring the frontend is a subscription change, not a protocol.
-- Media uploads bypass service pods entirely; the service's memory profile is independent
-  of clip size.
-
-### Negative
-
-- `chat:raw` carries a second reader; non-alert entries (mostly pure chat) are read and
-  skipped per delivery (bounded work: parse, check `event_type`, ACK).
-- A new event type stays off alert overlays until it gets an alert profile or is added to
-  the consumer's allowlist. That is deliberate: whatever passes is published to every
-  alerts/goal/list socket, including anonymous OBS sources and shared-overlay recipients.
-- At-least-once redelivery means subscribers may see the same alert twice in a crash
-  window; accepted for live overlays (an alert animating twice is cosmetic) and prevented
-  at the data layer (persist, history) and the leaderboard layer (per-alert claim).
-- Single-node MinIO is a single point of failure and a capacity ceiling for stored media;
-  accepted until demand says otherwise.
-- `alert_events` has no FK to `overlays` (append-only history must survive overlay
-  deletion); consumers must tolerate rows for gone overlays.
+- Alert features land without touching listeners or the chat pipeline; a broken alert-
+  processor degrades to "no alerts", never "no chat".
+- `alert_events` (one row per routed overlay delivery) makes goal counts, lists and
+  post-hoc questions answerable from Postgres; it has no FK to `overlays` (append-only,
+  survives overlay deletion), rows for gone overlays are tolerated.
+- The delivery contract reuses the gateway's channel convention, so the frontend is a
+  subscription change. Uploads bypass pods: media memory is independent of clip size.
+- A new event type stays invisible to alerts until profiled or allowlisted (deliberate:
+  anything passing is published to sockets including anonymous OBS and share
+  recipients). Redelivery may animate an alert twice in a crash window (cosmetic).
+  Single-node MinIO is a SPOF and capacity ceiling until demand says otherwise.
 
 ## Implementation
 
-- **Overlay kinds**: `migrations/100_overlay_type.sql`; overlay-manager models/CRUD/render
-  routing (`services/overlay-manager/`), frontend kind routing.
-- **Alert-processor**: `services/alert-processor/` (consumer, normalizer bridge, routing
-  repository, publisher, leaderboard, goal polls and debounced list pushes (ADR-0072),
-  health, Prometheus metrics; port 8098; Dockerfile;
-  compose entry `deployments/docker-compose.yml`). Kubernetes manifests in the GitOps repo
-  (`caesar-deployment/apps/workloads/all-chat/alert-processor-deployment.yaml`).
-- **History**: `migrations/106_alert_events.sql` (idempotent; index
-  `(overlay_id, occurred_at DESC)`).
-- **Media**: `migrations/099_media_objects.sql`; `services/media-service/`;
-  `minio-statefulset.yaml`, `minio-ingress.yaml` in the GitOps repo (uploads capped at
-  10 MiB, ingress `proxy-body-size 12m`).
-- **Delivery channel**: `overlay:{overlay_id}:alerts` for every routed alert.
-
-## Related Decisions
-
-- ADR-0002 (Redis Streams + Pub/Sub) — the consumer-group pattern and the per-overlay
-  channel convention this extends.
-- ADR-0009 (Ring Buffer Publisher) — the downstream reconnect tolerance the gateway's
-  alerts subscription inherits.
-- ADR-0056 (shadcn token vocabulary) — the frontend surface the alert overlays render on.
-- ADR-0070 (alert overlays carry chat sources; the gateway resolves alert profiles and
-  forwards `overlay:{id}:alerts`), ADR-0072 (goal polls and debounced leaderboard pushes
-  owned by the alert-processor), ADR-0075 (an `all` profile is the base style under every
-  event type): the follow-up records for how the platform actually renders today.
+- `migrations/100_overlay_type.sql`, `106_alert_events.sql` (index
+  `(overlay_id, occurred_at DESC)`), `099_media_objects.sql`.
+- `services/alert-processor/` (port 8098; consumer, normalizer bridge, routing repo,
+  publisher, leaderboard, goal polls and list pushes per ADR-0072, health, metrics;
+  compose entry in `deployments/docker-compose.yml`; k8s manifests in caesar-deployment).
+- `services/media-service/`; MinIO statefulset and ingress in the GitOps repo (uploads
+  capped 10 MiB, ingress `proxy-body-size 12m`).
+- Delivery channel: `overlay:{overlay_id}:alerts`.

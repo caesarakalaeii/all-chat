@@ -39,7 +39,7 @@ vi.mock('undici', () => ({
 }));
 
 /**
- * The mode-gated signer-construction rules (PR 2 plan ruling 6) and the
+ * The mode-gated signer-construction rules and the
  * fallback predicate that encodes them. The euler+URL and shadow+URL rows
  * are regression guards for PRE-EXISTING behaviour: the k8s default runs
  * euler WITH TIKTOK_SIGNER_URL set and relies on the SelfSigner for lane
@@ -98,7 +98,7 @@ describe('pickSignClients', () => {
 });
 
 describe('fallbackPromotionAvailable', () => {
-  it('pure-node mode is available: PR 3 warms the target tab at promotion time', () => {
+  it('pure-node mode is available: promotion warms the target tab on the signer', () => {
     // The relay (GET /v1/stream/:username) attaches to a pool tab; pure-node
     // leases a warm-CLASSIC-room session that never creates one for the
     // target room, so promotion warms it first (sign/warm-target-tab.ts).

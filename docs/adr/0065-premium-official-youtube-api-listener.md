@@ -20,26 +20,16 @@ was taken out of the deployment in March 2026 and ADR-0023/ADR-0025 record the d
 bring it back for every channel. The project's YouTube Data API quota is now 1,009,000 units per
 day and mostly unused.
 
-## Decision Drivers
+Rejected: reviving the Data API listener for every channel (spends quota on
+streams InnerTube serves free, and `search.list` discovery only finds public
+streams, so it would not fix the unlisted case); a pinned link only (cannot
+read members-only chat).
 
-- Unlisted streams should work for everyone, at no quota cost.
-- Members-only chat can only be read with the channel owner's own credentials, which means the
-  Data API.
-- The InnerTube decision stays the default: quota is spent only where it buys something InnerTube
-  cannot do.
-- A streamer who stops qualifying must fall back to today's behaviour, not lose chat.
-- One channel is served by exactly one listener at a time.
+Chosen: a pinned stream link for everyone, plus an opt-in premium
+official-API mode. InnerTube stays the default; quota is spent only where it
+buys something InnerTube cannot do.
 
-## Considered Options
-
-1. **Revive the Data API listener for every channel.** Rejected for the reasons in ADR-0023: it
-   spends quota on streams InnerTube serves for free, and its `search.list` discovery (100 units)
-   only finds public streams, so it would not even fix the unlisted case.
-2. **Pinned stream link only.** Free and enough for unlisted streams, but it cannot read
-   members-only chat.
-3. **Pinned stream link for everyone, plus an opt-in premium official-API mode.** Chosen.
-
-## Decision Outcome
+## Decision Outcome## Decision Outcome
 
 **Pinned stream link (free).** A YouTube source can store a video id in `config.stream_id`
 (`PATCH /overlays/:id/sources/:source_id`). overlay-manager accepts a watch, `youtu.be`, `/live/`
@@ -63,35 +53,26 @@ listener's own verification is authoritative:
 - It discovers broadcasts with `liveBroadcasts.list broadcastStatus=active broadcastType=all` on
   the owner's token, which returns unlisted, members-only and "Stream now" broadcasts, and reads
   chat over the gRPC `liveChatMessages.streamList`.
-- It claims each channel it serves with a TTL key `youtube:official:claim:{channelID}` (3 minutes,
-  the ADR-0015 pattern), but only while one of the opted-in owner's overlays is connected: a claim
-  takes the channel away from innertube for every overlay on it. innertube skips claimed channels
-  and stops what it was polling on them. Claims are refreshed by the global-sync leader every 60s
-  and released when a channel stops qualifying, when the owner's overlay disconnects (after the
-  listener's 90s disconnect debounce), while the global quota state is Critical or worse, when a
-  sync hits a token or auth error on the owner's credentials (the cached ownership verdict is
-  dropped with it), and when a replica shuts down. The next sync on each side then hands the
-  channel over, so a running stream moves between the listeners within about a minute instead of
-  going dark. Discovery backs off to at most once a minute, so a go-live on a claimed channel is
-  seen about as fast as innertube would see it.
+- It claims each served channel with a TTL key `youtube:official:claim:{channelID}`
+(3 minutes, the ADR-0015 pattern), taking the channel away from innertube for
+every overlay on it; innertube skips claimed channels. Claims refresh every
+60s from the global-sync leader and release on: a channel ceasing to qualify,
+the owner's overlay disconnecting (after the 90s debounce), Critical-or-worse
+quota state, a token/auth error on the owner's credentials, or replica
+shutdown, so a running stream moves between listeners within about a minute
+instead of going dark. Discovery backs off to at most once a minute.
 
 ## Consequences
 
-### Positive
-
-- Unlisted streams work for every user without spending quota.
-- Members-only chat works for premium streamers.
-- Any failure of the official path (listener stopped or crashed, token revoked or rejected, premium
-  lapsed, quota pressure) releases the claim, or lets its 3-minute TTL expire after a crash, and
-  InnerTube resumes.
-
-### Negative
-
-- A second YouTube listener is deployed again, with its own replicas and alerting surface.
-- An opted-in channel costs quota while its owner's overlay is open and the channel is offline:
-  at most one `liveBroadcasts.list` a minute, plus a `channels.list` per owner every six hours.
-- A pin is per channel: when several overlays use the same channel, the earliest-created source
-  with a pin wins.
+Unlisted streams work for everyone without spending quota; members-only chat
+works for premium streamers. Any failure of the official path (listener
+stopped, token revoked, premium lapsed, quota pressure) releases the claim or
+lets its TTL expire, and InnerTube resumes. Costs: a second YouTube listener
+deployed with its own replicas and alerting surface; an opted-in channel costs
+quota while its owner's overlay is open and the channel is offline (at most
+one `liveBroadcasts.list` a minute plus a `channels.list` per owner every six
+hours); a pin is per channel, so with several overlays on the same channel the
+earliest-created source with a pin wins.
 
 ## Implementation
 

@@ -5,7 +5,7 @@
 **Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: All-Chat Platform Team
 
-## Context and Problem Statement
+## Context
 
 ADR-0071 baked the KLIPY app key into the frontend image at build time
 (`NEXT_PUBLIC_KLIPY_API_KEY` from the `KLIPY_API_KEY` Docker build arg, filled
@@ -14,7 +14,7 @@ secret (`allchat-secrets`, key `klipy-api-key`), and a runtime secret cannot
 reach a `NEXT_PUBLIC_` variable, which Next.js inlines at build time. How does
 the browser get the key?
 
-## Decision Drivers
+Constraints:
 
 - KLIPY's integration requirements
   (https://docs.klipy.com/integration-requirements) require API requests and
@@ -24,7 +24,7 @@ the browser get the key?
   browser sends.
 - Rotating the key should not need an image rebuild.
 
-## Considered Options
+## Considered options
 
 1. **A server route returns the key; the browser keeps calling KLIPY
    (chosen).** `GET /klipy-config` reads `process.env.KLIPY_API_KEY` per
@@ -36,7 +36,7 @@ the browser get the key?
 3. Pass the key as a prop from a server component. The editor page is a client
    component, so the prop would thread through several layers for one value.
 
-## Decision Outcome
+## Decision
 
 Option 1. `frontend/src/lib/klipy.ts` fetches `/klipy-config` once per page
 load (a failed fetch is retried on the next search) and calls
@@ -61,7 +61,7 @@ The same change applies KLIPY's one REQUIRED attribution item
   can still see it in the search URLs their browser sends; KLIPY's partner
   panel, not secrecy, limits its use.
 
-## Related Decisions
+## Related
 
 - ADR-0071: the alerts editor and browser-side KLIPY search; this record
   replaces only its key delivery.

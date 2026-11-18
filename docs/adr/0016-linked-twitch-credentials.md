@@ -2,121 +2,37 @@
 
 **Date**: 2026-06-13
 **Status**: Accepted
-**Revised**: 2026-11-04 (disconnecting a linked platform clears its id, ADR-0090); 2026-11-03 (brought in line with the current implementation; linked platform ids now persisted)
+**Revised**: 2026-11-18 (linked platform ids persisted and backfilled; disconnect clears them)
 **Deciders**: All-Chat Platform Team
 
----
+## Context
 
-## Context and Problem Statement
-
-The IRC↔EventSub partition (ADR-0015) decides that a Twitch channel is read via EventSub when its
-owner granted the chat scopes (`user:read:chat` + `user:bot` + `channel:bot`) and holds a valid
-token on the Twitch-login users row, or when linked credentials exist in `twitch_oauth_tokens`. There
-was no linked-token path before this ADR: the grant was stored exclusively on the **users row**:
-
-```sql
-EXISTS (SELECT 1 FROM users u
-        WHERE LOWER(u.username) = LOWER(ocs.channel_id)
-          AND u.auth_provider = 'twitch'
-          AND 'user:read:chat' = ANY(u.granted_scopes)
-          AND u.token_expires_at > NOW())
-```
-
-The users row belongs to the **login provider**. A streamer who signed up via YouTube or Kick has
-`username = 'youtube_…'` / a Kick username and `auth_provider != 'twitch'`, so the predicate can
-**never** match their channel — regardless of what they consent to. When such a user completed the
-Twitch add-source OAuth (which requests the chat scopes with `force_verify`), the callback landed
-in `linkPlatformToUser`, which had nowhere to persist the grant:
-
-- there is one `granted_scopes` column and one access/refresh-token slot per user, both
-  semantically owned by the auth_provider (overwriting them was the clobber bug fixed in
-  `d1a5efce`);
-- `UserRepository.Update` never persisted the platform-ID columns, so even the link itself
-  (`google_id`/`kick_id`/`twitch_id`) was silently dropped.
-
-Net effect (verified in production 2026-06-13): 11 of 46 IRC-partitioned channels belonged to
-YouTube/Kick-login accounts with **no self-service path to EventSub at all**. Twitch held their
-grant server-side; All-Chat discarded every artifact of it.
+The Twitch chat partition (ADR-0015) resolves a channel's credential from the users row, but that row belongs to the login provider. A streamer signed up via YouTube or Kick has `auth_provider != 'twitch'`, so the partition predicate could never match their channel, and `linkPlatformToUser` had nowhere to persist a Twitch grant: one `granted_scopes` column and one token slot per user, both semantically owned by the login provider (overwriting them was the clobber bug fixed in `d1a5efce`), and `UserRepository.Update` did not persist platform-ID columns at all. Verified in production 2026-06-13: 11 of 46 IRC-partitioned channels had no self-service path to EventSub.
 
 ## Decision
 
-Store Twitch credentials obtained via the **add-source link flow** in a dedicated table,
-`twitch_oauth_tokens` (migration 056), keyed by `(user_id, twitch_login)`:
+Store credentials obtained via the add-source link flow in a dedicated table `twitch_oauth_tokens` (migration 056), keyed by `(user_id, twitch_login)` with `twitch_login`/`twitch_user_id`, AES-encrypted `access_token`/`refresh_token` (shared multi-key cipher, `encryption_version = 1`), `token_expires_at`, `granted_scopes`. auth-service writes there only when `platform == twitch && isAddSource && auth_provider != 'twitch'`; Twitch-login accounts keep the grant on their users row (a second copy would make token-refresh race itself).
 
-- `twitch_login` (= channel name), `twitch_user_id`, encrypted `access_token`/`refresh_token`
-  (shared multi-key cipher, `encryption_version = 1`), `token_expires_at`, `granted_scopes`.
-- Written by auth-service **only when `platform == twitch && isAddSource && auth_provider !=
-  'twitch'`** (`shouldStoreLinkedTwitchCredentials`). Twitch-login accounts keep their grant on
-  the users row — storing it twice would have token-refresh racing two copies of the same refresh
-  token.
+Consumers check both credential sources:
 
-Consumers extend their lookups to both credential sources:
+- overlay-manager `chat_via_eventsub`: the predicate ORs an exists over `twitch_oauth_tokens` with `user:read:chat` granted and unexpired, so the frontend badge turns green for linked accounts.
+- twitch-eventsub-listener `SyncChannels`: a `LEFT JOIN LATERAL` unions both sources per channel and picks one credential, preferring the one that is chat-scoped and unexpired (users row breaks ties).
+- token-refresh-service: token type `twitch_link` flows through the standard batch loop (`GetExpiringTwitchLinkTokens`/`UpdateTwitchLinkTokens`/`MarkTwitchLinkTokenPermanentlyFailed`, same 48-hour recovery window and 30-day permanent-fail suppression).
 
-- **overlay-manager** `chat_via_eventsub`: `… OR EXISTS (SELECT 1 FROM twitch_oauth_tokens t WHERE
-  LOWER(t.twitch_login) = LOWER(ocs.channel_id) AND 'user:read:chat' = ANY(t.granted_scopes) AND
-  t.token_expires_at > NOW())` — the frontend badge turns green for linked accounts.
-- **twitch-eventsub-listener** `SyncChannels`: a `LEFT JOIN LATERAL` unions both sources per
-  channel and picks ONE credential, preferring whichever is chat-scoped AND unexpired (users row
-  breaks ties). The subscription then uses that token exactly as before.
-- **token-refresh-service**: new token type `twitch_link` flows through the standard batch loop
-  (`GetExpiringTwitchLinkTokens` / `UpdateTwitchLinkTokens` /
-  `MarkTwitchLinkTokenPermanentlyFailed`, same bounded 48-hour recovery window and 30-day
-  permanent-fail suppression).
-- **DSGVO cleanup**: `cleanup_expired_oauth_tokens()` was extended by migration 063 to cover the
-  linked tables; it was later removed by migration 118 together with the other pg_cron-scheduled
-  cleanups, so no automatic expired-token deletion runs for `twitch_oauth_tokens` today. The
-  `retention-sweeper` CronJob ([ADR-0089](./0089-retention-sweeper-cronjob.md)) deliberately leaves
-  these rows in place, because expiry alone does not prove the credential is dead and a live row
-  still anchors the channel's EventSub eligibility; they cascade from `users` on account deletion.
+Retention: the pg_cron cleanup that used to delete expired rows was removed (migration 118) and the retention-sweeper (ADR-0089) deliberately leaves them: expiry alone does not prove the credential is dead, and a live row still anchors EventSub eligibility. Rows cascade from `users` on account deletion.
 
-## Considered Alternatives
-
-1. **Match the partition predicate on `users.twitch_id` after fixing platform-ID persistence.**
-   Rejected: `ocs.channel_id` stores the Twitch *login*, not the numeric ID, so this still needs a
-   login column; and it leaves the token/scope storage problem unsolved (one slot per user).
-2. **Per-platform scope/token columns on users.** Rejected: schema bloat, and the YouTube/Kick
-   precedent (`youtube_oauth_tokens`, `kick_oauth_tokens`) already established per-platform token
-   tables.
-3. **Tell affected users to create a second, Twitch-login account.** Rejected: works (the
-   predicate matches any Twitch-login row by channel name) but is an unacceptable UX and risks the
-   duplicate-account guard.
+Alternatives rejected: matching on `users.twitch_id` after fixing ID persistence (`ocs.channel_id` stores the login, and the one-slot storage problem remains); per-platform scope/token columns on users (schema bloat; the `youtube_oauth_tokens`/`kick_oauth_tokens` precedent already uses per-platform tables); telling users to create a Twitch-login account (works but unacceptable UX and trips the duplicate-account guard).
 
 ## Consequences
 
-- The "Connect Twitch" add-source button now works identically for every account type; the
-  outreach instruction "re-add your Twitch source" is truthful for all users. (The add-source flow
-  now lands these accounts on the EventSub listener, which is what ADR-0026's enforce phase left as
-  the only Twitch chat path.)
-- A channel can be EventSub-eligible through either credential source; the LATERAL preference
-  order makes the choice deterministic (valid+scoped first, users row over linked).
-- Linked credentials die independently of the account: if their refresh token is revoked,
-  token-refresh-service records the rejection by pushing the expiry 30 days ahead, the listener's
-  `has_chat_scope`/`token_expires_at` checks stop selecting the row, and the channel leaves the
-  EventSub partition. Under ADR-0015 that was a fallback to IRC; since ADR-0026's enforce phase
-  dropped IRC, the channel's chat goes quiet until the credential is repaired (re-add with
-  `force_verify`).
-- Linking now also records the platform id on the account. `linkPlatformToUser` calls
-  `UserRepository.SetPlatformID`, which fills `twitch_id`/`google_id`/`kick_id` only when the
-  column is empty and leaves it alone when another account already owns the id. Migration 121
-  backfills `twitch_id` and `kick_id` from `twitch_oauth_tokens` / `kick_oauth_tokens` for links
-  made before, skipping ids that another account owns or that more than one account linked
-  (YouTube is not backfilled: `youtube_oauth_tokens` stores channel ids, not the Google id).
-  A login with a linked platform therefore lands on the linking account; before, it missed the
-  account, tried to create a second one and failed on the username index ("Failed to process
-  user", 2026-11-03). That login authenticates only: profile fields, tokens and `granted_scopes`
-  on the users row stay the login provider's (`linkMayReplacePrimaryCredentials`). Streamer sends
-  as themselves to Twitch still require a Twitch-login account, because only that account holds
-  a Twitch token on its users row. Disconnecting the linked platform in Settings
-  ([ADR-0090](./0090-disconnecting-a-linked-platform.md)) clears the id again together with the
-  tokens, so that platform's login stops reaching the account.
+- The add-source "Connect Twitch" flow works identically for every account type, and these accounts land on EventSub, the only Twitch chat path under ADR-0026.
+- EventSub eligibility is deterministic: valid+scoped first, users row over linked.
+- A linked credential dying independently of the account (revoked refresh token: expiry pushed 30 days ahead recorded by token-refresh) removes the channel from the partition; with no IRC fallback its chat goes quiet until the credential is repaired by re-adding with `force_verify`.
+- Linking also records the platform id: `UserRepository.SetPlatformID` fills `twitch_id`/`google_id`/`kick_id` only when empty; migration 121 backfills `twitch_id`/`kick_id` from the token tables (YouTube not backfilled: those rows store channel ids, not the Google id). A login with a linked platform then lands on the linking account (before it missed the account and failed creating a second one on the username index). That login authenticates only; profile fields, tokens and scopes stay the login provider's (`linkMayReplacePrimaryCredentials`). Streamer sends as themselves to Twitch still require a Twitch-login account.
+- Disconnecting a linked platform in Settings (ADR-0090) clears the id and the tokens together, so that platform's login stops reaching the account.
 
 ## Verification
 
-- `services/auth-service/handlers/platform_auth_v2_link_test.go` — storage decision + persistence
-  (testcontainers).
-- `services/overlay-manager/repository/source_repo_test.go` — predicate flips on linked rows,
-  ignores expired ones.
-- `services/twitch-eventsub-listener/channels/query_test.go` — credential selection incl. the
-  "linked beats scope-less users row" case.
-- `services/token-refresh-service` — source-level query guards + refresh/mark routing tests.
-- Migration idempotency: `services/auth-service/repository/migrations_rerun_test.go`.
+`platform_auth_v2_link_test.go` (storage decision, persistence), `source_repo_test.go` (predicate on linked rows), `query_test.go` (credential selection incl. linked-beats-scope-less), token-refresh-service query-guard and routing tests, migration rerun idempotency (`migrations_rerun_test.go`).
+
+Related: ADR-0015 (partition), ADR-0026 (IRC deprecation), ADR-0089 (retention), ADR-0090 (disconnect).

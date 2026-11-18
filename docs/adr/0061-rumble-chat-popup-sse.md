@@ -26,37 +26,18 @@ Two candidate routes existed:
 
 ## Spike Findings (2026-09-08, live)
 
-Grounded in Social Stream Ninja's adapter source
-(`steveseguin/social_stream`, `sources/websocket/rumble.js`) and the
-AxelChat issue tracker (discussions #783, #253; AxelChat is closed-source,
-so it corroborates behaviour rather than implementation),
-and verified directly against production:
-
-- **The endpoint is SSE, not WebSocket.** `GET
+- The endpoint is SSE, not WebSocket: `GET
   https://web7.rumble.com/chat/api/chat/<chat_id>/stream` with
-  `Accept: text/event-stream`. Rumble's own pop-up chat client opens an
-  `EventSource` on exactly this URL. There is no WebSocket route for chat
+  `Accept: text/event-stream`; Rumble's own pop-up chat client opens an
+  `EventSource` on exactly this URL, and there is no WebSocket route for chat
   reads.
-- **Anonymous reads work.** A bare request with no cookies returned a live
-  SSE stream for a 24/7 channel, complete with the `init` history event
-  (50 messages, users, badge config) and live `messages` batches. Rumble's
-  own client sends credentials (`EventSource(..., {withCredentials: true})`)
-  because the *page* also sends messages; reading does not need them. A
-  session cookie is therefore optional (`RUMBLE_SESSION_COOKIE`), not
-  required.
-- **Message shape** (verified from a live capture, pinned as test fixtures
-  in both the listener and the normalizer):
-  - `init`: `{chat: {id}, messages[], users[], channels[], config:
-    {badges, rants levels}}` — history plus catalog, once per connect.
-  - `messages`: `{messages[], users[], channels[]}` — live batches with
-    `request_id`. Message entries: `id, time (RFC3339), user_id, text,
-    blocks[], type` (`"regular"`), optional `rant {price_cents, duration}`,
-    `is_deleted`. User entries: `id, username, link, image.1, is_follower,
-    color, badges[]`.
-  - The users array is per-batch — sender name, colour, avatar and badges
-    live there, not on the message. Deletions arrive as `is_deleted`
-    messages.
-  - Keepalives are SSE comment lines (`: -1`).
+- Anonymous reads work (a bare request returned a live stream), so a session
+  cookie was optional (`RUMBLE_SESSION_COOKIE`), not required.
+- Message shapes (verified from a live capture, pinned as test fixtures):
+  `init` (history plus catalog, once per connect), `messages` batches with
+  per-batch `users[]` (sender name/colour/avatar/badges live there), `is_deleted`
+  deletions, optional `rant {price_cents, duration}`, keepalives as SSE comment
+  lines.
 
 ## Decision (2026-09-08, since withdrawn)
 

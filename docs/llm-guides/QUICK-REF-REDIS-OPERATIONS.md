@@ -1,230 +1,42 @@
 # Quick Reference: Redis Operations
 
-**Time Estimate**: 15-30 minutes | **Difficulty**: ⭐ Easy
+Goal: inspect and debug Redis Streams, Pub/Sub and cache state.
 
-**Goal**: Inspect and debug Redis Streams, Pub/Sub, and cache operations.
+Access: `redis-cli` locally, or `kubectl exec -n allchat deployment/redis -- redis-cli` in Kubernetes.
 
----
-
-## Redis CLI Access
+## Streams (`chat:raw`)
 
 ```bash
-# Local development
-redis-cli
-
-# Kubernetes
-kubectl exec -n allchat deployment/redis -- redis-cli
+XINFO STREAM chat:raw              # length, groups
+XINFO GROUPS chat:raw              # consumer groups: message-processor, alert-processors
+XPENDING chat:raw message-processor            # lag: pending count per group
+XPENDING chat:raw message-processor - + 10     # individual pending messages
+XINFO CONSUMERS chat:raw message-processor     # per-consumer pending + idle time
+XAUTOCLAIM chat:raw message-processor <free-consumer> 300000 0-0 COUNT 100   # claim idle messages
 ```
 
----
+Consumer lag above ~10,000 (the alert threshold in the message-processor README) means the processors are behind: check consumer idle times, then scale message-processor/consumer code at `services/message-processor/`, `services/alert-processor/consumer/consumer.go`.
 
-## Redis Streams Commands
+## Pub/Sub (`overlay:{overlay_id}`)
 
-### Inspect Stream
-
-```bash
-# Get stream info
-XINFO STREAM chat:raw
-
-# Output shows:
-# - length: 1542 (current messages)
-# - first-entry: oldest message ID
-# - last-entry: newest message ID
-# - groups: consumer groups
-
-# Read last 10 messages
-XREAD COUNT 10 STREAMS chat:raw 0-0
-
-# Read from specific ID
-XREAD COUNT 10 STREAMS chat:raw 1706400000000-0
-```
-
-### Check Consumer Groups
+Per-overlay channels after processing:
 
 ```bash
-# List consumer groups
-XINFO GROUPS chat:raw
-
-# Output:
-# - name: message-processor
-# - consumers: 3
-# - pending: 42 (unacknowledged messages)
-
-# Check pending messages (lag)
-XPENDING chat:raw message-processor
-
-# Output:
-# 1) (integer) 42            # Total pending
-# 2) "1706400000-0"          # Oldest pending ID
-# 3) "1706400099-0"          # Newest pending ID
-# 4) Consumer breakdown
-
-# View specific pending messages
-XPENDING chat:raw message-processor - + 10
-```
-
-### Troubleshoot Consumer Lag
-
-```bash
-# If lag >10,000 messages, check consumers
-XINFO CONSUMERS chat:raw message-processor
-
-# Output shows per-consumer stats:
-# - name: processor-1
-# - pending: 15000 (stuck consumer!)
-# - idle: 300000 (5 minutes since last activity)
-
-# Claim stuck messages for another consumer
-XAUTOCLAIM chat:raw message-processor processor-2 300000 0-0 COUNT 100
-```
-
----
-
-## Redis Pub/Sub Commands
-
-### Check Active Channels
-
-```bash
-# List all active Pub/Sub channels
 PUBSUB CHANNELS overlay:*
-
-# Output:
-# overlay:uuid-1
-# overlay:uuid-2
-# ...
-
-# Count subscribers per channel
-PUBSUB NUMSUB overlay:uuid-1
-
-# Output:
-# overlay:uuid-1
-# 5  (5 API Gateway instances subscribed)
+PUBSUB NUMSUB overlay:<id>
+SUBSCRIBE overlay:<id>    # watch live; Ctrl+C to stop
 ```
 
-### Subscribe to Channel (Debug)
+API-Gateway presence keys: `overlay:connected:{id}`.
 
-```bash
-# Subscribe to overlay channel (see messages in real-time)
-SUBSCRIBE overlay:uuid-1
+## Cache
 
-# Output (when messages arrive):
-# 1) "message"
-# 2) "overlay:uuid-1"
-# 3) "{"id":"...","platform":"twitch","user":{...}}"
+Emote cache keys are `emote:*` with TTLs. `KEYS emote:*` is fine for spot checks but use `SCAN` on a cache big enough to matter. `redis-cli --bigkeys` finds large keys; `INFO memory` shows usage; `SLOWLOG GET 10` shows slow commands.
 
-# Press Ctrl+C to stop
-```
+## Common issues
 
-### Publish Test Message
+- Stream filling quickly: publishers cap the stream length (`MAXLEN ~`); if it outgrows the cap, scale message-processors rather than raising the cap blindly.
+- High memory: `redis-cli --bigkeys`, `MEMORY DOCTOR`.
+- Lag stuck: claim idle pending messages with `XAUTOCLAIM` (see above).
 
-```bash
-# Publish mock message (testing)
-PUBLISH overlay:uuid-1 '{"id":"test","platform":"test","user":{"username":"test"},"message":{"text":"Test"}}'
-
-# Output:
-# (integer) 5  (5 subscribers received message)
-```
-
----
-
-## Cache Operations
-
-### Inspect Emote Cache
-
-```bash
-# List emote cache keys
-KEYS emote:*
-
-# Get emote data
-GET emote:Kappa:twitch
-
-# Output (JSON):
-# {"code":"Kappa","provider":"twitch","url":"https://..."}
-
-# Check TTL
-TTL emote:Kappa:twitch
-
-# Output:
-# (integer) 3458  (seconds remaining, ~57 minutes)
-```
-
-### Clear Cache
-
-```bash
-# Delete specific emote
-DEL emote:Kappa:twitch
-
-# Delete all emotes for channel
-DEL emote:*:twitch:xqc
-
-# Clear all emote cache (use with caution)
-EVAL "return redis.call('del', unpack(redis.call('keys', 'emote:*')))" 0
-```
-
----
-
-## Performance Debugging
-
-### Check Memory Usage
-
-```bash
-INFO memory
-
-# Key metrics:
-# used_memory_human: 128.45M
-# used_memory_peak_human: 256.12M
-# maxmemory_human: 1G
-```
-
-### Check Slow Commands
-
-```bash
-SLOWLOG GET 10
-
-# Output shows slowest commands (>10ms threshold)
-# Useful for identifying bottlenecks
-```
-
-### Monitor Commands Per Second
-
-```bash
-INFO stats
-
-# Look for:
-# instantaneous_ops_per_sec: 5420
-# total_commands_processed: 1542890
-```
-
----
-
-## Common Issues
-
-### Stream Filling Too Fast
-
-**Symptom**: `XINFO STREAM chat:raw` shows length approaching MAXLEN (50,000)
-
-**Solution**: Increase MAXLEN or scale Message Processor
-```bash
-# Increase MAXLEN (modify publisher code)
-XADD chat:raw MAXLEN ~ 500000 * field value
-```
-
-### High Memory Usage
-
-**Symptom**: Redis using >80% of maxmemory
-
-**Check largest keys**:
-```bash
-# Requires redis-cli --bigkeys (run on server)
-redis-cli --bigkeys
-
-# Or use memory doctor
-MEMORY DOCTOR
-```
-
----
-
-## Related Documentation
-
-- [ADR-0002](../adr/0002-redis-streams-pubsub.md) - Redis architecture
-- [01-DATA-FLOW.md](../architecture/01-DATA-FLOW.md) - Message flow
+References: [docs/adr/0002-redis-streams-pubsub.md](../adr/0002-redis-streams-pubsub.md), [docs/architecture/01-DATA-FLOW.md](../architecture/01-DATA-FLOW.md).

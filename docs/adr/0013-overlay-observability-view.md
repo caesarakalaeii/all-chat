@@ -2,63 +2,26 @@
 
 **Date**: 2026-05-31
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-03
 **Deciders**: caesarakalaeii
 
-## Context and Problem Statement
+## Context
 
-The only way to watch an overlay's chat was the OBS render route (`/overlay/[id]`): transparent, theme-styled, auto-fading, and tuned for compositing on a broadcast — not for *reading*. Streamers asked for a second-monitor "dashboard" to monitor chat and events with full readability and observability. We needed a second surface that reuses the exact realtime pipeline (so it stays in sync with what hits chat) without duplicating the subtle connection logic, and without coupling the two very different UIs.
+The only way to watch an overlay's chat was the OBS render route (`/overlay/[id]`): transparent, theme-styled, auto-fading, tuned for broadcast compositing rather than reading. Streamers asked for a second-monitor dashboard for monitoring chat and events. The requirement: a second surface that reuses the realtime pipeline (reconnect/backoff, `?since=` replay watermark, id dedup, deletion handling, `message_update` aggregation, `platform_status` gating) without duplicating it or coupling the two UIs.
 
-## Decision Drivers
+Alternatives rejected: a standalone view with its own copy of the connection logic (the copies drift); an authenticated owner-only dashboard route (the data is already public via the public config and WebSocket endpoints, so auth adds only friction).
 
-- Reuse the battle-tested connection logic (reconnect/backoff, `?since=` replay watermark, id dedup, deletion handling, `message_update` aggregation, `platform_status` gating) — duplicating it is a maintenance hazard.
-- Keep the production OBS overlay's behavior byte-for-byte unchanged.
-- The view must be readable: scrollback, no fade, no theme CSS, no animations, its own light/dark mode.
-- Minimize new surface area and dependencies.
+## Decision
 
-## Considered Options
+Extract the connection logic into a shared `useOverlayStream` hook (callback-based: `onChat`/`onMessageUpdate`/`onDeletion`), refactor the overlay page to consume it behavior-preserving, and build a public route `/overlay/[id]/view` on top. Public by UUID, like the OBS overlay: it exposes nothing beyond what `/overlays/public/:id/config` and `/ws/overlay/:id` already serve.
 
-1. **Standalone view with its own duplicated stream logic**
-   - ✅ Pros: zero risk to the overlay page.
-   - ❌ Cons: two copies of the subtle reconnect/replay/dedup/watermark logic drift apart.
-
-2. **Extract a shared `useOverlayStream` hook; refactor the overlay to consume it; build the view on top**
-   - ✅ Pros: one implementation of the hard part; both surfaces stay in sync; each page keeps its own message-array/display policy via callbacks.
-   - ❌ Cons: touches the production overlay page (mitigated: behavior-preserving move + unit/E2E coverage).
-
-3. **Authenticated, owner-only dashboard route**
-   - ✅ Pros: more private.
-   - ❌ Cons: needs auth plumbing; the same chat/events are already public via the overlay endpoints, so it adds friction without adding protection.
-
-## Decision Outcome
-
-**Chosen**: Option 2, served as a **public** route `/overlay/[id]/view` (Option 1's access model rejected in favor of public-by-UUID, consistent with the OBS overlay).
-
-**Rationale**: The connection logic is the only genuinely shared, high-risk code — extracting it into `useOverlayStream` (callback-based: `onChat`/`onMessageUpdate`/`onDeletion`) lets the overlay keep its filter→sound→TTS→fade policy and the view keep its no-filter scrollback + moderation-marking policy, with one source of truth for the socket. The view is public by UUID because it exposes only data already public through `/overlays/public/:id/config`, the new `/overlays/public/:id/event-settings`, and `/ws/overlay/:id` — no new exposure, no login friction.
-
-## Consequences
-
-### Positive
-- Single implementation of reconnect/replay/dedup/watermark/platform-status, unit-tested without a socket.
-- Overlay behavior preserved (verified by unit tests + E2E + manual stack run).
-- View ignores overlay themes entirely (never imports `events.css` / `visual_settings` / `custom_css`), giving "no fancy animations" and theme isolation for free.
-- Observability extras: filtered messages are shown, moderated messages stay visible (struck-through + tagged), and deletions are logged in the activity feed.
-
-### Negative
-- The overlay page's bubble/timestamp classes were migrated `gray-*` → `slate-*` (design-system-mandated; near-imperceptible tint shift) to satisfy the ENFORCE-03 lint rules when the file was touched.
-- The "configured events" panel needs the public event-settings route enabled at the gateway; it degrades gracefully (observed event types) if absent.
+The two pages share the socket but keep separate display policies: the overlay keeps its filter-to-sound-TTS-fade pipeline; the view has scrollback, no fade, no theme CSS, its own light/dark mode, shows filtered messages, keeps moderated messages visible (struck-through and tagged), and logs deletions in an activity feed. The view never imports overlay themes (`events.css`, `visual_settings`, `custom_css`). A "configured events" panel uses the public event-settings route (`GET /api/v1/overlays/public/:id/event-settings`) and degrades to observed event types if it is not available.
 
 ## Implementation
 
-- **Frontend (new)**: `frontend/src/hooks/useOverlayStream.ts`; `frontend/src/core/overlayStreamCore.ts` + `frontend/src/lib/utils/overlayViewModel.ts` (pure helpers); `frontend/src/app/overlay/[id]/view/{layout,page}.tsx`; `frontend/src/components/ResizableSplit.tsx`; `frontend/src/components/overlay/{ChatPanel,ActivityPanel,ObservabilitySummary,ChatRow,CompactEvent,ConnectionBadge,OverlayViewThemeToggle,PlatformGlyph}.tsx`.
-- **Frontend (modified)**: `frontend/src/app/overlay/[id]/page.tsx` (consume the hook, behavior-preserving); `frontend/src/components/PlatformStatusIndicators.tsx` (`variant` prop); `frontend/src/app/globals.css` (`.overlay-view` light/dark tokens); `frontend/src/lib/types/overlay.ts` (`PublicOverlayConfig`, `EventSettings`); "Monitor view" link on the overlay editor `frontend/src/app/overlays/[id]/page.tsx` (the standalone `overlays/[id]/preview/page.tsx` this work originally touched was later removed; its `preview/embed` child route for alerts still exists).
-- **Backend**: `services/api-gateway/cmd/main.go` — expose the existing, already-public
-  `HandleGetPublicEventSettings` (in overlay-manager) via the gateway route
-  `GET /api/v1/overlays/public/:id/event-settings`.
-- **Tests**: pure-helper + hook (mock WebSocket) + view component unit tests; `frontend/tests/e2e/overlay-view.spec.ts` smoke test.
-- **Timeline**: 2026-05-31.
+- Hook and pipeline: `frontend/src/hooks/useOverlayStream.ts`, `frontend/src/core/overlayStreamCore.ts`, `frontend/src/lib/utils/overlayViewModel.ts`.
+- View: `frontend/src/app/overlay/[id]/view/`, components under `frontend/src/components/overlay/` (`ChatPanel`, `ActivityPanel`, `ObservabilitySummary`, `ConnectionBadge`, `OverlayViewThemeToggle`, ...), split pane in `frontend/src/components/ResizableSplit.tsx`.
+- Backend: the gateway exposes overlay-manager's public event-settings at `/api/v1/overlays/public/:id/event-settings`.
+- Tests: pure-helper, hook (mock WebSocket), view unit tests, plus `frontend/tests/e2e/overlay-view.spec.ts`.
 
-## Related Decisions
-
-- [ADR-0002: Redis Streams + Pub/Sub](./0002-redis-streams-pubsub.md) — the pipeline this view consumes.
-- [ADR-0005: React + Next.js App Router](./0005-react-nextjs-frontend.md) — the frontend conventions followed.
+Related: ADR-0002 (the pipeline), ADR-0005 (frontend conventions).

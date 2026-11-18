@@ -19,98 +19,58 @@ audience are German-speaking. This record decides how a user picks it, where
 the choice lives, how it reaches components that have no React Context, and
 who gets it first.
 
-## Decision Drivers
-
-- No locale segment in any path, ever (ADR-0055).
-- Static pages stay static: no request-time locale read.
-- No React Context: Storybook renders components standalone under a required
-  CI gate (ADR-0055).
-- An OBS browser source must never change language on its own mid-broadcast.
-- The first catalog is a machine translation, so it needs reviewers before it
-  reaches everyone.
-- Binding legal text must not be published in a language nobody reviewed.
-
-## Considered Options
-
-1. **Account preference in the database, resolved at request time.**
-   Rejected: request-time resolution is what ADR-0055 ruled out, for the same
-   reason (every page becomes dynamic), and a server-side preference cannot reach
-   a statically rendered page without it.
-2. **`Accept-Language` / `navigator.language` detection.** Rejected: an OBS
-   instance on a German machine would switch a streamer's overlay chrome to
-   German without anyone choosing it, and the server-side variant is a
-   request-time read again.
-3. **Explicit choice stored in the browser, applied on the client after
-   hydration.** Chosen.
-
 ## Decision Outcome
 
-**Chosen**: option 3.
+**Explicit choice, stored per browser, applied on the client after
+hydration.** Rejected: account preference resolved at request time (the
+ADR-0055 ruling); `Accept-Language` / `navigator.language` detection (an OBS
+instance on a German machine would switch a live overlay's language without
+anyone choosing it).
 
-- `frontend/src/lib/i18n/active-locale.ts` holds the active locale as a module
-  singleton with a subscribe/notify pair. It starts at `DEFAULT_LOCALE` on the
-  server and on the client.
-- `components/LocaleSync.tsx`, mounted in the root layout, calls
-  `restoreStoredLocale()` in an effect: it reads `localStorage.allchat_locale`,
-  loads that catalog with a dynamic `import()`, then activates it, which sets
-  `<html lang>` and notifies subscribers. Because nothing changes before that
-  effect, the first client render matches the static HTML for every reader of
-  the locale, so there is no hydration mismatch.
-- `useTranslations()` subscribes through `useSyncExternalStore` (server
-  snapshot `DEFAULT_LOCALE`), so a switch re-renders every subscriber. It returns
-  one translator for the life of the page that resolves the active locale per
-  call: the stored choice lands right after hydration, and if `t` changed
-  identity then, every effect listing it would run twice per page load, some of
-  them one-shot (the OAuth callback's single-use code exchange). A `useMemo`
-  keyed only on `t` therefore keeps its first copy.
-  It lives in its own `'use client'` module because Server Components import the
-  same barrel.
-- `getTranslations()` without an argument returns a translator that resolves the
-  active locale per call, so module-scope translators in plain modules
-  (`errorMessages.ts`) follow a switch. `formatNumber` / `formatDateTime`
-  default to the active locale too.
-- Non-English catalogs are partial by type (`LocaleMessages`). A key a catalog
-  lacks resolves to English, never to the raw key. Hand-written namespace files
-  are annotated with the complete `LocaleNamespace<'ns'>` shape, so a missing or
-  extra key in them is a compile error.
-- German translates every namespace except `legal`, which stays English until a
-  legal review signs off a German privacy policy, terms and cookie notice.
-- The picker is a card on `/settings` (ADR-0078 added a second, ungated switch
-  in the homepage nav). Who may pick a non-English language on `/settings` is
-  the `ui_languages` feature gate (migration 103), enforced by share-service on
-  `GET /api/v1/ui-languages`, which the card probes. Seeded
-  `early_access=TRUE, is_premium=FALSE`; ADR-0078 later turned `early_access`
-  off in the admin UI, so every signed-in user can pick. English stays
-  selectable in every state so nobody is stuck in a language they lost access to.
+- `frontend/src/lib/i18n/active-locale.ts` holds the active locale as a
+  module singleton with a subscribe/notify pair, starting at `DEFAULT_LOCALE`
+  on server and client. `components/LocaleSync.tsx`, mounted in the root
+  layout, restores `localStorage.allchat_locale` in an effect (dynamic
+  `import()` of the catalog, then activate: sets `<html lang>` and notifies).
+  Nothing changes before that effect, so the first client render matches the
+  static HTML and there is no hydration mismatch.
+- `useTranslations()` subscribes via `useSyncExternalStore` (server snapshot
+  `DEFAULT_LOCALE`) and stays one translator for the life of the page
+  (`useMemo` keyed on it): if it changed identity when the stored choice
+  lands, every effect listing it would run twice per page load, some one-shot
+  (the OAuth callback's single-use code exchange). Lives in its own
+  `'use client'` module because Server Components import the same barrel.
+- `getTranslations()` without an argument returns a translator resolving the
+  active locale per call, so module-scope translators (`errorMessages.ts`)
+  follow a switch; the formatters in `format.ts` default to the active locale
+  too.
+- Non-English catalogs are partial by type (`LocaleMessages`): a missing key
+  resolves to English, never to the raw key; hand-written namespace files are
+  annotated with the complete `LocaleNamespace` shape, so a missing or extra
+  key is a compile error.
+- German translates every namespace except `legal`, which stays English until
+  legal review signs off the German texts. The picker is a card on
+  `/settings`; who may pick a non-English language is the `ui_languages`
+  feature gate (migration 103), probed via share-service's
+  `GET /api/v1/ui-languages` and enforced on the card. English stays
+  selectable in every state.
 
 ## Consequences
 
-### Positive
+No URL changes, no dependency, no middleware, no static page made dynamic;
+the switch is entirely inside `src/lib/i18n/`; the English bundle does not
+grow per language; rollout reversible from the admin UI. Costs:
 
-- No URL changes, no new dependency, no middleware, no static page made dynamic.
-- Components and call sites are untouched: the switch is entirely inside
-  `src/lib/i18n/`, as ADR-0055 intended.
-- The English bundle does not grow per language: a catalog is fetched only by a
-  browser that chose it.
-- The rollout is reversible from the admin UI without a deploy.
-
-### Negative
-
-- **Server-rendered pages stay English.** Guides, docs, blog chrome, metadata,
-  the JSON-LD and the skip link are Server Components and render
-  `DEFAULT_LOCALE`. The German catalog covers their namespaces anyway, so they
-  switch the day those surfaces resolve a locale client-side.
-- **A brief English frame** on load for a German user, before the effect runs.
-- **The choice is per browser, not per account.** An OBS browser source has its
-  own storage, so overlays in OBS stay English unless chosen there; this is
-  intended, but it also means a second device needs the choice again.
-- **Strings resolved once at module load stay English**, e.g. the editor's
-  `EDITOR_LOADING_LABEL` constants.
-- The gate controls who can pick a language, not what renders: a stored choice
-  keeps applying after a gate flip.
-- The German catalog is not in the localization tool's database. Regenerating
-  `messages/de/` from an export overwrites each namespace file whole and drops
-  every key the export lacks; merge instead.
+- Server-rendered pages stay English (Server Components render
+  `DEFAULT_LOCALE`) plus a brief English frame on load; strings resolved once
+  at module load stay English too.
+- The choice is per browser, not per account: an OBS browser source has its
+  own storage (intended), and a second device needs the choice again.
+- The gate controls who can pick, not what renders: a stored choice keeps
+  applying after a gate flip.
+- The German catalog is not in the localization tool's DB: regenerating
+  `messages/de/` from an export overwrites each namespace file whole; merge
+  instead.
 
 ## Implementation
 

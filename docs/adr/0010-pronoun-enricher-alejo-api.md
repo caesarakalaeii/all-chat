@@ -2,95 +2,28 @@
 
 **Date**: 2026-04-04
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
-**Deciders**: Phase 9 — Add optional support for Alejo pronouns
+**Revised**: 2026-11-03
+**Deciders**: Enrichment team (Phase 9)
 
----
+## Context
 
-## Context and Problem Statement
+Overlays are expected to show pronouns next to usernames. The community standard for Twitch pronoun display is the Alejo pronouns API (api.pronouns.alejo.io), data users opt into at pr.alejo.io. Integration must not degrade message delivery when the third-party API fails, and must not hammer it (no SLA).
 
-All-Chat displays chat messages from multiple streaming platforms. Streamers and viewers increasingly expect pronoun display alongside usernames in chat overlays. The only publicly available pronoun data source for Twitch users is the Alejo pronouns API (api.pronouns.alejo.io), which users opt into at pr.alejo.io. Adding pronoun display requires integrating this external API dependency into the message-processor enrichment pipeline.
+## Decision
 
----
+Add a `PronounEnricher` in the message-processor that resolves pronouns from the Alejo API with Redis caching and silent failure: an API failure skips pronouns for that message and never affects delivery.
 
-## Decision Drivers
+- Cache `pronoun:{twitch_login}`, TTL 24h for hits and 404s; API failures negative-cache the empty sentinel for 5 minutes so a degraded Alejo API does not collapse throughput.
+- Pronoun definitions fetched once at startup (`GET /v1/pronouns`); user lookup `GET /v1/users/{twitch_login}`, 3s HTTP timeout.
+- Lookup runs only for overlays with pronoun display on (`ShowPronouns` from `display_settings.show_pronouns` / `visual_settings.showPronouns`, default on; `services/message-processor/router/overlay_router.go`), so overlays with it off send nothing to the API.
+- Cross-platform: non-Twitch viewers resolved via linked Twitch account, `TwitchUsername` added by `ViewerBadgeEnricher`'s JOIN; the field is `json:"-"` and never serialized to clients.
+- Pronoun changes on pr.alejo.io take up to 24h to propagate (cache TTL; accepted).
 
-- Pronoun display must be optional — an overlay shows pronouns only if its owner turned the toggle on, and viewers only see pronouns if they have opted in at pr.alejo.io
-- API failures must not degrade message delivery (D-05: silent skip on errors)
-- Cache is required to avoid hammering a third-party API with no SLA
-- Non-Twitch users with a linked Twitch account should still get pronouns (cross-platform)
-- The `TwitchUsername` field used for cross-platform lookup must never be sent to clients
-
----
-
-## Considered Options
-
-1. **Alejo API (api.pronouns.alejo.io/v1/)** — Opt-in pronoun database for Twitch users
-   - ✅ Pros: Free, widely adopted by streaming community, accurate opt-in data
-   - ❌ Cons: External dependency, no SLA, third-party outage silences pronouns
-
-2. **Store pronouns in All-Chat's own database** — Users set pronouns in profile settings
-   - ✅ Pros: No external dependency, works for all platforms
-   - ❌ Cons: Creates user-facing feature gap (separate from established Twitch community standard), requires UI, users must re-register pronouns they already set elsewhere
-
-3. **No pronoun support** — Skip pronouns entirely
-   - ✅ Pros: No complexity
-   - ❌ Cons: Missing community-expected feature for inclusive chat display
-
----
-
-## Decision Outcome
-
-**Chosen**: Option 1 — Alejo API with Redis caching and silent fail
-
-**Rationale**: Alejo pronouns is the established community standard for Twitch pronoun display. The graceful degradation design (silent skip on failure, 24h cache) ensures pronoun availability does not affect message delivery. Cross-platform resolution via linked Twitch accounts is achievable without an extra DB roundtrip by extending the existing `ViewerBadgeEnricher` query.
-
----
-
-## Consequences
-
-### Positive
-
-- Pronouns populated for all users who have opted in at pr.alejo.io, on overlays whose pronoun display is on — zero extra user action required on All-Chat
-- 24h Redis cache drastically reduces API call volume (one API call per unique viewer per day at most)
-- Empty sentinel caching for 404 responses avoids re-fetching for users with no pronouns
-- Cross-platform pronoun resolution works for YouTube/Kick/TikTok/Discord users with linked Twitch accounts
-
-### Negative
-
-- External API dependency with no SLA — Alejo API outage silences pronouns for all viewers until cache expires
-- Pronouns only available for Twitch users; non-Twitch users without a linked account never get pronouns
-- Cache key `pronoun:{twitch_login}` — pronoun changes on pr.alejo.io take up to 24h to propagate (acceptable trade-off)
-
----
+Alternatives rejected: storing pronouns in our own database (would need a user-facing settings feature and re-registration away from the established community standard); no pronoun support (missing community-expected feature).
 
 ## Implementation
 
-- **Files**:
-  - `services/message-processor/enricher/pronoun_enricher.go` — PronounEnricher with Alejo API integration and Redis cache
-  - `services/message-processor/enricher/pronoun_enricher_test.go` and `pronoun_enricher_negcache_test.go` — Unit tests
-  - `services/message-processor/cmd/main.go` — Wired `pronounEnricher.Enrich` after `viewerBadgeEnricher.Enrich` in CHAT PATH only
-  - `services/message-processor/models/message.go` — `Pronouns` (json:pronouns,omitempty) and `TwitchUsername` (json:"-") fields on UserInfo
-  - `services/message-processor/enricher/viewer_badge_enricher.go` — Extended DB query with LEFT JOINs to resolve linked Twitch username
-- **Lookup gating** (2026-11-02 amendment, data minimisation): the user lookup runs only for overlays whose pronoun display is on — `ShowPronouns`, resolved by the message-processor overlay router from `display_settings.show_pronouns` / `visual_settings.showPronouns`, default on. Overlays with it off send nothing to the Alejo API (`services/message-processor/router/overlay_router.go`)
+- `services/message-processor/enricher/pronoun_enricher.go` (+ tests: `pronoun_enricher_test.go`, `pronoun_enricher_negcache_test.go`), wired into the chat path in `services/message-processor/cmd/main.go` after `viewerBadgeEnricher`.
+- Fields: `Pronouns` (`json:"pronouns,omitempty"`) and `TwitchUsername` (`json:"-"`) on `UserInfo` in `services/message-processor/models/message.go`.
 
-- **Cache**:
-  - Key pattern: `pronoun:{twitch_login}`
-  - TTL: 24 hours for successful lookups and for 404s; API failures negative-cache the empty sentinel for 5 minutes so a degraded Alejo API does not collapse processing throughput (`pronoun_enricher_negcache_test.go`)
-
-- **API**:
-  - Pronoun definitions: `GET https://api.pronouns.alejo.io/v1/pronouns` — fetched once at startup
-  - User lookup: `GET https://api.pronouns.alejo.io/v1/users/{twitch_login}`
-  - HTTP timeout: 3 seconds
-
-- **Cross-platform resolution**: Non-Twitch messages use `msg.User.TwitchUsername` (set by ViewerBadgeEnricher via new `COALESCE(twitch_vs.username, '') AS twitch_username` JOIN). This field is tagged `json:"-"` and never serialized to clients.
-
-- **Timeline**: Phase 9, Plan 01 — 2026-04-04
-
----
-
-## Related Decisions
-
-- **ADR-0002**: Redis Streams + Pub/Sub — enrichers operate in the message-processor pipeline before Pub/Sub publish
-- **ADR-0004**: No hexagonal architecture — enrichers are direct domain logic without ports/adapters
-- **Phase 9 CONTEXT.md**: D-05 (silent fail), D-12 (TwitchUsername json:"-"), pronoun display requirements
+Related: ADR-0002 (enrichers run before the Pub/Sub publish).

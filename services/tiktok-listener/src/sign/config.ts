@@ -61,10 +61,10 @@
  *                  flag budget is shared by every pod leasing it, so N connect-capable
  *                  replicas enforce N x the per-pod cap — keep ONE connect-capable replica
  *                  in pure-node rollouts, or divide the cap across them with
- *                  TIKTOK_MAX_WS_CONNECTS_PER_HOUR (PR 4 deployment assumption).
+ *                  TIKTOK_MAX_WS_CONNECTS_PER_HOUR.
  *                  The premium fallback tier is ON in this mode: promotion
  *                  warms the target-room tab on the signer before attaching the relay
- *                  (PR 3, sign/warm-target-tab.ts).
+ *                  (sign/warm-target-tab.ts).
  */
 export type SignerMode = 'euler' | 'shadow' | 'self' | 'pure-node';
 
@@ -203,7 +203,7 @@ export function eulerStillReachableForSignature(config: SignConfiguration): bool
       return config.selfSignFallback;
     case 'pure-node':
       // No Euler leg exists on this path — selfSignFallback does not
-      // apply; the capture-based fallback tier is PR 3's machinery.
+      // apply; the capture-based fallback tier machinery is shared.
       return false;
   }
 }

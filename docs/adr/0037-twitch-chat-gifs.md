@@ -2,130 +2,36 @@
 
 **Date**: 2026-07-18
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-18 (trimmed; record the current state of the event-path gap)
 **Deciders**: caesarakalaeii
 
-## Context and Problem Statement
+## Context
 
-Twitch shipped native chat GIFs (Giphy-backed). A viewer picks a GIF and it is
-delivered to chat as a **text-replacement token, like an emote**: the message body
-carries a bracketed alt caption (e.g. `[Y A Y Yes GIF by Djemilah Birnie]`) and a
-side-channel names the GIF that stands in for that span. Twitch renders the GIF in
-place of the caption and hides the caption text.
+Twitch ships native chat GIFs (Giphy-backed). A viewer's GIF is delivered like an emote: the message body carries a bracketed alt caption (e.g. `[Y A Y Yes GIF by …]`) and a side-channel names the GIF standing in for that span; Twitch renders the GIF and hides the caption. Both Twitch transports carry it: EventSub `channel.chat.message` has a `gif` fragment, and IRC PRIVMSG has a `gifs` tag listing `start-end|gif_id|url` spans (inclusive, zero-based *byte* offsets).
 
-Both Twitch chat transports carry it (documented on `dev.twitch.tv`, and confirmed in
-[PR #576](https://github.com/caesarakalaeii/all-chat/pull/576#issuecomment-5007998475)):
+Until this ADR the pipeline ignored the GIF entirely: messages surfaced as bare caption text with no image. PR #576 had already built a source-agnostic media path end to end for Discord uploads and Tenor/Giphy link previews — `MessageInfo.attachments []Attachment` on the wire, the `MessageAttachments` React component on all three render surfaces (live overlay, editor preview, monitor), a WCAG 2.2.2 hide/show control for animated GIFs, and CSP media directives — explicitly as groundwork for Twitch GIFs.
 
-- **EventSub `channel.chat.message`**: a new fragment `{"type":"gif","text":"[…]","gif":{"gif_id":"…","url":"…"}}`.
-- **IRC PRIVMSG**: a new `gifs` tag — a comma-separated list of `start-end|gif_id|url`,
-  where `start-end` are inclusive, zero-based **byte** offsets into the message text
-  marking the alt-caption span.
+## Decision
 
-Until now our Twitch pipeline ignored the GIF entirely: the message surfaced as bare
-`[…]` caption text with no image. We want Twitch chat GIFs to render on overlays.
+**Twitch chat GIFs become `Attachment{type:"image", content_type:"image/gif"}` entries on `MessageInfo.attachments`, with the alt caption stripped from the visible text and kept as the attachment's alt text.** This reuses the whole #576 render + a11y + CSP path unchanged and matches Twitch's hidden-caption look. Alternatives rejected: rendering the GIF as a large inline emote (no a11y control on the monitor, duplicates `MessageAttachments`); attaching the GIF but leaving the caption visible (shows `[Y A Y …]` plus a redundant thumbnail).
 
-[PR #576](https://github.com/caesarakalaeii/all-chat/pull/576) had already added a
-media path end to end for Discord (image/GIF/video uploads and Tenor/Giphy link
-previews), *explicitly* as groundwork for Twitch chat GIFs once their mechanism was
-known: `MessageInfo.attachments []Attachment` on the wire, a source-agnostic
-`MessageAttachments` React component wired into all three render surfaces (live
-overlay, editor preview, in-app monitor), a WCAG 2.2.2 hide/show control for animated
-GIFs on the in-scope monitor, and `media-src` in the CSP. This ADR records how Twitch
-chat GIFs plug into that existing path.
+Both transports converge on Twitch's own **`gifs` tag** as the internal representation:
 
-## Decision Drivers
+- **twitch-eventsub-listener** (`buildGifsTag`, wired into `buildChatTags`) synthesizes the tag from `gif` fragments with byte offsets accumulated across fragments, mirroring how it already synthesizes `emotes`. A new `eventsub.ChatGif` type and a `Gif` field on `ChatMessageFragment` carry the payload (`services/twitch-eventsub-listener/eventsub/types.go`).
+- **twitch-listener (IRC)**: the PRIVMSG parser builds its tag map from an explicit allowlist and forwards the native `gifs` tag with a one-line addition. The IRC path inherits the same multibyte-offset caveat as IRC emotes (Go byte offsets); the EventSub path is exact.
+- **message-processor** (`extractTwitchGifs` in the Twitch normalizer): parses the tag into attachments, strips each caption span from the visible text, and re-anchors first-party emote byte offsets (`remapEmotePositions`), dropping any emote occurrence that overlapped a removed span. Spans are reduced to a sorted, disjoint set so a degenerate overlapping tag cannot desync the shift. A GIF with a present URL but a malformed span still yields an attachment. Capped at 4 GIFs per message.
+- **frontend**: no code change — `MessageAttachments` is platform-agnostic and `img-src https:` already permits the URLs.
 
-- **Reuse the #576 media path.** It already renders `image/gif` attachments on every
-  surface with the a11y controls and CSP in place. Twitch GIFs *are* Giphy GIFs — the
-  same media kind Discord's Tenor/Giphy previews already flow through.
-- **One parse site for both transports.** EventSub is the primary/only forward chat
-  path (ADR-0015, ADR-0026), but the IRC listener still passes native tags through, so
-  both should converge on one representation rather than two parsers.
-- **Faithful to Twitch's rendering.** Show the GIF, not the `[…]` caption — Twitch
-  hides the caption. Keep the caption as accessible alt text.
-- **No regressions to first-party emotes.** A message may in principle carry both a GIF
-  and native Twitch emotes; stripping the caption must not desync emote byte offsets.
+## Consequences
 
-## Considered Options
+- Twitch chat GIFs render on overlays with zero frontend change; a11y and CSP are inherited from #576; one representation serves both transports; first-party emotes stay correct alongside GIFs.
+- If Twitch changes the published `gif` fragment field names before GA, `ChatGif` / `buildGifsTag` is the single place to adjust.
+- **Event-path scope**: `NormalizeEvent` now runs the same GIF extraction the chat path does (`services/message-processor/normalizer/twitch_normalizer.go:441`), so a notice whose message carries a `gifs` tag renders its GIF. The `resubscription` handler still attaches no tags (`services/twitch-eventsub-listener/webhooks/handler.go:782`), so a GIF inside a dedicated-resub message remains unrendered.
+- **Zero-caption GIFs are dropped**: the position-based tag format has nothing to key on without a caption span; Twitch always sends one today.
+- **Comma-in-URL** would break the tag round-trip, but that is Twitch's own format constraint (URL last, comma-separated) and Twitch never emits an unencoded comma.
+- **Not premium-gated** and no onboarding-tour entry: this is parity with what Twitch native chat already shows, not a paid add-on. GIF *search* is a separate feature with its own providers and entitlements (ADR-0071 editor GIF search; the Klipy alert-overlay provider under ADR-0073/0074).
 
-1. **Render the GIF as a large inline "emote" (text-replacement in `renderMessage`).**
-   Closest to Twitch's literal mechanism and needs no text stripping. **Rejected**: an
-   inline `<img>` in `renderMessage` has *no* WCAG 2.2.2 control on the in-scope monitor,
-   directly contradicting the position #576 just established (full-size GIFs get a
-   hide/show control there); it also duplicates media rendering that `MessageAttachments`
-   already does, and emote-sized inline layout fights a full-size GIF.
+## Related
 
-2. **Map the GIF to an `attachment`, leave the caption in the body.** Simplest, but the
-   overlay then shows `[Y A Y Yes GIF by …]` as literal caption text *above* a duplicate
-   GIF thumbnail — redundant and unlike Twitch. **Rejected.**
-
-3. **Map the GIF to an `attachment` and strip the caption span from the text (chosen).**
-   Reuses the whole #576 render + a11y + CSP path unchanged; matches Twitch's hidden-caption
-   look; preserves the caption as the attachment's alt text.
-
-## Decision Outcome
-
-**Chosen: Option 3.** Twitch chat GIFs become `Attachment{type:"image", content_type:"image/gif"}`
-entries on `MessageInfo.attachments`, and the alt caption is stripped from the visible text.
-
-Concretely, both transports converge on the **`gifs` tag** as the internal wire
-representation (`start-end|gif_id|url`, Twitch's own IRC format):
-
-- **twitch-eventsub-listener** (`buildGifsTag`, wired into `buildChatTags`): synthesizes
-  the `gifs` tag from `gif` fragments, with byte offsets accumulated across fragments —
-  exactly mirroring how it already synthesizes the `emotes` tag from `emote` fragments.
-  A new `eventsub.ChatGif` type and a `Gif` field on `ChatMessageFragment` carry the payload.
-- **twitch-listener (IRC)**: the PRIVMSG parser builds its tag map from an explicit allowlist
-  (it does not blindly copy `msg.Tags`), so it forwards the native `gifs` tag with a one-line
-  addition next to the existing `source-*` forwarding. Positions in the native IRC tag follow the
-  same convention as the IRC `emotes` tag, which the normalizer already byte-slices — so a
-  multibyte caption on the IRC path inherits the same pre-existing offset caveat as IRC emotes
-  (the EventSub path, which synthesizes byte offsets on both sides, is exact).
-- **message-processor** (`extractTwitchGifs` in the Twitch normalizer): parses the `gifs`
-  tag into attachments (URL, `content_type:"image/gif"`, caption → `filename`), strips each
-  caption span from the visible text, and **re-anchors first-party emote byte offsets** to
-  the stripped text (`remapEmotePositions`), dropping any emote occurrence that overlapped a
-  removed span. A GIF whose URL is present but whose span is malformed still yields an
-  attachment (the image renders) and is simply not stripped. Capped at 4 GIFs per message.
-- **frontend**: **no code change.** `MessageAttachments` is platform-agnostic and already
-  renders `image/gif` attachments on all three surfaces; Twitch GIFs are images, so the
-  existing `img-src https:` CSP already permits them (no `media-src` change needed).
-
-### Consequences
-
-- **Positive**: Twitch chat GIFs render on overlays with zero frontend change; a11y and
-  CSP are inherited from #576; one parser serves EventSub and IRC; first-party emotes stay
-  correct alongside GIFs.
-- **Negative / limitations**: Like the existing emote/attachment offset handling, positions
-  are Go byte offsets; the strip logic reduces spans to a sorted, disjoint set so a degenerate
-  overlapping tag can't desync the emote-offset shift. The EventSub `gif` fragment shape follows
-  Twitch's published contract; if Twitch changes field names before GA, `ChatGif`/`buildGifsTag`
-  are the single place to adjust. Known scoped-out cases, each consistent with existing behaviour
-  and safe to defer:
-  - **Event-path GIFs** (a GIF inside a resub/sub *message*): originally scoped out, on the
-    reasoning that the event handlers build no `gifs` tag and `NormalizeEvent` does not extract
-    one. The render half of that gap is since closed (follow-up to ADR-0046):
-    `NormalizeEvent` runs the same `extractTwitchGifs` call the chat path does
-    (`services/message-processor/normalizer/twitch_normalizer.go:441`), so a notice whose
-    message carries a `gifs` tag renders its GIF. The `resubscription` handler still attaches
-    no tags (`services/twitch-eventsub-listener/webhooks/handler.go:782`), so a GIF inside a
-    dedicated-resub message remains unrendered.
-  - **Zero-caption GIFs** are dropped: the tag format is position-based (`start-end`), so a GIF
-    with no alt-caption span in the body has nothing to key on. Twitch always sends a bracketed
-    caption today.
-  - **Comma-in-URL** would break the comma-separated tag round-trip, but this matches Twitch's own
-    IRC `gifs`-tag format constraint (URL last, comma-separated), so Twitch never emits an
-    unencoded comma in a GIF URL.
-- **Not premium-gated.** This is parity with what Twitch native chat already shows (matching
-  #576's ungated Discord media), not a premium add-on, so it ships as a base feature with no
-  `feature_gates` entry and no onboarding-tour entry. A Patreon note is still worthwhile once
-  deployed.
-- GIF **search** is a separate feature with its own providers and entitlements: the later,
-  client-side editor GIF search (ADR-0071) and the Klipy alert-overlay GIF provider, whose app
-  key is only delivered to entitled sessions (ADR-0073, ADR-0074).
-
-## References
-
-- ADR-0015 (EventSub chat-ownership claim), ADR-0026 (IRC listener deprecation)
-- ADR-0071 (later, client-side editor GIF search), ADR-0073/ADR-0074 (Klipy alert-overlay GIF provider: app key delivery and entitlement)
-- Twitch docs: EventSub `channel.chat.message`; IRC `gifs` tag on PRIVMSG
+- [ADR-0015](./0015-eventsub-chat-ownership-claim.md) and [ADR-0026](./0026-twitch-irc-listener-deprecation.md) — the transports this rides on.
+- ADR-0071, ADR-0073, ADR-0074 — the later, separate GIF-search features.

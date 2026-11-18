@@ -1,593 +1,71 @@
 # All-Chat Overlay Themes
 
-Custom CSS themes for your All-Chat overlays in OBS. These themes allow you to completely transform the look of your chat overlay without touching any code.
+Custom CSS themes for All-Chat chat overlays. Copy a theme into the Custom CSS field of the OBS browser source, or into the in-app editor (dashboard → overlay → **Advanced → Custom CSS**, which also auto-updates bundled themes). Detailed selectors and events: [CSS_CUSTOMIZATION.md](../CSS_CUSTOMIZATION.md) and [AUTHORING-EVENTS.md](./AUTHORING-EVENTS.md).
 
----
+## Bundled themes
 
-## 📚 Looking for the Complete CSS Reference?
+These files live next to this README and ship inside the app (`frontend/scripts/generate-bundled-themes.mjs` bundles every `*.css` here into the theme marketplace; run `npm run generate:themes` after editing):
 
-**For developers and advanced customization**, see these guides:
-- **[CSS Customization Guide](../CSS_CUSTOMIZATION.md)** - Complete DOM structure, CSS classes, and advanced techniques
-- **[Styling events in a theme](./AUTHORING-EVENTS.md)** - The `--event-*` tokens; **required reading if you add a theme**
-- **[Platform Badge Customization](../PLATFORM_BADGE_CUSTOMIZATION.md)** - Platform badge position and style options
+- `minimal-theme.css`: inline layout, `[icon] [badges] username: message`, no bubbles or avatars, events flattened inline. Requires the platform badge style set to **Icon**. Absorbed the older `minimal-theme-fixed`; overlays configured with that id resolve here (ADR-0053).
+- `minimal-icon-theme.css`: clean dark bubbles with icon platform badges before the username. Requires badge position **Before username** and style **Icon**.
+- `high-contrast-theme.css`: pure black and white maximum-contrast look (WCAG AAA ratios), bold sizes, excludes the scroll sentinel via `.space-y-3 > div:not(.scroll-anchor)`.
+- `noita-minimal-theme.css`: dark fantasy pixel-art, Noita Blackletter usernames (font by viowlet, https://www.reddit.com/r/noita/comments/jp56ub/), transparent background, inline layout.
+- `win98-theme.css`: Windows 98 windows with inset input styling, pixelated rendering, optional title bar. See the customization comments in the file itself (uncomment the Hide sections for avatars, platform badges, user badges, timestamps; scale and background colour are one-line edits).
 
-**This page** focuses on quick theme application and basic customization.
+- `comic-speech-theme.css`: speech balloons with tails and halftone fill; paints the balloon from `--chat-bubble-bg-color`.
+- `trading-card-theme.css`: card-faced rows with foil borders; per-row variety on the border axis.
+- `sticky-notes-theme.css`: coloured note squares, the worked example for per-row bubble colours.
+- `neo-brutalist-theme.css`: thick black borders and hard offset shadows.
+- `cyberpunk-theme.css`, `minecraft-theme.css`, `neon-glass-theme.css`, `vaporwave-theme.css`, `terminal-hacker-theme.css`, `pastel-cute-theme.css`, `modern-dark-theme.css`: genre looks on the same hook classes.
 
----
+Every theme here styles its events; the marketplace preview renders all of them. Apply any of them from the in-app theme picker, or by pasting the entire file into OBS → Browser Source → Custom CSS.
 
-## How to Apply a Theme in OBS
+## Layout: the two feed preferences
 
-1. **Add Browser Source** (if you haven't already)
-   - In OBS, click the `+` button in the Sources panel
-   - Select "Browser"
-   - Name it (e.g., "All-Chat Overlay")
-   - Set the URL to your overlay: `http://your-domain.com/overlay/YOUR_OVERLAY_ID`
-   - Set width/height to match your canvas (e.g., 1920x1080)
+Feed Anchor and Invert Message Order are user preferences, not theme properties. A theme must adapt rather than hardcode one arrangement. The wrapper carries `[data-feed-anchor="top|bottom"]` and `[data-feed-order="newest-last|newest-first"]`; the anchor sets where blank space collects, the order decides which end is newest. Entry animation direction is driven by the inherited `--msg-enter-dir` / `--msg-enter-origin` custom properties that the `.msg-anim-*` presets read. Details and examples are in [CSS_CUSTOMIZATION.md](../CSS_CUSTOMIZATION.md#display-settings). Exclude `.scroll-anchor` from any rule that styles rows; do not override the wrapper's flex layout or `.overlay-live-body`'s `margin-top`.
 
-2. **Apply Custom CSS**
-   - Right-click your Browser Source → Properties
-   - Scroll down to the "Custom CSS" text box
-   - Copy the entire contents of a theme file (e.g., `win98-theme.css`)
-   - Paste it into the Custom CSS box
-   - Click OK
+## Cooperative customizer values
 
-3. **Customize** (optional)
-   - Open the CSS file in a text editor
-   - Read the comments for customization options
-   - Uncomment sections to hide elements (avatars, badges, platform labels)
-   - Adjust colors, sizes, and animations to your preference
-
-## Available Themes
-
-### Minimal Clean (`minimal-theme.css`) ⭐ MOST USED
-
-The flagship minimal look: everything on **one line**, no bubbles, no avatars.
-
-**Features:**
-- Inline layout: `[icon] [badges] username: message`
-- Colourful usernames with a smooth black readability outline
-- Transparent background, no message containers
-- Events render inline too, as `username: ⭐ New Subscriber! x5`
-- Platform status indicators hidden by default (re-enable with the
-  "Platform indicators" toggle in Appearance)
-
-**Required Settings:**
-- Platform Badge Style: **"Icon (logo)"** (a text badge is hidden by this theme)
-
-**Preview:**
-```
-[🎮] [💎] Username: Hello from Twitch chat!
-```
-
-> **Consolidated in 2026-08.** This theme absorbed the old
-> "Minimal Clean Theme (Fixed Platform & Badges)" (`minimal-theme-fixed`), which
-> was a bugfix fork that shipped beside it instead of replacing it. Overlays still
-> configured with the old id resolve here automatically — see
-> [ADR-0053](../adr/0053-consolidate-minimal-theme-and-retire-theme-ids-via-alias.md).
-
-### Minimal Icon Theme (`minimal-icon-theme.css`) ⭐ NEW
-
-Clean, modern theme showcasing the new **[ICON] [BADGES] USERNAME** layout!
-
-**Features:**
-- Platform logos as compact icons (Twitch, YouTube, Kick, TikTok)
-- Icon badges appear before username
-- Clean dark background with accent border
-- Subtle icon backgrounds and glow effects
-- Perfect for streamers who want a minimal, uncluttered look
-
-**Required Settings:**
-- Platform Badge Position: **"Before username"**
-- Platform Badge Style: **"Icon (logo)"**
-
-**Preview:**
-```
-[🎮] [💎] [⚔️] Username
-     Hello from Twitch chat!
-     12:34:56 PM
-```
-
-### High Contrast Theme (`high-contrast-theme.css`) ⭐ ACCESSIBILITY
-
-Maximum readability theme optimized for WCAG AAA compliance!
-
-**Features:**
-- WCAG AAA compliant (21:1 contrast ratios)
-- Pure black background (#000) with pure white text (#FFF)
-- Bold typography with increased font sizes (usernames: 20px, messages: 22px)
-- Multi-layer text shadows for username color legibility
-- Enhanced avatar borders (4px) and shadows
-- Larger, more distinct platform badges and user badges (24px)
-- High-contrast event styling with tier-based glows
-- Thick borders (3-6px) for all elements
-- Optimized for visibility over any content
-
-**Best For:**
-- Streamers prioritizing accessibility
-- Viewers with visual impairments
-- Maximum readability in all lighting conditions
-- Professional/corporate streaming environments
-- Streaming over very light or very dark games
-
-**Contrast Ratios (WCAG AAA):**
-- White text on black: 21:1 ✓
-- Light gray timestamps on black: 17.3:1 ✓
-- Yellow accents on black: 19.6:1 ✓
-
-**Customization Options:**
-- ✅ Adjust text sizes (compact/large modes)
-- ✅ Hide avatars for text-only focus
-- ✅ Change accent color (yellow/cyan/magenta)
-- ✅ Square vs rounded avatars
-- ✅ Border thickness adjustments
-- ✅ Disable animations for maximum stability
-
-**Usage:**
-1. Copy contents of `high-contrast-theme.css`
-2. Open OBS → Browser Source → Custom CSS field
-3. Paste and save
-4. Verify contrast in OBS preview
-
-**Preview:**
-```
-┌──────────────────────────────────────────────┐
-│ [🎮] [💎] [⚔️] Username (bold, white)        │
-│    Hello from Twitch chat!                   │
-│    (22px white text, thick black outline)    │
-│    [🕐 12:34:56 PM] (14px gray)              │
-└──────────────────────────────────────────────┘
-(Pure black background, 3px white border, 6px yellow left border)
-```
-
-### Noita Minimal Theme (`noita-minimal-theme.css`) ⭐ DARK FANTASY
-
-Dark fantasy pixel-art theme inspired by Noita's mystical underground atmosphere!
-
-**Features:**
-- **Authentic Noita Blackletter font** for usernames (custom font by viowlet)
-- Pixel-art fonts for message text (Press Start 2P / VT323)
-- Magical glowing text effects (purple/gold aura)
-- Earthy color palette (browns, golds, dark purples)
-- Transparent background (OBS-friendly)
-- Inline minimal layout: `[ICON] [BADGES] USERNAME: message`
-- Platform-specific muted colors (mystic purple, crimson, mossy green)
-- Animated magical pulse effect on usernames
-- Optional sparkle particle decorations
-- Alchemical event styling with mystical borders
-
-**Color Palette:**
-- Background: Fully transparent
-- Usernames: `#e8d4a0` (warm parchment) with purple magical glow
-- Messages: `#c9b896` (earthy tone) with pixel font
-- Platform colors: Muted earthy versions (purple, crimson, green, gray)
-
-**Typography:**
-- Username font: `Noita Blackletter` (20px, uppercase, blackletter style)
-- Message font: `Press Start 2P` (14px, pixel art)
-- Magical text-shadow glow: Multi-layer purple aura
-
-**Customization Options:**
-- ✅ Thicker glow effect (intensify magical aura)
-- ✅ No animations (disable pulse/fade effects)
-- ✅ Monochrome usernames (single gold color)
-- ✅ Hide platform badges/icons
-- ✅ Hide user badges
-- ✅ Compact spacing (tighter layout)
-- ✅ Brighter text (increase brightness)
-- ✅ Stacked layout (username above message)
-- ✅ Particle effects (sparkle decorations)
-
-**Best For:**
-- Noita streamers
-- Dark fantasy/roguelike games
-- Retro/pixel art aesthetics
-- Mystical/magical stream themes
-- Minimal overlay designs with character
-
-**Font Attribution:**
-- Noita Blackletter font created by **viowlet** (Reddit)
-- Source: [r/noita community](https://www.reddit.com/r/noita/comments/jp56ub/)
-
-**Accessibility:**
-- WCAG AA compliant (gold text ~8:1 contrast ratio)
-- Readable 14-16px pixel fonts at 1080p
-- Multi-layer outline ensures readability on any background
-- Respects `prefers-reduced-motion` for accessibility
-
-**Preview:**
-```
-[🎮] [💎] USERNAME: Hello from the mystical caves!
-     (Glowing blackletter username with magical purple aura)
-     (Pixel font message with dark outline)
-```
-
-### Windows 98 Theme (`win98-theme.css`)
-
-Transform your chat into a nostalgic Windows 98 experience!
-
-**Features:**
-- Classic Win98 gray windows with 3D borders
-- Inset avatar frames
-- Platform badges styled as Win98 status bars
-- Message text in white boxes with inset borders
-- Timestamp styled as status indicators
-- Pixelated rendering for authentic retro feel
-- Optional title bar
-
-**Customization Options:**
-- ✅ Show/hide avatars
-- ✅ Show/hide platform badges (TWITCH, YOUTUBE, etc.)
-- ✅ Show/hide user badges (subscriber, moderator)
-- ✅ Show/hide timestamps
-- ✅ Adjust message size (scale)
-- ✅ Change window background color
-- ✅ Add Win98 title bar to messages
-- ✅ Adjust transparency
-- ✅ Disable animations
-
-**Preview:**
-```
-┌─────────────────────────────────────────────┐
-│ [👤] [TWITCH] Username 💎             │
-│      ┌─────────────────────────────┐      │
-│      │ Hello from Twitch chat!     │      │
-│      └─────────────────────────────┘      │
-│      [🕐 12:34:56 PM]                      │
-└─────────────────────────────────────────────┘
-```
-
-## Creating Your Own Theme
-
-Want to create a custom theme? Here's a quick overview. **For detailed documentation, see the [CSS Customization Guide](../CSS_CUSTOMIZATION.md)**.
-
-### Quick Start
-
-### Key CSS Classes to Target
-
-Based on the current overlay implementation (`frontend/src/app/overlay/[id]/page.tsx`):
-
-#### Feed Layout (user preferences, not theme-owned)
-
-Two **independent** display settings decide how the feed is laid out. They are
-user preferences, so a theme should read them and adapt rather than hardcode
-around them.
-
-| Setting                                 | Values          | Default | What it moves                                                                                                               |
-| --------------------------------------- | --------------- | ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `display_settings.feed_anchor`          | `top`, `bottom` | `top`   | Which **edge of the canvas** the stack rests on, so where blank space accumulates and which way a short feed grows.         |
-| `display_settings.invert_message_order` | `false`, `true` | `false` | Which **end of the list** holds the newest message. Presentation only — messages are always appended to the end internally. |
-
-All four combinations are valid. `feed_anchor: bottom` with the order NOT
-inverted is the Twitch-like arrangement: newest at the bottom, older messages
-pushed upward, blank space at the top.
-
-The live overlay wrapper and the editor preview root both carry one stable hook
-per axis:
-
-- `[data-feed-anchor="top"]` — feed glued to the top edge, grows downward
-- `[data-feed-anchor="bottom"]` — feed glued to the bottom edge, grows upward
-- `[data-feed-order="newest-last"]` — normal reading order
-- `[data-feed-order="newest-first"]` — Invert Message Order is on
+Most `--chat-*` properties are cooperative: read the variable with your own theme value as the fallback and the user's customization wins when they have set it.
 
 ```css
-/* Fade the far end of the feed, whichever end that happens to be */
-[data-feed-anchor="top"] .overlay-live-body > div:last-child {
-  opacity: 0.6;
-}
-[data-feed-anchor="bottom"] .overlay-live-body > div:first-child {
-  opacity: 0.6;
+.break-words {
+  font-size: var(--chat-font-size, var(--theme-font-size, 1rem));
 }
 ```
 
-A new message lands at whichever end `data-feed-order` names, so vertical entry
-animations have to enter from that side. The attribute sets two inherited custom
-properties the built-in `.msg-anim-*` presets read — `--msg-enter-dir` (`1`, or
-`-1` when newest-first) and `--msg-enter-origin` (`100%`, or `0%`). Custom
-keyframes can read them and flip for free:
+A value declared as a `--theme-*` variable in your `:root` (`--theme-font-size: 15px`, `--theme-avatar-gap: 16px`) applies only while the user has left the matching dashboard control unset; the app's consumer rules read the theme intent as the middle fallback. Minimal Clean shows the pattern; the theme-CSS parser reads a theme's declarations and `var()` fallbacks back into the editor's fields, so a bare fallback (not nested in a second `var()`) is treated as the user's choice and becomes unbeatable.
 
-```css
-@keyframes my-entry {
-  from {
-    opacity: 0;
-    transform: translateY(calc(40px * var(--msg-enter-dir, 1)));
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-```
+Three properties are **not** cooperative. When their dashboard control is set, the app forces the property in the top `visual-customizer` layer regardless of what your theme writes, and emits nothing when unset: Text Shadow (`text-shadow` on `.break-words`, `.chat-username`, `.text-xs.text-slate-500`), Bubble shadow (`box-shadow` on chat rows), and Platform accent (`color`/`fill` on `[data-platform='<p>'] .platform-badge` and its SVG). Never declare or read `--chat-text-shadow`, `--chat-bubble-shadow` or `--platform-*-accent` in a theme: mentioning one makes your default indistinguishable from a user choice. Tests in `frontend/src/lib/theme-marketplace/__tests__/` enforce this for bundled themes.
 
-Overriding a `.msg-anim-*` rule outright still works — they are single unlayered
-class selectors, and these properties do not raise their specificity.
-
-**Exclude `.scroll-anchor`** from any rule that styles overlay rows. It is the
-invisible auto-scroll sentinel rendered next to the newest message and must stay
-a zero-box element; a rule that catches it turns it into dead space glued to the
-newest message, which a bottom-anchored feed shows as a gap on the edge it was
-supposed to rest on. The bundled High Contrast theme shows the pattern:
-`.space-y-3 > div:not(.scroll-anchor)`.
-
-**Do not** set `margin-top`, `justify-content` or `flex-direction` on the
-wrapper or on `.overlay-live-body` itself. Bottom anchoring is implemented as a
-flex-column wrapper plus `margin-top: auto` on `.overlay-live-body`, and
-overriding either one re-pins the feed to the edge the user did not choose.
-Styling the list's _children_ is fine and is unaffected.
-
-Unlike the visual-customizer properties, this is structural layout rather than a
-`--theme-*` variable, so there is no theme-intent fallback step to declare.
-
-#### Customizer settings a theme cannot override
-
-Most `--chat-*` properties are cooperative: read the variable with your own value
-as the fallback (`font-size: var(--chat-font-size, 15px)`) and the user's control
-wins when they set it, your look wins when they don't.
-
-The spacing, bubble-geometry and font-size controls also emit a
-**theme-intent step** in the app's own consumer rules —
-`gap: var(--chat-avatar-gap, var(--theme-avatar-gap, 0.75rem))` on the avatar
-row, the same shape as `--chat-message-gap`, the bubble set and the message
-`font-size` (`var(--chat-font-size, var(--theme-font-size, 1rem))` on
-`.break-words`; the legacy display-setting size sits innermost, so a set GUI
-control outranks it). Declare your value in `:root`
-(`--theme-avatar-gap: 16px`, `--theme-font-size: 15px`) and it applies whenever
-the user has not set the control; declare nothing and the platform default is
-used. Minimal shows the pattern for the bubble and message-gap intent set (it
-hides avatars, so it declares no `--theme-avatar-gap`); Comic Speech, Trading
-Card and Windows 98 Retro show it for the avatar stride.
-
-These are **not** cooperative. When the user sets one, the app emits a rule
-inside `@layer visual-customizer` — the top layer, which outranks your theme's
-`@layer marketplace-themes` — so nothing a theme writes can win against it:
-
-| Setting                     | Properties forced | On                                                                   |
-| --------------------------- | ----------------- | -------------------------------------------------------------------- |
-| Text Shadow                 | `text-shadow`     | `.break-words`, `.chat-username`, `.text-xs.text-slate-500`          |
-| Bubble shadow               | `box-shadow`      | chat rows (`> div`, excluding `.event-message` and `.scroll-anchor`) |
-| Platform accent (each of 5) | `color`, `fill`   | `[data-platform='<p>'] .platform-badge` and the badge SVG's shapes   |
-
-Nothing is emitted when the control is unset, so an unconfigured overlay still
-renders your theme exactly as written. Two consequences for theme authors:
-
-- A hardcoded `text-shadow: …` on message text is fine as a default, but
-  expect it to be replaced the moment the user picks a Text Shadow preset.
-- **Never** declare or read `--chat-text-shadow`, `--chat-bubble-shadow` or
-  `--platform-*-accent`. The theme-CSS parser back-fills the editor's fields from
-  a theme's declarations _and_ from its `var()` fallbacks, so mentioning one of
-  these would make your default indistinguishable from a user choice, and then
-  unbeatable. A unit test fails if a bundled theme does.
-
-#### Bubble background, and per-row colour variety
-
-`--chat-bubble-bg-color` is cooperative, so **read it on whatever element you
-paint as the bubble** — not necessarily the row. Comic Speech paints the balloon
-on `.min-w-0.flex-1` and Trading Card paints the card face inside a two-layer
-`padding-box` / `border-box` background; both read the variable there. A unit
-test fails if a bundled theme paints a bubble without reading it. The only
-exemptions are themes with no bubble at all (Minimal, Noita Minimal).
-
-If your theme varies the bubble colour **per row**, two extra rules apply:
-
-1. Put the per-row colour in a **nested** fallback,
-   `var(--chat-bubble-bg-color, var(--my-paper, …))`, and set `--my-paper` in the
-   `nth-child` rules. A bare fallback gets read back into the editor's field as
-   if the streamer had chosen it, which collapses your palette to one colour.
-   A nested `var()` reads as unbalanced to that parser, which is its signal to
-   skip. Keep the pattern out of your comments too: the parser does not strip
-   them.
-2. Move the row-to-row rhythm off the colour axis for the case where the
-   streamer _has_ picked one colour. `--customizer-bubble-bg-set` is `1` only
-   then (absent otherwise), so multiplying a per-row wash by it costs nothing
-   when unset:
+Bubble color is cooperative too, and themes are expected to read it:
 
 ```css
 .chat-message {
-  --paper: #fff8c4;
-  --shade: 0;
-  background-color: var(--chat-bubble-bg-color, var(--paper, #fff8c4)) !important;
-  background-image: linear-gradient(
-    rgba(0, 0, 0, calc(0.075 * var(--shade) * var(--customizer-bubble-bg-set, 0))),
-    rgba(0, 0, 0, calc(0.075 * var(--shade) * var(--customizer-bubble-bg-set, 0)))
-  ) !important;
-}
-.space-y-3 > div:nth-child(even) {
-  --paper: #cfe8ff;
-  --shade: 1;
+  background-color: var(--chat-bubble-bg-color, var(--paper, #fff8c4));
 }
 ```
 
-Sticky Notes is the worked example. Neo-Brutalist and Trading Card keep their
-per-row variety on the shadow and the foil border respectively, which are
-colour-independent and need none of this.
+Paint it on whatever element you render as the bubble, not necessarily the row. For per-row color variation, put the per-row color in a **nested** var fallback and gate any extra contrast wash on `--customizer-bubble-bg-set` (which is `1` only when the streamer picked a solid color); Sticky Notes is the worked example. The streamer can additionally force per-platform bubble fills or per-user bubble colors; where set, those replace your fill. Do not key theme rules off `data-bubble-slot` (assigned by arrival order, so it is not positional); use `nth-child` for rhythm.
 
-Separately, the streamer can set **differently-coloured bubbles** (Appearance →
-Bubble colors): a fill per platform, a palette cycled down the feed, and/or each
-message taking its chatter's username colour (fill or 2px outline, keyed on the
-row's `data-user-bubble` attribute). Those are enforced like the table above, as
-rules in `@layer visual-customizer` on `[data-platform='<p>']`,
-`[data-bubble-slot='<n>']` and `[data-user-bubble]` rows, so they replace
-your bubble fill when configured and emit nothing when not. Events are never
-painted.
+## Authoring your own theme
 
-Do not key any theme rule off `data-bubble-slot`. It is assigned from **arrival
-order**, not position, so that a row keeps its colour as the feed scrolls — a
-theme reading it would be styling "the 3rd message ever seen". Use `nth-child`
-for positional rhythm; a unit test enforces this.
+Start from an existing theme and the class map in [CSS_CUSTOMIZATION.md](../CSS_CUSTOMIZATION.md#class-reference). Non-negotiable parts of the contract:
 
-#### Message Container
-- `.space-y-3 > div` - Individual message wrapper
-- `.bg-gray-900/90` - Default dark background
-- `.rounded-lg` - Rounded corners (change to 0 for square)
-- `.p-3` - Padding
-- `.shadow-lg` - Shadow effect
+- Apply theme rules through plain declarations. Theme CSS is layered above the app defaults; `!important` is stripped at injection.
+- Every bundled theme must style its events (see `--event-*` tokens in [AUTHORING-EVENTS.md](./AUTHORING-EVENTS.md)); leaving them on the platform default reads as a different product dropped into your overlay. Tests fail otherwise.
+- Never recolor `.chat-username`. Size, weight, font and outlines are yours; `color` belongs to the viewer.
+- Don't use `:is()` or comma-split placeholder text: the marketplace preview scopes selectors by splitting lists on commas and does not parse `:is(...)`, so such a rule renders differently in preview and OBS.
+- Set theming metadata in a comment header at the top of the file: `Theme Name`, `Description`, `Tags`, `Author`, `Version`, `Updated`.
 
-#### Avatar Section
-- `.flex-shrink-0` - Avatar container
-- `.flex-shrink-0 img` - Avatar image
-- `.flex-shrink-0 > div` - Avatar fallback (initials)
-- `.w-10.h-10` - Avatar size (40x40px)
-- `.rounded-full` - Circular shape
+Check your work:
 
-#### Username & Platform
-- `.platform-badge` - Platform badge wrapper (both text and icon variants)
-- `.platform-badge-text` - Platform text label (TWITCH, YOUTUBE, etc.)
-- `.platform-badge-icon` - Platform icon (SVG logo)
-- `.font-semibold.text-sm` - Username
-- Color classes:
-  - `.text-purple-400` - Twitch
-  - `.text-red-400` - YouTube
-  - `.text-green-400` - Kick
-  - `.text-gray-400` - Other
-- **Note**: Platform badge position and style can be configured via Display Settings (before/after username, text/icon)
-
-#### Badges
-- `.flex.gap-1` - Badge container
-- `.flex.gap-1 img` - Individual badge images
-- `.w-4.h-4` - Badge size (16x16px)
-
-#### Message Text
-- `.text-white.break-words` - Message content
-- Font size: set by the GUI control, or by `--theme-font-size` in your `:root`
-  when the control is unset (platform default 16px; see the theme-intent step)
-
-#### Timestamp
-- `.text-xs.text-gray-500` - Timestamp text
-
-#### Events (subs, raids, redemptions)
-- `.event-message` - Event row wrapper (instead of `.chat-message`)
-- `.event-tier-{low|medium|high}`, `.event-type-{type}` - Importance and event type
-- `.event-icon`, `.event-title`, `.event-value`, `.event-metadata` - Inner content
-- `--event-*` custom properties - How you actually restyle them
-
-**A theme that styles only chat leaves events in the platform default** (a
-scaled-up gold gradient card with a glow and a bounce), which looks like a
-different product dropped into your overlay. See
-**[AUTHORING-EVENTS.md](./AUTHORING-EVENTS.md)** for the token table and a
-copy-paste recipe; a test fails if a bundled theme has no event styling.
-
-### Theme Template
-
-```css
-/* Reset default styles — plain declarations; the overlay layers your theme
-   above the app defaults for you */
-body {
-  background: transparent;
-  font-family: 'Your Font', sans-serif;
-}
-
-/* Message container */
-.space-y-3 > div {
-  background: #YOUR_COLOR;
-  border: YOUR_BORDER;
-  border-radius: YOUR_RADIUS;
-  padding: YOUR_PADDING;
-}
-
-/* Avatar */
-.flex-shrink-0 img,
-.flex-shrink-0 > div {
-  /* Your avatar styles */
-}
-
-/* Platform badge (text or icon) */
-.platform-badge {
-  /* Styles for both text and icon variants */
-}
-
-.platform-badge-text {
-  /* Text badge styles (TWITCH, YOUTUBE) */
-}
-
-.platform-badge-icon svg {
-  /* Icon badge styles (platform logos) */
-}
-
-/* Username */
-.font-semibold.text-sm {
-  /* Your username styles */
-}
-
-/* Message text */
-.text-white.break-words {
-  /* Your message styles */
-}
-
-/* Timestamp */
-.text-xs.text-gray-500 {
-  /* Your timestamp styles */
-}
-
-/* Hide elements (optional) */
-.flex-shrink-0 { display: none; } /* Hide avatars */
-.text-xs.font-semibold.uppercase { display: none; } /* Hide platform */
-.flex.gap-1 { display: none; } /* Hide badges */
+```bash
+cd frontend
+npm run generate:themes   # bundle docs/overlay-themes/*.css into the app
+npm run dev               # then open http://localhost:3000/dev/theme-contrast
+npm run test:themes       # message-text contrast (Playwright)
+npm test -- bundled-themes-events
 ```
 
-## Tips & Best Practices
-
-1. **Plain rules win** - theme CSS sits above the app defaults by cascade layer, and `!important` is stripped at injection, so write normal declarations
-2. **Test in OBS** - Styles may look different in OBS vs browser
-3. **Use web-safe fonts** - Or include @font-face declarations
-4. **Keep it simple** - Too many animations can impact performance
-5. **Transparent backgrounds** - Use `transparent` or `rgba()` for overlay backgrounds
-6. **Consider readability** - Ensure text is readable over your game/content
-
-## Troubleshooting
-
-**CSS not applying?**
-- Custom CSS is unlayered and already outranks the app's layers — `!important` is not needed
-- Check for syntax errors (missing semicolons, brackets)
-- Try refreshing the Browser Source in OBS
-
-**Fonts not working?**
-- Use web-safe fonts or include font files
-- System fonts may not be available in OBS
-
-**Performance issues?**
-- Disable complex animations
-- Reduce the number of messages displayed
-- Simplify box-shadow and backdrop-filter effects
-
-**Elements not hiding?**
-- Ensure you're using the correct class selector
-- Use browser DevTools to inspect and verify class names
-- Add `display: none;` — unlayered custom CSS outranks the utilities layer
-
-## Contributing Themes
-
-Want to share your theme with the community?
-
-1. Create your CSS file in `docs/overlay-themes/your-theme-name.css`
-2. Add clear comments and customization instructions
-3. Include a preview/screenshot
-4. Update this README with your theme details
-5. Submit a pull request!
-
-## Example Theme Ideas
-
-Here are some ideas for future themes:
-
-- **Cyberpunk/Neon** - Glowing borders, neon colors, futuristic fonts
-- **Minimalist** - Clean, simple, monochrome design
-- **Retro Terminal** - Green/amber text on black, monospace font
-- **Material Design** - Google's Material Design principles
-- **Glassmorphism** - Frosted glass effect with blur
-- **Neumorphism** - Soft 3D raised/pressed elements
-- **8-bit/Pixel Art** - Pixelated borders, retro game aesthetic
-- **macOS Aqua** - Classic macOS X style (circa 2001)
-- **Comic Book** - Bold outlines, speech bubble design
-- **Paper/Card** - Physical cards with shadows and texture
-
-## Additional Resources
-
-- **[CSS Customization Guide](../CSS_CUSTOMIZATION.md)** - Complete developer documentation
-- **[Quick Start Guide](./QUICK-START.md)** - Apply themes in minutes
-- **[Main Repository](../../README.md)** - All-Chat project homepage
-
-## Credits
-
-Created for the All-Chat project - a cloud-native microservices platform for aggregating chat from multiple streaming platforms.
-
-## License
-
-These themes are provided as examples and can be freely modified and distributed.
+To share a theme, open a pull request adding the CSS file to `docs/overlay-themes/` and a section here.

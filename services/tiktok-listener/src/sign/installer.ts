@@ -241,7 +241,7 @@ export function installSignConfiguration(
       }
       // No Euler fallback: the entire point of the mode is that the
       // leased session replaces the Euler signature. The capture-based
-      // fallback tier is PR 3's machinery.
+      // fallback tier machinery is shared.
       installed = new MeasuredSigner(signers.pureNode, observer);
       notes.push('we lease the shared WS session; no Euler on this path');
       break;

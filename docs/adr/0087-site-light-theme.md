@@ -4,123 +4,59 @@
 **Status**: Accepted
 **Deciders**: caesarakalaeii
 
-## Context and Problem Statement
+## Context
 
-The site was dark-only (ADR-0056: "a single authoritative dark-only token
-system"). The legal pages carried a light-mode button, but it did nothing
-visible: it set light values on the `--color-*` tokens inside
-`#legal-wrapper`, and the legal pages had since moved onto the lanes art
-direction (`.lanes-app`, `.lanes-panel`), which paints with hard-coded
-`#000`, `#fff`, `#f4f3ef` and its own `--lanes-*` variables. Users asked for
-a working light mode, across the whole site rather than only the legal pages.
+The site was dark-only (ADR-0056) and the legal pages' light-mode button did nothing
+visible: those pages had moved onto the lanes art direction (`.lanes-app`,
+`.lanes-panel`), which painted with literal `#000`/`#fff` colors and its own `--lanes-*`
+variables. Users asked for a working light mode across the whole site. The site paints
+with three color systems: the design tokens (`--color-*` in `@theme`, used by shadcn
+primitives, the admin pages and most components), the lanes art direction (homepage,
+product pages, legal, docs, blog), and broadcast art (OBS overlays, preview iframes,
+chat-theme previews, stream mockups) that shows what viewers see on stream. Constraints:
+dark stays the default; broadcast art never changes with the site theme; no flash of the
+wrong theme on load; light text is AA-locked by a test; one place per color decision.
 
-The site paints with three color systems:
+## Considered options
 
-1. the design tokens (`--color-*` in `@theme`), used by shadcn primitives,
-   the admin pages and most components;
-2. the lanes art direction (homepage, product pages, legal, docs, blog),
-   which used literal colors in `globals.css` and `border-white/20`-style
-   utilities in markup;
-3. broadcast art: OBS overlays (`/overlay/*`), the editor's preview iframes,
-   chat-theme previews and the homepage's stream mockups, which show what
-   viewers see on stream.
+- Light values for the existing tokens switched by `data-theme="light"` (chosen): the
+  token-consuming components switch with no markup change; the lanes CSS moves onto role
+  variables whose dark values are the old literals, so dark mode is pixel-identical. Cost:
+  areas that must stay dark need the dark values restated.
+- CSS `light-dark()` per token: rejected; `color-scheme` on the root changes the canvas
+  background (how an OBS browser source stays transparent), and scoping it away from
+  overlay routes would resolve every token to its light value there.
+- Invert with a CSS filter: rejected; inverts images and brand colors, unclean per
+  element.
+- Follow `prefers-color-scheme` by default: rejected; the maintainer chose an explicit,
+  remembered dark default.
 
-## Decision Drivers
+## Decision
 
-- Nothing changes for anyone who does not opt in: dark stays the default.
-- Broadcast art must never change with the site theme. An OBS browser
-  source on a streamer's machine must render exactly as configured.
-- No flash of the wrong theme on load.
-- Every light text color clears WCAG 2.2 AA, locked by a test like the dark
-  ones.
-- One place per color decision, so a new color cannot be added dark-only by
-  accident.
-
-## Considered Options
-
-1. **Light values for the existing tokens and role variables, switched by
-   `data-theme="light"` on `<html>`.**
-   - ✅ The 119 components on tokens switch with no markup change; the lanes
-     CSS moves onto role variables whose dark values are its old literals,
-     so dark mode is unchanged pixel for pixel.
-   - ❌ Areas that must stay dark need the dark values restated (see below).
-2. **CSS `light-dark()` per token, driven by `color-scheme`.**
-   - ✅ Both values sit side by side in one declaration.
-   - ❌ `color-scheme` on the root changes the canvas background, which is
-     how an OBS browser source stays transparent; scoping it away from the
-     overlay routes makes those routes resolve every token to its light
-     value. Rejected.
-3. **Invert the page with a CSS filter.**
-   - ❌ Inverts images, emotes and brand colors and cannot be undone per
-     element cleanly. Rejected.
-4. **Follow the OS (`prefers-color-scheme`) by default.**
-   - ❌ Would flip the site for every visitor on a light OS on their next
-     visit. The maintainer chose dark by default with an explicit,
-     remembered toggle.
-
-## Decision Outcome
-
-**Chosen**: Option 1.
-
-- `lib/theme.ts` keeps the choice in `localStorage` (`allchat_theme`). An
-  inline `<head>` script (`THEME_INIT_SCRIPT`, built from the same key and
-  route rule) sets `data-theme="light"` before the first paint;
-  `components/ThemeSync.tsx` keeps it right across client navigation.
-- Unthemed routes: `/overlay/*` (OBS browser sources) and
-  `/overlays/[id]/preview/*` (the editor's preview iframes) never get the
-  attribute.
-- `globals.css` restates the semantic tokens under
-  `:root[data-theme='light']`. The shadcn aliases follow on their own because
-  they are computed on the same element. Platform and status colors get
-  darker light values so they stay AA as text.
-- The lanes art direction paints with role variables on `:root`:
-  `--lanes-fg`, `--lanes-fg-strong`, `--lanes-fg-dim`, `--lanes-page`,
-  `--lanes-panel` and the five lane colors. Their dark values are the
-  literals the pages were designed with. Markup uses them through
-  `@theme inline` Tailwind colors (`border-lanes-fg-strong/20`,
-  `bg-lanes-panel`, `text-lanes-fg`).
-- `.theme-dark` marks an area that stays dark in either theme: chat-theme
-  and credit-roll previews, the theme-showcase card, the homepage hero stage
-  (its WebGL bands are translucent tints drawn from fixed colors and wash
-  out over a light page) and the stream mockups. Custom properties inherit
-  as computed values, so `.theme-dark` restates the dark values instead of
-  pointing back at them; `token-contrast.test.ts` fails if the restatement
-  misses a value the light theme changes or an alias computed from one.
-- The toggle (`components/ThemeToggle.tsx`) sits in every site nav: AppNav,
-  the homepage and extension-page navs, and the admin sidebar. It replaces
-  the legal pages' own button, which is removed.
-- Not premium-gated: it is a display preference and partly an
-  accessibility one (maintainer decision), so it has no feature gate,
-  onboarding entry or `/upgrade` row.
+`lib/theme.ts` keeps the choice in `localStorage` (`allchat_theme`); an inline head script
+(`THEME_INIT_SCRIPT`) sets `data-theme="light"` before first paint and
+`components/ThemeSync.tsx` maintains it across navigation. `/overlay/*` (OBS) and
+`/overlays/[id]/preview/*` (preview iframes) never get the attribute. `globals.css`
+restates the semantic tokens under `:root[data-theme='light']` (shadcn aliases follow
+since they compute on the same element; platform and status colors get darker light
+values for AA). The lanes art direction paints with role variables on `:root`
+(`--lanes-fg`, `--lanes-fg-strong`, `--lanes-fg-dim`, `--lanes-page`, `--lanes-panel`,
+five lane colors), their dark values being the original literals, consumed via
+`@theme inline` Tailwind colors. `.theme-dark` marks areas that stay dark in either
+theme (chat-theme and credit-roll previews, theme-showcase card, homepage hero stage,
+stream mockups); it restates the dark values rather than aliasing them, and
+`token-contrast.test.ts` fails on any missed value. The toggle
+(`components/ThemeToggle.tsx`) sits in every site nav (AppNav, homepage and extension
+navs, admin sidebar) and replaces the legal pages' button. Not premium-gated: a display
+preference with no feature gate, onboarding entry or `/upgrade` row.
 
 ## Consequences
 
-### Positive
-
-- One switch for the whole site, remembered per browser, no flash.
-- Dark mode unchanged except the new toggle, verified by pixel-diffing
-  dark screenshots against `main`.
-- Light text colors are AA-locked by the same test as dark ones.
-- The dark-tuned raw palette text classes (`text-red-400` and friends) that
-  failed on light backgrounds moved onto the status tokens, as ADR-0056
-  already asked.
-
-### Negative
-
-- Every new color needs a light value, and every new broadcast-art area
-  needs `.theme-dark`. A hard-coded `#fff` or `text-white` on a lanes page
-  silently disappears in light mode.
-- `.theme-dark` duplicates the dark token values. The test keeps the copy
-  exact, but it is a second place to edit when a dark token changes.
-- The server always renders dark; a light choice is applied by the head
-  script, so `<html>` carries `suppressHydrationWarning`.
-- Native form controls and scrollbars still follow the browser default
-  (`color-scheme` is not set), as before.
-
-## Related Decisions
-
-- [ADR-0056](./0056-shadcn-token-vocabulary-as-the-design-system-contract.md):
-  the token vocabulary this extends with a second set of values; no longer
-  dark-only.
-- [ADR-0053](./0053-consolidate-minimal-theme-and-retire-theme-ids-via-alias.md):
-  overlay chat themes, the broadcast art the site theme must not touch.
+- One remembered, flash-free switch; dark mode pixel-unchanged apart from the toggle
+  (verified by dark screenshot pixel-diff); light AA locked by the same test as dark; the
+  dark-tuned raw palette text classes (`text-red-400` etc.) moved onto status tokens.
+- Every new color needs a light value and every new broadcast area needs `.theme-dark`; a
+  hard-coded `#fff` on a lanes page silently disappears in light mode. `.theme-dark`
+  duplicates the dark values (locked exact by the test). The server renders dark and
+  `<html>` carries `suppressHydrationWarning`; form controls and scrollbars still follow
+  the browser default.

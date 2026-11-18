@@ -18,7 +18,7 @@
 
 /**
  * `WebcastSigner` that leases the signer service's shared WS session and
- * synthesizes the connector's initial fetch result in-process (PR 2 of the
+ * synthesizes the connector's initial fetch result in-process (the
  * pure-Node transport).
  *
  * One captured session — a warm classic room's WS URL + cookie jar, leased
@@ -26,7 +26,7 @@
  * `im_enter_room` for the target room on the leased socket (cross-room
  * entry, measured 2026-09-18). No Euler, no per-room page capture.
  *
- * Measured constraints this implementation encodes (spike report, PR 2
+ * Measured constraints this implementation encodes (measured 2026-09-18,
  * Task 1, 2026-09-18):
  *  - The lease wsUrl's recorded identity params are LOAD-BEARING at the WS
  *    handshake: a bare push origin with only compress/room_id/internal_ext/
@@ -58,7 +58,7 @@ import {
   type WebcastSigner
 } from './signer.js';
 
-/** The signer service's GET /v1/session response (PR 1, SessionLease). */
+/** The signer service's GET /v1/session response (a SessionLease). */
 interface SessionLeaseResponse {
   wsUrl?: string;
   cookieHeader?: string;
@@ -290,7 +290,7 @@ export class PureNodeSigner implements WebcastSigner {
    * `cursor` to the pushServer itself, so those stay in the synthesized
    * fields and every OTHER recorded param is forwarded via routeParams
    * (merged into the WS query at :1838) — the handshake rejects the bare
-   * origin without them (measured, PR 2 Task 1).
+   * origin without them (measured 2026-09-18).
    */
   private synthesize(request: SignRequest, lease: CachedLease): SignResult {
     const wsUrl = new URL(lease.wsUrl);

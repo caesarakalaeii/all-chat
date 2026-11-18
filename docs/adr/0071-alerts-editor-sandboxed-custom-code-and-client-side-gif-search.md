@@ -1,190 +1,87 @@
-# ADR-0071: The Alerts Editor — Free Editing With Premium Uploads, Sandboxed Custom Code Under the Page CSP, and Client-Side KLIPY Search
+# ADR-0071: The Alerts Editor: Free Editing, Sandboxed Custom Code, and Client-Side KLIPY Search
 
 **Date**: 2026-10-16
 **Status**: Accepted
 **Revised**: 2026-11-15 (editing, custom code and GIF search are free; only uploads stay premium, via the `media_upload` gate)
 **Deciders**: All-Chat Platform Team
 
-## Context and Problem Statement
+## Context
 
-ADR-0070 gave alerts overlays stored profiles (`alert_profiles`) and a
-premium-gated `PUT /overlays/:id/alerts/profiles`, but no editor: the dashboard
-showed an alerts overlay the chat overlay's appearance sections and a chat
-preview that said "Waiting for messages". Issue #954 asks for the editor, for a
-premium tier of custom HTML/CSS/JS per alert, for GIF search through KLIPY
-(the issue spells it "Klippy"), and for media uploads through media-service.
+ADR-0070 gave alerts overlays stored profiles and a premium-gated profile PUT but no
+editor (the dashboard showed chat appearance sections and a "Waiting for messages"
+preview). Four questions: which tier may edit (migration 107 made saving premium); how
+streamer JS is isolated under the overlay page's strict CSP (an `iframe srcdoc` inherits
+its parent's policy); where GIF search runs and with which key (KLIPY requires
+browser-originated requests, order and media URLs as returned, "Powered by KLIPY"
+attribution, forbids proxying without written approval); and whether a browser can upload
+media at all (it could not).
 
-Four questions needed an answer:
+## Considered options
 
-1. **Which tier may edit?** The issue speaks of "free-tier editing". ADR-0070
-   and migration 107 make saving profiles premium (`alerts_editor`), with the
-   defaults and the test alert free. ADR-0068 says nothing about tiers.
-2. **How is streamer JavaScript isolated**, and does it run at all under the
-   overlay page's strict CSP? An `iframe srcdoc` inherits its parent's policy.
-3. **Where does GIF search run, and with which key?**
-4. **Can a browser upload media at all?** It turned out it could not (see
-   below).
+- Editing tier: keep saving premium (chosen 2026-10-16) versus open the editor and keep
+  only uploads premium (chosen 2026-11-15, current). Uploads are premium because they
+  consume object storage, behind the separate `media_upload` gate (migration 128) on
+  media-service's presign. The middle option, free presets with the custom-code columns
+  still gated, reverses migration 107 unasked; and at the time the `alerts_overlay` kind
+  itself was premium, so a free tier could not have created the overlay it edits.
+- Isolation: `<iframe sandbox="allow-scripts" srcdoc>` (chosen): no same-origin token, so
+  the frame runs in a unique opaque origin, unable to reach the overlay page, its storage
+  or cookies, or send credentialed same-origin requests; the token list is exactly
+  `allow-scripts` and a unit test asserts the string. A separate-origin `sandbox.` route
+  could allow external scripts and `eval` but needs a new host, TLS and ingress for an
+  unasked-for capability; a JS realm shim is weaker than the browser boundary and CSP-
+  blocked anyway.
+- GIF search: browser-side calls to `api.klipy.com` with a public app key (chosen); the
+  key is public by nature, travelling in every request URL. A backend proxy is forbidden
+  by KLIPY without written approval.
 
-## Decision Drivers
+## Decision
 
-- Streamer JS is arbitrary code on a public OBS page. The isolation must hold
-  even when the code is hostile, and it must not depend on reviewing the code.
-- The overlay page's CSP must not be weakened for the feature. A broader
-  `script-src` would apply to every overlay, not just the sandbox.
-- KLIPY's usage rules require requests and media loads from the user's
-  browser, results in the order returned, media URLs used as returned, and a
-  "Powered by KLIPY" attribution.
-- Accepted decisions stand unless a new record changes them.
+`alerts_editor` still gates the PUT, now free, so it can be narrowed again without a
+deploy. The editor is fully editable; `MediaField` reads `users.is_premium` from the auth
+store and disables its upload button next to the upgrade link without premium (the server
+answers 403 either way). The frontend does not read gate state; flipping a gate back to
+premium needs a frontend change or a public gate probe (same caveat as
+`creatableOverlayKinds`).
 
-## Considered Options
+Migration 109 adds `custom_html`, `custom_css`, `custom_js` (TEXT, default '', idempotent)
+to `alert_profiles`; `shared/alerts` caps each at 64 KiB and validates nothing else, the
+sandbox is the isolation. The renderer gives each alert a fresh frame and posts
+`{type, profile, event}` once loaded (target origin `*`, the only one reaching an opaque
+origin); an injected bootstrap provides `onAlert(cb)`, `allchat.fill(template, event)` and
+the `data-alert-text`/`img[data-alert-image]` bindings; the parent keeps timing and
+sound. Contract documented in `frontend/src/components/overlays/alertSandbox.ts`.
 
-### Tiering
+CSP unchanged and verified: the srcdoc inherits `script-src 'self' 'unsafe-inline' ...`;
+inline scripts run; external `<script src>` loads only from policy hosts; `eval` is
+blocked; https images, media and fetch work (`frame-src` does not apply to
+`about:srcdoc`). The e2e spec `alerts-editor.spec.ts` asserts the sandbox attribute and
+in-sandbox DOM writes. If `script-src` moves to nonces (TODO in `next.config.js`),
+`'unsafe-inline'` stops applying and the sandbox scripts die: that change must thread the
+nonce into the srcdoc or adopt a separate-origin sandbox.
 
-1. **Keep saving premium (chosen 2026-10-16, replaced by option 3 on
-   2026-11-15).** The defaults are the free preset library; test alerts are
-   free. Without premium the editor was read-only, and the standard upgrade
-   link sat on it and on the custom-code section.
-2. Make preset editing free and gate only the custom-code columns
-   server-side. That reverses ADR-0070 and migration 107, which no record
-   asked for. The alerts overlay kind was itself premium then (`alerts_overlay`,
-   migration 108), so a free tier could not have created the overlay it edits.
-3. **Open the editor, keep uploads premium (chosen 2026-11-15).** The
-   `alerts_overlay` and `alerts_editor` gates were opened to everyone in the
-   admin feature-gates UI, so creating an alerts overlay, saving profiles,
-   custom code and KLIPY search are free. Uploading your own files takes
-   object storage and stays premium through a gate of its own,
-   `media_upload` (migration 128), which media-service mounts with
-   `RequirePremium` on `POST /api/v1/media/presign` only.
+`frontend/src/lib/klipy.ts` calls `GET https://api.klipy.com/api/v1/{app_key}/gifs/search`,
+stores the `hd` (fallback `md`) URL as returned, shows `sm` renditions in the grid, keeps
+result order and shows "Powered by KLIPY". The key comes at runtime from the frontend
+`GET /klipy-config` (ADR-0073/0074); without it or on failure the picker says "search
+unavailable"; pasting a URL always works. The CSP already admits `api.klipy.com` and the
+media hosts.
 
-### Isolation of custom code
-
-a. **`<iframe sandbox="allow-scripts" srcdoc=...>` (chosen).** No
-   same-origin token, so the frame runs in a unique opaque origin. It cannot
-   reach the overlay page, its storage or cookies, or send credentialed
-   same-origin requests. The token list is exactly `allow-scripts`: no forms,
-   popups or top navigation. A unit test asserts the attribute string.
-b. A sandboxed route on a separate origin (e.g. a `sandbox.` host). It would
-   have its own CSP, so external scripts and `eval` could be allowed. But it
-   needs a new host, TLS and an ingress, for a capability nobody has asked for
-   yet.
-c. Run user JS in the page with a JS-level sandbox (e.g. a realm shim). Weaker
-   than the browser's origin boundary, and blocked by the CSP anyway.
-
-### GIF search
-
-- **Browser-side calls to `api.klipy.com` with a public app key (chosen).**
-  KLIPY's rules forbid proxying requests or caching
-  media. The key is public by nature, because it travels in every request URL.
-- A backend proxy: forbidden without written approval from KLIPY.
-
-## Decision Outcome
-
-- **Tiering: option 3.** `alerts_editor` still gates the PUT, now free, so
-  it can be narrowed again without a deploy. The editor is fully editable for
-  everyone; `MediaField` reads `users.is_premium` from the auth store and,
-  without premium, disables its upload button next to the standard upgrade
-  link (the server answers 403 either way). The frontend does not read gate
-  state: a gate flipped back to premium needs a frontend change or a public
-  gate probe (the same caveat as `creatableOverlayKinds`).
-- **Custom code: option (a).** Migration 109 adds `custom_html`, `custom_css`
-  and `custom_js` (TEXT, default `''`, idempotent) to `alert_profiles`.
-  `shared/alerts` caps each field at 64 KiB and validates nothing else: the
-  sandbox is the isolation (ADR-0068). The gateway forwards the fields in the
-  resolved profile. The renderer gives each alert a fresh frame and posts
-  `{type: "alert", profile, event}` to it once the frame has loaded (target
-  origin `*`, the only one that reaches an opaque origin). An injected
-  bootstrap provides `onAlert(cb)`, `allchat.fill(template, event)` and the
-  `data-alert-text` / `img[data-alert-image]` bindings. The parent keeps
-  timing and sound. The contract is documented in
-  `frontend/src/components/overlays/alertSandbox.ts`.
-- **CSP: unchanged, verified.** The srcdoc inherits
-  `script-src 'self' 'unsafe-inline' …`. Inline scripts (the bootstrap and
-  the streamer's code) run. External `<script src>` loads only from the
-  hosts that policy lists. `eval`/`new Function` are blocked; there is no
-  `'unsafe-eval'`. Images, media and `fetch` to any https host work
-  (`img-src`/`media-src`/`connect-src https:`). `frame-src` does not apply to
-  `about:srcdoc`. The e2e spec `alerts-editor.spec.ts` runs against the dev
-  server and asserts the sandbox attribute string and that a script in the
-  sandbox writes to its own DOM.
-  **If `script-src` moves to nonces** (the TODO in `next.config.js`),
-  `'unsafe-inline'` is ignored and the sandbox scripts stop running. That
-  change must then either pass the nonce into the srcdoc's script tags or
-  move to option (b). This record is the reminder.
-- **GIF search:** `frontend/src/lib/klipy.ts` calls
-  `GET https://api.klipy.com/api/v1/{app_key}/gifs/search` and stores the
-  `hd` (fallback `md`) GIF URL as returned. It shows the `sm` rendition in the
-  grid, keeps result order, and shows "Powered by KLIPY". The key is fetched
-  at runtime from the frontend's `GET /klipy-config` route, which reads
-  `KLIPY_API_KEY` from the cluster secret (ADR-0073) and returns it to any
-  signed-in user (ADR-0074). Without a key, or on any failure, the picker
-  says "search unavailable". Pasting a URL still works, and so does uploading
-  for premium users. The existing CSP already admits `api.klipy.com`
-  (`connect-src https:`) and KLIPY's media hosts (`img-src https:`).
-- **Media upload made reachable.** Three defects meant no browser upload could
-  ever have succeeded (`media_objects` was empty in production):
-  1. the gateway had no `/api/v1/media` route: it now proxies to
-     media-service (`MEDIA_SERVICE_URL`, no prefix strip);
-  2. media-service presigned PUTs against its in-cluster endpoint
-     (`minio.allchat.svc…:9000`). The signature covers the Host header, so a
-     browser cannot use such a URL. It now presigns with a second client for
-     the origin of `MEDIA_PUBLIC_URL`, and `MINIO_REGION` (default
-     `us-east-1`) keeps presigning offline;
-  3. MinIO serves path-style, so a public URL needs the bucket segment:
-     production's `MEDIA_PUBLIC_URL` must be `https://media.allch.at/allchat-media`
-     (a GitOps change).
+Uploads were made reachable by fixing three defects: the gateway had no `/api/v1/media`
+route (proxies to media-service, no prefix strip); media-service presigned against its
+in-cluster MinIO endpoint whose Host signature a browser cannot satisfy (now presigns for
+`MEDIA_PUBLIC_URL`'s origin, `MINIO_REGION` keeps presigning offline); and MinIO's
+path-style serving means `MEDIA_PUBLIC_URL` is `https://media.allch.at/allchat-media`.
 
 ## Consequences
 
-### Positive
-
-- Streamer code can do anything a web page can do inside its frame, and
-  nothing to the overlay page or other overlays.
-- No CSP change, no new host, no editor dependency (the editor uses plain
-  textareas; the test alert is the preview).
-- GIF search costs no backend work and complies with KLIPY's rules by
-  construction.
-- The alerts editor's preview pane is the real alert box on the overlay
-  socket (`/overlays/:id/preview/alerts`, passive), so a test alert previews
-  custom code exactly as OBS will render it.
-
-### Negative
-
-- Custom code cannot load scripts from arbitrary CDNs or use `eval`. Inline
-  code only.
-- Search is unavailable while `KLIPY_API_KEY` is unset in the frontend
-  deployment. Rotating the key is a secret change and a pod restart, no
-  rebuild (ADR-0073).
-- Every alert frame carries its profile's custom code (up to 3 × 64 KiB). That
-  is acceptable at alert rates.
-- A streamer who loses premium keeps their uploaded files playing. The
-  `media_upload` gate protects new uploads, not existing objects, and list
-  and delete stay open so they can still clean up.
-
-## Implementation
-
-- `migrations/109_alert_profiles_custom_code.sql` (+ down); `shared/alerts`
-  (`CustomHTML/CSS/JS`, `MaxCustomCodeLen`).
-- `services/overlay-manager/repository/alert_profile_repo.go`;
-  `services/api-gateway/subscription/repository.go` (`AlertProfile`),
-  `models/service_config.go` (media route).
-- `services/media-service/storage/storage.go` (public-host presigner,
-  `MINIO_REGION`).
-- Upload gate: `migrations/128_media_upload_feature_gate.sql` (+ down),
-  `GateMediaUpload` in `shared/featuregates/cache.go`, mounted on presign in
-  `services/media-service/cmd/routes.go`.
-- Frontend: `components/overlays/AlertsEditor.tsx`, `alertSandbox.ts`,
-  `AlertBox.tsx` (`CustomCodeAlert`), `lib/klipy.ts`, `lib/api/media.ts`,
-  `app/overlays/[id]/preview/alerts/page.tsx`, `components/editor/sectionRegistry.ts`
-  (`ALERT_OVERLAY_SECTIONS`), editor page wiring.
-- Key delivery: `frontend/src/app/klipy-config/route.ts` (ADR-0073, ADR-0074).
-
-## Related Decisions
-
-- ADR-0068: the alerts platform, media-service, and the accepted risk of
-  unrestricted streamer JS.
-- ADR-0070: profiles, the gateway resolver, the `alerts_editor` gate.
-- ADR-0008: feature gates.
-- ADR-0040: the precedent for self-hosting what the strict CSP would
-  otherwise block.
-- ADR-0073 / ADR-0074: runtime delivery of the KLIPY key, entitled sessions
-  only.
+- Streamer code can do anything a web page can inside its frame and nothing to the
+  overlay page or other overlays; inline only, no external CDNs, no `eval`.
+- No CSP change, no new host, no editor dependency (plain textareas; the test alert is
+  the preview, on the real overlay socket `/overlays/:id/preview/alerts`, passive).
+- GIF search costs no backend work and complies with KLIPY's rules by construction; it is
+  unavailable while `KLIPY_API_KEY` is unset (rotation: secret change plus pod restart,
+  no rebuild, ADR-0073).
+- Every alert frame carries up to 3 x 64 KiB of custom code, acceptable at alert rates. A
+  streamer who loses premium keeps existing uploads playing; `media_upload` protects new
+  uploads only, and list/delete stay open for cleanup.

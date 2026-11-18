@@ -29,12 +29,10 @@ delivered.
 
 **A second transport tier, premium-only, delivered by the signer's viewer-tab
 relay.** When a room's primary connect exhausts its flap retry budget and the
-room's streamer is premium, the listener switches that room's delivery to the
-relay: frames are decoded with the connector's own schemas and replayed into
-the room's `TikTokLiveConnection` via `processProtoMessageFetchResult`, so
-every chat/gift/social/envelope handler, the dedup layer and the heartbeat
-monitor run exactly as on the primary path. One decoder on both sides means a
-delivery gap is a wire gap.
+room's streamer is premium, delivery switches to the relay: frames are decoded
+with the connector's own schemas and replayed via `processProtoMessageFetchResult`,
+so every handler, the dedup layer and the heartbeat monitor run exactly as on
+the primary path — one decoder on both sides, so a delivery gap is a wire gap.
 
 Entitlement is `users.is_premium` — the materialized flag the payment service
 keeps current (ADR-0018/0027) and the moderation write-path already trusts —

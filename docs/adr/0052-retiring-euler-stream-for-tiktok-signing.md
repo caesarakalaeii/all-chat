@@ -1,338 +1,105 @@
 # ADR-0052: Retiring Euler Stream for TikTok webcast signing
 
-## Status
+**Date**: 2026-08-14
+**Status**: Accepted
+**Revised**: 2026-11-18
+**Deciders**: caesarakalaeii
 
-Accepted — step 1 (the signature itself) is implemented as
-`services/tiktok-signer`, a self-hosted sign service that computes X-Bogus with
+## Implementation (current state)
+
+The self-hosted sign service `services/tiktok-signer` computes X-Bogus with
 TikTok's own web SDK in a headless browser (vendored from the MIT-licensed
 carcabot/tiktok-signature; see its `vendor/PROVENANCE.md`) and X-Gnarly with a
-vendored encoder, then signs *and executes* `/webcast/im/fetch/` exactly as
-Euler's `/webcast/fetch` did. The listener wires it in behind the existing
-flags: `SelfSigner` (`src/sign/self.ts`) is constructed when
-`TIKTOK_SIGNER_URL` is set, connections pin their device presets to the
-signer's browser identity, and under `self` the second seam
-(`fetchWebcastSignatureFromProvider`) is repointed at the service as well.
+vendored encoder; it signs *and executes* `/webcast/im/fetch/` exactly as
+Euler's `/webcast/fetch` did, returning the decoded protobuf plus the cookies
+TikTok set (`SignResult`). The listener wires it behind the existing flags:
+`SelfSigner` (`src/sign/self.ts`) when `TIKTOK_SIGNER_URL` is set, device
+presets pinned to the signer's browser identity.
 
-Step 4 (lever 1) remains **verified live**, not merely implemented:
-`src/sign/euler-free.live.test.ts` resolves room IDs for three accounts and
-answers is-live with `SignConfig.basePath` pointed at a closed port, so Euler
-demonstrably is not on that path. Opt-in via `TIKTOK_LIVE_TESTS=1`.
+Retired in production: `TIKTOK_SIGNER_MODE=pure-node`,
+`TIKTOK_SELF_SIGN_FALLBACK=false` — no TikTok connection has an Euler leg. The
+code default is still `euler`; the walk `shadow` (measure) → `self` (cutover,
+fallback on) → fallback off (retire) in the listener README applies to any
+deployment that sets nothing. Lever 1 (`TIKTOK_DISABLE_EULER_FALLBACKS`,
+default on) drops Euler from the room-id/is-live composites, where it was only
+ever the last leg. Gift enrichment (`TIKTOK_EXTENDED_GIFT_INFO`) defaults on
+only under `self`, because the direct `gift/list/` route must itself be signed.
 
-Retired in production: the listener runs `TIKTOK_SIGNER_MODE=pure-node` with
-`TIKTOK_SELF_SIGN_FALLBACK=false`, so no TikTok connection has an Euler leg.
-The code default is still `euler`, so a deployment that sets nothing stays on
-Euler; the walk `shadow` (measure) → `self` (cutover, Euler fallback on) →
-`TIKTOK_SELF_SIGN_FALLBACK=false` (retire) in the listener README still
-applies to such a deployment.
+Two incident follow-ups, absorbed into the current design:
 
-**Revised**: 2026-11-03 (brought in line with the current implementation)
-
-> **Update 2026-09-15** (incident follow-up): the ceiling bit us in production
-> before the signing work landed. On 2026-09-14 one tiktok-listener pod held 43
-> of ~48 leases and overran the free tier's concurrent *WebSocket proxy* cap
-> (every connection is proxied via `ws-fallback.eulerstream.com` with
-> `ws_direct=0`); above the cap the proxy accepts the handshake and replays the
-> initial fetch, then silently withholds live push. Two mitigations shipped that
-> stay within this ADR's levers: ADR-0007 rebalancing ported to the service's
-> TypeScript coordinator, and a per-pod connection ceiling
-> (`TIKTOK_MAX_STREAMS_PER_POD`, default 20). Neither raises the ceiling; both
-> keep us visibly under it until self-signing retires Euler entirely.
-
-> **Update 2026-09-15, later the same day** (TikTok-side escalation): Euler's
-> sign API went dark (`Route '/api/v1/sign_webcast' DNE`), and the same day the
-> community established the common cause (zerodytrash/TikTok-Live-Connector#329,
-> isaackogan/TikTokLive#376): since 2026-09-09 TikTok gates webcast data
-> endpoints on browser-grade sessions — anonymous, non-browser fetchers get an
-> empty 200 or a 403 regardless of signature quality. Measured against the
-> same live room: our signed fetch (undici, X-Bogus) → 200 with 0 bytes; the
-> same fetch in-page from a headless/Xvfb Chromium → 403; the same Chromium
-> on a real display → 200 with a full `ProtoMessageFetchResult` (~5s, ~60KB,
-> pushServer/cursor/internalExt intact). The signature is accepted; the
-> *session* is what TikTok judges. The signer therefore grew a page-viewer
-> mode (`src/signing/viewer.ts`, `SIGNER_VIEWER_MODE=page`): a non-headless
-> browser tab per room on the streamer's live page, capturing the SDK-signed
-> im/fetch the player itself receives, and returning the same
-> `{fetchResult, fetchResultCookieHeader}` contract. It requires a real
-> rendering stack (Xvfb was measured insufficient) — see the signer README
-> for the deployment requirements. `shadow`/`self`/fallback flags are
-> unchanged; the viewer path is how `self` keeps working under the new
-> TikTok regime.
-
-> **Update 2026-09-16** (signing lab, diagnosis + hardening): the page-mode
-> viewer fleet went 100% `viewer_capture_failed` across every lane and room.
-> In-cluster A/B (same lane, same live room, same Chromium) isolated the
-> cause to the ANGLE-on-Vulkan/lavapipe renderer args added to
-> `ensureBrowser` that morning: with them the page never makes a single
-> webcast call (no room/enter, no im/fetch, 0 requests in 240s); without
-> them, plain default GL on Xvfb+llvmpipe boots the player and captures
-> im/fetch 200 with full payloads (2613 bytes in the lab) on every attempt —
-> direct, through residential lanes, and with media interception. The
-> renderer spoof stopped matching real driver behaviour after the image's
-> Chromium update and now reads as the bot tell it was avoiding; the args and
-> the mesa-vulkan-drivers they needed are removed. Also shipped same day:
-> the listener's push WebSocket now mirrors Chrome's TLS ClientHello
-> (`tls-impersonate`, `src/ws/chrome-tls.ts`; JA4 cipher/extension segments
-> verified against a reference fingerprint service through the CONNECT
-> tunnel), closing the last leg where the connection described itself as
-> Node. Runtime: node:20-alpine → node:26-bookworm-slim (glibc prebuilds,
-> full Chrome extension set).
-
-The licence obstacle the issue describes does **not** apply to the version we
-pin (see "Licence"): 2.4.0 is MIT.
+- **Concurrency ceiling** (2026-09-14): one listener pod overran Euler's
+  free-tier concurrent WebSocket proxy cap (above it, the proxy accepts the
+  handshake then silently withholds push). Mitigations now in place: ADR-0007
+  rebalancing in the service's coordinator, and a per-pod ceiling
+  (`TIKTOK_MAX_STREAMS_PER_POD`, default 20).
+- **TikTok session gating** (from 2026-09-09): TikTok gates webcast data
+  endpoints on browser-grade sessions — an anonymous non-browser fetcher gets
+  an empty 200 or 403 regardless of signature quality (measured side by side:
+  undici fetch fails, a real-display Chromium succeeds — TikTok judges the
+  session, not the signature). The signer's **page-viewer mode**
+  (`src/signing/viewer.ts`, `SIGNER_VIEWER_MODE=page`) runs a non-headless
+  browser tab per room on the streamer's live page, capturing the SDK-signed
+  im/fetch the player itself receives and returning the same
+  `{fetchResult, fetchResultCookieHeader}` contract; it needs a real rendering
+  stack (Xvfb measured insufficient; removed renderer-spoof args had caused a
+  full `viewer_capture_failed` failure). The listener's push WebSocket
+  meanwhile mirrors Chrome's TLS ClientHello (`tls-impersonate`,
+  `src/ws/chrome-tls.ts`). Verified live by `src/sign/euler-free.live.test.ts`
+  (opt-in `TIKTOK_LIVE_TESTS=1`): Euler demonstrably is not on that path.
 
 ## Context
 
-`tiktok-live-connector` cannot open a TikTok LIVE WebSocket without a signed URL,
-and by default it obtains that signature from **Euler Stream**, a third-party
-sign service. Euler therefore sits on the critical path of *every* TikTok
-connection All-Chat makes.
+`tiktok-live-connector` cannot open a TikTok LIVE WebSocket without a signed
+URL, and by default obtains it from **Euler Stream**, a third-party sign
+service that sat on the critical path of every connection. Costs measured on
+2026-08-14: a hard ceiling on concurrent rooms (12 attempts exhausted the
+free-tier sign limit, failing uncleanly); paywalled gift enrichment
+(`fetchAvailableGifts()` requires a Business plan); a third party in a
+credential path (authenticated sessions forward the TikTok session cookie to
+the sign server).
 
-Three costs were measured on 2026-08-14, while investigating coin chests (PR #695):
+Only the signature required solving something hard — the connector already
+ships direct-to-TikTok routes for room id, room info, is-live and gifts, and
+Euler is not just a signer but an executor of `/im/fetch/`. The signing
+primitives (X-Bogus, X-Gnarly, msToken) exist nowhere in the library bundle:
+the algorithms live on Euler's server. There are **two** signing seams,
+`fetchSignedWebSocketFromProvider` (the handshake) and
+`fetchWebcastSignatureFromProvider` (generic HTTP URL signing, which is what
+gift enrichment actually flows through); a cutover overriding only the first
+leaves Euler on the gift path. No fork is needed: the connector's
+`RouteConfig` / `RoomIdRouteConfig` / `IsLiveRouteConfig` / `SignConfig` are
+mutable module-level objects covering every call site.
 
-1. **A hard ceiling on concurrent rooms.** Twelve simultaneous connection
-   attempts exhausted the free-tier sign limit. It does not even fail cleanly:
-   the connector throws `Cannot read properties of undefined (reading
-   'retry-after')` while trying to read the 429 response. This is a direct limit
-   on how many TikTok streamers we can serve.
-2. **Paywalled gift enrichment.** `fetchAvailableGifts()` returns *"This endpoint
-   requires a Business plan."* That is why `enableExtendedGiftInfo` has been off,
-   and why TikTok gifts are not enriched the way they are on other platforms.
-3. **A third party in a credential path.** When authenticated sessions are used,
-   the connector forwards the TikTok session cookie *to the sign server*.
-
-Euler's pricing is not viable for us, so the free tier is shaping our behaviour
-in ways we did not choose.
-
-### What actually has to be built
-
-Scoping this revealed that it is much smaller than "replace the library".
-`tiktok-live-connector` already ships direct-to-TikTok routes for nearly
-everything it asks Euler for:
-
-| Need | Euler route | Direct alternative in the library |
-|---|---|---|
-| WebSocket signature | `fetchSignedWebSocketFromEulerRoute` | **none — this is the real work** |
-| Room ID | `fetchRoomIdFromEulerRoute` | `fetchRoomIdRoute`, `fetchRoomIdComposite` |
-| Room info | `fetchRoomInfoFromEulerRoute` | `fetchRoomInfoRoute`, `fetchRoomInfoApiLiveRoute`, `fetchRoomInfoFromHtmlRoute` |
-| Is-live | — | `fetchIsLiveRoute`, `fetchIsLiveComposite` |
-| Gifts | `fetchRoomGiftsFromEulerRoute` | `fetchRoomGiftsRoute` |
-
-Only the signature genuinely requires solving something hard.
-
-#### How hard, concretely
-
-Read against the bundled source (`dist/lib-YL2P_UWg.js`, 2.4.0) so the estimate
-is not a guess:
-
-- **Euler does not just sign a URL for the WebSocket seam. It performs the
-  request.** `fetchSignedWebSocketFromEulerRoute` calls
-  `apiClient.rooms.fetchWebcastURL(...)` with `responseType: 'arraybuffer'` and
-  returns `deserializeMessage('ProtoMessageFetchResult', ...)` over the *response
-  body*, plus `x-set-tt-cookie` and `x-room-id` response headers. So their server
-  signs **and** executes TikTok's `/im/fetch/`, then hands back the decoded
-  protobuf and the cookies TikTok set. A self-signer must therefore reproduce the
-  whole exchange — build the signed `/im/fetch/` URL, issue it, and surface the
-  `Set-Cookie` content — not merely compute a token. `SignResult` already has
-  this shape, which is why the seam is right.
-- **The signing primitives are nowhere in the library.** `X-Bogus`, `X-Gnarly`
-  and `msToken` each appear exactly twice in the bundle, and both occurrences are
-  in `fetchWebcastSignatureFromEulerRoute`, which *strips* them from a URL before
-  asking Euler to re-add them. There is no generator to copy or adapt: the
-  algorithms live entirely on Euler's server. The strings `/im/fetch` and
-  `webcast/im/fetch` do not occur at all.
-
-That is the real cost of step 1: implementing TikTok's undocumented parameter
-signing from scratch, against a target that churns, with no reference
-implementation in our dependency tree. It is a reverse-engineering project, not
-an integration task — which is why the seam, the measurement and the fallback
-were built first and left switched off.
-
-### No fork is required
-
-The library exposes module-level **mutable** configuration objects that between
-them cover every Euler call site. Its own documentation invites the substitution:
-
-> Global route registry. Call sites should read handlers from here rather than
-> importing the route functions directly, so downstream consumers can swap
-> implementations.
-
-Concretely:
-
-- `RouteConfig.fetchSignedWebSocketFromProvider` — the WebSocket signature.
-- `RouteConfig.fetchWebcastSignatureFromProvider` — a **second, distinct**
-  signing seam, described below.
-- `RoomIdRouteConfig.skipFetchRoomIdFromEulerRoute` and the identically named
-  field on `IsLiveRouteConfig` — the Euler leg of the two composites.
-- `SignConfig.basePath` — where the Euler SDK points, and also what the
-  connector's whitelist check compares against for authenticated sockets.
-
-So we can repoint the connector at our own implementation without forking it,
-and without vendoring a patched copy we would then have to maintain.
-
-### There are two Euler signing seams, not one
-
-The issue's table implies a single signing dependency. Reading the connector's
-bundled source shows **two**, and a cutover that overrides only the first leaves
-Euler on the critical path for gifts:
-
-| Seam | Used for | Reached via |
-|---|---|---|
-| `fetchSignedWebSocketFromProvider` | the webcast WebSocket handshake | connect |
-| `fetchWebcastSignatureFromProvider` | signing an arbitrary **HTTP** URL | `WebcastHttpClient.request({ signRequest: true })` |
-
-The second matters because of gift enrichment. `fetchAvailableGifts()` resolves
-to `RouteConfig.fetchRoomGifts`, which already defaults to the *direct* route
-`fetchRoomGiftsRoute` — it calls TikTok's `webcast/gift/list/` itself and never
-touches Euler's gift endpoint. But it passes `signRequest: true`, so the request
-is signed through `fetchWebcastSignatureFromProvider`, i.e. through Euler.
-
-So the Business-plan error is *not* because the library asks Euler for the gift
-list. It is because Euler must sign the URL of our own direct request. That is
-why `TIKTOK_EXTENDED_GIFT_INFO` is gated on signing for ourselves rather than
-being independently switchable, and why implementing only the WebSocket
-signature would not unblock the gift-enrichment acceptance criterion.
-
-### Which routes actually still reach Euler
-
-Of the routes the connector genuinely invokes, only the two signature seams are
-Euler-bound. `RouteConfig.fetchRoomInfo` and `RouteConfig.fetchRoomGifts`
-**already default to the direct-to-TikTok routes**, so the room-info row of the
-issue's table needs no work: its "alternative" is the existing default. The
-`fetchRoomIdFromProvider` / `fetchRoomInfoFromProvider` Euler routes are only
-reachable as the composites' last leg, which lever 1 disables.
-
-## Decision
-
-Separate the work into **two independent levers with very different risk**, and
-gate each behind its own flag rather than shipping one combined switch.
-
-### Lever 1 — drop Euler from the composites (`TIKTOK_DISABLE_EULER_FALLBACKS`, default **on**)
-
-Room ID and is-live already try the HTML scrape and TikTok's API endpoint first
-and consult Euler only when both have failed. Turning off that last leg reduces
-free-tier consumption immediately and cannot lose a capability, because Euler was
-never the primary source. This is worth doing on its own merits even if the
-signing work is never finished.
-
-### Lever 2 — sign it ourselves (`TIKTOK_SIGNER_MODE`, default **`euler`**)
-
-Four modes, intended to be walked in order:
-
-- **`euler`** — unchanged behaviour, and the baseline. Our code is not on the
-  connect path at all.
-- **`shadow`** — Euler signs the connection that is actually used; our signer
-  runs concurrently against the same room and its outcome is recorded and
-  discarded. Enabling this cannot change connection behaviour.
-- **`self`** — we sign. With `TIKTOK_SELF_SIGN_FALLBACK` on (the default), Euler
-  still catches our failures; turning it off is what finally retires the
-  dependency.
-- **`pure-node`** — no signing request of any kind: the listener leases the
-  signer's shared WebSocket session (`GET /v1/session`) and attaches the room
-  cross-room, so Euler never sees a connection. The final step of the walk.
-  See `services/tiktok-signer/README.md`.
-
-Gift enrichment (`TIKTOK_EXTENDED_GIFT_INFO`) defaults on **only** under `self`,
-because the direct `gift/list/` route must itself be signed — enabling it any
-earlier just reinstates the Business-plan error on every connect.
-
-### The trade-off, stated deliberately
-
-Today, when TikTok changes the signing algorithm, it is Euler's problem and we
-get the fix for free. Afterwards it is our on-call problem, and **TikTok ingest
-is fully down until we fix it**. Signing also implies fingerprinting and device
-presets that TikTok actively churns, so this is an ongoing maintenance
-commitment, not a one-off build.
-
-That trade is only defensible with evidence, which is what `shadow` mode is for:
-it exists so we can measure our own signature success rate against Euler's, on
-the same rooms, at the same time, before anything depends on it. `ShadowSigner`
-starts the candidate before awaiting the primary specifically so the comparison
-is concurrent — TikTok's behaviour varies by room and by minute, and a candidate
-run seconds later is not a comparison.
+The trade, deliberately taken: when TikTok changes the algorithm it becomes
+our on-call problem and TikTok ingest is down until fixed. `shadow` mode
+exists to measure our success rate against Euler's, concurrently on the same
+rooms, before anything depends on the answer.
 
 ## Consequences
 
-### Positive
-
-- The composite change removes free-tier calls now, with no signing work.
-- The signature seam is a single interface (`WebcastSigner`), so the eventual
-  implementation has one place to land and can be swapped for a remote sign
-  service by changing `TIKTOK_SIGNER_URL` alone.
+- The signature seam is a single interface (`WebcastSigner`), swappable for a
+  remote sign service by changing `TIKTOK_SIGNER_URL`.
 - `tiktok_sign_attempts_total` is labelled by signer, outcome, reason and
-  `load_bearing`, so the shadow experiment and real availability are the same
-  metric read two ways. Failures are also recorded when the fallback rescues
-  them, so a totally broken self-signer is visible before we remove the net.
-- The rate-limit classifier special-cases the connector's `retry-after`
-  `TypeError`, so the exact failure that prompted this work is legible rather
-  than landing in `unknown`.
-
-### Negative
-
-- Shadow mode doubles initial `/im/fetch/` traffic per connect (not WebSocket
-  connections). Euler consumption is unchanged, since the candidate does not
-  call them.
-- Three interacting flags is more configuration surface than one switch. This is
-  deliberate: collapsing them would couple the safe change to the risky one.
-- Until the signer exists, `shadow` and `self` degrade to Euler with a warning.
-  The install report deliberately reports the **effective** state, not the
-  requested one, so a dashboard cannot show Euler retired while it is not.
-- The signing work is **two** implementations, not one: the WebSocket handshake
-  and the generic HTTP URL signer behind
-  `fetchWebcastSignatureFromProvider`. `WebcastSigner` covers only the first.
-  Fully retiring Euler — and unblocking gift enrichment specifically — needs the
-  second as well, and it is not yet designed.
-
-### Licence
-
-The issue describes `tiktok-live-connector` as carrying a modified AGPL whose
-§19 withdraws its additional permission for anything powering a *"commercial,
-closed-source, or hosted SaaS platform, including but not limited to a WebSocket
-relay service, data-scraping API, or managed hosting solution offered to third
-parties"*, with §21 excepting Euler Stream Inc. and TikFinity / STV GmbH by
-name.
-
-**That is not the licence of the version we actually depend on.** Checked
-2026-08-17 against the installed tree: `tiktok-live-connector@2.4.0` ships a
-plain **MIT** licence (`node_modules/tiktok-live-connector/LICENSE`, 21 lines,
-"MIT License / Copyright (c) 2026 zerodytrash"), and `package-lock.json`
-records `"license": "MIT"` for the pinned resolution. There is no §19, no §21
-and no SaaS carve-out in the text we are bound by.
-
-So the licence risk as stated in the issue does not apply to the code we ship
-today, and it is **not** a precondition of the signing work. Two caveats keep it
-from being a non-issue entirely:
-
-- **The relicence is real, just not ours yet.** It lands in **2.4.3** (already
-  recorded in this service's README, from PR #695). We depend on the range
-  `^2.4.0`, so a routine lockfile refresh would pull 2.4.3+ and the modified
-  AGPL with it, silently. If the §19 SaaS restriction matters to us, the
-  dependency should be **pinned to `2.4.0`** rather than left on a caret range,
-  and the shipped `LICENSE` re-read on any deliberate bump.
-- The author has a direct commercial interest in the service being replaced.
-  That is a reason to expect upstream churn around the signing seams — and a
-  reason a future version may restrict precisely this use — not a constraint on
-  2.4.0.
-
-MIT also *removes* the obstacle to extracting a reusable sign service, which the
-AGPL reading would have blocked. Any such extraction should still re-verify the
-licence of the version in the lockfile at that time.
+  `load_bearing`; failures are recorded even when the fallback rescues them,
+  so a broken self-signer is visible before the net is removed.
+- Shadow mode doubles initial im/fetch traffic per connect; Euler consumption
+  unchanged. Three interacting flags are deliberate: collapsing them would
+  couple the safe change to the risky one. Until the signer exists, `shadow`
+  and `self` degrade to Euler with a warning, and the install report reports
+  the *effective* state.
+- Licence: the modified-AGPL §19 SaaS restriction discussed in the issue does
+  not apply to the version depended on (2.4.0, plain MIT, checked in the
+  lockfile). The relicence is real and lands in 2.4.3 against the caret range
+  `^2.4.0` — pin to `2.4.0` rather than leave a caret, and re-read the shipped
+  `LICENSE` on any bump.
 
 ## Alternatives considered
 
-**Fork or vendor the connector.** Rejected: unnecessary.
-`RouteConfig`, `RoomIdRouteConfig` / `IsLiveRouteConfig` and `SignConfig` are
-module-level mutable objects that between them cover every call site, and a
-fork would mean carrying upstream's churn — on a library whose whole value is
-tracking a moving target.
-
-**Pay for a Business plan.** The pricing is what prompted this issue. It also
-leaves costs 1 and 3 only partly addressed: a higher ceiling is still a ceiling,
-and the third party stays in the credential path.
-
-**Hard cutover to self-signing.** Rejected: it converts a cost problem into an
-availability problem in one step, with no measured success rate to justify it.
-Hence shadow mode and a configurable fallback.
-
-**Only do the composite work (lever 1) and stop.** Still viable, and lever 1 is
-deliberately built so this remains an option. It does not lift the connection
-ceiling or unblock gift enrichment, both of which are driven by the signature.
+- **Fork the connector.** Unnecessary: the mutable config objects cover every
+  call site, and a fork carries upstream's churn.
+- **Pay for a Business plan.** The pricing is what prompted this; leaves the
+  ceiling and the cookie path partly in place.
+- **Hard cutover, no shadow step.** Converts a cost problem into an
+  availability problem with no measured success rate.
+- **Only lever 1 and stop.** Viable and built so it remains an option; it does
+  not lift the ceiling or unblock gifts.

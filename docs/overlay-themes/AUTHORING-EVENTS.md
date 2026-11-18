@@ -1,7 +1,6 @@
 # Styling events in a theme
 
-Events — subs, gift bombs, raids, bits, channel-point redemptions, Super Chats,
-follows — are chat rows with an `.event-message` wrapper instead of
+Events (subs, gift bombs, raids, bits, channel-point redemptions, Super Chats, follows) are chat rows with an `.event-message` wrapper instead of
 `.chat-message`. If your theme styles only `.chat-message` (or only the chat
 bubble), events fall back to the **platform default**: a scaled-up card with a
 gold or purple gradient, a glowing border, a bouncing entrance and a 36px emoji.
@@ -9,9 +8,7 @@ In a minimal or retro theme that reads as a different product dropping into the
 overlay.
 
 Every theme shipped in `docs/overlay-themes/` styles its events. If you add one,
-style yours too — the `bundled-themes-events` test fails otherwise.
-
----
+style yours too; the `bundled-themes-events` test fails otherwise.
 
 ## The short version
 
@@ -32,7 +29,7 @@ properties, so a theme re-skins events from one block:
 ```
 
 Because theme CSS is injected into the same `@layer marketplace-themes` as
-these defaults — after them — your token values win **without** `!important`.
+these defaults (injected after them), your token values win **without** `!important`.
 
 ### Flatten events into ordinary chat rows
 
@@ -55,11 +52,9 @@ For minimal/inline themes, the whole card can be removed in eight declarations:
 See `minimal-theme.css` for the full inline treatment (title and value rendered
 on the same line as the username).
 
----
-
 ## Token reference
 
-Structure — these default to the same `--chat-*` values the visual customizer
+Structure: these default to the same `--chat-*` values the visual customizer
 applies to chat bubbles, so events follow the overlay's look on their own:
 
 | Token                   | Default                              | What it does                            |
@@ -79,7 +74,7 @@ applies to chat bubbles, so events follow the overlay's look on their own:
 | `--event-accent-color`  | type colour                          | Left accent bar colour                   |
 | `--event-decor`         | `''`                                 | `none` removes decorative pseudo-elements |
 
-Tier — set these to keep the low/medium/high hierarchy in your palette. Setting
+Tier: set these to keep the low/medium/high hierarchy in your palette. Setting
 `--event-bg` / `--event-border-color` / `--event-glow` directly overrides all
 three tiers at once:
 
@@ -110,8 +105,6 @@ Typography and inner content:
 | `--event-metadata-display` / `--event-meta-size` / `--event-meta-color`                      | `block` / `.75rem` / `#94a3b8` |
 | `--event-indent`                                                                            | `3.5rem` (text/metadata left margin) |
 
----
-
 ## Class hooks
 
 `events.css` is the frozen public API (`frontend/src/styles/EVENTS_CSS_API.md`).
@@ -131,11 +124,9 @@ The elements inside an event row are:
 ```
 
 There is **no** `.event-user` element. An event row carries the same header as a
-chat row, so the chatter's name comes from `.chat-username` — style it once and
+chat row, so the chatter's name comes from `.chat-username`; style it once and
 it covers both. (`.event-user` used to duplicate it, could not render a premium
 gradient name, and forced themes to style two username elements.)
-
----
 
 ## Rules
 
@@ -145,16 +136,14 @@ gradient name, and forced themes to style two username elements.)
   `.event-type-source_permission_error` and
   `.event-type-listener_deprecation_notice` are the overlay telling the streamer
   something is broken. They honour the structural tokens but keep their red/amber
-  chrome in every theme — don't repaint them.
+  chrome in every theme, so do not repaint them.
 - **Watch your specificity.** If your theme styles rows via
   `.space-y-3 > div` or `:nth-child(...)`, those selectors also match event rows
   and outrank a plain `.event-message { … }`. Use `.space-y-3 > div.event-message`
   when you need to win.
-- **No commas needed in `:is()`** — don't use `:is()` at all. The preview scoper
+- **No commas needed in `:is()`**: do not use `:is()` at all. The preview scoper
   splits selector lists on commas and does not parse `:is(...)`, so a rule using
   it renders differently in the marketplace preview than in OBS.
-
----
 
 ## Checking your work
 

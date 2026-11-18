@@ -83,7 +83,7 @@ export class PrometheusMetrics {
   // signal that precedes an outage report if acted on.
   private canaryDivergences: Counter<string>;
 
-  // PR 3 (pure-Node transport): target-room tab warms the canary requests
+  // Pure-Node transport: target-room tab warms the canary requests
   // from the signer. Bounded outcomes; each warm is one signer-side capture,
   // so the counter also audits the single-digit-per-hour budget.
   private canaryWarms: Counter<string>;
@@ -406,7 +406,7 @@ export class PrometheusMetrics {
     this.canaryDivergences.inc({ kind });
   }
 
-  /** PR 3: one canary warm request's outcome (attempted is recorded on call). */
+  /** One canary warm request's outcome (attempted is recorded on call). */
   recordCanaryWarm(outcome: 'attempted' | 'warmed' | 'capture_refused' | 'capture_failed' | 'network'): void {
     this.canaryWarms.inc({ outcome });
   }

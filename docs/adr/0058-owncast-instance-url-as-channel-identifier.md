@@ -12,13 +12,13 @@ platform ID: a Twitch username, a YouTube `UC...` id, a Kick slug, a TikTok
 username, a Discord channel id. `overlay_chat_sources.channel_identifier`
 stores that name and the source picker asks for it.
 
-[Owncast](https://owncast.online) does not have channels. It is a self-hosted
-streaming server whose instances serve **one stream each**; there is no
-instance-side channel to name. The only identity that picks out the content is
-the instance's base URL (e.g. `https://watch.example.org`). Its chat is
-read-only and open by design: an anonymous client `POST`s `/api/chat/register`
-(unauthenticated), receives an `{id, accessToken, displayName}` triple, and
-opens the websocket at `/ws?accessToken=...` to receive chat events.
+[Owncast](https://owncast.online) does not have channels: it is a self-hosted
+streaming server serving **one stream per instance**. The only identity that
+picks out the content is the instance's base URL (e.g.
+`https://watch.example.org`). Its chat is read-only and open by design: an
+anonymous client `POST`s `/api/chat/register` and receives
+`{id, accessToken, displayName}`, then opens the websocket at
+`/ws?accessToken=...`.
 
 A second, less obvious difference: an Owncast instance is somebody's own
 server. It goes offline, upgrades, or changes version **independently of

@@ -116,11 +116,11 @@ function parseRoomList(env: string | undefined): string[] {
     .filter(Boolean);
 }
 
-// Warm rooms (pure-Node transport PR 1): the classic rooms whose captured
+// Warm rooms (pure-Node transport): the classic rooms whose captured
 // WS session GET /v1/session leases to the listener.
 const warmRooms = parseRoomList(process.env.SIGNER_WARM_ROOMS);
 const warmRoomSet = new Set(warmRooms);
-// Canary isolation (PR 1 item 6): canary rooms capture on their own
+// Canary isolation: canary rooms capture on their own
 // profiles so a flag earned on a primary jar cannot blind the canary.
 const canaryRooms = new Set(parseRoomList(process.env.SIGNER_RELAY_CANARY_ROOMS));
 const dualListed = findDualListedRooms(canaryRooms, warmRooms);

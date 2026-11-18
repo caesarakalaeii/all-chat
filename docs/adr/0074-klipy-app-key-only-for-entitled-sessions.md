@@ -5,7 +5,7 @@
 **Revised**: 2026-11-15 (the alerts editor is free, so every signed-in user gets the key; the premium check and its 403 are gone)
 **Deciders**: All-Chat Platform Team
 
-## Context and Problem Statement
+## Context
 
 ADR-0073 made `GET /klipy-config` return the KLIPY app key to anyone, with no
 authentication. One unauthenticated request was enough to scrape it, and
@@ -14,7 +14,7 @@ calls to come from the user's browser (no proxy without written approval), so
 the key must reach the browser of the person using the GIF picker. The
 question is which browsers.
 
-## Decision Drivers
+Constraints:
 
 - Only users who can open the alerts editor need the key: since 2026-11-15
   that is every signed-in user (the `alerts_editor` gate is free, ADR-0070,
@@ -25,7 +25,7 @@ question is which browsers.
 - The frontend pod holds no JWT secret, and user tokens carry no premium
   claim, so verifying the JWT locally would still need a database lookup.
 
-## Considered Options
+## Considered options
 
 1. **Forward the caller's credentials to the gateway's
    `GET /api/v1/auth/me` (chosen).** The gateway validates the token,
@@ -37,7 +37,7 @@ question is which browsers.
    client component and the key would still be fetchable; it moves the
    problem instead of checking it.
 
-## Decision Outcome
+## Decision
 
 Option 1. `/klipy-config` reads the `Cookie` and `Authorization` request
 headers, forwards only those to `${API_GATEWAY_URL}/api/v1/auth/me` (5 s
@@ -74,7 +74,7 @@ NetworkPolicies admit ingress from the two frontend deployments.
 - The frontend pods now reach the gateways in-cluster, which NetworkPolicy
   previously did not allow.
 
-## Related Decisions
+## Related
 
 - ADR-0073: runtime key delivery; this record restricts who receives it.
 - ADR-0071: browser-side KLIPY search.

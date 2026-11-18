@@ -222,4 +222,3 @@ Write to `services/<service-name>/README.md` using template structure.
 
 - **Template**: [docs/development/service-template.md](../../docs/development/service-template.md)
 - **Examples**: All service READMEs in services/*/README.md
-- **Navigation**: [docs/llm-guides/NAVIGATION.md](../../docs/llm-guides/NAVIGATION.md)

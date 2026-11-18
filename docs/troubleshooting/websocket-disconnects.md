@@ -1,111 +1,41 @@
-# Troubleshooting: WebSocket Disconnects
+# Troubleshooting: WebSocket disconnects
 
-API Gateway WebSocket connection issues and message delivery failures.
+API Gateway overlay WebSocket issues. The gateway protocol and keepalive contract are in `services/api-gateway/README.md`; client logic lives in `useOverlayStream` (and the legacy `WebSocketClient`).
 
----
+## Cannot connect
 
-## Client Cannot Connect
+Browser console "WebSocket connection failed":
 
-### WebSocket Upgrade Failed
+1. Gateway up? `curl http://localhost:8080/health/ready`
+2. Overlay id valid? It must exist in the database.
+3. Origin allowed? Check `CORS_ORIGIN` and the gateway logs for a rejected upgrade.
 
-**Symptom**: Browser console shows "WebSocket connection failed"
+## Drops every 30-60 seconds
 
-**Check**:
-```javascript
-// Browser console
-ws = new WebSocket('ws://localhost:8080/ws/overlay/YOUR_OVERLAY_ID')
-// Should connect successfully
-```
+Causes: proxy/NAT idle timeout, gateway pod restart, or a client failing the read deadline. The keepalive contract:
 
-**Solutions**:
-1. Verify API Gateway is running: `curl http://localhost:8080/health/ready`
-2. Check overlay ID is valid (exists in database)
-3. Verify CORS allows origin (check API Gateway logs)
+- The gateway sends a protocol-level ping every 30s (`PingInterval`) and closes if nothing arrives within 60s (`PongWait`). Browsers answer protocol pings automatically.
+- The client also sends an app-level `{"type":"ping"}` every 20s; the gateway echoes `{"type":"pong"}` (`connection.go`), which lets the client detect a dead path.
 
-**File**: `services/api-gateway/websocket/manager.go:HandleWebSocket()`
+Do not add ad-hoc keepalive layers on top; check that the gateway still echoes pong and that no proxy strips it.
 
-### Connection Drops Frequently
+## Connection silently dies, badge stuck on "Live"
 
-**Symptom**: WebSocket connects then disconnects after 30-60 seconds
+A half-open socket: the path broke (Wi-Fi, NAT timeout, sleep/wake) but no FIN/RST arrived, so `readyState` stays OPEN and `onclose` never fires. Handled client-side (`useOverlayStream`):
 
-**Causes**:
-1. Network proxy timeout (corporate firewall, NAT/idle reaping)
-2. API Gateway pod restarted (check pod events)
-3. Client failing the gateway's read deadline (`PongWait`, 60s)
+- Any inbound frame refreshes `lastActivity`; a 5s watchdog declares the socket dead after 40s (`LIVENESS_TIMEOUT_MS`) of silence, flips the badge to Reconnecting and force-reconnects with `?since=` (the gateway replays the gap).
+- `online` and `visibilitychange -> visible` force an immediate reconnect; a fully suspended tab only recovers on those events.
+- `isConnected()` / `connectionStatus` are liveness-aware.
 
-**Keepalive contract** (already implemented — do not re-add ad-hoc keepalive):
-- The gateway sends a **protocol-level** ping every `PingInterval` (30s) and
-  closes the connection if no pong/data arrives within `PongWait` (60s). Browsers
-  auto-answer protocol pings, so a healthy tab stays connected on its own.
-- The client (`useOverlayStream`, and the legacy `WebSocketClient`) **also** sends
-  an **app-level** `{"type":"ping"}` every 20s; the gateway echoes
-  `{"type":"pong"}` (`connection.go handleMessage`). This is what lets the client
-  detect a dead path even on a silent channel — see the next entry.
+If this regresses: confirm the gateway pong echo still works and client timers are not throttled.
 
-### Connection Silently Dies / Indicator Stuck on "Live"
+## Connected but no messages
 
-**Symptom**: messages stop arriving but the `/view` badge keeps showing **Live**;
-no reconnect happens. Worse on hardened/background tabs (e.g. LibreWolf).
+The break is upstream of the gateway. Trace from the source:
 
-**Cause**: a **half-open** socket — the network path broke (Wi-Fi blip, NAT/proxy
-idle timeout, sleep/wake) but no TCP FIN/RST arrived, so `ws.readyState` stays
-`OPEN` and `onclose` never fires. Browsers never surface protocol ping/pong to
-JS, so the page can't tell the link died.
-
-**How it's handled** (`useOverlayStream` / `WebSocketClient`):
-- Any inbound frame (chat/status/**pong**) refreshes a `lastActivity` timestamp.
-- A watchdog checks every 5s; after `LIVENESS_TIMEOUT_MS` (40s) of total silence
-  the socket is declared dead, the badge flips to **Reconnecting**, and the client
-  force-reconnects with `?since=` (the gateway replays the buffered gap).
-- `online` / `visibilitychange→visible` force an immediate reconnect, so a
-  backgrounded tab recovers the moment it's focused.
-- `isConnected()` / `connectionStatus` are liveness-aware, so the indicator can't
-  report a zombie as connected.
-
-If you see this regress, confirm the gateway still echoes `pong` to a client
-`ping` and that the client timers aren't being throttled to death (a fully
-suspended tab only recovers on the visibility/online events above).
-
----
-
-## Messages Not Appearing
-
-### Redis Pub/Sub Not Subscribed
-
-**Symptom**: WebSocket connected but no messages received
-
-**Check subscription**:
 ```bash
-# Check API Gateway subscribed to overlay channel
-redis-cli PUBSUB CHANNELS overlay:*
-
-# Should see: overlay:YOUR_OVERLAY_ID
+kubectl exec -n allchat deploy/redis -- redis-cli XINFO STREAM chat:raw        # listener published?
+kubectl exec -n allchat deploy/redis -- redis-cli XINFO GROUPS chat:raw        # message-processor consuming, lag low?
+kubectl exec -n allchat deploy/redis -- redis-cli PUBSUB CHANNELS "overlay:*"  # processor publishing to this overlay?
+kubectl logs -n allchat -l app=api-gateway | grep -i subscript
 ```
-
-**Solution**: Check API Gateway logs for subscription errors
-
-**File**: `services/api-gateway/websocket/manager.go:SubscribeOverlay()`
-
-### Message Processor Not Publishing
-
-**Symptom**: Messages in Redis Stream but not Pub/Sub
-
-**Check**:
-```bash
-# Check messages in stream
-redis-cli XREAD COUNT 10 STREAMS chat:raw 0
-
-# Check if Message Processor is consuming
-redis-cli XINFO GROUPS chat:raw
-# Should show "message-processor" consumer group with lag=0
-```
-
-**File**: `services/message-processor/publisher/pubsub.go:Publish()`
-
----
-
-## Related Documentation
-
-- [decision-tree.md](./decision-tree.md) - High-level triage
-- [api-gateway/README.md](../../services/api-gateway/README.md) - WebSocket documentation
-- [QUICK-REF-REDIS-OPERATIONS.md](../llm-guides/QUICK-REF-REDIS-OPERATIONS.md) - Redis debugging

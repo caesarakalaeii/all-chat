@@ -97,7 +97,6 @@ echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━
 echo ""
 echo -e "${BOLD}Documentation:${NC}"
 echo -e "  ${BLUE}../docs/frontend/FRONTEND_QUICK_START.md${NC} - Quick reference guide"
-echo -e "  ${BLUE}../docs/frontend/FRONTEND_DEV_SETUP.md${NC}   - Complete documentation"
 echo ""
 echo -e "${BOLD}${GREEN}✨ Happy coding! ✨${NC}"
 echo ""
