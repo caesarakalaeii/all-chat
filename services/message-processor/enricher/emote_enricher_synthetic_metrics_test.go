@@ -244,3 +244,39 @@ func TestRealMessageUsesPerUserCacheKey(t *testing.T) {
 		t.Fatalf("real message: userCalls=%d lastUserID=%q, want 2 and %q", store.userCalls, client.lastUserID, "real-user")
 	}
 }
+
+// Only a Twitch identity resolves a 7TV personal set, so a real chatter on any
+// other platform must share the channel key too — see hasPersonalEmotes. Keyed
+// per user, each stored a redundant copy of the channel set and filled Redis
+// (AllChatRedisMemoryNearLimit, 2026-11-18).
+func TestNonTwitchChatterSharesChannelCacheKey(t *testing.T) {
+	for _, platform := range []string{"tiktok", "youtube", "kick"} {
+		store := &mockEmoteCacheStore{getErr: cache.ErrCacheMiss}
+		client := &mockEmoteServiceClient{emotes: []EmoteServiceEmote{{Code: "KEKW", Provider: "7tv", URL: "https://example"}}}
+		e := NewEnricher(client, store, zap.NewNop())
+
+		msg := &models.UnifiedChatMessage{
+			Platform:  platform,
+			ChannelID: "bardeado_2001",
+			User:      models.UserInfo{ID: "_delci0"},
+			Message:   models.MessageInfo{Text: "KEKW"},
+			Metadata:  map[string]interface{}{},
+		}
+		if err := e.Enrich(context.Background(), msg); err != nil {
+			t.Fatalf("%s: Enrich returned error: %v", platform, err)
+		}
+
+		if store.userCalls != 0 {
+			t.Errorf("%s: chatter used %d per-user cache calls, want 0", platform, store.userCalls)
+		}
+		if store.setCalls != 1 {
+			t.Errorf("%s: channel cache must still be filled, got %d sets", platform, store.setCalls)
+		}
+		if client.lastUserID != "" {
+			t.Errorf("%s: sent user %q to the emote service, want none", platform, client.lastUserID)
+		}
+		if len(msg.Message.Emotes) != 1 {
+			t.Errorf("%s: message must still enrich, got %#v", platform, msg.Message.Emotes)
+		}
+	}
+}

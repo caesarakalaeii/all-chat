@@ -232,10 +232,9 @@ func (e *Enricher) Enrich(ctx context.Context, msg *models.UnifiedChatMessage) e
 	// request logs and testgen counters instead.
 	synthetic := isSynthetic(msg.Metadata)
 
-	// A per-user cache entry holds a full copy of the channel's emote set
-	// (100-230 KB, kept 13h), so it is only worth writing when the chatter can
-	// actually have personal emotes. Drop the user id otherwise and share the
-	// channel-level entry.
+	// A per-user cache entry holds a full copy of the channel's emote set, so it
+	// is only worth writing when the chatter can actually have personal emotes.
+	// Drop the user id otherwise and share the channel-level entry.
 	userID := msg.User.ID
 	if synthetic || !hasPersonalEmotes(msg.Platform) {
 		userID = ""
@@ -460,26 +459,16 @@ func (e *Enricher) refreshAsync(channel, platform, userID, twitchChannel string)
 // hasPersonalEmotes reports whether a chatter on this platform can have a
 // personal emote set we are able to resolve. 7TV is the only provider of
 // per-user emotes, via /v3/users/{platform}/{id} (FetchUserEmotes in
-// emote-service). That lookup resolves a chatter only from a Twitch identity:
-// in the allchat emote-service logs every non-Twitch chatter fails it with
-//
-//	clients/seventv.go:469 "Failed to fetch user emotes, ignoring user-set"
-//	platform=tiktok  user_id=viscoo.011             status code 400
-//	platform=youtube user_id=UCTINeC6PcFX77Wzx8wHb2bw status code 400
-//
-// and none succeeds. The merged response is then byte-identical to the
-// channel-level one, so a per-user cache key stored a redundant full-size copy
-// of the channel emote set (400-1744 emotes, ~100-230 KB) per chatter per
-// channel for 13h, which filled Redis (AllChatRedisMemoryNearLimit,
-// 2026-11-18).
+// emote-service), and that lookup resolves a chatter only from a Twitch
+// identity — a TikTok username or a YouTube chatter id is always a 400. The
+// merged response is then byte-identical to the channel-level one, so a
+// per-user cache key stored a redundant full-size copy of the channel emote
+// set (~100-230 KB) per chatter per channel for 13h, which filled Redis
+// (AllChatRedisMemoryNearLimit, 2026-11-18).
 //
 // Note this is about CHATTER ids only. The same 7TV endpoint does serve
 // YouTube and Kick CHANNEL connections — see fetchPlatformConnectionEmotes in
 // emote-service — so the channel lookup is unaffected by this predicate.
-//
-// The allowlist fails closed: a platform missing here loses personal emotes
-// rather than leaking memory. If 7TV starts resolving chatters on another
-// platform, add it here — the cache key follows this predicate.
 func hasPersonalEmotes(platform string) bool {
 	return platform == "twitch"
 }
