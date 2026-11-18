@@ -372,6 +372,7 @@ COMMENT ON COLUMN your_table.settings IS 'JSONB settings, schema: {"key": "value
 - [ ] Migration file created with correct number
 - [ ] Migration tested on local database
 - [ ] Migration uses IF NOT EXISTS for idempotency
+- [ ] Widening a CHECK constraint moves its DROP/ADD pair into the new migration and deletes it from the older one: every pod start replays every file, so an older, narrower copy is re-checked against today's rows and fails the init container (migrations 114/123)
 - [ ] Indexes created for foreign keys and frequently queried columns
 - [ ] Foreign keys enforce referential integrity
 - [ ] Migration applied to Kubernetes cluster

@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-10
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -42,15 +43,15 @@ day and mostly unused.
 
 **Pinned stream link (free).** A YouTube source can store a video id in `config.stream_id`
 (`PATCH /overlays/:id/sources/:source_id`). overlay-manager accepts a watch, `youtu.be`, `/live/`
-URL or a bare id, and rejects a video that oEmbed attributes to a different channel. innertube
-tries the pinned video on every discovery attempt before browsing the channel page, so a stale pin
-never hides a public stream. Pin changes reach the listener within about a minute (source-manager's
-30s registry refresh plus innertube's 30s sync).
+URL or a bare id, and rejects a video whose watch-page owner (InnerTube `/next`) is a different
+channel. innertube tries the pinned video on every discovery attempt before browsing the channel
+page, so a stale pin never hides a public stream. Pin changes reach the listener within about a
+minute (source-manager's 30s registry refresh plus innertube's 30s sync).
 
 **Official-API mode (premium, gate `youtube_official_api`).** A source can set
-`config.official_api: true`. overlay-manager checks the gate and that the caller has a YouTube
-token row for the channel; that check is for user feedback only. The revived `youtube-listener`
-is authoritative:
+`config.official_api: true`. overlay-manager checks the gate and that the caller has a
+`youtube_oauth_tokens` row for the channel, and fails closed when the check cannot run; the
+listener's own verification is authoritative:
 
 - It only considers sources that opted in, whose overlay owner holds a token row for the channel
   and is premium (or the gate is free), on an active overlay of a non-banned user. Eligibility is
@@ -98,8 +99,12 @@ is authoritative:
   `services/youtube-listener-innertube/streams/manager.go`, `services/youtube-listener/`
   (`streams/`, `api/client.go`), `shared/youtubeclaim/`, `shared/featuregates/cache.go`,
   `migrations/102_youtube_official_api_gate.sql`, the YouTube source settings in the overlay editor.
-- **Deployment**: the listener runs as `youtube-listener-official` (2 replicas) in the `allchat`
-  namespace, re-added in caesar-deployment #147 on 2026-10-10. Without opted-in channels it
+- **Deployment**: the listener runs as `youtube-listener-official` (2 replicas for
+  node-reboot coverage, ADR-0021 in caesar-deployment; only the global-sync lease
+  holder claims and serves channels, the other is a warm standby) in the `allchat`
+  namespace, deployment manifest `apps/workloads/all-chat/youtube-listener-official-deployment.yaml`
+  in the GitOps repo. It runs with no Service: nothing calls it, Prometheus scrapes pod
+  annotations, and `/admin/*` is reachable only by port-forward. Without opted-in channels it
   claims nothing and InnerTube serves every channel.
 
 ## Related Decisions

@@ -18,31 +18,66 @@ package ratelimit
 
 import (
 	"context"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func setupTestRedis(t *testing.T) *redis.Client {
-	client := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-		DB:   15, // Use separate DB for tests
-	})
+	return redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()})
+}
 
-	// Ping to check connection
-	ctx := context.Background()
-	if err := client.Ping(ctx).Err(); err != nil {
-		t.Skip("Redis not available for testing")
+// A logged-out client's bucket key holds its raw IP. Redis drops the key after
+// its one-minute window, but logs are kept for days, so neither the 429 warning
+// nor the Redis-error log may carry the full address.
+func TestRateLimiter_LogsOnlyAnonymisedIP(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	redisDown := func(t *testing.T) *redis.Client {
+		mr := miniredis.RunT(t)
+		addr := mr.Addr()
+		mr.Close()
+		return redis.NewClient(&redis.Options{Addr: addr, MaxRetries: -1})
 	}
 
-	// Clean up test keys
-	client.FlushDB(ctx)
+	for name, newRedis := range map[string]func(*testing.T) *redis.Client{
+		"limit exceeded": setupTestRedis,
+		"redis error":    redisDown,
+	} {
+		t.Run(name, func(t *testing.T) {
+			core, logs := observer.New(zap.DebugLevel)
+			rl := NewRateLimiter(Config{
+				RequestsPerMinute: 1,
+				KeyPrefix:         "test",
+				RedisClient:       newRedis(t),
+				Logger:            zap.New(core),
+			})
 
-	return client
+			router := gin.New()
+			router.Use(rl.Middleware())
+			router.GET("/test", func(c *gin.Context) { c.Status(200) })
+			for i := 0; i < 2; i++ {
+				req := httptest.NewRequest("GET", "/test", nil)
+				req.RemoteAddr = "203.0.113.42:4321"
+				router.ServeHTTP(httptest.NewRecorder(), req)
+			}
+
+			require.NotZero(t, logs.Len())
+			for _, entry := range logs.All() {
+				logged := fmt.Sprint(entry.ContextMap())
+				assert.NotContains(t, logged, "203.0.113.42")
+				assert.Contains(t, logged, "test:ip:203.0.113.0")
+			}
+		})
+	}
 }
 
 func TestRateLimiter_AllowsWithinLimit(t *testing.T) {

@@ -413,6 +413,7 @@ func (r *PostgresOverlayRepository) GetByID(ctx context.Context, id string) (*do
 | Data Type | Encryption Method | Key Management |
 |-----------|-------------------|----------------|
 | **OAuth Tokens** | AES-256-GCM | Kubernetes Secret (encryption key) |
+| **Discord relay webhook URLs** (`overlay_chat_sources.config.relay_webhook_url`, ADR-0091) | AES-256-GCM, same versioned key; never returned by the API | Kubernetes Secret (`TOKEN_ENCRYPTION_KEY_V<n>` on discord-listener) |
 | **User Passwords** | N/A (OAuth only, no passwords) | N/A |
 | **Database** | PostgreSQL TDE (Transparent Data Encryption) | Cloud KMS (AWS RDS encryption) |
 | **Redis** | Redis encryption at rest (cloud provider) | Cloud KMS |
@@ -439,10 +440,21 @@ spec:
 | Data Type | Retention Period | Deletion Method |
 |-----------|------------------|-----------------|
 | **User Accounts** | Until user deletion request | Hard delete (GDPR compliance) |
-| **OAuth Tokens** | Until expiry or revocation | Overwrite + hard delete |
-| **Logs** | 30 days | Automatic deletion (Loki retention) |
-| **Metrics** | 90 days | Automatic deletion (Prometheus retention) |
+| **OAuth Tokens** | Until disconnect or account deletion; legacy TikTok tokens, legacy Kick rows without `kick_user_id` and expired Instagram tokens 7 days after expiry | Hard delete on disconnect; cascade delete; retention-sweeper (ADR-0089) |
+| **Messages sent through All-Chat** (`viewer_message_history`) | 1 hour | retention-sweeper, every 15 minutes |
+| **YouTube quota audit log, alert events** | 30 days | retention-sweeper |
+| **Moderation actions** | 90 days | retention-sweeper |
+| **Abandoned device-link requests** | 1 hour after expiry | retention-sweeper |
+| **Logs / traces** | 7 days | Automatic deletion (Loki / Tempo retention) |
+| **Client IPs in service logs** | As logs; anonymised before logging (IPv4 last octet zeroed, IPv6 cut to /48) | Go services log only `shared/middleware.AnonymizeIP` output; gin services use `middleware.GinAccessLog()`, never `gin.Logger()`, which prints the full IP from the forwarded `X-Forwarded-For` |
+| **Client IPs in rate-limit keys** | Until the end of the one-minute window | Redis key expiry (`shared/ratelimit`, emote-service) |
+| **Client IPs in the edge access log** | Not recorded | The `public` EnvoyProxy in caesar-deployment (`apps/infrastructure/gateway/gateway.yaml`) sets an access-log format without `x-forwarded-for`, client addresses or query strings |
+| **Metrics** | 15 days | Automatic deletion (Prometheus retention) |
 | **Overlays** | Until user deletion | Cascade delete (FK constraint) |
+
+The user-facing statement of every retention period is section 6 of the
+privacy policy (`frontend/src/lib/i18n/messages/en/legal.ts`). Change both
+together.
 
 ---
 
@@ -710,9 +722,9 @@ srv := &http.Server{
 
 | Requirement | Implementation |
 |-------------|----------------|
-| **Right to Access** | `GET /auth/me` returns user data |
+| **Right to Access** | `GET /auth/me/data-export` (streamer) and `GET /auth/viewer/data-export` (viewer) return everything stored about the account as one JSON file, credentials excluded; "Download my data" on `/settings` and `/settings/viewer`. Contents: `services/auth-service/README.md` → Data export |
 | **Right to Deletion** | `DELETE /auth/me` deletes user + cascades |
-| **Data Portability** | `GET /auth/export` returns JSON (planned) |
+| **Data Portability** | Same JSON export as Right to Access |
 | **Consent** | OAuth authorization flow |
 | **Data Minimization** | Only store necessary user data |
 | **Encryption** | Tokens encrypted at rest, TLS in transit |
@@ -721,7 +733,7 @@ srv := &http.Server{
 
 | Requirement | Implementation |
 |-------------|----------------|
-| **Right to Know** | `GET /auth/me` |
+| **Right to Know** | `GET /auth/me/data-export`, `GET /auth/viewer/data-export` |
 | **Right to Delete** | `DELETE /auth/me` |
 | **Right to Opt-Out** | Analytics opt-out (planned) |
 

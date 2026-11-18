@@ -166,12 +166,23 @@ Returns aggregated health status of all backend services.
 
 ### Auth Service Routes
 
+The most commonly used routes. The complete, authoritative list is the route
+registration in [`cmd/main.go`](./cmd/main.go).
+
 | Method | Path | Auth Required | Description |
 |--------|------|---------------|-------------|
 | GET | `/api/v1/auth/twitch/login` | No | Start Twitch OAuth flow |
 | GET | `/api/v1/auth/twitch/callback` | No | Twitch OAuth callback |
 | POST | `/api/v1/auth/refresh` | No | Refresh token |
 | GET | `/api/v1/auth/me` | Yes | Get current user |
+| DELETE | `/api/v1/auth/me` | Yes | Delete the account |
+| GET | `/api/v1/auth/me/data-export` | Yes | DSGVO Art. 15/20 data export |
+| PATCH | `/api/v1/auth/me/onboarding` | Yes | Finish or re-arm the first-run setup guide |
+| POST | `/api/v1/auth/me/tos-acceptance` | Yes | Accept the current Terms of Service and Privacy Policy |
+| GET | `/api/v1/auth/me/connections` | Yes | Platforms whose OAuth tokens the account holds (ADR-0090) |
+| DELETE | `/api/v1/auth/me/connections/:platform` | Yes | Disconnect a linked platform: delete and revoke its tokens (ADR-0090) |
+| GET | `/api/v1/auth/viewer/me` | Viewer | Current viewer, with current premium and terms acceptance |
+| POST | `/api/v1/auth/viewer/me/tos-acceptance` | Viewer | Accept the Terms of Service and Privacy Policy as a viewer |
 | POST | `/api/v1/auth/logout` | Yes | Logout |
 
 ### Overlay Manager Routes
@@ -192,13 +203,13 @@ All overlay routes require JWT authentication.
 | PUT | `/api/v1/overlays/:id/sources/:source_id` | Update chat source |
 | DELETE | `/api/v1/overlays/:id/sources/:source_id` | Remove chat source |
 | GET | `/api/v1/overlays/:id/alerts/profiles` | Alert profiles, merged over defaults |
-| PUT | `/api/v1/overlays/:id/alerts/profiles` | Save alert profiles (premium, `alerts_editor`) |
+| PUT | `/api/v1/overlays/:id/alerts/profiles` | Save alert profiles (`alerts_editor` gate, free) |
 | POST | `/api/v1/overlays/:id/alerts/test` | Publish a test alert |
 | GET/PUT | `/api/v1/overlays/:id/goal` | Goal overlay config (ADR-0072) |
 | GET/PUT | `/api/v1/overlays/:id/list` | List overlay config (ADR-0072) |
 | GET | `/api/v1/overlays/public/:id/goal` | Public: goal state for the OBS renderer |
 | GET | `/api/v1/overlays/:id/list/top` | Public: leaderboard top-N for the OBS renderer |
-| * | `/api/v1/media/*` | media-service: presigned alert-media uploads (`MEDIA_SERVICE_URL`, ADR-0071) |
+| * | `/api/v1/media/*` | media-service: presigned alert-media uploads, presign premium via `media_upload` (`MEDIA_SERVICE_URL`, ADR-0071) |
 
 ### Emote Service Routes
 
@@ -294,7 +305,7 @@ The gateway logs all requests with:
 - Method and path
 - Response status code
 - Latency
-- Client IP
+- Client IP, anonymised (IPv4 last octet zeroed, IPv6 cut to /48; `shared/middleware.AnonymizeIP`)
 - User agent
 
 **Example Log**:
@@ -307,7 +318,7 @@ The gateway logs all requests with:
   "path": "/api/v1/overlays",
   "status": 200,
   "latency": "15ms",
-  "client_ip": "192.168.1.1"
+  "client_ip": "192.168.1.0"
 }
 ```
 

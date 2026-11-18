@@ -2,6 +2,7 @@
 
 **Date**: 2026-06-02
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: All-Chat Platform Team
 
 ---
@@ -12,8 +13,11 @@ Demand-gated listeners (twitch-eventsub chat, youtube) only capture a channel's 
 overlay that uses it has a live WebSocket. source-manager derives the demanded set from the
 `overlay:connected:{overlay_id}` keys api-gateway maintains (see ADR-0002 and the source-manager
 demand model). When the last WebSocket for an overlay disconnected, api-gateway **deleted** that key
-immediately (after a 60s disconnect grace period) and source-manager eagerly dropped the overlay
+immediately (after the 60s default disconnect grace period) and source-manager eagerly dropped the overlay
 from demand. The eventsub listener then tore down the `channel.chat.message` subscription.
+(Post-[ADR-0026](./0026-twitch-irc-listener-deprecation.md): with the IRC listener in enforce mode
+there is no fallback Twitch chat path once this gate closes, so the linger window is the only slack
+a Twitch channel's chat gets.)
 
 This created an asymmetry with the downstream delivery path, which is explicitly built to tolerate
 brief reconnects: the api-gateway pub/sub subscriber **lingers for `PUBSUB_LINGER_SECONDS` (default 5

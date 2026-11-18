@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-23
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -42,15 +43,15 @@ The customizer state layer is already decoupled from presentation: all controls 
 ### Key sub-decisions
 
 - **Sections become flat and first-class.** `AppearancePanel`'s nested groups (Typography, Colors, Background & Bubbles, Visibility, Sizing, Platform Colors, Events, Filters, Sounds, Text-to-Speech) are promoted to top-level nav entries. `AppearancePanel` is dissolved; the group components (`TypographyGroup` et al.) are kept as-is and rendered directly by the section panel.
-- **Nav grouping encodes workflow, not implementation.** Groups: **Setup** (Theme, Sources, Testing), **Appearance** (visual groups), **Behavior** (Messages, Filters, Sounds, Text-to-Speech, Engagement), **Advanced** (Custom CSS, Danger Zone). The mock message/event injector moves from the "Expert" drawer to a first-class **Testing** section under Setup: positioning the overlay in OBS with mock traffic is a setup activity every streamer performs, not an expert feature.
+- **Nav grouping encodes workflow, not implementation.** Groups: **Setup** (Theme, Sources, Moderators, Testing), **Appearance** (visual groups), **Behavior** (Messages, Filters, Sounds, Text-to-Speech, Engagement), **Advanced** (Custom CSS, Danger Zone). The mock message/event injector moves from the "Expert" drawer to a first-class **Testing** section under Setup: positioning the overlay in OBS with mock traffic is a setup activity every streamer performs, not an expert feature.
 - **Search is a static registry, not DOM scraping.** A `sectionRegistry` module declares each section's id, group, title, and searchable control entries (label + synonym keywords + anchor id). Search filters this registry; selecting a result activates the section, scrolls to the anchored control, expands its Advanced disclosure if needed, and flash-highlights it. Registry entries are colocated with section definitions so a new control's registry entry is reviewable in the same diff.
 - **Advanced tiering is presentation-only.** An `AdvancedDisclosure` component (collapsed by default, not persisted) wraps low-traffic controls within their section. No schema flag, no feature gate: which controls are "advanced" is a UI judgment revisable without migration.
 - **Onboarding spotlight targets the nav.** `forceOpen` forcing of drawer state is replaced by steering the *active section* while the guide is active (a one-shot navigation, not a lock); the user's persisted last-active section is untouched. `CollapsibleSection` had no consumers left after the editor migrated, so it is deleted with its test.
-- **The editor page sheds its section JSX.** Each section's panel content moves toward dedicated components under `frontend/src/components/editor/sections/`, shrinking the 3,600-line page. This is done opportunistically per section, not as a blocking rewrite.
+- **Section JSX stays in the editor page for now.** The plan to move each section's panel into `frontend/src/components/editor/sections/` was not carried out: the groups still render inline in `frontend/src/app/overlays/[id]/page.tsx` (about 4,600 lines), composing components from `frontend/src/components/appearance/`. Decomposition remains opportunistic, not a blocking rewrite.
 - **localStorage keys `editor-panel-sections-v1` / `appearance-panel-sections-v1` are retired.** The nav persists only the last active section (`editor-active-section-v1`). Stale keys are left in place (harmless) rather than migrated.
 
 ### Consequences
 
-- **Positive**: named settings are findable via search; geometry is stable (nav never moves); every section is permanently visible in the nav; long-tail controls stop competing with everyday ones; the monolithic editor page gets decomposed; screen-reader heading navigation maps one section = one `h2`.
+- **Positive**: named settings are findable via search; geometry is stable (nav never moves); every section is permanently visible in the nav; long-tail controls stop competing with everyday ones; screen-reader heading navigation maps one section = one `h2`.
 - **Negative / accepted**: one section visible at a time means cross-section comparison requires switching (mitigated: switching is one click and never reflows); the nav consumes ~160px of the config column (mitigated: the column is user-resizable 25–70% and the nav collapses to horizontal chips below the container breakpoint); the search registry must be maintained alongside new controls (mitigated: colocated declaration, reviewed in the same PR).
 - **Out of scope**: the separate Event Settings and Credits pages keep their own routes; the overlay Monitor View (ADR-0013) is unaffected; no backend change.

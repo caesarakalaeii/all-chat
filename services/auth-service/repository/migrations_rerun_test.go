@@ -123,6 +123,11 @@ func TestMigrationsSurviveRerun(t *testing.T) {
 	}
 
 	// Second pass = pod restart.
+	_, err = pool.Exec(ctx, `INSERT INTO viewers (tos_accepted, tos_accepted_at) VALUES (TRUE, NOW())`)
+	if err != nil {
+		t.Fatalf("failed to insert viewer terms canary: %v", err)
+	}
+
 	runMigrations(t, pool, migrations)
 
 	var tokenStillValid bool
@@ -160,6 +165,30 @@ func TestMigrationsSurviveRerun(t *testing.T) {
 	}
 	if onboardingCompleted != nil {
 		t.Errorf("re-running migrations re-fired the 077 onboarding backfill (onboarding_completed_at = %v); a deploy would silently complete onboarding for users who restarted it", onboardingCompleted)
+	}
+
+	// 122 backfills TRUE only through ADD COLUMN's default on the first run.
+	// The canary was created afterwards, so it is still waiting to accept; a
+	// re-run must not mark it accepted.
+	var tosAccepted bool
+	err = pool.QueryRow(ctx, `
+		SELECT tos_accepted FROM users WHERE username = 'rerun_canary'
+	`).Scan(&tosAccepted)
+	if err != nil {
+		t.Fatalf("failed to read canary terms acceptance: %v", err)
+	}
+	if tosAccepted {
+		t.Error("re-running migrations marked the canary as having accepted the terms; a deploy would silently skip the acceptance prompt for new users")
+	}
+
+	// 126 adds viewers.tos_accepted without a backfill; a re-run must not reset a
+	// viewer who already accepted.
+	var viewerTosAccepted bool
+	if err := pool.QueryRow(ctx, `SELECT bool_and(tos_accepted) FROM viewers`).Scan(&viewerTosAccepted); err != nil {
+		t.Fatalf("failed to read viewer terms canary: %v", err)
+	}
+	if !viewerTosAccepted {
+		t.Error("re-running migrations reset viewers.tos_accepted; a deploy would re-prompt every viewer")
 	}
 
 	// The ambassador grant + opted-in showcase must survive the re-run (ADR-0041):

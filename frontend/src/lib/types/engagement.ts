@@ -139,6 +139,10 @@ export interface ChatCommandInput {
   create_clip: boolean
   /** Template rendering to an https image shown on the alerts overlays (ADR-0080). */
   image_url: string
+  /** https sound played with the command's alert; overrides the alert profile's. */
+  sound_url: string
+  /** Template for the alert's text; overrides the alert profile's text template. */
+  alert_text: string
   min_role: ChatCommandRole
   cooldown_seconds: number
   enabled: boolean
@@ -161,9 +165,21 @@ export interface ChatCommandStatus {
   consent_overlay_id: string | null
 }
 
+/** The last bot message on one platform that did not arrive; the next one that does clears it. */
+export interface ChatCommandSendFailure {
+  platform: string
+  /** Who posted it: the All-Chat Bot, the streamer's custom bot, or the streamer. */
+  sender?: 'allchat_bot' | 'custom_bot' | 'self'
+  error_kind: string
+  /** The platform's own explanation, when it gave one. */
+  detail?: string
+  at: string
+}
+
 export interface ChatCommandList {
   commands: ChatCommand[]
   status: ChatCommandStatus
+  send_failures?: ChatCommandSendFailure[]
 }
 
 export interface ChatCommandPreview {

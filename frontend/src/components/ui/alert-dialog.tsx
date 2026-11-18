@@ -77,7 +77,9 @@ function AlertDialogContent({
   VariantProps<typeof alertDialogContentVariants>) {
   return (
     <AlertDialogPrimitive.Portal>
-      <AlertDialogPrimitive.Backdrop className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[8px]" />
+      {/* z-50 for the same reason as ui/dialog's backdrop: the navs and the
+          cookie banner are z-50 and must be covered too. */}
+      <AlertDialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[8px]" />
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cn(alertDialogContentVariants({ size, className }))}

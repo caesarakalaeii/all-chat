@@ -60,8 +60,9 @@
  *                  connect budget (maxWsConnectsPerHour) is PER POD: the leased session's
  *                  flag budget is shared by every pod leasing it, so N connect-capable
  *                  replicas enforce N x the per-pod cap — keep ONE connect-capable replica
- *                  in pure-node rollouts or divide the cap accordingly (PR 4 deployment
- *                  assumption). The premium fallback tier is ON in this mode: promotion
+ *                  in pure-node rollouts, or divide the cap across them with
+ *                  TIKTOK_MAX_WS_CONNECTS_PER_HOUR (PR 4 deployment assumption).
+ *                  The premium fallback tier is ON in this mode: promotion
  *                  warms the target-room tab on the signer before attaching the relay
  *                  (PR 3, sign/warm-target-tab.ts).
  */
@@ -120,6 +121,19 @@ export interface SignConfiguration {
 
   /** Euler Stream API key, when Euler is used at all. Empty means the free tier. */
   eulerApiKey: string;
+
+  /**
+   * WS connects this pod may sign per rolling hour, under `pure-node`.
+   *
+   * Per pod, but spent against the ONE session leased from the signer, so the
+   * fleet enforces `replicas x this`. It has to be divided by the number of
+   * connect-capable replicas to stay under that session's ~15/hour flag
+   * threshold — see the `pure-node` note on SignerMode. Configurable because
+   * nothing inside the pod can know its own replica count, and the
+   * two-replica rollout at the 12/hour default exhausted the shared budget in
+   * production (2026-11-18).
+   */
+  maxWsConnectsPerHour: number;
 }
 
 function readBool(raw: string | undefined, fallback: boolean): boolean {
@@ -128,6 +142,18 @@ function readBool(raw: string | undefined, fallback: boolean): boolean {
   if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
   if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
   return fallback;
+}
+
+/**
+ * Read a positive-integer setting, keeping the default on anything else.
+ *
+ * Same reasoning as `readSignerMode`: a typo in the deployment manifest should
+ * leave the listener on the known-good value rather than start it with a
+ * budget of zero or NaN, either of which refuses every room.
+ */
+function readPositiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw?.trim());
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function readSignerMode(raw: string | undefined): SignerMode {
@@ -156,7 +182,8 @@ export function loadSignConfiguration(env: NodeJS.ProcessEnv = process.env): Sig
     // Only meaningful once we sign ourselves; leaving it on under `euler` would just reinstate
     // the Business-plan error on every connect.
     enableExtendedGiftInfo: readBool(env.TIKTOK_EXTENDED_GIFT_INFO, signerMode === 'self'),
-    eulerApiKey: (env.SIGN_API_KEY ?? '').trim()
+    eulerApiKey: (env.SIGN_API_KEY ?? '').trim(),
+    maxWsConnectsPerHour: readPositiveInt(env.TIKTOK_MAX_WS_CONNECTS_PER_HOUR, 12)
   };
 }
 

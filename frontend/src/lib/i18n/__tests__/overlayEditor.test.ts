@@ -1107,7 +1107,11 @@ describe('credit roll settings copy', () => {
     expect(t('overlayEditor.credits.currentValue', { value: 50 })).toBe('Current: 50')
     expect(t('overlayEditor.credits.durationLabel')).toBe('Display Duration (seconds)')
     expect(t('overlayEditor.credits.durationHint')).toBe(
-      'How long the roll runs before it starts over (10-300 seconds). A roll too long to fit scrolls to its end first.'
+      'The shortest time the roll runs before it starts over (10-300 seconds). A roll too long to fit scrolls to its end and waits out the pause first.'
+    )
+    expect(t('overlayEditor.credits.restartDelayLabel')).toBe('Pause Before Restart (seconds)')
+    expect(t('overlayEditor.credits.restartDelayHint')).toBe(
+      'How long the end of the roll stays on screen before it starts over (0-3600 seconds).'
     )
     expect(t('overlayEditor.credits.opacityLabel')).toBe('Background Opacity (0-1)')
   })

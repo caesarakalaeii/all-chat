@@ -1,7 +1,8 @@
 # ADR-0002: Redis Streams + Pub/Sub Hybrid
 
 **Date**: 2025-11-11
-**Status**: ✅ Accepted
+**Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: Architecture Team, Infrastructure Lead
 
 ---
@@ -10,7 +11,7 @@
 
 All-Chat aggregates chat messages from multiple streaming platforms (Twitch, YouTube, Kick, TikTok) and delivers them to overlay viewers in real-time. The message processing pipeline must:
 
-1. **Buffer messages** from platform listeners (Twitch IRC, YouTube API polls)
+1. **Buffer messages** from platform listeners (Twitch, YouTube, Kick, TikTok and the beta platform listeners)
 2. **Process reliably** through normalization and enrichment pipeline
 3. **Deliver to multiple subscribers** (API Gateway replicas broadcasting to WebSocket clients)
 4. **Maintain low latency** (<500ms P95 from platform → overlay)
@@ -53,7 +54,7 @@ Listeners → Kafka (chat-raw topic) → Message Processor → Kafka (overlay-* 
 - **Resource heavy**: Each broker needs 2-4GB RAM, persistent storage
 - **Steep learning curve**: Kafka configuration, partitioning strategies complex
 - **LLM unfamiliarity**: Fewer Kafka examples, LLMs generate incorrect producer/consumer code
-- **Cost**: 3× CX31 instances (~€60/month) just for Kafka cluster
+- **Cost**: a multi-broker Kafka cluster's monthly cost, the largest of the options here
 
 **Estimated Latency**: 200-500ms (disk I/O dominant)
 
@@ -145,7 +146,7 @@ Listeners → Redis Streams (chat:raw) → Message Processor → Redis Pub/Sub (
 - **Durable ingress**: Listeners publish to Streams (AOF persisted, consumer groups)
 - **Fast egress**: Processor publishes to Pub/Sub (in-memory, instant fan-out)
 - **Simple**: Single Redis instance, no Kafka/NATS complexity
-- **Cost-effective**: Redis handles 50K ops/s on 1GB RAM instance (~€10/month)
+- **Cost-effective**: A small single-instance Redis suffices
 - **LLM-friendly**: Redis is well-documented, LLMs generate correct code
 - **Backpressure-capable**: Streams support consumer lag monitoring (XPENDING)
 
@@ -154,15 +155,8 @@ Listeners → Redis Streams (chat:raw) → Message Processor → Redis Pub/Sub (
 - **Fan-out bottleneck**: Pub/Sub scales O(n) with subscribers (mitigated by Redis Cluster in Phase 2)
 - **Streams MAXLEN**: Must tune retention to avoid trimming unprocessed messages
 
-**Estimated Latency**: **100-500ms total**
-- Listener → Streams: ~10ms
-- Streams → Processor: ~50ms
-- Processor (normalize + enrich): ~300ms (emote API calls)
-- Processor → Pub/Sub: ~5ms
-- Pub/Sub → Gateway: ~10ms
-- Gateway → WebSocket: ~50ms
-
-**Total P95**: ~425ms (within <500ms target) ✅
+**Estimated Latency**: **100-500ms total P95** (within <500ms target), dominated by the
+processor's normalize + enrich step (emote API calls; then cached).
 
 ---
 
@@ -189,19 +183,15 @@ Listeners → Redis Streams (chat:raw) → Message Processor → Redis Pub/Sub (
    - Easier debugging (Redis CLI for manual inspection)
 
 4. **LLM Development Velocity**:
-   - Redis examples abundant, LLMs generate 95%+ correct code
-   - Kafka: 60% accuracy (complex producer/consumer configs)
-   - NATS: 40% accuracy (LLMs unfamiliar with JetStream API)
+   - Redis examples abundant, LLMs generate correct code
 
 5. **Cost-Effective**:
-   - Phase 1: Single Redis (1GB RAM, ~€10/month)
-   - Phase 2: Redis Cluster 6 nodes (~€60/month)
-   - Kafka: 3 brokers + ZooKeeper (~€90/month minimum)
+   - Single Redis instance is cheap to run
 
 6. **Scalability Path**:
-   - Phase 1: Single Redis (500-1,000 msg/s)
-   - Phase 2: Redis Cluster (3,000-5,000 msg/s)
-   - Phase 3+: Migrate to Kafka if needed (10,000+ msg/s)
+   - Phase 1: Single Redis
+   - Phase 2: Redis Cluster if sustained throughput demands it
+   - Phase 3+: Migrate to Kafka if needed
 
 ---
 
@@ -210,54 +200,37 @@ Listeners → Redis Streams (chat:raw) → Message Processor → Redis Pub/Sub (
 ### Positive
 
 1. **Low Latency Achieved** (~100-500ms P95):
-   - Measured in testing: 425ms P95 from Twitch IRC → overlay display
+   - Measured in testing: 425ms P95 end to end
    - Users perceive as "real-time" (<1s feels instant)
 
 2. **Simple Operations**:
-   - Single Redis instance (docker-compose for dev, k8s StatefulSet for prod)
+   - Single-primary Redis (docker-compose for dev, k8s Deployment + PVC in this repo's dev manifests; production runs the Sentinel-managed replication group behind HAProxy, see the deployment pipeline's Redis HA runbook)
    - No Kafka brokers, no ZooKeeper, no complex topic management
    - Redis CLI for debugging (XREAD, XINFO, PUBSUB CHANNELS)
 
 3. **Development Velocity**:
-   - LLMs generated 95% of Redis integration code correctly
-   - 2-3 days to implement entire message pipeline (vs 1-2 weeks for Kafka)
+   - LLMs generated the Redis integration code correctly
 
-4. **Cost Savings**:
-   - Phase 1: €10/month (Redis) vs €90/month (Kafka cluster)
-   - Phase 2: €60/month (Redis Cluster) vs €150/month (Kafka + more brokers)
-
-5. **Backpressure Monitoring**:
-   - `XPENDING chat:raw message-processors` shows consumer lag
-   - Alerts fire if lag >10,000 messages (processor overwhelmed)
+4. **Backpressure Monitoring**:
+   - `XPENDING chat:raw <group>` shows consumer lag (group `message-processor` for chat, `alert-processors` for alerts)
+   - Failed messages are routed to a dead-letter stream and the PEL is drained at processor startup (XAUTOCLAIM of entries idle >5 minutes), so a crashed replica's unacknowledged messages are reprocessed rather than lost
 
 ### Negative
 
 1. **Partial Durability**:
    - **Messages lost if**:
-     - Message Processor crashes between consuming from Streams and publishing to Pub/Sub
      - API Gateway crashes after subscribing but before WebSocket send
    - **Mitigation**: Health checks detect crashes quickly, Redis Pub/Sub reconnects automatically
-   - **Impact**: ~0.01% message loss rate (acceptable for transient chat)
 
-2. **Fan-out Bottleneck** (Phase 1):
+2. **Fan-out Bottleneck**:
    - **Problem**: Pub/Sub scales O(n) with subscribers
-     - 10,000 msg/s × 26 Gateway pods = 260,000 deliveries/sec
-     - Single Redis instance saturates at ~100K msg/s Pub/Sub
-   - **Current Limit**: ~1,000 msg/s sustained (Phase 1 bottleneck)
-   - **Mitigation**: Redis Cluster in Phase 2 (sharding by overlay ID)
+   - **Current Limit**: single Redis instance
+   - **Mitigation**: Redis Cluster (Phase 2, sharding by overlay ID)
 
 3. **Streams MAXLEN Tuning**:
-   - **Problem**: `MAXLEN 50,000` fills in 5 seconds at 10,000 msg/s
+   - **Problem**: the 100,000-entry sliding window fills quickly under burst load
    - **Risk**: Trimming discards unprocessed messages if processor lags
-   - **Mitigation**:
-     - Monitor consumer lag (XPENDING)
-     - Increase MAXLEN to 500,000 (500MB memory)
-     - Alert if lag >10,000 messages
-
-4. **No Message Replay**:
-   - Once published to Pub/Sub, messages cannot be replayed
-   - Cannot reprocess historical messages (e.g., to fix bug in normalizer)
-   - **Mitigation**: Not needed for transient chat messages (not audit logs)
+   - **Mitigation**: Monitor consumer lag (XPENDING), alert on lag
 
 ---
 
@@ -265,57 +238,90 @@ Listeners → Redis Streams (chat:raw) → Message Processor → Redis Pub/Sub (
 
 ### Files and Configuration
 
-**Listeners** (publish to Streams):
-- `services/twitch-listener/publisher/redis.go`
-- `services/youtube-listener/publisher/redis.go`
+**Listeners and other chat:raw publishers** (XADD to chat:raw):
+- `services/twitch-listener/publisher/stream_publisher.go`
+- `services/twitch-eventsub-listener/publisher/stream_publisher.go`
+- `services/youtube-listener/publisher/stream_publisher.go`
+- `services/youtube-listener-innertube/publisher/redis_publisher.go`
 - `services/kick-listener/publisher/redis.go`
-- `services/tiktok-listener/publisher/redis.go`
+- `services/discord-listener/publisher/stream_publisher.go`
+- `services/facebook-listener/publisher/stream_publisher.go`
+- `services/owncast-listener/publisher/redis.go`
+- `services/goodgame-listener/publisher/redis.go`
+- `services/picarto-listener/publisher/redis.go`
+- `services/altstream-listener/publisher/redis.go`
+- `services/instagram-listener/publisher/stream_publisher.go`
+- `services/moderation-service/publisher/deletion.go` (message_deletion events)
+- TikTok listener (`services/tiktok-listener`, TypeScript): XADD to `chat:raw` from `src/index.ts`
+
+All use a bounded stream (MAXLEN ~100,000, approximate trimming) and wrap the
+XADD call in a `RingBufferPublisher` (`shared/listener/ring_buffer.go`) so
+transient publish failures are retried rather than dropped (ADR-0009).
 
 **Message Processor** (consume from Streams, publish to Pub/Sub):
-- `services/message-processor/consumer/streams.go` (XREADGROUP)
-- `services/message-processor/publisher/pubsub.go` (PUBLISH)
+- `services/message-processor/consumer/stream_consumer.go` (XREADGROUP, consumer group `message-processor`, PEL drain at startup via XAUTOCLAIM)
+- `services/message-processor/publisher/pubsub_publisher.go` (PUBLISH overlay:{id} and overlay:{id}:updates)
+
+**alert-processor** is a second `chat:raw` consumer group (`alert-processors`,
+`services/alert-processor/consumer/consumer.go`) that publishes event-typed
+messages to `overlay:{id}:alerts` via `services/alert-processor/publisher/publisher.go`.
 
 **API Gateway** (subscribe to Pub/Sub):
-- `services/api-gateway/websocket/manager.go` (SUBSCRIBE overlay:*)
+- `services/api-gateway/subscription/subscriber.go` (SUBSCRIBE overlay:{id},
+  plus `:updates`, `:poll`, `:prediction` and for alert overlays `:alerts`)
+  over one shared connection; the per-connection WebSocket plumbing lives in
+  `services/api-gateway/websocket/manager.go`
 
 ### Redis Configuration
 
-**docker-compose.yml** (Phase 1):
+**docker-compose.yml** (`deployments/docker-compose.yml`, dev):
 ```yaml
 redis:
   image: redis:7-alpine
-  command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+  # REDIS_PASSWORD empty = AUTH disabled; non-empty enables --requirepass
+  command: |
+    if [ -n "$REDIS_PASSWORD" ]; then
+      exec redis-server --requirepass "$REDIS_PASSWORD" --appendonly yes --appendfsync everysec
+        --maxmemory 512mb --maxmemory-policy allkeys-lru;
+    else
+      exec redis-server --appendonly yes --appendfsync everysec
+        --maxmemory 512mb --maxmemory-policy allkeys-lru;
+    fi
   ports:
-    - "6379:6379"
+    - "127.0.0.1:6379:6379"
   volumes:
-    - redis-data:/data
+    - redis_data:/data
 ```
 
-**Kubernetes StatefulSet** (Phase 1):
+**Kubernetes Deployment** (`deployments/k8s/base/redis/deployment.yaml`, dev/local k3d; production runs the Sentinel + HAProxy stack from the deployment pipeline instead):
 ```yaml
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: redis
 spec:
-  serviceName: redis
   replicas: 1
   template:
     spec:
       containers:
       - name: redis
-        image: redis:7
-        command: ["redis-server"]
+        image: redis:7-alpine
+        command: ["sh", "-c"]
         args:
-          - "--appendonly yes"
-          - "--maxmemory 1gb"
-          - "--maxmemory-policy allkeys-lru"
+          - |
+            if [ -n "$REDIS_PASSWORD" ]; then
+              exec redis-server --requirepass "$REDIS_PASSWORD" --appendonly yes
+                --appendfsync everysec --maxmemory 512mb --maxmemory-policy allkeys-lru;
+            else
+              exec redis-server --appendonly yes --appendfsync everysec
+                --maxmemory 512mb --maxmemory-policy allkeys-lru;
+            fi
         resources:
           requests:
-            memory: "256Mi"
+            memory: "128Mi"
             cpu: "100m"
           limits:
-            memory: "1Gi"
+            memory: "512Mi"
             cpu: "500m"
 ```
 
@@ -323,98 +329,76 @@ spec:
 
 **Listener (Publish to Streams)**:
 ```go
-// services/twitch-listener/publisher/redis.go
-func (p *RedisPublisher) Publish(ctx context.Context, msg RawMessage) error {
-    data, _ := json.Marshal(msg)
-    return p.client.XAdd(ctx, &redis.XAddArgs{
-        Stream: "chat:raw",
-        MaxLen: 50000,  // Trim to last 50K messages
-        Approx: true,   // Allow approximate trimming (faster)
-        Values: map[string]interface{}{
-            "data": data,
-        },
-    }).Err()
+// services/twitch-listener/publisher/stream_publisher.go
+// Wrapped in a RingBufferPublisher so transient XADD failures are retried.
+func buildXAddFunc(client *redis.Client) sharedlistener.PublishFunc {
+    return func(ctx context.Context, data []byte) error {
+        args := &redis.XAddArgs{
+            Stream: StreamKey,      // "chat:raw"
+            MaxLen: MaxStreamLength, // 100000 (sliding window, approximate trim)
+            Approx: true,
+            Values: map[string]interface{}{"data": data},
+        }
+        _, err := client.XAdd(ctx, args).Result()
+        return err
+    }
 }
 ```
 
 **Message Processor (Consume Streams, Publish Pub/Sub)**:
 ```go
-// services/message-processor/consumer/streams.go
-func (c *StreamConsumer) Consume(ctx context.Context) {
-    for {
-        // Read from Stream with consumer group
-        streams, _ := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-            Group:    "message-processors",
-            Consumer: c.consumerID,
-            Streams:  []string{"chat:raw", ">"},
-            Count:    10,
-            Block:    2 * time.Second,
-        }).Result()
+// services/message-processor/consumer/stream_consumer.go
+func (c *StreamConsumer) readAndProcess(ctx context.Context) error {
+    streams, _ := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+        Group:    ConsumerGroup, // "message-processor"
+        Consumer: c.consumerName,
+        Streams:  []string{StreamKey, ">"},
+        Count:    ReadCount,     // 100
+        Block:    ReadBlockTime, // 5s
+    }).Result()
 
-        for _, msg := range streams[0].Messages {
-            // Process message (normalize + enrich)
-            enriched := c.processor.Process(msg)
-
-            // Publish to overlay-specific Pub/Sub
-            c.client.Publish(ctx, fmt.Sprintf("overlay:%s", enriched.OverlayID), enriched)
-
-            // ACK message
-            c.client.XAck(ctx, "chat:raw", "message-processors", msg.ID)
-        }
-    }
+    // Process batch with bounded concurrency (ADR-0033)
+    c.processBatch(ctx, streams[0].Messages)
+    // Each message: normalize + enrich + Publish to overlay:{id},
+    // then XAck (after DLQ routing on repeated failure).
+    return nil
 }
 ```
 
 **API Gateway (Subscribe Pub/Sub)**:
 ```go
-// services/api-gateway/websocket/manager.go
-func (m *Manager) SubscribeOverlay(overlayID string) {
-    pubsub := m.redis.Subscribe(ctx, fmt.Sprintf("overlay:%s", overlayID))
-    defer pubsub.Close()
+// services/api-gateway/subscription/subscriber.go
+func (s *Subscriber) Subscribe(ctx context.Context, overlayID string, withAlerts bool) error {
+    channels := channelsFor(overlayID, false, withAlerts)
+    // [overlay:{id}, overlay:{id}:updates, overlay:{id}:poll,
+    //  overlay:{id}:prediction, (overlay:{id}:alerts)]
+    pubsub := s.client.Subscribe(ctx, channels...)
 
     for msg := range pubsub.Channel() {
-        // Broadcast to all WebSocket clients for this overlay
-        m.broadcastToOverlay(overlayID, msg.Payload)
+        // Deliver to the WebSocket connections for this overlay
+        s.deliver(overlayID, msg.Payload)
     }
 }
 ```
+
+---
+
+## Future Considerations
+
+**Redis Cluster (Phase 2)**: if sustained throughput outgrows a single primary,
+shard by `overlay:{id}`. Kafka migration remains the Phase 3+ fallback path if
+streams outgrow what Redis Cluster can handle.
 
 ---
 
 ## Related Decisions
 
 - **ADR-0003**: [CloudNativePG](./0003-cloudnative-postgres.md) - PostgreSQL for durable configuration storage
+- **ADR-0009**: [Ring Buffer Publisher for Listener XADD Resilience](./0009-ring-buffer-publisher.md) - XADD failure retry for the stream publishers
+- **ADR-0033**: [Bounded-Concurrency Enrichment in the Message Processor](./0033-message-processor-concurrent-enrichment.md) - bounded concurrency in the consumer
+- **ADR-0068**: [Event Alerts Platform](./0068-event-alerts-platform.md) - the second `chat:raw` consumer group (`alert-processors`)
 - **Architecture**: [01-DATA-FLOW.md](../architecture/01-DATA-FLOW.md) - Complete message flow documentation
-- **Scaling**: [03-SCALING.md](../architecture/03-SCALING.md) - Redis Cluster migration (Phase 2)
-
----
-
-## Future Considerations
-
-### Migration to Kafka (Phase 3+)
-
-**Trigger**: If sustained throughput exceeds 5,000 msg/s (Redis Cluster limit)
-
-**Migration Path**:
-1. Deploy Kafka cluster alongside Redis
-2. Dual-publish: Listeners publish to both Redis Streams AND Kafka
-3. Migrate Message Processor to consume from Kafka (gradual rollout)
-4. Migrate API Gateway to consume from Kafka topics
-5. Decommission Redis Streams (keep Redis for caching)
-
-**Cost**: ~€150/month (3-node Kafka cluster)
-
-### Redis Cluster (Phase 2)
-
-**Trigger**: Sustained throughput >1,000 msg/s
-
-**Implementation**:
-- Deploy 6-node Redis Cluster (3 primary + 3 replica)
-- Shard by key: `overlay:{id}` (consistent hashing)
-- API Gateway instances distributed across shards
-- Reduces fan-out bottleneck (each primary handles subset of overlays)
-
-**Expected Capacity**: 3,000-5,000 msg/s
+- **Operations**: [Runbooks](../operations/runbooks/) - Redis outage recovery
 
 ---
 
@@ -444,10 +428,8 @@ func (m *Manager) SubscribeOverlay(overlayID string) {
 
 ## References
 
-- **Redis Streams**: https://redis.io/docs/data-types/streams/
-- **Redis Pub/Sub**: https://redis.io/docs/manual/pubsub/
-- **Kafka vs Redis**: https://redis.com/blog/comparing-redis-kafka/
-- **Message Queue Patterns**: https://www.enterpriseintegrationpatterns.com/patterns/messaging/
+- **Redis Streams**: https://redis.io/docs/latest/develop/data-types/streams/
+- **Redis Pub/Sub**: https://redis.io/docs/latest/develop/pubsub/
 
 ---
 
@@ -459,4 +441,4 @@ func (m *Manager) SubscribeOverlay(overlayID string) {
 
 **Trade-off**: Partial durability (Pub/Sub messages lost on crash), fan-out bottleneck at scale (mitigated by Redis Cluster in Phase 2).
 
-**Status**: ✅ Implemented and validated in production, handling 500-1,000 msg/s in Phase 1.
+**Status**: Implemented and validated in production.

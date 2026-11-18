@@ -289,9 +289,7 @@ func main() {
 	}
 
 	// CORS is handled by API Gateway, not by individual services
-	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
-		SkipPaths: []string{"/health/live", "/health/ready"},
-	}))
+	router.Use(middleware.GinAccessLog())
 
 	// Register health routes (no auth required)
 	healthHandler.RegisterRoutes(router)

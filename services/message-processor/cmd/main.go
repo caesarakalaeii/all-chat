@@ -44,6 +44,7 @@ import (
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
 	"github.com/caesar/all-chat/shared/metrics"
+	"github.com/caesar/all-chat/shared/middleware"
 	sharedredis "github.com/caesar/all-chat/shared/redis"
 	"github.com/caesar/all-chat/shared/sendall"
 	"github.com/caesar/all-chat/shared/tracing"
@@ -355,9 +356,11 @@ func main() {
 		// Send-to-all detection (once per raw message): if this is a streamer's own
 		// message echoed back after a "send to all", auth-service pre-registered it so
 		// the N platform echoes collapse into one combined-pill message. Only chat
-		// messages participate — events never fan out this way.
+		// messages participate — events never fan out this way. An update (late media
+		// for a row already on the overlay) skips this and the text-health metric: the
+		// original message already went through both.
 		var sendAllGroup *sendall.Registration
-		if rawMsg.EventType == "" || rawMsg.EventType == "chat" {
+		if !rawMsg.IsUpdate && (rawMsg.EventType == "" || rawMsg.EventType == "chat") {
 			if reg, lookupErr := deduplicator.LookupSendAllGroup(ctx, rawMsg.Platform, rawMsg.UserID, rawMsg.Text); lookupErr != nil {
 				log.Debug("send-to-all lookup failed, treating as ordinary message", zap.Error(lookupErr))
 			} else {
@@ -522,11 +525,11 @@ func main() {
 						}
 					}
 					// Per-overlay 7TV emote-set override applies to all platforms.
-					if setID, err := overlayRouter.SevenTVEmoteSetIDForOverlay(ctx, overlay.OverlayID); err == nil && setID != "" {
+					if overlayCfg, err := overlayRouter.OverlayConfig(ctx, overlay.OverlayID); err == nil && overlayCfg.SevenTVEmoteSetID != "" {
 						if unified.Metadata == nil {
 							unified.Metadata = make(map[string]interface{})
 						}
-						unified.Metadata["seventv_emote_set_id"] = setID
+						unified.Metadata["seventv_emote_set_id"] = overlayCfg.SevenTVEmoteSetID
 					}
 
 					startEmote := time.Now()
@@ -615,12 +618,21 @@ func main() {
 						unified.Metadata["twitch_channel_hint"] = twitchCh
 					}
 				}
+				// One read of the overlay's config serves the 7TV override here and the
+				// pronoun toggle below. On a DB error both stay off: no override, no lookup.
+				overlayCfg, cfgErr := overlayRouter.OverlayConfig(ctx, overlay.OverlayID)
+				if cfgErr != nil {
+					log.Debug("Failed to load overlay config, skipping 7TV override and pronouns",
+						zap.String("overlay_id", overlay.OverlayID),
+						zap.Error(cfgErr),
+					)
+				}
 				// Per-overlay 7TV emote-set override applies to all platforms.
-				if setID, err := overlayRouter.SevenTVEmoteSetIDForOverlay(ctx, overlay.OverlayID); err == nil && setID != "" {
+				if overlayCfg.SevenTVEmoteSetID != "" {
 					if unified.Metadata == nil {
 						unified.Metadata = make(map[string]interface{})
 					}
-					unified.Metadata["seventv_emote_set_id"] = setID
+					unified.Metadata["seventv_emote_set_id"] = overlayCfg.SevenTVEmoteSetID
 				}
 
 				// Enrich with emotes
@@ -663,9 +675,10 @@ func main() {
 
 				// Must run after the viewer-identity enricher: that is what populates
 				// User.TwitchUsername, which the pronoun lookup keys off for
-				// non-Twitch platforms.
+				// non-Twitch platforms. Only an overlay that displays pronouns triggers
+				// the third-party lookup (ADR-0010 amendment).
 				startPronoun := time.Now()
-				if err := pronounEnricher.Enrich(ctx, unified); err != nil {
+				if err := pronounEnricher.Enrich(ctx, unified, overlayCfg.ShowPronouns); err != nil {
 					log.Warn("Failed to enrich pronouns",
 						zap.String("message_id", rawMsg.MessageID),
 						zap.Error(err),
@@ -676,6 +689,8 @@ func main() {
 			}
 
 		publish:
+			unified.IsUpdate = rawMsg.IsUpdate
+
 			// Streamer send-to-all: collapse the per-platform echoes into one combined
 			// message. Reuse the shared group id (so all echoes share an id), attach the
 			// full platform set for the combined pill, and publish at most once per
@@ -705,16 +720,22 @@ func main() {
 				platformMsgID = rawMsg.MessageID
 			}
 
-			isDup, dedupErr := deduplicator.IsDuplicateForOverlay(
-				ctx,
-				overlay.OverlayID,
-				rawMsg.Platform,
-				rawMsg.ChannelID,
-				platformMsgID,
-				rawMsg.UserID,
-				rawMsg.Text,
-				rawMsg.Timestamp,
-			)
+			// An update reuses the id of a message this overlay already received, so
+			// it would always be flagged; it replaces that row rather than adding one.
+			var isDup bool
+			var dedupErr error
+			if !rawMsg.IsUpdate {
+				isDup, dedupErr = deduplicator.IsDuplicateForOverlay(
+					ctx,
+					overlay.OverlayID,
+					rawMsg.Platform,
+					rawMsg.ChannelID,
+					platformMsgID,
+					rawMsg.UserID,
+					rawMsg.Text,
+					rawMsg.Timestamp,
+				)
+			}
 
 			if dedupErr != nil {
 				log.Warn("Deduplication check failed, processing message anyway",
@@ -783,7 +804,7 @@ func main() {
 		// Placed after the overlay loop so multi-overlay fanout counts as one message.
 		// Uses daily buckets (chat:stats:daily:{platform}:{YYYY-MM-DD}) so the
 		// API can sum the last 7 days for a stable rolling window.
-		if publishedToAnyOverlay {
+		if publishedToAnyOverlay && !rawMsg.IsUpdate {
 			day := time.Now().UTC().Format("2006-01-02")
 			statsKey := "chat:stats:daily:" + rawMsg.Platform + ":" + day
 			// Same increment as the weekly buckets, but for the all-time counter
@@ -847,7 +868,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
+	router.Use(middleware.GinAccessLog())
 
 	// Add tracing middleware if enabled
 	if tracingEnabled {

@@ -138,11 +138,12 @@ Body: {
   "description": "Multi-platform chat display",
   "overlay_type": "chat"   # chat (default) | alerts | goal | list
 }
-# alerts, goal and list need their premium gate (ADR-0008): alerts_overlay
-# (migration 108), goal_overlay (110), list_overlay (111):
+# alerts, goal and list are checked against their gate (ADR-0008):
+# alerts_overlay (migration 108, opened to everyone on 2026-11-15),
+# goal_overlay (110) and list_overlay (111), both premium:
 # 403 {"error":"Premium required","feature":"<gate>"}. Cloning checks the same
 # gate. Existing overlays of those kinds keep working when premium lapses.
-# The frontend offers these kinds on beta.allch.at only for now
+# The frontend offers goal and list on beta.allch.at only for now
 # (frontend/src/lib/platform-availability.ts); the API accepts them on any host.
 
 # List user's overlays
@@ -214,6 +215,15 @@ Body: { "config": { ... } }
 #   official_api — true hands the channel to youtube-listener (premium gate
 #                  youtube_official_api): 403 when not premium, 409 when the caller has no
 #                  YouTube connection for the channel. Turning it off is never checked.
+#   vertical_companion — "", "on" or "off": merge the channel's simultaneous vertical
+#                  broadcast (see youtube-listener-innertube README). 400 for any other
+#                  value. Free, never gated.
+# Discord keys (ADR-0048, ADR-0091):
+#   relay_enabled / relay_channel_id — the relay target, validated like the source's channel.
+#   relay_webhook_url — server-owned: discord-listener provisions it and stores it encrypted.
+#                  It is never returned by any source response and is ignored on create and
+#                  PATCH; PATCH keeps the stored one while relay_channel_id is unchanged and
+#                  drops it otherwise, so a webhook is provisioned in the new channel.
 
 # Delete source
 DELETE /api/v1/overlays/:overlay_id/sources/:source_id
@@ -234,7 +244,7 @@ GET /api/v1/overlays/:overlay_id/alerts/profiles
                     "custom_html": "", "custom_css": "", "custom_js": "" }, ... ],
     "saved": ["all"] }
 
-# Bulk upsert, all or nothing. Premium (gate alerts_editor). 400 unless the
+# Bulk upsert, all or nothing. Gate alerts_editor (free since 2026-11-15). 400 unless the
 # overlay is an alerts overlay, or for an unknown/duplicated event_type, a
 # volume outside 0-100, duration_ms outside 1-60000, a non-http(s) media URL or
 # a template over 500 characters, or a custom_html/custom_css/custom_js field
@@ -320,6 +330,7 @@ Body: {
   "enabled": true,
   "scroll_speed": 50,
   "display_duration_seconds": 60,
+  "restart_delay_seconds": 0,
   "clips_enabled": true,
   "clips_muted": true
 }
@@ -331,8 +342,11 @@ Authorization: Bearer <jwt-token>
 
 The OBS source (`/overlay/:id/credits`) scrolls the roll up at `scroll_speed`
 pixels per second, from just below the screen until its last line reaches the
-bottom edge. It holds there until `display_duration_seconds` is up and then
-starts over; a roll too long to fit scrolls to its end first. With
+bottom edge. It holds there for `restart_delay_seconds` (0-3600, default 0)
+and then starts over, or later if `display_duration_seconds` is not up yet:
+one cycle lasts `max(pass + restart_delay_seconds, display_duration_seconds)`,
+so a short roll still fills the display duration and a long one is never cut
+off. With
 `clips_enabled`, the session's Twitch clips play full-screen behind the roll,
 one after another. The browser looks up each clip's MP4 from Twitch's web GQL
 and plays it with sound in OBS unless `clips_muted` (ADR-0076); when that
@@ -440,6 +454,7 @@ credit_roll_configs (
     include_treasure_chests, include_shares, include_likes BOOLEAN,
     leaderboard_top_n INTEGER, leaderboard_sort_by VARCHAR(20), -- 'value' | 'count'
     scroll_speed INTEGER, display_duration_seconds INTEGER,
+    restart_delay_seconds INTEGER NOT NULL DEFAULT 0,          -- migration 124
     background_opacity DECIMAL(3,2), theme VARCHAR(50),       -- 'classic' | 'cinematic' | 'modern'
     clips_enabled BOOLEAN, clips_max_count INTEGER, clips_fallback_days INTEGER, clips_muted BOOLEAN,
     custom_css TEXT NOT NULL DEFAULT '',

@@ -62,7 +62,7 @@ func VerifyWebhookSignature(secret string, body []byte, sigHeader string) bool {
 
 // ParseMemberEvent normalizes a members:* webhook payload into a MembershipSnapshot.
 // data is the "member"; the patron's Patreon user id comes from the member's user
-// relationship, and the email (if present) from the included user resource.
+// relationship. The included user and address resources are not read.
 func ParseMemberEvent(body []byte) (*MembershipSnapshot, error) {
 	var doc apiDocument
 	if err := json.Unmarshal(body, &doc); err != nil {
@@ -81,14 +81,5 @@ func ParseMemberEvent(body []byte) (*MembershipSnapshot, error) {
 	if snap.PatreonUserID == "" {
 		return nil, fmt.Errorf("webhook member has no associated user id")
 	}
-
-	// Email is best-effort: pull it from the included user resource if present.
-	for _, inc := range doc.Included {
-		if inc.Type == "user" && inc.ID == snap.PatreonUserID {
-			snap.Email = inc.Attributes.Email
-			break
-		}
-	}
-
 	return snap, nil
 }

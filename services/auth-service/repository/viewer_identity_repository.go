@@ -19,6 +19,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/caesar/all-chat/shared/premium"
@@ -55,8 +56,9 @@ func (r *ViewerIdentityRepository) GetOrCreateViewerByPlatform(ctx context.Conte
 	).Scan(&viewerID)
 
 	if err == nil {
-		// Found existing viewer
-		return viewerID, nil
+		// Found existing viewer — engagement-service creates identities for chatters
+		// who never signed in, so the session may not point at it yet.
+		return viewerID, r.linkSession(ctx, viewerID, platform, platformUserID)
 	}
 	if err != pgx.ErrNoRows {
 		return uuid.Nil, fmt.Errorf("failed to lookup viewer_platform_identity: %w", err)
@@ -90,15 +92,22 @@ func (r *ViewerIdentityRepository) GetOrCreateViewerByPlatform(ctx context.Conte
 	}
 
 	// Step 3d: backfill viewer_id on existing session rows for this platform user
-	_, err = r.db.Exec(ctx,
-		`UPDATE viewer_sessions SET viewer_id = $1 WHERE platform = $2 AND platform_user_id = $3`,
-		newViewerID, platform, platformUserID,
-	)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("failed to update viewer_sessions viewer_id: %w", err)
-	}
+	return newViewerID, r.linkSession(ctx, newViewerID, platform, platformUserID)
+}
 
-	return newViewerID, nil
+// linkSession points the viewer session of (platform, platformUserID) at viewerID.
+// Every identity resolution routes through it: a session left on NULL, or on a
+// viewer the identity has since moved away from, hides the viewer's premium from
+// the admin view and keeps the linked-streamer inheritance from reaching them.
+func (r *ViewerIdentityRepository) linkSession(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) error {
+	if _, err := r.db.Exec(ctx,
+		`UPDATE viewer_sessions SET viewer_id = $1
+		 WHERE platform = $2 AND platform_user_id = $3 AND viewer_id IS DISTINCT FROM $1`,
+		viewerID, platform, platformUserID,
+	); err != nil {
+		return fmt.Errorf("failed to update viewer_sessions viewer_id: %w", err)
+	}
+	return nil
 }
 
 // GetViewerCosmetics returns the name_color for a viewer, or nil if not set.
@@ -257,7 +266,7 @@ func (r *ViewerIdentityRepository) LinkPlatformToViewer(ctx context.Context, vie
 	if err == nil {
 		// Row exists — idempotent if it already points to the right viewer.
 		if existingViewerID == viewerID {
-			return nil
+			return r.linkSession(ctx, viewerID, platform, platformUserID)
 		}
 		// The platform belongs to a different viewer. In the connect flow the
 		// user explicitly asked to link this platform to their current account,
@@ -269,7 +278,7 @@ func (r *ViewerIdentityRepository) LinkPlatformToViewer(ctx context.Context, vie
 		if updateErr != nil {
 			return fmt.Errorf("failed to re-link platform identity: %w", updateErr)
 		}
-		return nil
+		return r.linkSession(ctx, viewerID, platform, platformUserID)
 	}
 	if err != pgx.ErrNoRows {
 		return fmt.Errorf("failed to check existing platform identity: %w", err)
@@ -285,15 +294,7 @@ func (r *ViewerIdentityRepository) LinkPlatformToViewer(ctx context.Context, vie
 	}
 
 	// Backfill viewer_id on the viewer_sessions row for this platform user.
-	_, err = r.db.Exec(ctx,
-		`UPDATE viewer_sessions SET viewer_id = $1 WHERE platform = $2 AND platform_user_id = $3`,
-		viewerID, platform, platformUserID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update viewer_sessions viewer_id: %w", err)
-	}
-
-	return nil
+	return r.linkSession(ctx, viewerID, platform, platformUserID)
 }
 
 // LinkedPlatform represents a single platform linked to a viewer.
@@ -327,53 +328,67 @@ func (r *ViewerIdentityRepository) GetLinkedPlatforms(ctx context.Context, viewe
 	return platforms, nil
 }
 
-// UnlinkPlatform removes a platform identity from a viewer.
+// UnlinkPlatform removes a platform identity from a viewer and deletes that platform
+// account's sessions with their OAuth tokens, in one transaction, as signing out does.
+// A detached session would outlive viewer erasure (ADR-0088) and the retention sweeper
+// keeps sessions (ADR-0089), so nothing else would ever remove it. It returns the
+// deleted tokens AS STORED (encrypted), so the caller can decrypt and revoke them at
+// the provider.
 // Returns ErrLastPlatform if the viewer only has one platform linked (must retain at least one).
 // Returns ErrNotFound if the platform is not linked to this viewer.
-func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error {
+func (r *ViewerIdentityRepository) UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) ([]RemovedToken, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin unlink: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
 	// Count how many platforms the viewer currently has.
 	var count int
-	err := r.db.QueryRow(ctx,
+	err = tx.QueryRow(ctx,
 		`SELECT COUNT(*) FROM viewer_platform_identities WHERE viewer_id = $1`,
 		viewerID,
 	).Scan(&count)
 	if err != nil {
-		return fmt.Errorf("failed to count linked platforms: %w", err)
+		return nil, fmt.Errorf("failed to count linked platforms: %w", err)
 	}
 	if count <= 1 {
-		return ErrLastPlatform
+		return nil, ErrLastPlatform
 	}
 
-	// Look up the platform_user_id before deleting so we can clear viewer_sessions.
 	var platformUserID string
-	err = r.db.QueryRow(ctx,
-		`SELECT platform_user_id FROM viewer_platform_identities WHERE viewer_id = $1 AND platform = $2`,
+	err = tx.QueryRow(ctx,
+		`DELETE FROM viewer_platform_identities WHERE viewer_id = $1 AND platform = $2 RETURNING platform_user_id`,
 		viewerID, platform,
 	).Scan(&platformUserID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
 	if err != nil {
-		return ErrNotFound
+		return nil, fmt.Errorf("failed to delete platform identity: %w", err)
 	}
 
-	// Delete the platform identity row.
-	tag, err := r.db.Exec(ctx,
-		`DELETE FROM viewer_platform_identities WHERE viewer_id = $1 AND platform = $2`,
-		viewerID, platform,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to delete platform identity: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrNotFound
-	}
-
-	// Clear viewer_id on sessions that belonged to the unlinked platform identity
-	// so they are no longer associated with the viewer.
-	_, _ = r.db.Exec(ctx,
-		`UPDATE viewer_sessions SET viewer_id = NULL WHERE platform = $1 AND platform_user_id = $2 AND viewer_id = $3`,
+	rows, err := tx.Query(ctx, `
+		DELETE FROM viewer_sessions
+		WHERE platform = $1 AND platform_user_id = $2 AND viewer_id = $3
+		RETURNING access_token, COALESCE(refresh_token, '')`,
 		platform, platformUserID, viewerID,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete unlinked sessions: %w", err)
+	}
+	removed, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (RemovedToken, error) {
+		var t RemovedToken
+		return t, row.Scan(&t.AccessToken, &t.RefreshToken)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete unlinked sessions: %w", err)
+	}
 
-	return nil
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit unlink: %w", err)
+	}
+	return removed, nil
 }
 
 // MigratePlatformUserID updates the platform_user_id in viewer_platform_identities for a viewer
@@ -404,4 +419,33 @@ func (r *ViewerIdentityRepository) GetViewerIsPremium(ctx context.Context, viewe
 		return false, fmt.Errorf("failed to get viewer is_premium: %w", err)
 	}
 	return isPremium, nil
+}
+
+// GetViewerTosAccepted reports whether the viewer accepted the current Terms of
+// Service and Privacy Policy (migration 126). Returns ErrNotFound when no such
+// viewer exists.
+func (r *ViewerIdentityRepository) GetViewerTosAccepted(ctx context.Context, viewerID uuid.UUID) (bool, error) {
+	var accepted bool
+	err := r.db.QueryRow(ctx, `SELECT tos_accepted FROM viewers WHERE id = $1`, viewerID).Scan(&accepted)
+	if err == pgx.ErrNoRows {
+		return false, ErrNotFound
+	}
+	if err != nil {
+		return false, fmt.Errorf("failed to get viewer tos_accepted: %w", err)
+	}
+	return accepted, nil
+}
+
+// AcceptViewerTos records that the viewer accepted the current Terms of Service
+// and Privacy Policy. Returns ErrNotFound when no such viewer exists.
+func (r *ViewerIdentityRepository) AcceptViewerTos(ctx context.Context, viewerID uuid.UUID) error {
+	tag, err := r.db.Exec(ctx,
+		`UPDATE viewers SET tos_accepted = TRUE, tos_accepted_at = NOW() WHERE id = $1`, viewerID)
+	if err != nil {
+		return fmt.Errorf("failed to record viewer terms acceptance: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

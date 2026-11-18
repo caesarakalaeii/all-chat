@@ -307,7 +307,11 @@ export class BackoffManager {
   }
 
   /**
-   * Remove backoff state when channel is no longer active
+   * Remove backoff state outright, park included.
+   *
+   * This is the operator's override: /api/retry and /api/reset-backoff call
+   * it to clear a room's backoff by hand, and a parked room is exactly the
+   * one they reach for it. Teardown wants forgetConnectionState.
    *
    * @param username TikTok username
    */
@@ -316,6 +320,50 @@ export class BackoffManager {
     if (deleted) {
       this.logger.debug('Removed backoff state', { username });
     }
+  }
+
+  /**
+   * Drop the state a torn-down connection owns, keeping a park that has not
+   * yet elapsed.
+   *
+   * A park is a promise about the SIGNER's rolling hour, not about the
+   * connection going away: PureNodeSigner.takeConnectSlot has already queued
+   * the refused room for the next slot to free, and recordBudgetRefusal parks
+   * it for exactly that long. Forgetting it lets the room re-dial inside its
+   * own window, spend a second of the pod's twelve hourly slots, and be
+   * re-queued further back than if it had waited (prod 2026-11-18: cotermatha
+   * refused at 00:03:51 for 20 minutes, torn down at 00:08:19 by a demand
+   * snapshot that briefly dropped it, re-dialled and refused again at
+   * 00:08:49). A deaf-room park rides the same field for the same reason —
+   * every reconnect is a sign against the same budget.
+   *
+   * The park keeps nextCheckTime with it: the poller gates on shouldCheckNow,
+   * and a room left eligible for an immediate check is a room dialled.
+   *
+   * @param username TikTok username
+   */
+  forgetConnectionState(username: string): void {
+    const parkRemaining = this.parkRemainingMs(username);
+    if (parkRemaining === 0) {
+      this.removeState(username);
+      return;
+    }
+
+    const now = Date.now();
+    const parkedUntil = now + parkRemaining;
+    this.backoffStates.set(username, {
+      username,
+      consecutiveOfflineChecks: 0,
+      consecutiveErrors: 0,
+      lastCheckTime: now,
+      nextCheckTime: parkedUntil,
+      currentBackoffMs: 0,
+      parkedUntil
+    });
+    this.logger.debug('Kept live park while forgetting connection state', {
+      username,
+      park_remaining_ms: parkRemaining
+    });
   }
 
   /**

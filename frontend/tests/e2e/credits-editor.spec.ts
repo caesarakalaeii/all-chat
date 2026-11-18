@@ -21,8 +21,8 @@ import { test, expect, type Page } from '@playwright/test'
 /**
  * The credit roll editor previews the OBS roll beside its settings: an unsaved
  * text or size edit shows in the preview at once, the preview never fetches the
- * real roll (that fetch counts as a display), and saving sends the custom texts
- * and sizes.
+ * real roll (that fetch counts as a display), and saving sends the custom texts,
+ * sizes and restart delay.
  */
 
 const OVERLAY_ID = 'credits-editor-e2e'
@@ -108,6 +108,8 @@ test('the preview shows saved and unsaved custom text and sizes, and saving send
     .poll(() => session.evaluate((el) => parseFloat(getComputedStyle(el).fontSize)))
     .toBeCloseTo(before * 2, 0)
 
+  await page.getByLabel('Pause Before Restart (seconds)').fill('90')
+
   await page.getByRole('button', { name: 'Save Settings' }).click()
   await expect.poll(() => saved.length).toBe(1)
   expect(saved[0].texts).toEqual({
@@ -116,6 +118,7 @@ test('the preview shows saved and unsaved custom text and sizes, and saving send
     session: 'Session du {day}/{month}/{year}',
   })
   expect(saved[0].font_scales).toEqual({ session: 200 })
+  expect(saved[0].restart_delay_seconds).toBe(90)
   expect(rollFetches()).toBe(0)
 })
 

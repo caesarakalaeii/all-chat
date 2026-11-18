@@ -151,7 +151,7 @@ Messages not showing up?
 │
 └─ Messages arrive delayed (>5 seconds)?
    ├─ Redis Streams backlog high?
-   │  Solution: Check XPENDING chat:raw message-processors
+   │  Solution: Check XPENDING chat:raw message-processor
    │  Guide: QUICK-REF-REDIS-OPERATIONS.md#streams-backlog
    │
    ├─ Message Processor slow?
@@ -159,7 +159,7 @@ Messages not showing up?
    │  Guide: QUICK-REF-SCALING.md#message-processor
    │
    └─ Network latency?
-      Solution: Check service-to-service latency with kubectl exec
+      Solution: Check service-to-service latency with kubectl debug
       Guide: QUICK-REF-KUBERNETES-DEBUG.md#network-latency
 ```
 
@@ -379,8 +379,8 @@ kubectl get pods -n allchat
 kubectl logs -n allchat -l app=<service-name> --tail=100 -f
 
 # Check health endpoints
-kubectl exec -n allchat deployment/<service> -- \
-  wget -qO- http://localhost:<port>/health/ready
+kubectl port-forward -n allchat deployment/<service> <port>:<port> >/dev/null &
+sleep 1; curl -s http://localhost:<port>/health/ready; kill $!
 ```
 
 ### Database Checks

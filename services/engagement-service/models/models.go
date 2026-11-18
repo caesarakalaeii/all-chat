@@ -188,13 +188,26 @@ type ChatCommand struct {
 	Trigger         string    `json:"trigger"`
 	Response        string    `json:"response"`
 	CreateClip      bool      `json:"create_clip"`
-	ImageURL        string    `json:"image_url"` // template; shown on alerts overlays (ADR-0080)
+	ImageURL        string    `json:"image_url"`  // template; shown on alerts overlays (ADR-0080)
+	SoundURL        string    `json:"sound_url"`  // https URL played with the command's alert
+	AlertText       string    `json:"alert_text"` // template; the alert's text instead of the profile's
 	MinRole         string    `json:"min_role"`
 	CooldownSeconds int       `json:"cooldown_seconds"`
 	Enabled         bool      `json:"enabled"`
 	UseCount        int64     `json:"use_count"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// SendFailure is the last bot post (command reply or timer) on one platform that
+// was not delivered, kept until the next delivered post there (ADR-0081). The
+// commands editor shows it, so a refused reply is not silent.
+type SendFailure struct {
+	Platform  string    `json:"platform"`
+	Sender    string    `json:"sender,omitempty"` // allchat_bot | custom_bot | self
+	ErrorKind string    `json:"error_kind"`
+	Detail    string    `json:"detail,omitempty"` // the platform's own explanation
+	At        time.Time `json:"at"`
 }
 
 // ChatTimer is one streamer-defined recurring chat message (ADR-0081). It fires on

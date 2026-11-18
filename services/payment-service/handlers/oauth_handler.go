@@ -178,7 +178,7 @@ func (h *OAuthHandler) Callback(c *gin.Context) {
 		return
 	}
 
-	if _, _, err := h.entitlement.Apply(ctx, snap, applyUserID, applyViewerID, nil); err != nil {
+	if _, _, err := h.entitlement.Apply(ctx, snap, applyUserID, applyViewerID); err != nil {
 		h.logger.Error("Failed to apply Patreon membership", zap.String("subject", st.Kind), zap.Error(err))
 		h.redirect(c, st.Kind, "error")
 		return

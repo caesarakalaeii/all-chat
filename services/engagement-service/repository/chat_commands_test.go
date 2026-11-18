@@ -190,3 +190,27 @@ func TestChatCommandImagesAndAlertsOverlays(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []uuid.UUID{alertsOverlay}, ids)
 }
+
+// A command's own alert sound and text (migration 123, ADR-0080) round-trip, and
+// either alone is enough for a command to do something.
+func TestChatCommandAlertSoundAndText(t *testing.T) {
+	pool := newTestDB(t)
+	repo := repository.New(pool)
+	ctx := context.Background()
+	owner := seedTwitchStreamer(t, pool, "ca"+uuid.NewString()[:8], nil, nil)
+
+	cmd := newChatCmd(owner, models.TriggerCommand, "!bark")
+	cmd.Response, cmd.SoundURL = "", "https://media.example.com/bark.mp3"
+	saved, err := repo.CreateChatCommand(ctx, cmd)
+	require.NoError(t, err)
+	assert.Equal(t, cmd.SoundURL, saved.SoundURL)
+
+	saved.SoundURL, saved.AlertText = "", "{user} barks"
+	updated, err := repo.UpdateChatCommand(ctx, saved)
+	require.NoError(t, err)
+	assert.Equal(t, "{user} barks", updated.AlertText)
+
+	updated.AlertText = ""
+	_, err = repo.UpdateChatCommand(ctx, updated)
+	assert.Error(t, err, "a command with no reply, clip or alert does nothing")
+}

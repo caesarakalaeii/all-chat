@@ -17,7 +17,9 @@
 package models
 
 import (
+	"encoding/json"
 	"errors"
+	"maps"
 	"regexp"
 	"time"
 )
@@ -55,6 +57,22 @@ type ChatSource struct {
 	DiscoveryStatus string    `json:"discovery_status,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// RelayWebhookURLKey is the config key holding the Discord webhook discord-listener provisioned
+// for a relay. It is a credential (anyone holding it can post into the channel), stored
+// encrypted and owned by the server: it is never sent to a client nor taken from one (ADR-0091).
+const RelayWebhookURLKey = "relay_webhook_url"
+
+// MarshalJSON leaves the relay webhook out of every API response.
+func (s ChatSource) MarshalJSON() ([]byte, error) {
+	type plain ChatSource // drops this method, so json.Marshal does not recurse
+	p := plain(s)
+	if _, ok := s.Config[RelayWebhookURLKey]; ok {
+		p.Config = maps.Clone(s.Config)
+		delete(p.Config, RelayWebhookURLKey)
+	}
+	return json.Marshal(p)
 }
 
 // Valid platforms

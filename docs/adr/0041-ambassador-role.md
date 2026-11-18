@@ -2,6 +2,7 @@
 
 **Date**: 2026-07-21
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -41,7 +42,7 @@ Entitlements today are three independent mechanisms (ADR-0018 premium, ADR-0020 
 - **Presentation is a separate table.** `ambassador_showcase(user_id PK, tagline, sort_order, featured_consent)`. The entitlement column on `users` stays a single boolean, so the ~9 `users` SELECT/scan sites in auth-service gain exactly one field. The admin listing surfaces the card via a `LEFT JOIN`; `/auth/me` gains only `is_ambassador` (the showcase fields are `omitempty` and unpopulated there).
 - **Public display is opt-in.** Assigning the role grants premium + early access **immediately**, but `GET /api/v1/ambassadors` returns a streamer only when `is_ambassador AND featured_consent` (and not banned). `featured_consent` defaults FALSE and is written **only** by the streamer via `PUT /api/v1/ambassadors/me/showcase`; the admin curates `tagline`/`sort_order` but never the consent.
 - **Not a purchasable premium feature.** Ambassador is an admin-granted recognition role, exactly like beta-tester (ADR-0020). It is therefore **not** a `feature_gates` entry and is **not** listed in the `/upgrade` page or the onboarding "Optional: go further" premium funnel — those advertise features a user can unlock by paying, which this is not. The public showcase is marketing, not a gated capability.
-- **Channel link is derived, not stored.** The showcase card links to the streamer's channel via the existing `channelUrl(platform, username)` helper using their `auth_provider` + `username`. This is exact for Twitch/Kick; for YouTube it is a best-effort `@handle` link (documented limitation — a stored custom URL can be added later if needed).
+- **Channel link is derived, not stored.** The public list API ships the streamer's `username` and `platform`; the homepage card passes both into the existing `channelUrl(platform, channelId, channelHandle)` helper (`frontend/src/lib/platform-channel-url.ts`) via `ChannelLink`. Exact for Twitch/Kick (and most others); for YouTube it is an `@handle` link when a handle resolves and no link at all otherwise, so it is best-effort there (a stored custom URL could be added later if needed).
 - **Migration 078 (new; edits no prior migration).** Idempotent `ADD COLUMN IF NOT EXISTS users.is_ambassador` (+ partial index) and `CREATE TABLE IF NOT EXISTS ambassador_showcase` (+ index). It writes **no** entitlement or consent values, so a re-run can never clobber a live grant or flip a streamer's consent — guarded by `services/auth-service/repository/migrations_rerun_test.go`.
 
 ## Consequences
@@ -57,7 +58,7 @@ Entitlements today are three independent mechanisms (ADR-0018 premium, ADR-0020 
 
 - A third admin-granted role increases the pressure toward a generic role model; if a **fourth** arrives, reconsider a `user_roles` table (carrying ADR-0020's note forward).
 - Entitlement state now spans `users` (role) and `ambassador_showcase` (presentation/consent); two writers, but the public read is a single join and the recompute is convergent.
-- The YouTube channel link is best-effort until a stored custom URL is added.
+- The YouTube channel link is best-effort: an `@handle` link when a handle resolves, no link otherwise (until a stored custom URL is added).
 
 ## Implementation
 

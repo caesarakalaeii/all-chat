@@ -92,7 +92,7 @@ func mapStatus(status int, maskedBody string) *APIError {
 // isRetryableStatus reports whether an HTTP status warrants a retry.
 func isRetryableStatus(s int) bool {
 	switch s {
-	case 408, 425, 500, 502, 503, 504:
+	case 408, 425, 500, 502, 503, 504, 529: // 529: Anthropic overloaded
 		return true
 	}
 	return false

@@ -124,7 +124,8 @@ kubectl -n allchat logs -f deployment/<service-name>
 kubectl -n allchat get pods -l app=<service-name>
 
 # Verify readiness probe
-kubectl -n allchat exec deployment/<service-name> -- wget -qO- http://localhost:8080/health/ready
+kubectl -n allchat port-forward deployment/<service-name> 8080:8080 >/dev/null &
+sleep 1; curl -s http://localhost:8080/health/ready; kill $!
 
 # Check events (should have no unhealthy warnings)
 kubectl -n allchat get events --sort-by=.lastTimestamp | grep <service-name>

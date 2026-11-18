@@ -84,6 +84,8 @@ function humanizeErrorKind(t: TFunction, kind: string): string {
       return t('viewerOverlay.chatSend.reasonQuotaExhausted')
     case 'send_failed':
       return t('viewerOverlay.chatSend.reasonSendFailed')
+    case 'message_dropped':
+      return t('viewerOverlay.chatSend.reasonMessageDropped')
     default:
       return kind
   }

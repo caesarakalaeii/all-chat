@@ -28,6 +28,8 @@ import (
 	"github.com/caesar/all-chat/services/media-service/models"
 	"github.com/caesar/all-chat/services/media-service/storage"
 	sharedauth "github.com/caesar/all-chat/shared/auth"
+	"github.com/caesar/all-chat/shared/featuregates"
+	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -155,7 +157,7 @@ func newTestRouter(t *testing.T, kc *sharedauth.KeyChain, store handlers.ObjectS
 	registry := newRouteRegistry()
 	router := gin.New()
 	registerMediaRoutes(router, kc, nil,
-		handlers.NewMediaHandler(registry, store, routeMediaConfig, zap.NewNop()))
+		handlers.NewMediaHandler(registry, store, routeMediaConfig, zap.NewNop()), uploadGate(true))
 	return router
 }
 
@@ -296,7 +298,7 @@ func TestRegisterMediaRoutes_WiredRevocationClientIsConsulted(t *testing.T) {
 	router := gin.New()
 	router.Use(gin.Recovery())
 	registerMediaRoutes(router, kc, revocation,
-		handlers.NewMediaHandler(newRouteRegistry(), &fakeStore{}, routeMediaConfig, zap.NewNop()))
+		handlers.NewMediaHandler(newRouteRegistry(), &fakeStore{}, routeMediaConfig, zap.NewNop()), uploadGate(true))
 
 	for _, tc := range mediaRouteSuccessCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -339,7 +341,7 @@ func TestRegisterMediaRoutes_TypedNilRevocationClientDegradesToFailOpen(t *testi
 	router := gin.New()
 	router.Use(gin.Recovery())
 	registerMediaRoutes(router, kc, revocationClient,
-		handlers.NewMediaHandler(newRouteRegistry(), &fakeStore{}, routeMediaConfig, zap.NewNop()))
+		handlers.NewMediaHandler(newRouteRegistry(), &fakeStore{}, routeMediaConfig, zap.NewNop()), uploadGate(true))
 
 	for _, tc := range mediaRouteSuccessCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -348,6 +350,41 @@ func TestRegisterMediaRoutes_TypedNilRevocationClientDegradesToFailOpen(t *testi
 			assert.Equal(t, tc.wantStatus, w.Code,
 				"an unusable revocation client must degrade to fail-open (skip the blacklist), not 500 every media request")
 			assert.Contains(t, w.Body.String(), tc.wantBody)
+		})
+	}
+}
+
+// uploadGate is the media_upload premium gate main() mounts on presign
+// (seeded is_premium=TRUE), deciding for a user whose users.is_premium is
+// userIsPremium.
+func uploadGate(userIsPremium bool) gin.HandlerFunc {
+	gates := featuregates.NewFeatureGateCacheWithGates(map[string]bool{featuregates.GateMediaUpload: true})
+	return middleware.RequirePremiumWithQuerier(gates, featuregates.GateMediaUpload,
+		func(context.Context, string) (bool, error) { return userIsPremium, nil }, zap.NewNop())
+}
+
+// TestRegisterMediaRoutes_UploadsArePremium pins the media_upload gate: alerts
+// and chat commands are free, but uploading your own images, GIFs and sounds
+// stays premium. Only presign is gated; a user whose premium lapsed can still
+// list and delete what they uploaded.
+func TestRegisterMediaRoutes_UploadsArePremium(t *testing.T) {
+	kc := newTestKeyChain(t)
+	token := mintUserToken(t, kc.LatestKid(), string(kc.LatestSecret()))
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	registerMediaRoutes(router, kc, nil,
+		handlers.NewMediaHandler(newRouteRegistry(), &fakeStore{}, routeMediaConfig, zap.NewNop()), uploadGate(false))
+
+	for _, tc := range mediaRouteSuccessCases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := doRouteRequest(router, tc.method, tc.path, "Bearer "+token, tc.body)
+
+			if tc.name == "presign" {
+				assert.Equal(t, http.StatusForbidden, w.Code, "uploading needs premium")
+				assert.Contains(t, w.Body.String(), "Premium feature required")
+				return
+			}
+			assert.Equal(t, tc.wantStatus, w.Code, "listing and deleting your own uploads stays free")
 		})
 	}
 }

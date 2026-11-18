@@ -43,9 +43,10 @@ const (
 
 // MembershipSnapshot is the normalized view of a patron's membership to all-chat's
 // campaign, derived from either the identity API response or a webhook payload.
+// It deliberately holds nothing personal: the Patreon user id links the patron
+// to an all-chat subject, the rest decides entitlement.
 type MembershipSnapshot struct {
 	PatreonUserID    string
-	Email            string
 	PatronStatus     string // raw Patreon patron_status; "" when the user has no membership to our campaign
 	EntitledCents    int    // currently_entitled_amount_cents
 	LastChargeStatus string
@@ -105,14 +106,10 @@ type apiRelMany struct {
 	Data []apiRelRef `json:"data"`
 }
 
-// apiAttributes is a union of the user and member attribute fields we read. Absent
-// fields simply unmarshal to their zero value, so one struct serves both resource
-// types.
+// apiAttributes holds the member attribute fields we read. Personal fields
+// (email, full_name, note, ...) are left out on purpose, so they are dropped
+// at decode time and never reach a snapshot.
 type apiAttributes struct {
-	// user
-	Email    string `json:"email"`
-	FullName string `json:"full_name"`
-	// member
 	PatronStatus           string `json:"patron_status"`
 	CurrentlyEntitledCents int    `json:"currently_entitled_amount_cents"`
 	LastChargeStatus       string `json:"last_charge_status"`

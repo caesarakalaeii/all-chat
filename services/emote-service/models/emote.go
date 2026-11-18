@@ -31,6 +31,9 @@ type Emote struct {
 	URL      string `json:"url"`      // Image URL
 	Provider string `json:"provider"` // "twitch", "7tv", "bttv", "ffz"
 	Channel  string `json:"channel"`  // Channel name (lowercase)
+	// ZeroWidth marks an emote drawn on top of the emote before it instead of beside it
+	// (7TV's ZeroWidth flag). Only 7TV sets it.
+	ZeroWidth bool `json:"zero_width,omitempty"`
 }
 
 // EmoteResponse is the response structure for emote endpoints

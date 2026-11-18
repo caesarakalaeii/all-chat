@@ -103,6 +103,7 @@ import { PlatformBadge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { YouTubeOfficialApiToggle } from '@/components/overlay/YouTubeOfficialApiToggle'
 import { YouTubeStreamLinkField } from '@/components/overlay/YouTubeStreamLinkField'
+import { YouTubeVerticalCompanionToggle } from '@/components/overlay/YouTubeVerticalCompanionToggle'
 import { StatusBadge } from '@/app/dashboard/shares/components/StatusBadge'
 import { RevocationConfirmModal } from '@/app/dashboard/shares/components/RevocationConfirmModal'
 import { cn } from '@/lib/utils'
@@ -286,7 +287,7 @@ const SAMPLE_MOCK_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overla
       id: 'sample-user-1',
       username: 'retro_mod',
       display_name: 'RetroMod',
-      avatar_url: 'https://i.pravatar.cc/100?img=13',
+      avatar_url: '/sample/avatar-1.svg',
       badges: [],
       color: '#fbbf24',
     },
@@ -301,7 +302,7 @@ const SAMPLE_MOCK_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overla
       id: 'sample-user-2',
       username: 'cybercritic',
       display_name: 'CyberCritic',
-      avatar_url: 'https://i.pravatar.cc/100?img=32',
+      avatar_url: '/sample/avatar-2.svg',
       badges: [],
       color: '#f87171',
     },
@@ -316,7 +317,7 @@ const SAMPLE_MOCK_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overla
       id: 'sample-user-3',
       username: 'emote_master',
       display_name: 'EmoteMaster',
-      avatar_url: 'https://i.pravatar.cc/100?img=56',
+      avatar_url: '/sample/avatar-3.svg',
       badges: [],
       color: '#4ade80',
     },
@@ -334,7 +335,7 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       id: 'event-user-1',
       username: 'generousviewer',
       display_name: 'GenerousViewer',
-      avatar_url: 'https://i.pravatar.cc/100?img=45',
+      avatar_url: '/sample/avatar-4.svg',
       badges: [],
       color: '#ff6b6b',
     },
@@ -356,7 +357,7 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       id: 'event-user-2',
       username: 'superfan',
       display_name: 'SuperFan',
-      avatar_url: 'https://i.pravatar.cc/100?img=67',
+      avatar_url: '/sample/avatar-5.svg',
       badges: [],
       color: '#e91e63',
     },
@@ -379,7 +380,7 @@ const SAMPLE_EVENT_MESSAGES: Array<Omit<ChatMessage, 'id' | 'timestamp' | 'overl
       id: 'event-user-3',
       username: 'bigstreamer',
       display_name: 'BigStreamer',
-      avatar_url: 'https://i.pravatar.cc/100?img=23',
+      avatar_url: '/sample/avatar-6.svg',
       badges: [],
       color: '#9146ff',
     },
@@ -735,6 +736,10 @@ function StreamSelectionPanel({
         >
           {saving ? 'Saving…' : 'Save'}
         </Button>
+
+        <Separator />
+
+        <YouTubeVerticalCompanionToggle source={source} overlayId={overlayId} onSaved={onSaved} />
 
         <Separator />
 
@@ -3686,9 +3691,7 @@ export default function OverlayEditorPage({ params }: { params: Promise<{ id: st
                   {shownSection === 'goal' && <GoalEditor overlayId={id} />}
                   {shownSection === 'list' && <ListEditor overlayId={id} />}
 
-                  {shownSection === 'alerts' && (
-                    <AlertsEditor overlayId={id} isPremium={user?.is_premium ?? false} />
-                  )}
+                  {shownSection === 'alerts' && <AlertsEditor overlayId={id} />}
 
                   {shownSection === 'theme' && (
                     <div>

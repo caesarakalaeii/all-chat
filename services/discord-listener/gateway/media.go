@@ -129,18 +129,24 @@ func attachmentFromEmbed(e DiscordEmbed) (RawAttachment, bool) {
 		}
 		return att, true
 	case "image":
-		if e.Image == nil {
+		// Discord puts a pasted image link's media in thumbnail and usually leaves
+		// image unset; image is still read first for embeds that do carry it.
+		media := e.Image
+		if media == nil {
+			media = e.Thumbnail
+		}
+		if media == nil {
 			return RawAttachment{}, false
 		}
-		url := firstNonEmptyURL(e.Image.ProxyURL, e.Image.URL)
+		url := firstNonEmptyURL(media.ProxyURL, media.URL)
 		if url == "" {
 			return RawAttachment{}, false
 		}
 		return RawAttachment{
 			Type:   "image",
 			URL:    url,
-			Width:  e.Image.Width,
-			Height: e.Image.Height,
+			Width:  media.Width,
+			Height: media.Height,
 		}, true
 	default:
 		return RawAttachment{}, false
@@ -154,4 +160,16 @@ func firstNonEmptyURL(candidates ...string) string {
 		}
 	}
 	return ""
+}
+
+// hasEmbedMedia reports whether any embed carries renderable media. Discord adds
+// link previews (Tenor/Giphy GIFs, pasted image links) in a MESSAGE_UPDATE after
+// the message was created, so this is what makes such an update worth forwarding.
+func hasEmbedMedia(msg MessageCreateData) bool {
+	for _, e := range msg.Embeds {
+		if _, ok := attachmentFromEmbed(e); ok {
+			return true
+		}
+	}
+	return false
 }

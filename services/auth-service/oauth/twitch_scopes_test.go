@@ -44,6 +44,7 @@ func TestModerationScopesForActions(t *testing.T) {
 		{"duplicate engagement dedupes", []string{"engagement", "engagement"}, []string{"channel:read:polls", "channel:read:predictions"}},
 		{"modlog requests the channel.moderate v2 reads plus automod manage", []string{"modlog"}, modlogScopes},
 		{"clip requests the clip scope (chat commands, ADR-0079)", []string{"clip"}, []string{"clips:edit"}},
+		{"ads requests only the ad-break read scope", []string{"ads"}, []string{"channel:read:ads"}},
 		{
 			"modlog + delete unions and dedupes",
 			[]string{"delete", "modlog"},

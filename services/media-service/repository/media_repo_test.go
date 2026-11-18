@@ -245,3 +245,13 @@ func TestDeleteByOwner_ReturnsTheQueryError(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, deleted)
 }
+
+func TestExistingKeys_ReportsWhichKeysHaveARow(t *testing.T) {
+	db := &fakeQuerier{rows: fakeRows{rows: [][]any{{"u/1/a.png"}}}}
+
+	existing, err := NewMediaRepository(db).ExistingKeys(context.Background(), []string{"u/1/a.png", "u/2/b.png"})
+	require.NoError(t, err)
+	assert.Equal(t, map[string]bool{"u/1/a.png": true}, existing)
+
+	db.assertIssued(t, "WHERE object_key = ANY($1)", []any{[]string{"u/1/a.png", "u/2/b.png"}})
+}

@@ -36,6 +36,7 @@ import Analytics from '@/components/Analytics'
 import { JsonLd } from '@/components/JsonLd'
 import CookieBanner from '@/components/CookieBanner'
 import ImpersonationBanner from '@/components/ImpersonationBanner'
+import TosAcceptanceDialog from '@/components/TosAcceptanceDialog'
 import { SiteFooter } from '@/components/SiteFooter'
 import { LocaleSync } from '@/components/LocaleSync'
 import { ThemeSync } from '@/components/ThemeSync'
@@ -183,6 +184,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           <SiteFooter />
           <CookieBanner />
+          <TosAcceptanceDialog />
         </ToastProvider>
       </body>
     </html>

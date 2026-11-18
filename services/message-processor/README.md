@@ -9,7 +9,7 @@ The Message Processor service consumes raw chat messages from Redis Streams, nor
 
 ## Features
 
-- **Redis Streams Consumer**: Consumes from `chat:raw` stream using consumer group `message-processors`
+- **Redis Streams Consumer**: Consumes from `chat:raw` stream using consumer group `message-processor`
 - **Multi-Platform Normalization**: Converts Twitch, YouTube, Kick, TikTok messages to unified format
 - **Emote Enrichment**: Adds 7TV, BTTV, FFZ emotes via external APIs with caching
 - **Message Age Filtering**: Ignores messages >60 seconds old (configurable)
@@ -25,7 +25,7 @@ The Message Processor service consumes raw chat messages from Redis Streams, nor
 
 ```
 Redis Streams (chat:raw)
-  ↓ XREADGROUP (consumer group: message-processors)
+  ↓ XREADGROUP (consumer group: message-processor)
 Consumer (5-10 replicas)
   ↓ per-batch bounded worker pool (MP_PROCESS_CONCURRENCY, default 16 — ADR-0033)
   ↓ route by platform
@@ -81,10 +81,6 @@ LOG_LEVEL=info                      # debug, info, warn, error
 
 # Message age filtering
 MESSAGE_AGE_CUTOFF_SECONDS=60       # Ignore messages older than this (default: 60)
-
-# Consumer group settings
-CONSUMER_GROUP=message-processors   # Redis Streams consumer group name
-CONSUMER_ID=processor-1             # Unique ID for this instance (auto-generated if not set)
 
 # Enrichment concurrency (ADR-0033)
 MP_PROCESS_CONCURRENCY=16           # Messages enriched+published in parallel per read batch (default: 16).
@@ -161,7 +157,7 @@ GET /status
 {
   "status": "running",
   "consumer": {
-    "group": "message-processors",
+    "group": "message-processor",
     "consumer_id": "processor-abc123",
     "stream": "chat:raw",
     "pending_messages": 42
@@ -181,6 +177,11 @@ fixed test overlay so external tools can be tested against the WebSocket feed
 without any real streaming platform. It only ever targets the fixed test overlay
 (`TEST_STREAM_OVERLAY_ID`, seeded by migration `058`). Disable with
 `TEST_STREAM_ENABLED=false`.
+
+The public status page depends on it: status.allch.at's end-to-end chat
+delivery row (caesar-deployment `apps/workloads/status`, ADR-0085) opens a
+passive socket on this overlay and starts a 5 s run every minute. Disabling the
+generator or changing the overlay id turns that row red.
 
 **Just connect — no trigger needed.** A `DemandWatcher` reuses the api-gateway
 connection-presence signal (`overlay:connected:{id}` / the `overlay:connections`
@@ -239,14 +240,14 @@ cache-efficiency or rate-anomaly alerts.
 
 ### 1. Consume from Redis Streams
 
-**Consumer Group**: `message-processors`
+**Consumer Group**: `message-processor`
 **Stream**: `chat:raw`
 **Pattern**: XREADGROUP, then a per-batch bounded worker pool, with per-message acknowledgment (XACK)
 
 ```go
 // consumer/stream_consumer.go
 streams, _ := client.XReadGroup(ctx, &redis.XReadGroupArgs{
-    Group:    "message-processors",
+    Group:    "message-processor",
     Consumer: consumerID,
     Streams:  []string{"chat:raw", ">"},
     Count:    ReadCount, // 100
@@ -319,6 +320,9 @@ normalizers := map[string]normalizer.Normalizer{
    - Call Emote Service to resolve emote URLs
    - Support 7TV, BTTV, FFZ providers
    - Cache emote data (1-hour TTL, 95%+ hit rate)
+   - Cache key is `mp:emotes:v3:{channel}`, with `:{user_id}` appended only for
+     chatters that can have a resolvable 7TV personal set — Twitch or Kick, and
+     not synthetic (see `hasPersonalEmotes` in `enricher/emote_enricher.go`)
 
 4. **Viewer Identity Enrichment** (`enricher/viewer_badge_enricher.go`):
    - Resolve All-Chat platform identity (name_color, avatar frame/flair, admin/premium badges)
@@ -336,6 +340,7 @@ normalizers := map[string]normalizer.Normalizer{
 
 5. **Pronoun Enrichment** (`enricher/pronoun_enricher.go`):
    - Fetches pronouns from Alejo API (api.pronouns.alejo.io/v1/)
+   - **Only for overlays that display pronouns**: the lookup sends the chatter's Twitch login to a third party, so it runs only while preparing a message for an overlay whose pronoun toggle is on. For an overlay with it off nothing is looked up, sent or cached, and its messages carry no pronouns. The toggle is resolved like the OBS overlay page does it: `visual_settings.showPronouns` wins when present (on unless `"none"`), else a boolean `display_settings.show_pronouns`, else on (the default). It comes from the same `overlay_configs` read that already fetches the 7TV emote-set override (`router.OverlayConfig`), so it costs no extra query
    - Runs **after** ViewerBadgeEnricher so `TwitchUsername` is available for cross-platform lookup
    - **CHAT PATH only** — not applied to events (subscriptions, raids, etc.)
    - Cache key: `pronoun:{twitch_login}`, 24h TTL
@@ -367,7 +372,10 @@ normalizers := map[string]normalizer.Normalizer{
 - API Gateway subscribes to these channels
 - Fan-out to all overlays displaying this chat source: the chat overlays only
   (`overlay_type = 'chat'`, `router/overlay_router.go`). Alerts/goal/list overlays
-  carry the same sources but are fed by the alert-processor (ADR-0070)
+  carry the same sources but are fed by the alert-processor (ADR-0070). A shared
+  overlay reaches a recipient overlay only while a share of the sender overlay to
+  that overlay's owner is `accepted`; revoking or expiring it stops the route at
+  once, even if other people still hold a share of the same overlay
 
 ```go
 // publisher/pubsub.go
@@ -461,6 +469,19 @@ content_type?, width?, height?, thumb_url?, spoiler?, filename? }`. GIFs arrive 
 `<a:name:id>`) are parsed by the Discord normalizer into the `emotes` array with
 `provider: "discord"`.
 
+Discord adds link previews (a GIF picked from the GIF picker is a Tenor link,
+a pasted image link) after the message was sent, in a `MESSAGE_UPDATE`. The
+discord-listener republishes that message once, under the same `message_id`
+with `is_update: true`, and the processor routes it to `overlay:{id}:updates`
+(delivered as `message_update`) so the overlay replaces the link-only row.
+An update skips per-overlay dedup, send-to-all detection, the stats counters and
+the engagement/chat-command forward, all of which already ran for the original.
+
+An emote may carry `zero_width: true` (omitted otherwise). Only 7TV sets it, from
+the emote's `ZeroWidth` flag (`1 << 8`). The overlay draws such an emote on top of
+the emote right before it, when only whitespace separates them; with nothing to
+attach to it renders as an ordinary emote.
+
 Twitch chat GIFs (ADR-0037) ride the same `attachments` array: the Twitch
 normalizer parses the `gifs` tag (`start-end|gif_id|url`, populated from the
 EventSub `gif` fragment or the native IRC tag) into `type: "image"` attachments
@@ -483,6 +504,10 @@ go test ./... -cover
 go test ./normalizer -v
 go test ./enricher -v
 go test ./consumer -v
+
+# The overlay-config query against a real Postgres (skipped without the variable,
+# and in -short runs; it creates and drops its own schema). Use a disposable database.
+TEST_DATABASE_URL='postgres://user@localhost:5432/scratch?sslmode=disable' go test ./router -run TestOverlayConfigAgainstPostgres -v
 ```
 
 ---
@@ -547,7 +572,7 @@ histogram_quantile(0.95, rate(processor_message_duration_seconds_bucket[5m]))
 rate(processor_emote_cache_operations_total{operation="hit"}[5m]) / rate(processor_emote_cache_operations_total[5m])
 
 # Consumer lag (pending messages)
-redis_xpending{stream="chat:raw", group="message-processors"}
+redis_xpending{stream="chat:raw", group="message-processor"}
 ```
 
 ### Alerts
@@ -555,7 +580,7 @@ redis_xpending{stream="chat:raw", group="message-processors"}
 **High Consumer Lag**:
 ```yaml
 alert: MessageProcessorLag
-expr: redis_xpending{stream="chat:raw", group="message-processors"} > 10000
+expr: redis_xpending{stream="chat:raw", group="message-processor"} > 10000
 for: 5m
 severity: warning
 ```
@@ -578,7 +603,7 @@ severity: warning
 
 **Check lag**:
 ```bash
-redis-cli XPENDING chat:raw message-processors
+redis-cli XPENDING chat:raw message-processor
 
 # Output:
 # 1) (integer) 5420        # Total pending
@@ -700,7 +725,7 @@ kubectl logs -n allchat deployment/message-processor | grep "7TV EventAPI"
 
 ## Production Considerations
 
-1. **Consumer Group**: All replicas must use same group name (`message-processors`)
+1. **Consumer Group**: All replicas must use same group name (`message-processor`)
 2. **Consumer ID**: Must be unique per replica (auto-generated with pod name)
 3. **Emote Cache**: Monitor hit rate, target >95% (higher = lower latency)
 4. **7TV EventAPI**: Keep WebSocket connected for real-time emote updates

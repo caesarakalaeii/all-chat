@@ -49,12 +49,12 @@ func TestPronounEnricher_APIError_NegativeCachesShortTTL(t *testing.T) {
 	e := newTestPronounEnricher(t, mr, srv.URL)
 
 	// First lookup: upstream 500 → must negative-cache rather than leave the key unset.
-	if err := e.Enrich(context.Background(), makeTwitchMsg("erroruser")); err != nil {
+	if err := e.Enrich(context.Background(), makeTwitchMsg("erroruser"), true); err != nil {
 		t.Fatalf("unexpected error on first lookup: %v", err)
 	}
 	// Second lookup within the negative-cache TTL: must be served from cache, NOT re-hit
 	// the failing API.
-	if err := e.Enrich(context.Background(), makeTwitchMsg("erroruser")); err != nil {
+	if err := e.Enrich(context.Background(), makeTwitchMsg("erroruser"), true); err != nil {
 		t.Fatalf("unexpected error on second lookup: %v", err)
 	}
 

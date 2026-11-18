@@ -571,8 +571,12 @@ type Capabilities struct {
 	// are the broadcaster's and are not delegatable), a caller with no role, and any lookup that
 	// could not determine the scopes. Hiding the CTA on a cannot-tell would leave a streamer
 	// with no route to the mod log at all.
-	ModLogGranted bool               `json:"mod_log_granted"`
-	Sources       []SourceCapability `json:"sources"`
+	ModLogGranted bool `json:"mod_log_granted"`
+	// AdBreaksGranted reports whether the OWNER's Twitch credential already holds
+	// channel:read:ads, so the monitor stops offering the ad break opt-in. Same safe-answer
+	// rule as ModLogGranted: false means "offer it".
+	AdBreaksGranted bool               `json:"ad_breaks_granted"`
+	Sources         []SourceCapability `json:"sources"`
 }
 
 // ActionsForModeratorScopes maps a delegated moderator's OWN granted scopes to the actions they

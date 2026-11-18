@@ -25,6 +25,7 @@ import (
 
 	"github.com/caesar/all-chat/services/alert-processor/metrics"
 	mpmodels "github.com/caesar/all-chat/services/message-processor/models"
+	"github.com/caesar/all-chat/shared/alerts"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -281,11 +282,10 @@ func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) error
 	}
 	metrics.RecordConsumed(raw.Platform, eventTypeLabel)
 
-	// Pure chat never enters the alert path, and neither do moderation
-	// deletions: deletions are reflect-back plumbing for the chat pipeline
-	// (they remove already-rendered lines), not something an alert overlay can
-	// show. Both are ACKed so the PEL only ever holds real alert work.
-	if raw.EventType == "" || raw.EventType == "chat" || raw.EventType == "message_deletion" {
+	// Only alert event types enter the alert path. Everything else (pure chat,
+	// deletions, the owner-only moderation log, system warnings, any type
+	// nobody declared) is ACKed here so the PEL only ever holds real alert work.
+	if !isAlertEvent(raw.EventType) {
 		return c.ack(ctx, msg.ID)
 	}
 
@@ -293,6 +293,34 @@ func (c *Consumer) processMessage(ctx context.Context, msg redis.XMessage) error
 		return err // NOT acked — redelivery is the recovery
 	}
 	return c.ack(ctx, msg.ID)
+}
+
+// profileLessAlertEvents are the public platform events alert overlays render
+// without a profile (name plus value text). Chat notices like announcement and
+// twitch_notice are public because Twitch shows them in chat.
+var profileLessAlertEvents = map[string]bool{
+	// Twitch channel.chat.notification
+	"watch_streak": true, "announcement": true, "bits_badge_tier": true,
+	"gift_paid_upgrade": true, "prime_paid_upgrade": true, "pay_it_forward": true,
+	"unraid": true, "modiversary": true, "twitch_notice": true,
+	// YouTube InnerTube new member
+	"member_joined": true,
+	// TikTok
+	"like_aggregate": true, "treasure_chest": true, "super_fan_join": true,
+	"super_fan_box": true, "question": true,
+}
+
+// isAlertEvent is the alert path's allowlist: an event type with an alert
+// profile (shared/alerts) or a public profile-less one. It is an allowlist
+// because whatever passes is persisted to alert_events and published on
+// overlay:{id}:alerts to every alerts/goal/list socket, anonymous OBS sources
+// and shared-overlay recipients included: a new event type stays off alert
+// overlays until it is added here or given a profile. mod_action must never
+// be added: the moderation log (incl. AutoMod-held text) is owner-only.
+// AllEvents is the base-style pseudo type, never a real event.
+func isAlertEvent(eventType string) bool {
+	return eventType != alerts.AllEvents &&
+		(alerts.IsKnownEventType(eventType) || profileLessAlertEvents[eventType])
 }
 
 func (c *Consumer) ack(ctx context.Context, streamID string) error {

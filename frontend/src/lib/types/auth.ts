@@ -46,8 +46,21 @@ export interface User {
   updated_at: string
   // null = user has not finished/dismissed the first-run setup guide.
   onboarding_completed_at?: string | null
+  // false = the post-login Terms of Service acceptance prompt is shown.
+  tos_accepted?: boolean
 }
 
 export interface LoginResponse {
   auth_url: string
+}
+
+/** A linked platform whose OAuth tokens the account can hold (GET /auth/me/connections). */
+export type ConnectablePlatform = 'twitch' | 'youtube' | 'kick' | 'facebook' | 'instagram'
+
+export interface PlatformConnection {
+  platform: ConnectablePlatform
+  /** The channel, login or Page names the tokens belong to. */
+  accounts: string[]
+  /** The platform the account signs in with; its tokens go only with the account. */
+  is_login: boolean
 }

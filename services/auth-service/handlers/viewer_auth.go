@@ -19,6 +19,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -51,8 +52,11 @@ type ViewerIdentityRepo interface {
 	LinkViewerToUser(ctx context.Context, platform, platformUserID, userID string) error
 	GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error)
 	GetLinkedPlatforms(ctx context.Context, viewerID uuid.UUID) ([]repository.LinkedPlatform, error)
-	UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) error
+	UnlinkPlatform(ctx context.Context, viewerID uuid.UUID, platform string) ([]repository.RemovedToken, error)
 	MigratePlatformUserID(ctx context.Context, platform, oldPlatformUserID, newPlatformUserID string) error
+	EraseViewer(ctx context.Context, viewerID uuid.UUID, platform, platformUserID string) ([]repository.LinkedPlatform, error)
+	GetViewerTosAccepted(ctx context.Context, viewerID uuid.UUID) (bool, error)
+	AcceptViewerTos(ctx context.Context, viewerID uuid.UUID) error
 }
 
 // ViewerAuthHandler handles authentication for viewers who want to send messages
@@ -438,14 +442,73 @@ func (h *ViewerAuthHandler) HandleMe(c *gin.Context) {
 		return
 	}
 
-	// Return viewer info (without tokens)
+	// Return viewer info (without tokens). is_premium was refreshed from the
+	// database by FreshViewerPremium.
 	c.JSON(http.StatusOK, models.ViewerInfo{
 		ID:          session.ID,
 		Platform:    session.Platform,
 		Username:    session.Username,
 		DisplayName: session.DisplayName,
 		AvatarURL:   session.AvatarURL,
+		IsPremium:   c.GetBool("is_premium"),
+		TosAccepted: h.viewerTosAccepted(c),
 	})
+}
+
+// viewerTosAccepted reports whether the signed-in viewer accepted the Terms. It
+// fails open (true): a token without a durable viewer has nowhere to record an
+// acceptance, and a lookup failure must not lock the viewer out behind a prompt
+// that cannot be dismissed.
+func (h *ViewerAuthHandler) viewerTosAccepted(c *gin.Context) bool {
+	viewerID, err := uuid.Parse(c.GetString("viewer_id"))
+	if err != nil {
+		return true
+	}
+	accepted, err := h.identityRepo.GetViewerTosAccepted(c.Request.Context(), viewerID)
+	if err != nil {
+		h.logger.Warn("Failed to read viewer terms acceptance", zap.Error(err))
+		return true
+	}
+	return accepted
+}
+
+// HandleAcceptTos records the signed-in viewer's acceptance of the Terms of
+// Service and Privacy Policy, the viewer counterpart of AuthHandler.HandleAcceptTos.
+//
+// POST /viewer/me/tos-acceptance
+func (h *ViewerAuthHandler) HandleAcceptTos(c *gin.Context) {
+	viewerID, err := uuid.Parse(c.GetString("viewer_id"))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	if err := h.identityRepo.AcceptViewerTos(c.Request.Context(), viewerID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Viewer not found"})
+			return
+		}
+		h.logger.Error("Failed to record viewer terms acceptance", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to record terms acceptance"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tos_accepted": true})
+}
+
+// FreshViewerPremium replaces the is_premium claim baked into a viewer JWT at
+// sign-in with the current viewers.is_premium, so an admin grant, a new
+// subscription or a lapse takes effect on the next request instead of when the
+// token expires. On a lookup failure the claim stands.
+func FreshViewerPremium(repo interface {
+	GetViewerIsPremium(ctx context.Context, viewerID uuid.UUID) (bool, error)
+}) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if viewerID, err := uuid.Parse(c.GetString("viewer_id")); err == nil {
+			if isPremium, err := repo.GetViewerIsPremium(c.Request.Context(), viewerID); err == nil {
+				c.Set("is_premium", isPremium)
+			}
+		}
+		c.Next()
+	}
 }
 
 // HandleLogout deletes the viewer session
@@ -491,6 +554,69 @@ func (h *ViewerAuthHandler) HandleLogout(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+}
+
+// HandleDeleteViewer erases the signed-in viewer's own data (ADR-0088): the viewer
+// identity, every linked platform and session (with its sent-message log), cosmetics,
+// points balances and ledger, poll votes, prediction wagers, and the viewer Patreon
+// connection and subscription. Rows engagement-service created for this platform
+// account without a login (chat votes, bets, earned points) are part of it.
+//
+// DELETE /viewer/me. Requires a viewer JWT; a streamer token has no viewer identity
+// and is refused. The token is revoked only after the erasure committed, so a failed
+// attempt can be retried with it.
+func (h *ViewerAuthHandler) HandleDeleteViewer(c *gin.Context) {
+	platform, platformUserID := c.GetString("platform"), c.GetString("platform_user_id")
+	if c.GetString("session_id") == "" || platform == "" || platformUserID == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+	// Tokens issued before viewer identities existed carry no viewer_id; the platform
+	// identity still finds the viewer.
+	viewerID := uuid.Nil
+	if raw := c.GetString("viewer_id"); raw != "" {
+		parsed, err := uuid.Parse(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid viewer ID"})
+			return
+		}
+		viewerID = parsed
+	}
+
+	erased, err := h.identityRepo.EraseViewer(c.Request.Context(), viewerID, platform, platformUserID)
+	if err != nil {
+		h.logger.Error("Failed to erase viewer data", zap.String("viewer_id", viewerID.String()), zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete viewer data"})
+		return
+	}
+
+	// Revoke the token this request authenticated with: the Authorization bearer, the
+	// only header the auth middleware reads. Not blacklistableSessionToken, which
+	// prefers X-Access-Token: that is the streamer session cookie, a different login.
+	if token, ok := strings.CutPrefix(c.GetHeader("Authorization"), "Bearer "); ok && token != "" {
+		if err := h.redis.Set(c.Request.Context(), "blacklist:"+token, "1", h.jwtExpiry).Err(); err != nil {
+			h.logger.Warn("Failed to blacklist viewer token after erasure", zap.Error(err))
+		}
+	}
+	dropViewerIdentityCache(c.Request.Context(), h.redis, h.logger, erased)
+
+	c.JSON(http.StatusOK, gin.H{"message": "Viewer data deleted"})
+}
+
+// dropViewerIdentityCache deletes the message-processor's per-identity viewer cache
+// (viewer:identity:{platform}:{platform_user_id}, 5 min TTL) so a changed or erased
+// viewer stops showing stale cosmetics in chat right away. Best-effort.
+func dropViewerIdentityCache(ctx context.Context, rdb redis.Cmdable, logger *zap.Logger, identities []repository.LinkedPlatform) {
+	if len(identities) == 0 {
+		return
+	}
+	keys := make([]string, 0, len(identities))
+	for _, id := range identities {
+		keys = append(keys, fmt.Sprintf("viewer:identity:%s:%s", id.Platform, id.PlatformUserID))
+	}
+	if err := rdb.Del(ctx, keys...).Err(); err != nil {
+		logger.Warn("Failed to invalidate viewer identity cache", zap.Strings("keys", keys), zap.Error(err))
+	}
 }
 
 // getOrCreateViewerSession gets or creates a viewer session
@@ -1268,7 +1394,8 @@ func (h *ViewerAuthHandler) HandleUnlinkPlatform(c *gin.Context) {
 		return
 	}
 
-	if err := h.identityRepo.UnlinkPlatform(c.Request.Context(), viewerID, targetPlatform); err != nil {
+	stored, err := h.identityRepo.UnlinkPlatform(c.Request.Context(), viewerID, targetPlatform)
+	if err != nil {
 		switch err {
 		case repository.ErrLastPlatform:
 			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -1281,7 +1408,48 @@ func (h *ViewerAuthHandler) HandleUnlinkPlatform(c *gin.Context) {
 		return
 	}
 
+	// The unlinked sessions are already deleted; revoke their tokens at the provider too.
+	revokeAtProvider(c.Request.Context(), h.revokerFor(targetPlatform), h.decryptStored(stored),
+		h.logger.With(zap.String("platform", targetPlatform)))
+
 	c.JSON(http.StatusOK, gin.H{"message": "Platform unlinked successfully"})
+}
+
+// revokerFor returns the viewer OAuth client that can revoke a token of platform,
+// or nil when that provider is not configured.
+func (h *ViewerAuthHandler) revokerFor(platform string) TokenRevoker {
+	switch {
+	case platform == "twitch" && h.twitchProvider != nil:
+		return h.twitchProvider
+	case platform == "youtube" && h.youtubeProvider != nil:
+		return h.youtubeProvider
+	case platform == "kick" && h.kickProvider != nil:
+		return h.kickProvider
+	}
+	return nil
+}
+
+// decryptStored decrypts viewer-session tokens as stored. A token that does not
+// decrypt is dropped: it is already deleted and cannot be revoked anyway.
+func (h *ViewerAuthHandler) decryptStored(stored []repository.RemovedToken) []repository.RemovedToken {
+	if h.cipher == nil {
+		return stored
+	}
+	decrypt := func(s string) string {
+		if s == "" {
+			return ""
+		}
+		plain, err := h.cipher.Decrypt(s)
+		if err != nil {
+			return ""
+		}
+		return plain
+	}
+	out := make([]repository.RemovedToken, 0, len(stored))
+	for _, t := range stored {
+		out = append(out, repository.RemovedToken{AccessToken: decrypt(t.AccessToken), RefreshToken: decrypt(t.RefreshToken)})
+	}
+	return out
 }
 
 // sanitizeRedirectPath ensures redirect_to is a safe relative path (starts with /,

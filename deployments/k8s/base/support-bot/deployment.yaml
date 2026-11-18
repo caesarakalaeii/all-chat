@@ -103,6 +103,21 @@ spec:
                   name: allchat-secrets
                   key: SUPPORT_BOT_LLM_API_KEY
                   optional: true
+            # Claude Code on the subscription (ADR-0093): a `claude setup-token` token.
+            # When set it wins over ANTHROPIC_API_KEY and LOCAL_LLM_*.
+            - name: CLAUDE_CODE_OAUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: SUPPORT_BOT_CLAUDE_OAUTH_TOKEN
+                  optional: true
+            # Claude (ADR-0093). When set, the bot runs on Claude and LOCAL_LLM_* is ignored.
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: allchat-secrets
+                  key: SUPPORT_BOT_ANTHROPIC_API_KEY
+                  optional: true
             # --- GitHub ---
             - name: GITHUB_TOKEN
               valueFrom:

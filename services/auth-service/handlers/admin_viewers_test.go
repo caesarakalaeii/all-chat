@@ -22,46 +22,22 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
-
-	"github.com/caesar/all-chat/services/auth-service/models"
-	"github.com/caesar/all-chat/services/auth-service/repository"
 )
 
-// mockViewerRepo implements the subset of ViewerRepository used by AdminViewerHandler.
-type mockViewerRepo struct {
-	repository.ViewerRepository
-	listAllFn          func(limit, offset int) ([]models.ViewerSession, error)
-	setViewerPremiumFn func(sessionID uuid.UUID, isPremium bool, ttl *time.Duration) error
-}
-
-func setupAdminViewerRouter(t *testing.T, mock *mockViewerRepo) *gin.Engine {
-	t.Helper()
-	gin.SetMode(gin.TestMode)
-	r := gin.New()
-	logger := zap.NewNop()
-	handler := &AdminViewerHandler{log: logger, viewerRepo: &mock.ViewerRepository}
-	// We can't easily mock the repo through the real handler since it takes a concrete type.
-	// Instead, test via HTTP against the real handler with a test DB.
-	// For now, test request validation.
-	r.POST("/admin/viewers/:session_id/premium", handler.HandleSetViewerPremium)
-	return r
-}
-
-func TestHandleSetViewerPremium_InvalidSessionID(t *testing.T) {
+func TestHandleSetViewerPremium_InvalidViewerID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	logger := zap.NewNop()
 	// Create handler with nil repo — we expect validation to fail before DB access
 	handler := &AdminViewerHandler{log: logger, viewerRepo: nil}
-	r.POST("/admin/viewers/:session_id/premium", handler.HandleSetViewerPremium)
+	r.POST("/admin/viewers/identities/:viewer_id/premium", handler.HandleSetViewerPremium)
 
 	body := `{"is_premium": true}`
-	req := httptest.NewRequest(http.MethodPost, "/admin/viewers/not-a-uuid/premium", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/admin/viewers/identities/not-a-uuid/premium", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -74,7 +50,7 @@ func TestHandleSetViewerPremium_InvalidSessionID(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp["error"] != "invalid session ID" {
+	if resp["error"] != "invalid viewer ID" {
 		t.Errorf("unexpected error: %s", resp["error"])
 	}
 }
@@ -84,10 +60,10 @@ func TestHandleSetViewerPremium_InvalidBody(t *testing.T) {
 	r := gin.New()
 	logger := zap.NewNop()
 	handler := &AdminViewerHandler{log: logger, viewerRepo: nil}
-	r.POST("/admin/viewers/:session_id/premium", handler.HandleSetViewerPremium)
+	r.POST("/admin/viewers/identities/:viewer_id/premium", handler.HandleSetViewerPremium)
 
-	sessionID := uuid.New().String()
-	req := httptest.NewRequest(http.MethodPost, "/admin/viewers/"+sessionID+"/premium", bytes.NewBufferString("not json"))
+	viewerID := uuid.New().String()
+	req := httptest.NewRequest(http.MethodPost, "/admin/viewers/identities/"+viewerID+"/premium", bytes.NewBufferString("not json"))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -130,16 +106,16 @@ func TestHandleSetViewerPremium_RejectsBadDuration(t *testing.T) {
 	logger := zap.NewNop()
 	handler := &AdminViewerHandler{log: logger, viewerRepo: nil}
 	r := gin.New()
-	r.POST("/admin/viewers/:session_id/premium", handler.HandleSetViewerPremium)
+	r.POST("/admin/viewers/identities/:viewer_id/premium", handler.HandleSetViewerPremium)
 
-	sessionID := uuid.New().String()
+	viewerID := uuid.New().String()
 	// 0, negative, and 11 years (over the ~10y cap).
 	for _, body := range []string{
 		`{"is_premium":true,"duration_seconds":0}`,
 		`{"is_premium":true,"duration_seconds":-1}`,
 		`{"is_premium":true,"duration_seconds":346896000}`,
 	} {
-		req := httptest.NewRequest(http.MethodPost, "/admin/viewers/"+sessionID+"/premium", bytes.NewBufferString(body))
+		req := httptest.NewRequest(http.MethodPost, "/admin/viewers/identities/"+viewerID+"/premium", bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)

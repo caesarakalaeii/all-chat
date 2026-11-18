@@ -36,11 +36,11 @@ export const OVERLAY_KINDS: readonly OverlayType[] = ['chat', 'alerts', 'goal', 
 export const CREATABLE_OVERLAY_KINDS: readonly OverlayType[] = OVERLAY_KINDS
 
 /**
- * Creatable kinds behind a premium gate (ADR-0008): alerts_overlay (migration
- * 108), goal_overlay (110) and list_overlay (111), which overlay-manager
- * enforces on create and clone.
+ * Creatable kinds behind a premium gate (ADR-0008): goal_overlay (migration
+ * 110) and list_overlay (111), which overlay-manager enforces on create and
+ * clone. alerts_overlay (108) was opened to everyone on 2026-11-15.
  */
-const PREMIUM_OVERLAY_KINDS: readonly OverlayType[] = ['alerts', 'goal', 'list']
+const PREMIUM_OVERLAY_KINDS: readonly OverlayType[] = ['goal', 'list']
 
 /**
  * The kinds to offer this user. The server re-checks the gate, so this only

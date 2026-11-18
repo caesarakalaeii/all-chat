@@ -441,7 +441,7 @@ describe('admin viewers page copy', () => {
   it('keeps the page header and the total count', () => {
     expect(t('admin.viewers.heading')).toBe('Viewer Management')
     expect(t('admin.viewers.intro')).toBe(
-      'Search viewer sessions, inspect activity, and manage bans and premium'
+      'Search viewers, including chatters who never signed in, inspect activity, and manage bans and premium'
     )
     // The count and the word 'matching' were siblings in JSX. One key, so a
     // language that puts the count last can.
@@ -466,7 +466,8 @@ describe('admin viewers page copy', () => {
   })
 
   it('keeps the table caption, column headers and empty state', () => {
-    expect(t('admin.viewers.empty')).toBe('No viewer sessions match your search or filters.')
+    expect(t('admin.viewers.empty')).toBe('No viewers match your search or filters.')
+    expect(t('admin.viewers.neverSignedIn')).toBe('Not signed in')
     expect(t('admin.viewers.tableCaption')).toBe('Viewers')
     expect(t('admin.viewers.columnViewer')).toBe('Viewer')
     expect(t('admin.viewers.columnPlatform')).toBe('Platform')
@@ -517,14 +518,16 @@ describe('admin viewers page copy', () => {
     expect(t('admin.viewers.activityTitle', { username: 'kate' })).toBe(
       'Activity for \u201Ckate\u201D'
     )
+    // Sent messages are deleted after one hour (ADR-0089), so the dialog only
+    // ever covers the last hour and must say so.
     expect(t('admin.viewers.activityDescription')).toBe(
-      'Messages this viewer has sent through All-Chat, and whose chats they appear in.'
+      'Messages this viewer sent through All-Chat in the last hour, and whose chats they appear in. Older messages are deleted.'
     )
-    expect(t('admin.viewers.activityTotalMessages')).toBe('Total messages')
+    expect(t('admin.viewers.activityTotalMessages')).toBe('Messages in the last hour')
     expect(t('admin.viewers.activityLastMessage')).toBe('Last message')
     expect(t('admin.viewers.activityStreamerFallback')).toBe('View streamer')
     expect(t('admin.viewers.activityOverlayLink')).toBe('overlay')
-    expect(t('admin.viewers.activityEmpty')).toBe('No message activity recorded for this viewer.')
+    expect(t('admin.viewers.activityEmpty')).toBe('No messages from this viewer in the last hour.')
     expect(t('admin.viewers.activityClose')).toBe('Close')
   })
 

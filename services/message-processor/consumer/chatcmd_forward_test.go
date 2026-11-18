@@ -52,6 +52,15 @@ func TestChatCommandForwarding(t *testing.T) {
 	c.forwardEngagementCommand(other)
 	assert.Len(t, c.engagementCh, 0, "ordinary chat on a channel without commands is not forwarded")
 
+	// A late-media update repeats a message that was already forwarded: a second
+	// copy would fire the command (or count a vote) twice.
+	update := &models.RawChatMessage{Platform: "discord", ChannelID: "caesarlp", Text: "!clip", IsUpdate: true}
+	_, err = mr.SAdd(models.ChatCommandChannelsKey, "discord:caesarlp")
+	require.NoError(t, err)
+	c.refreshChatCommandChannels(ctx)
+	c.forwardEngagementCommand(update)
+	assert.Len(t, c.engagementCh, 0, "a message update is never forwarded")
+
 	raw := &models.RawChatMessage{
 		MessageID: "m1", Platform: "twitch", ChannelID: "caesarlp", UserID: "42", Username: "bob",
 		Text: "clip that", Tags: map[string]string{"badges": "vip/1", "display-name": "Bob"},

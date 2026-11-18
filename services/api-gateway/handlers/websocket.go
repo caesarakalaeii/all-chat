@@ -393,6 +393,10 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 	// viewerParticipant/engagement-only tabs and passive render-only overlays attach
 	// WITHOUT the overlay:connected demand signal so they can't sustain demand-based
 	// upstream capture with no owner going live (P2-3, and the 24/7 IRL OBS case).
+	// Live frames are held from here until the connect burst is out, so a
+	// broadcast during the replay fetch cannot reach the client before the
+	// connected frame or the replay it belongs after.
+	wsConn.HoldLive()
 	if skipDemand {
 		h.wsManager.AddConnectionNoDemand(context.Background(), wsConn)
 	} else {
@@ -476,6 +480,7 @@ func (h *WebSocketHandler) HandleOverlayConnection(c *gin.Context) {
 			}
 		}
 	}
+	wsConn.ReleaseLive()
 
 	h.logger.Info("WebSocket connection established",
 		zap.String("overlay_id", overlayID),

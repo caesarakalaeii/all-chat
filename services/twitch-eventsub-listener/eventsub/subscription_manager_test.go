@@ -20,9 +20,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -227,4 +229,62 @@ func TestHasSubscriptionIsScopedPerBroadcasterAndType(t *testing.T) {
 	require.True(t, sm.HasSubscription("b-1", "channel.chat.message"))
 	require.False(t, sm.HasSubscription("b-1", "channel.chat.notification"), "different type")
 	require.False(t, sm.HasSubscription("b-2", "channel.chat.message"), "different broadcaster")
+}
+
+// Twitch can invalidate the app access token long before its expires_in. The cached token must be
+// discarded on the first 401 so the next call fetches a new one; before this, every create and
+// delete kept sending the dead token until the pod restarted (2026-11-03 outage).
+func TestAppToken401EvictsCachedTokenAndRecovers(t *testing.T) {
+	var mu sync.Mutex
+	tokenRequests := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/oauth2/token") {
+			mu.Lock()
+			tokenRequests++
+			n := tokenRequests
+			mu.Unlock()
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"access_token":"token-` + strconv.Itoa(n) + `","expires_in":5000000,"token_type":"bearer"}`))
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer token-2" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"error":"Unauthorized","status":401,"message":"Invalid OAuth token"}`))
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"data":[{"id":"sub-1","status":"webhook_callback_verification_pending","type":"stream.online"}],"total":1}`))
+	}))
+	defer server.Close()
+
+	sm := NewSubscriptionManager("client-id", "client-secret", "webhook-secret", "https://example.com/callback", zap.NewNop())
+	sm.apiURL = server.URL + "/helix/eventsub/subscriptions"
+	sm.tokenURL = server.URL + "/oauth2/token"
+	ctx := context.Background()
+
+	_, err := sm.SubscribeToStreamOnline(ctx, "b-1")
+	require.ErrorContains(t, err, "401", "the rejected token surfaces as a failure")
+
+	id, err := sm.SubscribeToStreamOnline(ctx, "b-1")
+	require.NoError(t, err, "the next call must fetch a new token instead of reusing the rejected one")
+	require.Equal(t, "sub-1", id)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, 2, tokenRequests)
+}
+
+// A 401 that answered an older token must not evict a token another call has already replaced:
+// that would throw away a working token and cost an extra client-credentials round trip.
+func TestEvictAppTokenIgnoresStaleToken(t *testing.T) {
+	sm := NewSubscriptionManager("client-id", "client-secret", "webhook-secret", "https://example.com/callback", zap.NewNop())
+	sm.accessToken = "current"
+	sm.tokenExpiry = time.Now().Add(time.Hour)
+
+	sm.evictAppToken("older")
+	require.Equal(t, "current", sm.accessToken)
+
+	sm.evictAppToken("current")
+	require.Empty(t, sm.accessToken)
 }

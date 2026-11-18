@@ -50,6 +50,8 @@ export type EventType =
   | 'prime_paid_upgrade'
   | 'pay_it_forward'
   | 'twitch_notice'
+  // Twitch ad break start (channel.ad_break.begin), owner-only opt-in notice
+  | 'ad_break'
   // Twitch moderation log (channel.moderate) and AutoMod holds
   // (automod.message.hold / automod.message.update), carried as one event type.
   | 'mod_action'
@@ -204,6 +206,8 @@ export interface Emote {
   provider: 'twitch' | '7tv' | 'bttv' | 'ffz' | 'youtube' | 'discord' | 'tiktok' | 'altstream'
   url: string
   positions: number[][]
+  /** 7TV overlay emote: drawn on top of the emote before it, not beside it. */
+  zero_width?: boolean
 }
 
 /**

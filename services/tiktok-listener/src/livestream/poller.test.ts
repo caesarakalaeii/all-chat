@@ -81,3 +81,41 @@ describe('LiveStreamPoller stuck recovery', () => {
     expect(mgr.parkRemainingMs('deaf')).toBe(24 * 60_000);
   });
 });
+
+describe('LiveStreamPoller target removal', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // The poller target goes away on every teardown — leadership loss, rebalance
+  // release, demand removal — and a budget park outlives all of them.
+  it('keeps a live budget park when the target is removed', () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const mgr = new BackoffManager(noopLogger);
+    const statusChecker = { clearCache: vi.fn() };
+    const poller = new LiveStreamPoller(statusChecker as never, mgr, noopLogger);
+
+    poller.addTarget('parked', 'overlay-1');
+    mgr.recordBudgetRefusal('parked', 20 * 60_000);
+    poller.removeTarget('parked');
+
+    expect(mgr.parkRemainingMs('parked')).toBe(20 * 60_000);
+    now.mockReturnValue(1_000_000 + 20 * 60_000);
+    expect(mgr.parkRemainingMs('parked')).toBe(0);
+  });
+
+  it('forgets an unparked room entirely when the target is removed', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const mgr = new BackoffManager(noopLogger);
+    const statusChecker = { clearCache: vi.fn() };
+    const poller = new LiveStreamPoller(statusChecker as never, mgr, noopLogger);
+
+    poller.addTarget('plain', 'overlay-2');
+    mgr.recordOfflineCheck('plain');
+    poller.removeTarget('plain');
+
+    expect(mgr.getAllUsernames()).not.toContain('plain');
+  });
+});

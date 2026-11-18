@@ -94,21 +94,30 @@ export const onboarding = {
     bubbleColorsTitle: 'Differently-coloured bubbles',
     bubbleColorsBody:
       'Give each platform its own bubble colour, or cycle a palette down the feed, under Bubble colors in Appearance. Free.',
+    adBreaksTitle: 'Twitch ad break notices',
+    adBreaksBody:
+      'The monitor’s Activity & Events shows when a Twitch ad break starts, scheduled or manual, so you can pause. Turn it on from the banner in the monitor. Free.',
     alertsOverlayTitle: 'Alert overlays',
     alertsOverlayBody:
-      'Pop up subs, bits, raids, Super Chats and TikTok gifts on stream as their own OBS source, with a test button to line them up.',
+      'Pop up subs, bits, raids, Super Chats and TikTok gifts on stream as their own OBS source, with a test button to line them up. Free.',
     alertsEditorTitle: 'Custom alerts editor',
     alertsEditorBody:
-      'Give every alert its own text, GIF and sound, search GIFs right in the editor, or write your own HTML, CSS and JavaScript for it.',
+      'Give every alert its own text, GIF and sound, search GIFs right in the editor, or write your own HTML, CSS and JavaScript for it. Free.',
     goalOverlayTitle: 'Goal overlays',
     goalOverlayBody:
       'A progress bar toward a follower, subscriber, bits or Super Chat goal that fills up live on stream.',
     listOverlayTitle: 'Leaderboard overlays',
     listOverlayBody:
       'Rank your top cheerers, gifters or Super Chatters of the last 30 days on stream, updated with every new one.',
+    mediaUploadsTitle: 'Upload your own media',
+    mediaUploadsBody:
+      'Premium: upload your own images, GIFs and sounds for alerts and command alerts. Pasting a link and searching GIFs stay free.',
     chatCommandsTitle: 'Chat commands',
     chatCommandsBody:
-      'Custom !commands and keyword triggers for every chat: reply as you, clip your Twitch stream on cue, show an image on your alerts overlay, and use variables, web lookups or JavaScript in replies. Replies in YouTube chat are premium.',
+      'Custom !commands and keyword triggers for every chat: reply as you, clip your Twitch stream on cue, show your own alert (image, sound, text) on your alerts overlay, and use variables, web lookups or JavaScript in replies. Replies in YouTube chat are premium.',
+    youtubeCommandRepliesTitle: 'Command replies in YouTube chat',
+    youtubeCommandRepliesBody:
+      'Premium: your chat commands and timers answer in YouTube chat too, not only on Twitch and Kick.',
     customChatBotTitle: 'Your own chat bot',
     customChatBotBody:
       'Premium: connect your own bot account on Twitch, Kick or YouTube, and command replies and timers go out under your bot’s name.',

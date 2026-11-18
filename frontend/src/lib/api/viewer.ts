@@ -126,10 +126,34 @@ export const viewerApi = {
   },
 
   /**
+   * Record the viewer's acceptance of the Terms of Service and Privacy Policy
+   * (viewers.tos_accepted).
+   */
+  async acceptTos(): Promise<{ tos_accepted: boolean }> {
+    return viewerApiClient.post('/api/v1/auth/viewer/me/tos-acceptance', {})
+  },
+
+  /**
    * Logout viewer (invalidate token on server)
    */
   async logout(): Promise<void> {
     await viewerApiClient.post('/api/v1/auth/viewer/logout', {})
+  },
+
+  /**
+   * Permanently erase the signed-in viewer's own data (ADR-0088). The server revokes
+   * the token; the caller clears it locally with viewerLogout().
+   */
+  async deleteViewerData(): Promise<void> {
+    await viewerApiClient.delete('/api/v1/auth/viewer/me')
+  },
+
+  /**
+   * Everything stored about the signed-in viewer identity, as the JSON export
+   * the privacy policy promises (DSGVO Art. 15/20).
+   */
+  async exportData(): Promise<unknown> {
+    return viewerApiClient.get<unknown>('/api/v1/auth/viewer/data-export')
   },
 
   /**

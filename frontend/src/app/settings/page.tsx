@@ -32,6 +32,8 @@ import { VisuallyHidden } from '@/components/ui/visually-hidden'
 import { toastManager } from '@/lib/toast'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { AmbassadorSettingsCard } from '@/components/settings/AmbassadorSettingsCard'
+import { ConnectedPlatformsCard } from '@/components/settings/ConnectedPlatformsCard'
+import { DataExportButton } from '@/components/settings/DataExportButton'
 import { LanguageSettingsCard } from '@/components/settings/LanguageSettingsCard'
 import {
   getGuilds,
@@ -239,6 +241,8 @@ function SettingsContent() {
           </div>
         </div>
 
+        <ConnectedPlatformsCard />
+
         <LanguageSettingsCard />
 
         {/* Setup guide section */}
@@ -306,6 +310,7 @@ function SettingsContent() {
           <h2 className="mb-4 text-lg">{t('settings.index.privacyHeading')}</h2>
           <p className="text-sub mb-4 text-sm">{t('settings.index.privacyBody')}</p>
           <div className="flex flex-col gap-3">
+            <DataExportButton load={authApi.exportData} filename="allchat-data-export" />
             <Link href="/legal/privacy" className="lanes-btn ghost justify-between">
               <span>{t('settings.index.privacyPolicyLink')}</span>
               <span aria-hidden="true">→</span>

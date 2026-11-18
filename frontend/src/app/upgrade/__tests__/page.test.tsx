@@ -33,9 +33,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-// The rows for the beta-only overlay kinds and features, and for alerts, released to every host (lib/platform-availability.ts).
-const betaOnlyStems = ['goalOverlay', 'listOverlay', 'chatCommands'] as const
-const alertsStems = ['alertsOverlay', 'alertsEditor'] as const
+// The rows for the beta-only overlay kinds (hidden here, outside beta.allch.at).
+const betaOnlyStems = ['goalOverlay', 'listOverlay'] as const
 
 describe('UpgradePage premium feature list', () => {
   it('lists the official YouTube API mode', () => {
@@ -47,17 +46,17 @@ describe('UpgradePage premium feature list', () => {
     expect(screen.getByText(t('marketing.upgrade.youtubeOfficialApiBody'))).toBeInTheDocument()
   })
 
-  it('lists the alerts overlay outside the beta host', () => {
+  it('lists media uploads, YouTube command replies and the custom chat bot on every host', () => {
     render(<UpgradePage />)
 
-    for (const stem of alertsStems) {
+    for (const stem of ['mediaUploads', 'youtubeCommandReplies', 'customChatBot'] as const) {
       expect(
         screen.getByRole('heading', { name: t(`marketing.upgrade.${stem}Title`) })
       ).toBeInTheDocument()
     }
   })
 
-  it('omits the goal and list overlays and chat commands outside the beta host', () => {
+  it('omits the goal and list overlays outside the beta host', () => {
     render(<UpgradePage />)
 
     for (const stem of betaOnlyStems) {
@@ -67,7 +66,7 @@ describe('UpgradePage premium feature list', () => {
     }
   })
 
-  it('lists the goal and list overlays and chat commands on beta.allch.at', () => {
+  it('lists the goal and list overlays on beta.allch.at', () => {
     vi.spyOn(window, 'location', 'get').mockReturnValue({
       ...window.location,
       hostname: 'beta.allch.at',

@@ -17,6 +17,8 @@
 package handlers
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,7 +26,9 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
 
@@ -252,4 +256,70 @@ func TestRedirectToFrontendWithError_NoPlatform(t *testing.T) {
 	if loc := w.Header().Get("Location"); strings.Contains(loc, "platform=") {
 		t.Errorf("redirect Location %q should not contain platform param", loc)
 	}
+}
+
+// The viewer JWT bakes is_premium in at sign-in and lives for a day, so an admin
+// grant (or a lapse) only took effect at the next sign-in. FreshViewerPremium
+// replaces the claim with the current database value.
+func TestFreshViewerPremium_ReplacesStaleClaim(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	viewerID := uuid.New()
+	for _, tc := range []struct {
+		name        string
+		claim       bool
+		dbPremium   bool
+		dbErr       error
+		wantPremium bool
+	}{
+		{"grant after sign-in", false, true, nil, true},
+		{"revoke after sign-in", true, false, nil, false},
+		{"lookup failure keeps the claim", true, false, errors.New("db down"), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &mockViewerIdentityRepo{getIsPremium: func(_ context.Context, id uuid.UUID) (bool, error) {
+				assert.Equal(t, viewerID, id)
+				return tc.dbPremium, tc.dbErr
+			}}
+			r := gin.New()
+			var got any
+			r.GET("/viewer/x", func(c *gin.Context) {
+				c.Set("viewer_id", viewerID.String())
+				c.Set("is_premium", tc.claim)
+				c.Next()
+			}, FreshViewerPremium(repo), func(c *gin.Context) { got, _ = c.Get("is_premium") })
+			r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/viewer/x", nil))
+			assert.Equal(t, tc.wantPremium, got)
+		})
+	}
+}
+
+func TestHandleViewerAcceptTos(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	viewerID := uuid.New()
+	var accepted uuid.UUID
+	h := newResolveTestHandler(&mockViewerIdentityRepo{acceptTos: func(_ context.Context, id uuid.UUID) error {
+		accepted = id
+		return nil
+	}})
+
+	for _, tc := range []struct {
+		name     string
+		viewerID string
+		wantCode int
+	}{
+		{"records acceptance", viewerID.String(), http.StatusOK},
+		{"no viewer identity", "", http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := gin.New()
+			r.POST("/viewer/me/tos-acceptance", func(c *gin.Context) {
+				c.Set("viewer_id", tc.viewerID)
+				c.Next()
+			}, h.HandleAcceptTos)
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/viewer/me/tos-acceptance", nil))
+			assert.Equal(t, tc.wantCode, w.Code)
+		})
+	}
+	assert.Equal(t, viewerID, accepted)
 }

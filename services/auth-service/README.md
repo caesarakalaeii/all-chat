@@ -96,6 +96,10 @@ OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
 # allchat_active_users{window=...} are re-sampled from the database
 USAGE_SAMPLE_INTERVAL_SECONDS=120
 
+# Public base of uploaded media, used for the file URLs in the data export.
+# Same value as media-service's; defaults to production's.
+MEDIA_PUBLIC_URL=https://media.allch.at/allchat-media
+
 # Application
 APP_VERSION=dev
 ENVIRONMENT=development
@@ -236,7 +240,8 @@ Authorization: Bearer <jwt-token>
 ### User Profile
 
 ```bash
-# Current user (includes onboarding_completed_at; null = first-run setup guide is shown)
+# Current user (includes onboarding_completed_at; null = first-run setup guide is shown,
+# and tos_accepted; false = the post-login Terms of Service prompt is shown)
 GET /api/v1/auth/me
 Authorization: Bearer <jwt-token>
 
@@ -246,7 +251,187 @@ PATCH /api/v1/auth/me/onboarding
 Authorization: Bearer <jwt-token>
 Body: { "completed": true }
 → Returns: { "onboarding_completed_at": "2026-07-17T12:00:00Z" }
+
+# Accept the current Terms of Service and Privacy Policy (sets users.tos_accepted = TRUE
+# and stamps tos_accepted_at). Rejected with 403 during admin impersonation and for
+# personal access tokens. There is no API to un-accept. Migration 122 marked every
+# existing account as accepted and makes new accounts accept on their first login;
+# when the terms change, re-arm the prompt for everyone in the database with
+# `UPDATE users SET tos_accepted = FALSE;`.
+POST /api/v1/auth/me/tos-acceptance
+Authorization: Bearer <jwt-token>
+→ Returns: { "tos_accepted": true }
+
+# Delete the account (ADR-0088). Session only: a personal access token is refused (403).
+DELETE /api/v1/auth/me
+Authorization: Bearer <jwt-token>
+→ Returns: { "message": "Account deleted successfully" }
 ```
+
+### Erasure (ADR-0088)
+
+`DELETE /api/v1/auth/me` runs one transaction (`repository/erasure.go`). It deletes the
+`users` row, and the foreign keys take everything keyed to the account or its overlays
+with it (`ON DELETE CASCADE`). Where another person's record must survive, the key is
+`SET NULL` instead: a ban outlives the admin who issued it (migration 119). The
+transaction also erases what has no foreign key to cascade through:
+
+- the user's own viewer identity: every viewer mapped to a platform account the user has
+  proven it controls (its login ids, the Twitch, Kick and YouTube accounts it connected,
+  the viewer sessions the viewer callback linked to it), with all of that viewer's data
+  (see below);
+- the overlays' alert history (`alert_events`) and YouTube quota bookkeeping
+  (`youtube_quota_audit_log`, `youtube_channel_quota`).
+
+The moderation audit log (`moderation_actions`) is kept: it must survive account
+deletion for abuse forensics (ADR-0017). Uploaded media files are removed from the
+bucket by media-service's orphan sweep once their `media_objects` rows are gone.
+
+`DELETE /api/v1/auth/viewer/me` erases the signed-in viewer's own data: the `viewers` row
+and, through it, every linked platform identity, cosmetics, points balances and ledger,
+poll votes, prediction wagers and the viewer Patreon token and subscription, plus every
+viewer session (tokens) of those identities and the messages sent through them
+(`viewer_message_history`). It also covers a viewer engagement-service created without a
+login, for someone who voted, bet or earned points by chat command: viewer login resolves
+the same `(platform, platform_user_id)` row. Open polls and predictions are tallied from
+the remaining rows. Viewer JWT only (a streamer token is 401); the bearer token is
+revoked after the erasure commits, and the `viewer:identity:*` cache is dropped.
+
+```bash
+DELETE /api/v1/auth/viewer/me
+Authorization: Bearer <viewer-jwt>
+→ 200 { "message": "Viewer data deleted" }
+```
+
+### Connected platforms (ADR-0090)
+
+Backs the "Connected platforms" card on `/settings`. Both routes are session-only
+(a personal access token gets 403); disconnecting is also refused while impersonating.
+
+```bash
+# Every platform whose OAuth tokens the account holds: the sign-in platform (users row)
+# and each linked one (its token table or mod_oauth_credentials).
+GET /api/v1/auth/me/connections
+→ Returns: { "connections": [ { "platform": "youtube", "accounts": ["UC…"], "is_login": false } ] }
+
+# Disconnect a linked platform: twitch | youtube | kick | facebook | instagram.
+# 409 { "error": "login_platform" } for the platform the account signs in with.
+DELETE /api/v1/auth/me/connections/:platform
+```
+
+A disconnect deletes, in one transaction, every row the user holds in that platform's
+token table and (Twitch, YouTube, Kick) their delegated-moderator credential, and
+clears the platform's id on the `users` row (`twitch_id`, `google_id`, `kick_id`) that
+linking records, so that platform no longer signs in to the account. It then
+revokes the deleted tokens at Twitch, Google or Kick (`oauth/revoke.go`). Revocation is
+best effort and never fails the request; Meta has no revoke for the stored Page token.
+Facebook and Instagram sources are removed from the user's overlays in the same
+transaction, because they cannot run without the token. Twitch, YouTube and Kick
+sources stay: Twitch stops receiving chat on the EventSub listener's next sync,
+YouTube falls back to InnerTube, Kick subscribes without auth. The sign-in platform's
+tokens are deleted only with the account (`DELETE /me`).
+
+Viewer unlink (`DELETE /viewer/linked-platforms/:platform`) also deletes the unlinked
+platform's `viewer_sessions` rows, as signing out does, and revokes their tokens with the
+viewer OAuth client.
+
+### Viewer Profile
+
+Viewers sign in with a platform account (`/api/v1/auth/viewer/{twitch,youtube,kick}/login`),
+not an All-Chat account. Their premium and terms acceptance live on the durable
+`viewers` row, which `viewer_sessions.viewer_id` points at.
+
+```bash
+# Current viewer session. is_premium is the current viewers.is_premium, not the
+# value baked into the viewer JWT at sign-in (FreshViewerPremium re-reads it on every
+# /viewer/* request, so an admin grant or a lapse takes effect at once).
+# tos_accepted false = the Terms of Service prompt is shown.
+GET /api/v1/auth/viewer/me
+Authorization: Bearer <viewer-jwt>
+
+# Accept the current Terms of Service and Privacy Policy as a viewer (sets
+# viewers.tos_accepted = TRUE and stamps tos_accepted_at). Migration 126 starts every
+# viewer at FALSE, existing ones included, so each is asked once; re-arm with
+# `UPDATE viewers SET tos_accepted = FALSE;` when the terms change.
+POST /api/v1/auth/viewer/me/tos-acceptance
+Authorization: Bearer <viewer-jwt>
+→ Returns: { "tos_accepted": true }
+```
+
+### Admin: viewers (ADR-0034)
+
+```bash
+# One row per platform account: viewer sessions full-outer-joined with viewer
+# identities, so an identity with no session (a chatter engagement-service created for
+# the points economy, or a viewer who logged out) is listed too, with session_id null.
+GET /admin/viewers?q=&platform=&is_banned=&is_premium=&limit=&offset=
+
+# Ban, unban and activity act on a session.
+GET  /admin/viewers/:session_id/activity
+POST /admin/viewers/:session_id/ban        Body: { "reason": "..." }
+POST /admin/viewers/:session_id/unban
+
+# Premium acts on the durable viewer (404 when it does not exist). duration_seconds
+# is optional and makes the grant time-limited (ADR-0027).
+POST /admin/viewers/identities/:viewer_id/premium   Body: { "is_premium": true, "duration_seconds": 2592000 }
+```
+
+### Data export (DSGVO Art. 15/20)
+
+```bash
+# Everything stored about the streamer account, as one JSON file.
+GET /api/v1/auth/me/data-export
+Authorization: Bearer <jwt-token>          # session only — a PAT is refused (403)
+
+# Everything stored about the viewer identity in a viewer token.
+GET /api/v1/auth/viewer/data-export
+Authorization: Bearer <viewer-jwt>
+→ 200, Content-Disposition: attachment; filename=allchat-data-export.json
+```
+
+The frontend's "Download my data" buttons call these: `/settings` (Data & Privacy
+card) and `/settings/viewer` ("Your data" card). Sections are defined in
+`handlers/data_export.go`; each is one query whose rows become a JSON list.
+
+Streamer export (`format_version: 2`):
+
+| Key | Contents |
+| --- | --- |
+| `user` | Profile, platform ids, roles (premium, admin override, beta tester, ambassador, admin), ban status and reason, onboarding date |
+| `linked_accounts` | Sign-in grant and every connected platform account (Twitch, YouTube, Kick, TikTok, Facebook, Instagram, Patreon, moderation credentials): account id/name, scopes, expiry |
+| `overlays` | Each overlay with its chat sources and settings: config, event settings, alert profiles, goal, list, credit roll, points config, TTS voice |
+| `alert_events`, `stream_sessions`, `polls`, `predictions` | Activity on the user's overlays |
+| `chat_commands`, `chat_timers`, `chat_bot_settings`, `chat_bot_accounts` | Chat commands and bots (bot login and display name only) |
+| `media` | Uploaded files: name, type, size, object key, public URL |
+| `api_tokens`, `devices` | Token and paired-device names, scopes, created/last used/expiry/revoked |
+| `translations`, `requested_locales` | Strings submitted and languages requested in `/translate` |
+| `premium_subscriptions` | Provider, status, tier, amount, period end |
+| `ambassador_showcase` | Tagline and homepage consent |
+| `moderation_actions` | Actions the user took, and every action on the user's overlays |
+| `moderation_delegations` | Moderator grants given and received, including revoked ones |
+| `share_requests` | Overlay shares sent and received |
+| `impersonations` | When an admin signed in as the user, and which admin |
+| `discord_accounts`, `discord_guilds` | Linked Discord identity and connected servers |
+| `viewer_sessions`, `messages` | Viewer sessions linked to the account; messages sent through All-Chat (kept 1 h) |
+| `viewer_accounts` | The viewer export below, for each viewer identity the user signed in with |
+
+Viewer export: `profile`, `platform_identities`, `sessions`, `cosmetics`, `points`,
+`points_transactions`, `poll_votes`, `prediction_entries`, `messages`,
+`premium_subscriptions`, `linked_patreon_accounts`.
+
+Deliberate rules:
+
+- **No credentials, ever.** Tokens, token hashes, API keys and signing secrets are
+  never selected; tables that hold one are listed column by column. Settings tables
+  without one are exported whole-row so new settings appear automatically;
+  `TestWholeRowExportTablesHoldNoCredentials` fails if one of them gains a
+  credential column.
+- **All or nothing.** The export is read in one read-only snapshot with timestamps in
+  UTC. A failing section fails the request (500) rather than returning a file that
+  silently omits it.
+- **Event logs are capped** at their 10,000 most recent rows each (alert events,
+  moderation actions, point transactions, votes, prediction entries, messages).
+- Bump `exportFormatVersion` when a section is added, removed or reshaped.
 
 ### Personal Access Tokens (ADR-0051)
 
@@ -334,13 +519,17 @@ Body: { "user_id": "uuid", "message": "...", "platforms": ["twitch","kick","yout
         "purpose": "command" | "timer" }
 → 200 { "success": true|false,
         "results": [{ "platform", "success", "sender": "allchat_bot"|"custom_bot"|"self",
-                      "error_kind" }] }
+                      "error_kind", "detail" }] }
+# detail: the platform's own explanation when it gave one (Twitch's drop reason,
+# or the message of a 401/403), for the streamer.
 ```
 
 The opt-in Twitch re-consent `GET /api/v1/auth/twitch/moderation/:overlay_id?actions=…`
-accepts `delete`, `timeout`, `ban`, `unban`, `engagement`, `modlog` and `clip`
-(`clips:edit`), and always folds in `user:write:chat`. `&return=commands` sends the
-user back to `/commands` instead of the overlay monitor.
+accepts `delete`, `timeout`, `ban`, `unban`, `engagement`, `modlog`, `clip`
+(`clips:edit`) and `ads` (`channel:read:ads`, ad break notices in the monitor), and
+always folds in `user:write:chat`. A request carrying `ads` must clear the
+`twitch_ad_breaks` feature gate (`RequirePremium`; seeded free by migration 127).
+`&return=commands` sends the user back to `/commands` instead of the overlay monitor.
 
 ### Chat bots (ADR-0081)
 
@@ -383,7 +572,10 @@ sendable streamer identity are skipped, like `/internal/chat/announce`.
 
 Platform mechanics: a Twitch bot send goes through Helix `chat/messages` with our
 **app access token** (client-credentials, cached pre-expiry) and `sender_id` set to
-the bot's platform user id. Kick: All-Chat Bot posts with the streamer's own Kick
+the bot's platform user id. Twitch answers a message it will not deliver (AutoMod,
+the channel's chat settings, an unverified sender) with 200 and `is_sent=false`; every
+Helix send treats that as a failure with `error_kind` `message_dropped` and logs the
+`drop_reason`. Kick: All-Chat Bot posts with the streamer's own Kick
 token and `type=bot`; a custom bot posts with the bot account's own token and
 `type=user` addressed to the streamer's Kick id. The streamer's Kick token and id
 come from the users row for a Kick-login account and from the linked
@@ -525,6 +717,19 @@ go test ./... -cover
 go test ./oauth -v
 go test ./handlers -v
 go test ./repository -v
+
+# Erasure tests (ADR-0088) against a real Postgres with every migration applied
+# (CI's integration job does this):
+TEST_DATABASE_URL=postgres://allchat:allchat_dev_password@localhost:5432/allchat \
+  go test -tags=integration -run TestErase ./repository/
+```
+
+The data-export tests apply the full migration set to a fresh database on a
+testcontainer, or, without Docker, on any Postgres you point them at (they create
+and drop their own database there):
+
+```bash
+TEST_DATABASE_URL=postgres://user@localhost:5432/postgres go test ./handlers -run 'DataExport|Delegations|WholeRow'
 ```
 
 ---
@@ -547,7 +752,9 @@ go test ./repository -v
 kubectl logs -n allchat deployment/auth-service | grep "OAuth exchange failed"
 
 # Verify credentials
-kubectl exec -n allchat deployment/auth-service -- env | grep CLIENT
+kubectl get deploy auth-service -n allchat \
+  -o jsonpath='{range .spec.template.spec.containers[?(@.name=="auth-service")].env[*]}{.name}{"\n"}{end}' \
+  | grep CLIENT
 
 # Test OAuth provider reachability
 curl https://id.twitch.tv/oauth2/token  # Should return 400 (missing params), not timeout
@@ -594,6 +801,42 @@ kubectl exec -n allchat allchat-cluster-1 -- psql -U allchat -c "SELECT * FROM u
 3. Check OAuth handler creates user: `repository/user_repo.go:CreateOrUpdateUser()`
 
 **File**: `handlers/oauth.go:handleCallback()`, `repository/user_repo.go:CreateOrUpdateUser()`
+
+---
+
+## Batch jobs
+
+The image ships two more binaries next to `auth-service`, each run by a Kubernetes CronJob
+in caesar-deployment (`apps/workloads/all-chat/`):
+
+- **`/app/key-rotator`** (`cmd/key-rotator`, `key-rotator-cronjob.yaml`, weekly):
+  re-encrypts token columns to the current encryption key.
+- **`/app/retention-sweeper`** (`cmd/retention-sweeper`, `retention-sweeper-cronjob.yaml`,
+  every 15 minutes, ADR-0089): deletes rows past the retention periods the privacy policy
+  promises. It is the only thing that enforces them. Needs only `DATABASE_URL`; opens one
+  connection, retrying a failed connect for up to a minute (a fresh pod's IP is not yet in
+  the Postgres NetworkPolicy allow-set when it starts); deletes in batches (`--batch-size`,
+  default 1000, `--batch-delay-ms`, default 100) with `FOR UPDATE SKIP LOCKED`, so it is
+  safe to re-run and to overlap; logs
+  `rows_deleted` per table and exits non-zero if any table failed.
+
+  | Table | Deleted when |
+  |---|---|
+  | `viewer_message_history` | `created_at` more than 1 hour ago |
+  | `youtube_quota_audit_log` | `timestamp` more than 30 days ago |
+  | `alert_events` | `created_at` more than 30 days ago |
+  | `moderation_actions` | `created_at` more than 90 days ago |
+  | `device_link_requests` | expired more than 1 hour ago and never minted a device token |
+  | `tiktok_oauth_tokens` | `expiry` more than 7 days ago (legacy table, nothing refreshes it) |
+  | `kick_oauth_tokens` | `kick_user_id IS NULL` and `expiry` more than 7 days ago (legacy listener rows nothing refreshes) |
+  | `instagram_oauth_tokens` | `expires_at` more than 7 days ago (no refresh grant; NULL never expires) |
+
+  Every other credential table is left alone: an expired access token is still renewable
+  while a refresh token works, and those rows are still keyed on. ADR-0089 has the
+  per-table reasoning.
+
+  Its tests run the binary against a fully migrated Postgres:
+  `TEST_DATABASE_URL=postgres://... go test -tags=integration ./cmd/retention-sweeper/`.
 
 ---
 

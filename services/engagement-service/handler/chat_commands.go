@@ -44,18 +44,25 @@ type chatCommandStore interface {
 	OwnerStatus(ctx context.Context, userID uuid.UUID) (repository.ChatCommandOwnerStatus, error)
 }
 
+// sendFailureLister reads the streamer's last undelivered bot posts
+// (consumer.SendStatus).
+type sendFailureLister interface {
+	Failures(ctx context.Context, owner uuid.UUID) ([]models.SendFailure, error)
+}
+
 // ChatCommands serves the chat commands editor (ADR-0079). Commands belong to the
 // authenticated streamer; there is no overlay in the path.
 type ChatCommands struct {
 	store    chatCommandStore
+	failures sendFailureLister
 	onChange func()       // resyncs chatcmd:channels after a write
 	fetch    *http.Client // {urlfetch} in previews
 	log      *zap.Logger
 }
 
 // NewChatCommands creates the handler. onChange runs after every successful write.
-func NewChatCommands(store chatCommandStore, onChange func(), log *zap.Logger) *ChatCommands {
-	return &ChatCommands{store: store, onChange: onChange, fetch: chatcmd.FetchClient(), log: log}
+func NewChatCommands(store chatCommandStore, failures sendFailureLister, onChange func(), log *zap.Logger) *ChatCommands {
+	return &ChatCommands{store: store, failures: failures, onChange: onChange, fetch: chatcmd.FetchClient(), log: log}
 }
 
 type chatCommandBody struct {
@@ -64,6 +71,8 @@ type chatCommandBody struct {
 	Response        string `json:"response"`
 	CreateClip      bool   `json:"create_clip"`
 	ImageURL        string `json:"image_url"`
+	SoundURL        string `json:"sound_url"`
+	AlertText       string `json:"alert_text"`
 	MinRole         string `json:"min_role"`
 	CooldownSeconds int    `json:"cooldown_seconds"`
 	Enabled         *bool  `json:"enabled"`
@@ -74,6 +83,9 @@ type chatCommandBody struct {
 func (b chatCommandBody) command(userID uuid.UUID) (models.ChatCommand, string) {
 	trigger := strings.TrimSpace(b.Trigger)
 	image := strings.TrimSpace(b.ImageURL)
+	sound := strings.TrimSpace(b.SoundURL)
+	_, soundErr := chatcmd.CheckHTTPS(sound) // the overlay plays it in OBS unchecked
+	alertText := strings.TrimSpace(b.AlertText)
 	switch {
 	case b.Kind != models.TriggerCommand && b.Kind != models.TriggerKeyword:
 		return models.ChatCommand{}, "kind must be command or keyword"
@@ -87,8 +99,12 @@ func (b chatCommandBody) command(userID uuid.UUID) (models.ChatCommand, string) 
 		return models.ChatCommand{}, "response must be at most 2000 characters"
 	case len(image) > 1000:
 		return models.ChatCommand{}, "image must be at most 1000 characters"
-	case strings.TrimSpace(b.Response) == "" && !b.CreateClip && image == "":
-		return models.ChatCommand{}, "a command needs a response, a clip or an image"
+	case len(sound) > 1000 || (sound != "" && soundErr != nil):
+		return models.ChatCommand{}, "sound must be an https URL of at most 1000 characters"
+	case len(alertText) > 500:
+		return models.ChatCommand{}, "alert text must be at most 500 characters"
+	case strings.TrimSpace(b.Response) == "" && !b.CreateClip && image == "" && sound == "" && alertText == "":
+		return models.ChatCommand{}, "a command needs a response, a clip or an alert"
 	case b.CooldownSeconds < 0 || b.CooldownSeconds > 86400:
 		return models.ChatCommand{}, "cooldown must be between 0 and 86400 seconds"
 	}
@@ -97,7 +113,8 @@ func (b chatCommandBody) command(userID uuid.UUID) (models.ChatCommand, string) 
 	}
 	enabled := b.Enabled == nil || *b.Enabled
 	return models.ChatCommand{UserID: userID, Kind: b.Kind, Trigger: trigger, Response: b.Response,
-		CreateClip: b.CreateClip, ImageURL: image, MinRole: b.MinRole, CooldownSeconds: b.CooldownSeconds, Enabled: enabled}, ""
+		CreateClip: b.CreateClip, ImageURL: image, SoundURL: sound, AlertText: alertText, MinRole: b.MinRole,
+		CooldownSeconds: b.CooldownSeconds, Enabled: enabled}, ""
 }
 
 func streamerID(c *gin.Context) (uuid.UUID, bool) {
@@ -130,7 +147,15 @@ func (h *ChatCommands) List(c *gin.Context) {
 		h.fail(c, "chat command owner status", err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"commands": cmds, "status": status})
+	// Best effort: the editor still works when Redis does not answer.
+	failures, err := h.failures.Failures(c.Request.Context(), userID)
+	if err != nil {
+		h.log.Warn("chat command send failures", zap.Error(err))
+	}
+	if failures == nil {
+		failures = []models.SendFailure{}
+	}
+	c.JSON(http.StatusOK, gin.H{"commands": cmds, "status": status, "send_failures": failures})
 }
 
 // Create adds a command. Gated by RequireEarlyAccess and RequirePremium(GateChatCommands) in main.go.

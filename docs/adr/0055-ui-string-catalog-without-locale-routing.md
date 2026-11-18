@@ -2,6 +2,7 @@
 
 **Date**: 2026-08-24
 **Status**: Accepted
+**Revised**: 2026-11-03 (brought in line with the current implementation)
 **Deciders**: caesarakalaeii
 
 (ADR numbering is shared with the caesar-deployment repo, so this is 0055. The
@@ -38,22 +39,24 @@ StreamController plugins. Public routes are indexed — `frontend/src/app/sitema
 and `frontend/src/app/robots.ts` list them unprefixed.
 
 **The app is statically rendered by default.** There is no
-`frontend/src/middleware.ts`, and exactly two routes opt into `force-dynamic`
-(`src/app/legal/impressum/page.tsx`, `src/app/dev/theme-contrast/page.tsx`).
+`frontend/src/middleware.ts`, and exactly three routes opt into `force-dynamic`
+(`src/app/legal/impressum/page.tsx`, `src/app/dev/theme-contrast/page.tsx`,
+`src/app/klipy-config/route.ts`).
 
-And one architectural fact: the frontend contains **zero React Context**.
-`grep -rn 'createContext\|useContext' frontend/src` returns nothing;
-`ToastProvider` is not a context provider. State is Zustand
-(`frontend/src/lib/stores/`) or module singletons.
+And one architectural fact: the frontend contains **zero React Context** outside
+the shadcn registry primitives; `ToastProvider` is not a context provider. State
+is Zustand (`frontend/src/lib/stores/`) or module singletons.
 
 ## Decision
 
-**A pure, typed catalog module at `frontend/src/lib/i18n/`. English is the only
-locale. Locale never enters the URL, and it is not resolved at request time.**
+**A pure, typed catalog module at `frontend/src/lib/i18n/`. English is the
+default and source locale, German the second (ADR-0066, ADR-0078). Locale never
+enters the URL, and it is not resolved at request time.**
 
-- `config.ts` — `SUPPORTED_LOCALES = ['en'] as const`, `Locale`,
-  `DEFAULT_LOCALE`, `isSupportedLocale`. Adding a language means editing this one
-  array and adding one file under `messages/`.
+- `config.ts` — `SUPPORTED_LOCALES = ['en', 'de'] as const`, `Locale`,
+  `DEFAULT_LOCALE`, `LOCALE_NATIVE_NAMES`, `isSupportedLocale`. Adding another
+  language means editing this one array and its `LOCALE_NATIVE_NAMES` entry, and
+  adding one directory under `messages/`.
 - `messages/en/` — one file per namespace, each a nested object literal ending in
   `as const`, composed by a barrel at `messages/en/index.ts` that exports
   `enMessages` and `EnMessages`. Namespaces are camelCase, nested at most three
@@ -75,9 +78,9 @@ locale. Locale never enters the URL, and it is not resolved at request time.**
   does not widen to `string` and does not use `any`. Placeholders are single
   braces, reusing the `errorMessages.ts` convention rather than inventing a
   second syntax.
-- `format.ts` — `formatNumber` and `formatDateTime`, both defaulting `locale` to
-  `DEFAULT_LOCALE`, with the `Intl` constructors cached by locale plus serialised
-  options.
+- `format.ts` — `formatNumber`, `formatDateTime` and, added later,
+  `formatCurrency`, each defaulting `locale` to the active locale, with the
+  `Intl` constructors cached by locale plus serialised options.
 - `index.ts` — `getTranslations(locale?)` for Server Components, plain modules
   and tests; `useTranslations()` for Client Components. Both return the identical
   `TFunction`.
@@ -96,30 +99,30 @@ someone's broadcast. The degradation is chosen in that direction deliberately.
 
 ### Two locales' worth of seam, one locale's worth of code
 
-`useTranslations()` is today a thin wrapper over `getTranslations(DEFAULT_LOCALE)`.
-It exists so that adding a locale is a change inside `src/lib/i18n/` rather than a
-sweep across every component. It is **not** a hook over a context: Storybook
-renders components standalone and `npx vitest --project storybook --run` is a
-required CI gate, so a component that needs a wrapping provider to render would
-break it. There is no Zustand store for locale either, for the same reason there
-is no resolver — nothing would read it yet.
+`useTranslations()` subscribes to the module-level active locale
+(`active-locale.ts`, ADR-0066) and re-renders on a switch; keyed off it, adding a
+locale is a change inside `src/lib/i18n/` rather than a sweep across every
+component. It is **not** a hook over a context: Storybook renders components
+standalone and `npx vitest --project storybook --run` is a required CI gate, so a
+component that needs a wrapping provider to render would break it. No Zustand
+store for locale either, for the same reason there is no resolver.
 
 ### No new dependency
 
-A single-locale catalog needs neither ICU plurals nor `select`. `next-intl` and
-friends bring a lockfile change, and a `frontend/` lockfile change has broken the
-Docker build before. When plural rules are genuinely needed they go behind the
-same `t()` signature, which keeps this a swappable engine rather than a call-site
-rewrite.
+A catalog needs neither ICU plurals nor `select` for the languages it carries.
+`next-intl` and friends bring a lockfile change, and a `frontend/` lockfile
+change has broken the Docker build before. When plural rules are genuinely
+needed they go behind the same `t()` signature, which keeps this a swappable
+engine rather than a call-site rewrite.
 
-### Two pilot surfaces, not a migration
+### A pilot, then the migration
 
 `layout.tsx` (server path: skip-link text, and `lang={DEFAULT_LOCALE}` so the
 attribute stops being a second source of truth) and `MaintenanceBanner.tsx`
-(client path). Legal pages, docs pages, admin screens, the editor, the onboarding
-copy and `errorMessages.ts` are untouched. Migrating everything in the same change
-would bury the design under a diff nobody can review, and the design is the part
-that is expensive to retrofit.
+(client path) were the pilot. Legal pages, docs pages, admin screens, the editor,
+the onboarding copy and `errorMessages.ts` were untouched at first. Migrating
+everything in the same change would bury the design under a diff nobody can
+review, and the design is the part that is expensive to retrofit.
 
 The rest followed in issue #799, which also added the gate below. Nothing about
 the design changed there; only the catalog's file layout, recorded above.
@@ -173,58 +176,60 @@ URL, now or later.** Locale #2 has to find a mechanism that leaves paths alone.
 
 ### Rejected: request-time resolution via `cookies()` / `headers()`
 
-Read a cookie or `Accept-Language` in the root layout, pick a locale, pass it down.
-
 Rejected because reading `cookies()` or `headers()` in the root layout makes
-**every page dynamic** — the marketing homepage, the docs pages, every public route
-that is currently static and indexed. With exactly one supported locale it buys
-nothing at all: the answer is always `'en'`. It is an unconditional de-optimisation
-of the whole app in exchange for a value that cannot vary.
+**every page dynamic**: the marketing homepage, the docs pages, every public
+route that is currently static and indexed. It buys nothing the module cannot
+already do: the default answer stays English and the client applies the stored
+choice after hydration (ADR-0066). It is an unconditional de-optimisation of the
+whole app in exchange for a value that cannot vary at render time.
 
-So locale *selection* is deferred outright. There is no `middleware.ts`, no
-`Accept-Language` parsing, no persisted account preference and no locale column.
-A resolver nothing calls is untested code that looks load bearing.
+So locale *selection* stayed deferred under ADR-0055 itself: no `middleware.ts`,
+no `Accept-Language` parsing, no persisted account preference and no locale
+column. A resolver nothing calls is untested code that looks load bearing. The
+deferred decision has since been made: ADR-0066 chose explicit client-side
+selection, and ADR-0078 put the switch in the homepage nav. Request-time
+resolution remains rejected.
 
 ### Rejected: extend `errorMessages.ts` into the catalog
 
 It is the closest thing the repo had, and it is where the placeholder convention
-comes from. But it is a `Record<ChatErrorType, ...>` keyed by an enum, whose values
-carry `actionableSteps` arrays — a shape driven by error rendering, not by string
-lookup. Bending the general catalog to fit it, or bending it to fit the catalog,
-are both worse than migrating it on its own once the foundation is proven.
+comes from. But it is a `Record<ChatErrorType, ...>` keyed by an enum, whose
+values carry `actionableSteps` arrays, a shape driven by error rendering, not by
+string lookup. It was left out of the pilot for that reason, and has since been
+backed by the catalog's `errors` namespace
+(`frontend/src/lib/i18n/messages/en/errors.ts`) while keeping its `Record` shape
+and accessors.
 
 ## Consequences
 
 **Pinning the formatter is a visible behaviour change.** `MaintenanceBanner` dates
 now read in English on every host, where before they followed the browser or OBS
-locale. This is the intended fix; it is also the one thing in this change a user
-could notice. Everything else renders byte-identically, em dash separators
-included, pinned by `frontend/src/components/__tests__/MaintenanceBanner.test.tsx`.
+locale. This is the intended fix; it is also the one thing a user could notice.
+Everything else renders byte-identically, em dash separators included, pinned by
+`frontend/src/components/__tests__/MaintenanceBanner.test.tsx`.
 
-**The `@ts-expect-error` line in `__tests__/translate.test.ts` is a load-bearing
-gate, not a comment.** `frontend/tsconfig.json` includes `**/*.ts`, so test files
-are type checked by `npx tsc --noEmit`. If `MessageKey` ever degrades to `string`,
-those suppressions become unused and `tsc` fails. Verified by hand: adding
-`| string` to `MessageKeyOf` produces three such errors.
+**The `@ts-expect-error` lines in `__tests__/translate.test.ts` are a
+load-bearing gate, not comments.** `frontend/tsconfig.json` includes `**/*.ts`,
+so test files are type checked by `npx tsc --noEmit`. If `MessageKey` ever
+degrades to `string`, those suppressions become unused and `tsc` fails.
 
-**The remaining 37 unpinned `Intl` call sites are now inconsistent with this one.**
-That is a deliberate scope line, not an oversight: each needs its own look at
-whether the value is UI copy or viewer data. `format.ts` exists for them to move
-onto.
+**The remaining unpinned `Intl` call sites are inconsistent with these
+formatters.** Each needs its own look at whether the value is UI copy or viewer
+data, so they move over case by case onto `format.ts`.
 
-**Adding locale #2 is now a bounded change**, and it needs its own decision about
-static rendering — which is why that decision is not pre-empted here. The checklist
-is in `docs/frontend/I18N.md`.
+**Adding another locale is now a bounded change**; the checklist is in
+`docs/frontend/I18N.md` ("Adding another locale").
 
-**Nothing lints for the AGPL header** that all 379 `.ts`/`.tsx` files under
+**Nothing lints for the AGPL header** that all `.ts`/`.tsx` files under
 `frontend/src` carry, so every new file in this module carries it by hand.
 
 ## Testing
 
 `frontend/src/lib/i18n/__tests__/translate.test.ts` covers nested lookup,
-interpolation, the same placeholder twice, an unknown key falling back to the key,
-a namespace passed as a key, a missing param leaving the placeholder, and the
-compile-time key check.
+interpolation, the same placeholder twice, an unknown key falling back to the
+key (and warning about it), a missing param leaving the placeholder (and warning
+about it), a namespace value resolving without throwing, and the compile-time
+key check.
 
 `frontend/src/lib/i18n/__tests__/format.test.ts` covers both formatters and, by
 spying on the `Intl` constructors, that they are cached. Constructing a formatter
@@ -241,10 +246,12 @@ before the change and passes after it.
 ## References
 
 - [docs/frontend/I18N.md](../frontend/I18N.md) — how to add a string, the
-  namespace convention, and the checklist for locale #2.
+  namespace convention, and the checklist under "Adding another locale".
+  ADR-0066 owns how a locale is chosen; ADR-0078 owns the homepage switch and
+  German being open to everyone.
 - `frontend/src/lib/errorMessages.ts` — source of the `{platform}` placeholder
   convention and of the "designed for easy internationalization" comment this
-  finally acts on. Not migrated here.
+  acts on. Now backed by the catalog's `errors` namespace.
 - `frontend/src/app/sitemap.ts`, `frontend/src/app/robots.ts` — the indexed
   unprefixed public routes that make locale routing unaffordable.
 - `.github/workflows/frontend-a11y.yml` — the a11y ESLint and Storybook axe gates

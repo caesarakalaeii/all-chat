@@ -43,6 +43,7 @@ The Twitch EventSub Listener connects to Twitch's EventSub WebSocket API to rece
 - ✅ `channel.moderate` (v2) - **Moderator actions** with the acting moderator's identity (ban, timeout, delete, warn, VIP/mod grants, blocked-term list edits; scope-gated, see below)
 - ✅ `automod.message.hold` (v2) - A chat message AutoMod held for review, with its text, category and severity level
 - ✅ `automod.message.update` (v2) - How a held message was resolved (`approved` / `denied` / `expired`) and by which moderator
+- ✅ `channel.ad_break.begin` (v1) - **Ad breaks**, scheduled by Ads Manager or run by hand, as event `ad_break` for the owner's monitor (scope-gated, see below)
 
 > Transport note: subscriptions use **webhook** transport (HTTP callback at `EVENTSUB_CALLBACK_URL`), not the EventSub WebSocket. Twitch verifies each subscription via a `webhook_callback_verification` challenge before it becomes `enabled`.
 
@@ -187,6 +188,21 @@ actions carry `target_user_id`, the same id `channel.chat.clear_user_messages`
 reports. The monitor uses these ids to fold each pair into one attributed log row;
 without the fold one action renders as two rows (a timeout even mislabels its second
 row as a ban, since the deletion frame carries no duration).
+
+### Ad Breaks (channel.ad_break.begin)
+
+Fires when a mid-roll ad break starts, whether Ads Manager scheduled it or the broadcaster or an
+editor ran it by hand. It becomes an `ad_break` event (`buildAdBreak` in `webhooks/handler.go`) with
+`duration_seconds`, `is_automatic`, `started_at` and, on manual breaks only, `requester_login`. Twitch
+fills the requester on scheduled breaks too, so it is dropped there. Twitch's reference types
+`duration_seconds`/`is_automatic` as integer/boolean while its example payload quotes both; the
+decoder accepts either.
+
+**Scope requirement.** The broadcaster's `channel:read:ads`, granted through the owner's
+`?actions=ads` re-consent (auth-service). A missing grant is a scope error at Info level, like the
+moderation log, and the same resync limitation applies. The api-gateway delivers `ad_break` to
+owner sockets only and never replays it. See
+[docs/features/twitch-ad-breaks.md](../../docs/features/twitch-ad-breaks.md).
 
 ### Platform Status Indicators
 
@@ -412,6 +428,19 @@ GET /status
   enforce-mode IRC (ADR-0026) stops that channel's chat entirely until re-consent. This alert did
   not exist during the 2026-09-26 silent-chat-loss incident and the same event produced nothing
   but a log line.
+- `listener_eventsub_helix_responses_total{operation,code}` - every Helix call the subscription
+  manager makes (`create`, `delete`, `get_existing`, `get_user`), by HTTP status (`error` for a
+  transport failure). `code="401"` means Twitch rejected the app access token; the manager then
+  discards the cached token and the next call requests a new one. `AllChatTwitchEventSubAppTokenRejected`
+  (caesar-deployment, critical) fires when 401s keep coming anyway.
+- `listener_eventsub_app_token_requests_total{result}` - client-credentials token requests, `success`
+  or `failure`. `AllChatTwitchEventSubAppTokenUnavailable` (critical) fires when no request
+  succeeded for 10m, which is what a rotated or wrong client secret looks like.
+
+Neither condition shows up in chat volume: subscriptions that already exist keep delivering, so
+only channels that are new, re-linked or revoked go silent. On 2026-11-03 the cached app token was
+invalidated by Twitch well before its expiry, every create and delete returned 401 for hours, and
+the only signal was user reports.
 
 ## Troubleshooting
 
@@ -437,6 +466,10 @@ Should return:
 ```bash
 kubectl logs -n allchat -l app=twitch-eventsub-listener | grep subscription
 ```
+
+**`status 401` / `Invalid OAuth token` on every call:** Twitch rejected the app access token. The
+manager discards it and fetches a new one on the next call, so persistent 401s mean the new token
+is rejected too: check whether the client secret was rotated, then restart the deployment.
 
 **Verify leader election:**
 ```bash

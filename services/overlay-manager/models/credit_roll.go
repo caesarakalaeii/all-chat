@@ -45,10 +45,13 @@ type CreditRollConfig struct {
 	LeaderboardSortBy string `json:"leaderboard_sort_by" db:"leaderboard_sort_by"` // "value" or "count"
 
 	// Display settings
-	ScrollSpeed            int     `json:"scroll_speed" db:"scroll_speed"`
-	DisplayDurationSeconds int     `json:"display_duration_seconds" db:"display_duration_seconds"`
-	BackgroundOpacity      float64 `json:"background_opacity" db:"background_opacity"`
-	Theme                  string  `json:"theme" db:"theme"` // "classic", "cinematic", "modern"
+	ScrollSpeed            int `json:"scroll_speed" db:"scroll_speed"`
+	DisplayDurationSeconds int `json:"display_duration_seconds" db:"display_duration_seconds"`
+	// RestartDelaySeconds holds the roll's end on screen before it starts over;
+	// display_duration_seconds stays the shortest the whole cycle runs.
+	RestartDelaySeconds int     `json:"restart_delay_seconds" db:"restart_delay_seconds"`
+	BackgroundOpacity   float64 `json:"background_opacity" db:"background_opacity"`
+	Theme               string  `json:"theme" db:"theme"` // "classic", "cinematic", "modern"
 
 	// Clips settings
 	ClipsEnabled      bool `json:"clips_enabled" db:"clips_enabled"`

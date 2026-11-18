@@ -122,3 +122,21 @@ func (r *MediaRepository) DeleteByOwner(ctx context.Context, userID, objectKey s
 	}
 	return tag.RowsAffected() > 0, nil
 }
+
+// ExistingKeys reports which of keys still have a registry row; the orphan sweep
+// removes the objects of the others (ADR-0088).
+func (r *MediaRepository) ExistingKeys(ctx context.Context, keys []string) (map[string]bool, error) {
+	rows, err := r.db.Query(ctx, `SELECT object_key FROM media_objects WHERE object_key = ANY($1)`, keys)
+	if err != nil {
+		return nil, fmt.Errorf("look up media_objects keys: %w", err)
+	}
+	found, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("scan media_objects keys: %w", err)
+	}
+	existing := make(map[string]bool, len(found))
+	for _, k := range found {
+		existing[k] = true
+	}
+	return existing, nil
+}

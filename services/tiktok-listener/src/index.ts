@@ -64,7 +64,7 @@ import { HeartbeatMonitor } from './reliability/heartbeat-monitor.js';
 import { MessageDeduplicator } from './deduplication/message-deduplicator.js';
 import {
   budgetRefusalRetryAfterMs,
-  connectionCeilingReached,
+  connectDisposition,
   isBudgetRefusalError,
   isWsFlapError,
   nextFlapRetryDelayMs,
@@ -122,6 +122,12 @@ const REDIS_PORT = parseInt(process.env.REDIS_PORT || '6379');
 // transient outage (e.g. the redis pod restarting during a node reboot) is
 // ridden out instead of crashing the pod into CrashLoopBackOff.
 const REDIS_RECONNECT_MAX_DELAY_MS = 5000;
+// How long the main Redis client may stay not-ready before /health/live fails
+// and the kubelet restarts the pod. node-redis can stop reconnecting after a
+// DNS failure (EAI_AGAIN during a kured node drain, 2026-11-04) and then holds
+// every xAdd in its offline queue forever; readiness alone cannot fix that
+// for a listener. Long enough to ride out a Redis failover.
+const REDIS_UNREADY_LIVENESS_MS = 120_000;
 const DATABASE_HOST = process.env.DATABASE_HOST || 'localhost';
 const DATABASE_PORT = parseInt(process.env.DATABASE_PORT || '5432');
 const DATABASE_USER = process.env.DATABASE_USER || 'allchat';
@@ -563,6 +569,10 @@ class TikTokListenerService {
   private proxyCredentials?: { username: string; password: string };
   private proxyCredentialsRefresh?: NodeJS.Timeout;
 
+  // When the main Redis client was first seen not-ready by the liveness probe;
+  // null while it is ready.
+  private redisUnreadySince: number | null = null;
+
   // Demand subscriber (Phase 5)
   private demandSubscriber: DemandSubscriber | null = null;
   private demandSafetyInterval: NodeJS.Timeout | null = null;
@@ -649,7 +659,8 @@ class TikTokListenerService {
     const signClients = pickSignClients(SIGN_CONFIG.signerMode, {
       signerBaseUrl: SIGN_CONFIG.signerBaseUrl,
       authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
-      selfTimeoutMs: TIKTOK_SIGNER_TIMEOUT_MS
+      selfTimeoutMs: TIKTOK_SIGNER_TIMEOUT_MS,
+      maxWsConnectsPerHour: SIGN_CONFIG.maxWsConnectsPerHour
     });
     this.selfSigner = signClients.selfSigner;
     this.pureNodeSigner = signClients.pureNodeSigner;
@@ -850,8 +861,9 @@ class TikTokListenerService {
    * unreachable. Previously that rejection propagated to process.exit(1),
    * turning a transient Redis outage (e.g. the single-replica redis pod going
    * down during a node reboot) into a CrashLoopBackOff. We retry until Redis is
-   * reachable; the HTTP server is already up, so the pod stays alive (liveness)
-   * and reports not-ready (readiness) until the connection succeeds.
+   * reachable; the HTTP server is already up, so the pod reports not-ready
+   * (readiness) until the connection succeeds, and liveness only fails once
+   * Redis has been unreachable for REDIS_UNREADY_LIVENESS_MS.
    */
   private async connectRedisWithRetry(): Promise<void> {
     let attempt = 0;
@@ -878,9 +890,21 @@ class TikTokListenerService {
   private startHttpServer(): void {
     this.httpServer = http.createServer((req, res) => {
       if (req.url === '/health/live' && req.method === 'GET') {
-        // Liveness probe
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok' }));
+        if (this.redis.isReady) {
+          this.redisUnreadySince = null;
+        } else {
+          this.redisUnreadySince ??= Date.now();
+        }
+        const unreadyMs = this.redisUnreadySince === null ? 0 : Date.now() - this.redisUnreadySince;
+        const alive = unreadyMs < REDIS_UNREADY_LIVENESS_MS;
+        if (!alive) {
+          logger.error('Redis client not ready past liveness threshold, failing liveness', {
+            unready_ms: unreadyMs,
+            threshold_ms: REDIS_UNREADY_LIVENESS_MS
+          });
+        }
+        res.writeHead(alive ? 200 : 503, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: alive ? 'ok' : 'redis unavailable', redis_unready_ms: unreadyMs }));
       } else if (req.url === '/health/ready' && req.method === 'GET') {
         // Readiness probe (TIKTOK-05)
         // Per CONTEXT.md: "Ready status: Pod reports ready AFTER successfully connecting to all assigned channels"
@@ -1240,25 +1264,45 @@ class TikTokListenerService {
       return;
     }
 
-    // Connection ceiling (see TIKTOK_MAX_STREAMS_PER_POD). Checked before the
+    // Both reasons not to dial (see connectDisposition). Checked before the
     // connectingStreams bookkeeping so the early return needs no cleanup, and
-    // before the live-status pre-check so a full pod spends no Euler budget on
-    // a stream it cannot connect anyway.
+    // before the live-status pre-check so a deferred stream spends no Euler
+    // budget on a connection it will not make.
     //
-    // The lease must be released before re-parking: a leased-but-unconnected
-    // stream is deaf everywhere, because no other pod may claim it (the exact
-    // failure of the 2026-09-14 incident). Rebalancing normally keeps leases
-    // under the same ceiling, so this is the last-resort guard when pods
-    // scale down between cycles.
+    // The park is the newer of the two. The poller tick, recoverStuckChannels
+    // and the rebalance hold all consult it; this path was the one way in that
+    // did not, so a demand snapshot that briefly dropped a parked room
+    // re-dialled it inside its own window and spent a second of the pod's
+    // twelve hourly slots on it (prod 2026-11-18, alfonsooc0304).
     const liveConnectionCount = this.activeStreams.size + this.connectingStreams.size;
-    if (connectionCeilingReached(liveConnectionCount, TIKTOK_MAX_STREAMS_PER_POD)) {
-      logger.warn('Connection ceiling reached, re-parking stream', {
-        username,
-        overlay_id: overlayId,
-        ceiling: TIKTOK_MAX_STREAMS_PER_POD,
-        active: this.activeStreams.size,
-        connecting: this.connectingStreams.size,
-      });
+    const parkRemainingMs = this.backoffManager.parkRemainingMs(username);
+    const disposition = connectDisposition({
+      parkRemainingMs,
+      liveConnectionCount,
+      ceiling: TIKTOK_MAX_STREAMS_PER_POD,
+    });
+    if (disposition !== 'dial') {
+      // A full pod is an operational problem (rebalancing normally prevents
+      // it) and warns; a park is the budget working as designed.
+      if (disposition === 'pod-full') {
+        logger.warn('Connection ceiling reached, re-parking stream', {
+          username,
+          overlay_id: overlayId,
+          ceiling: TIKTOK_MAX_STREAMS_PER_POD,
+          active: this.activeStreams.size,
+          connecting: this.connectingStreams.size,
+        });
+      } else {
+        logger.info('Stream parked by sign budget, deferring connect', {
+          username,
+          overlay_id: overlayId,
+          park_remaining_ms: parkRemainingMs,
+          park_remaining_minutes: Math.round(parkRemainingMs / 60000),
+        });
+      }
+      // The lease must be released before re-parking: a leased-but-unconnected
+      // stream is deaf everywhere, because no other pod may claim it (the
+      // exact failure of the 2026-09-14 incident).
       if (this.leadershipCoordinator) {
         await this.leadershipCoordinator.release(username);
       }
@@ -1690,8 +1734,8 @@ class TikTokListenerService {
       stream.connection.disconnect();
       this.activeStreams.delete(username);
 
-      // Clear backoff state (the poller target went above)
-      this.backoffManager.removeState(username);
+      // Clear backoff state (the poller target went above); a live park survives.
+      this.backoffManager.forgetConnectionState(username);
       this.statusChecker.clearCache(username);
       // The heartbeat-forced path does not come through here (it disconnects
       // directly and reads the streak in the disconnected handler), so clearing

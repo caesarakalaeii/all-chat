@@ -48,7 +48,7 @@ import { DISCORD_INVITE_URL, PATREON_JOIN_URL } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import { useTranslations } from '@/lib/i18n'
 import { useAuthStore } from '@/lib/stores/auth-store'
-import { useFeatureAvailable, useOverlayKindAvailable } from '@/lib/platform-availability'
+import { useOverlayKindAvailable } from '@/lib/platform-availability'
 import type { SpotlightSection } from '@/components/editor/sectionRegistry'
 
 /**
@@ -110,7 +110,6 @@ export function OnboardingChecklist({
   const finish = useOnboardingStore((s) => s.finish)
   const user = useAuthStore((s) => s.user)
   const isKindAvailable = useOverlayKindAvailable()
-  const isFeatureAvailable = useFeatureAvailable()
   const [createOpen, setCreateOpen] = useState(false)
   const [confirmDismiss, setConfirmDismiss] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -423,26 +422,35 @@ export function OnboardingChecklist({
                   </span>
                   <p className="text-xs text-text-sub">{t('onboarding.extras.flairsBody')}</p>
                 </li>
-                {isKindAvailable('alerts') && (
-                  <li>
-                    <span className="font-medium text-text">
-                      {t('onboarding.extras.alertsOverlayTitle')}
-                    </span>
-                    <p className="text-xs text-text-sub">
-                      {t('onboarding.extras.alertsOverlayBody')}
-                    </p>
-                  </li>
-                )}
-                {isKindAvailable('alerts') && (
-                  <li>
-                    <span className="font-medium text-text">
-                      {t('onboarding.extras.alertsEditorTitle')}
-                    </span>
-                    <p className="text-xs text-text-sub">
-                      {t('onboarding.extras.alertsEditorBody')}
-                    </p>
-                  </li>
-                )}
+                <li>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.adBreaksTitle')}
+                  </span>
+                  {/* Listed here but NOT in app/upgrade/page.tsx: that list is specifically
+                      the PREMIUM tour, and the twitch_ad_breaks gate is seeded free
+                      because a notice in the owner's own activity feed uses no shared
+                      resource. If the gate is ever flipped to premium, move this entry
+                      into the /upgrade list and keep the two in sync per the note above. */}
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.adBreaksBody')}</p>
+                </li>
+                {/* Alerts overlays, the alerts editor and chat commands are free (their
+                    gates were opened on 2026-11-15), so they are listed here but NOT in
+                    app/upgrade/page.tsx. Their premium parts are in both lists: media
+                    uploads, YouTube command replies and your own chat bot. */}
+                <li>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.alertsOverlayTitle')}
+                  </span>
+                  <p className="text-xs text-text-sub">
+                    {t('onboarding.extras.alertsOverlayBody')}
+                  </p>
+                </li>
+                <li>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.alertsEditorTitle')}
+                  </span>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.alertsEditorBody')}</p>
+                </li>
                 {isKindAvailable('goal') && (
                   <li>
                     <span className="font-medium text-text">
@@ -463,56 +471,64 @@ export function OnboardingChecklist({
                     </p>
                   </li>
                 )}
-                {isFeatureAvailable('chatCommands') && (
-                  <li>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-text">
-                        {t('onboarding.extras.chatCommandsTitle')}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          trackEvent('cta_click', {
-                            cta: 'chat_commands',
-                            location: 'onboarding-extras',
-                          })
-                          router.push('/commands')
-                        }}
-                      >
-                        {t('onboarding.checklist.showMe')}
-                      </Button>
-                    </div>
-                    <p className="text-xs text-text-sub">
-                      {t('onboarding.extras.chatCommandsBody')}
-                    </p>
-                  </li>
-                )}
-                {isFeatureAvailable('customChatBot') && (
-                  <li>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-text">
-                        {t('onboarding.extras.customChatBotTitle')}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          trackEvent('cta_click', {
-                            cta: 'custom_chat_bot',
-                            location: 'onboarding-extras',
-                          })
-                          router.push('/upgrade')
-                        }}
-                      >
-                        {t('onboarding.checklist.showMe')}
-                      </Button>
-                    </div>
-                    <p className="text-xs text-text-sub">
-                      {t('onboarding.extras.customChatBotBody')}
-                    </p>
-                  </li>
-                )}
+                <li>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.mediaUploadsTitle')}
+                  </span>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.mediaUploadsBody')}</p>
+                </li>
+                <li>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-text">
+                      {t('onboarding.extras.chatCommandsTitle')}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        trackEvent('cta_click', {
+                          cta: 'chat_commands',
+                          location: 'onboarding-extras',
+                        })
+                        router.push('/commands')
+                      }}
+                    >
+                      {t('onboarding.checklist.showMe')}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-text-sub">{t('onboarding.extras.chatCommandsBody')}</p>
+                </li>
+                <li>
+                  <span className="font-medium text-text">
+                    {t('onboarding.extras.youtubeCommandRepliesTitle')}
+                  </span>
+                  <p className="text-xs text-text-sub">
+                    {t('onboarding.extras.youtubeCommandRepliesBody')}
+                  </p>
+                </li>
+                <li>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-text">
+                      {t('onboarding.extras.customChatBotTitle')}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        trackEvent('cta_click', {
+                          cta: 'custom_chat_bot',
+                          location: 'onboarding-extras',
+                        })
+                        router.push('/upgrade')
+                      }}
+                    >
+                      {t('onboarding.checklist.showMe')}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-text-sub">
+                    {t('onboarding.extras.customChatBotBody')}
+                  </p>
+                </li>
                 <li>
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-text">

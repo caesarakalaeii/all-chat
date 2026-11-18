@@ -41,6 +41,7 @@ import (
 	"github.com/caesar/all-chat/services/alert-processor/repository"
 	"github.com/caesar/all-chat/shared/database"
 	"github.com/caesar/all-chat/shared/logger"
+	"github.com/caesar/all-chat/shared/middleware"
 	"github.com/caesar/all-chat/shared/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -124,9 +125,7 @@ func main() {
 
 	router := gin.New()
 	router.Use(gin.Recovery())
-	router.Use(gin.LoggerWithConfig(gin.LoggerConfig{
-		SkipPaths: []string{"/health/live", "/health/ready"},
-	}))
+	router.Use(middleware.GinAccessLog())
 
 	router.GET("/health/live", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "alive"})

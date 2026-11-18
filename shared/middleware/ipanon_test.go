@@ -30,7 +30,11 @@ func TestAnonymizeIP(t *testing.T) {
 		{"IPv6 full", "2001:0db8:0000:0000:0000:0000:0000:0001", "2001:db8::"},
 		{"IPv6 short", "2001:db8::1", "2001:db8::"},
 		{"IPv6 loopback", "::1", "::"},
-		{"invalid string", "not-an-ip", "not-an-ip"},
+		// Anything unparseable is dropped rather than passed through: an
+		// address with a port or zone would otherwise be logged in full.
+		{"invalid string", "not-an-ip", ""},
+		{"IPv4 with port", "192.168.1.42:8080", ""},
+		{"IPv6 with zone", "fe80::1%eth0", ""},
 		{"empty", "", ""},
 	}
 

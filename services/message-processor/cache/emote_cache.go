@@ -48,9 +48,10 @@ const defaultStaleGrace = 12 * time.Hour
 
 // CachedEmote stores the minimum metadata needed to reconstruct emote markup.
 type CachedEmote struct {
-	Code     string `json:"code"`
-	URL      string `json:"url"`
-	Provider string `json:"provider"`
+	Code      string `json:"code"`
+	URL       string `json:"url"`
+	Provider  string `json:"provider"`
+	ZeroWidth bool   `json:"zero_width,omitempty"`
 }
 
 // Entry is the result of a cache lookup: the cached emotes plus whether the

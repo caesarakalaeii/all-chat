@@ -169,3 +169,24 @@ func TestBotSendTimerPurpose(t *testing.T) {
 	require.NoError(t, a.BotSend(context.Background(), "u1", "gg", "twitch", PurposeTimer))
 	assert.Equal(t, "timer", purpose)
 }
+
+// A bot send that posted nothing returns each platform's outcome, so the caller
+// can show the streamer why (ADR-0081): who sent it and what the platform said.
+func TestBotSendNotDeliveredCarriesTheResults(t *testing.T) {
+	t.Setenv("SERVICE_JWT_SECRET_V1", "test-service-secret-0123456789-abcdefghijklmnop")
+	svcKeys, err := sharedAuth.NewKeyChainFromEnv("SERVICE_JWT_SECRET")
+	require.NoError(t, err)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"success":false,"results":[{"platform":"twitch","success":false,`+
+			`"sender":"allchat_bot","error_kind":"message_dropped","detail":"A verified phone number is required."}]}`)
+	}))
+	defer srv.Close()
+
+	a := New(stubStore{}, srv.URL, "https://allch.at", svcKeys, zap.NewNop())
+	err = a.BotSend(context.Background(), "u1", "gg", "twitch", PurposeCommand)
+	var notDelivered *BotSendError
+	require.ErrorAs(t, err, &notDelivered)
+	assert.Equal(t, []SendResult{{Platform: "twitch", Sender: "allchat_bot", ErrorKind: "message_dropped",
+		Detail: "A verified phone number is required."}}, notDelivered.Results)
+	assert.Contains(t, err.Error(), "twitch:message_dropped")
+}

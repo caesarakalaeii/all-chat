@@ -361,6 +361,17 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     saveFailed:
       'Die Einstellung der offiziellen API konnte nicht geändert werden. Bitte versuch es erneut.',
   },
+  verticalCompanion: {
+    label: 'Meinen Hochformat-Stream zusammenführen',
+    description:
+      'Wenn du gleichzeitig im Quer- und Hochformat streamst, hat dein Kanal zwei Übertragungen mit getrennten Chats. All-Chat führt die Hochformat-Übertragung in dieses Overlay zusammen, wenn sie denselben Titel wie dein Haupt-Stream hat oder ihr Titel das sagt (Vertical, Portrait, Hochformat, #shortslive).',
+    unmarkedLabel: 'Mein Hochformat-Stream hat einen anderen Titel',
+    unmarkedDescription:
+      'Eine zweite Live-Übertragung auf diesem Kanal auch dann zusammenführen, wenn ihr Titel weder zu deinem Haupt-Stream passt noch sagt, dass sie im Hochformat ist.',
+    multiStreamNote: 'Deine Stream-Auswahl folgt bereits jeder Live-Übertragung auf diesem Kanal.',
+    saveFailed:
+      'Die Einstellung für den Hochformat-Stream konnte nicht geändert werden. Bitte versuch es erneut.',
+  },
   relay: {
     loopFilter:
       'Schleifenfilter: aktiv — Discord-Nachrichten werden nie zurück an Discord weitergeleitet.',
@@ -613,9 +624,7 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     customHtmlLabel: 'HTML',
     customCssLabel: 'CSS',
     customJsLabel: 'JavaScript',
-    customLocked: 'Eigener Alert-Code ist ein Premium-Feature.',
-    lockedBody:
-      'Das Bearbeiten von Alerts ist ein Premium-Feature. Dein Overlay nutzt die eingebauten Alerts, und Test-Alerts bleiben kostenlos.',
+    uploadLocked: 'Eigene Dateien hochzuladen ist ein Premium-Feature.',
     save: 'Alerts speichern',
     saving: 'Wird gespeichert...',
     saved: 'Alerts gespeichert',
@@ -800,7 +809,10 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     currentValue: 'Aktuell: {value}',
     durationLabel: 'Anzeigedauer (Sekunden)',
     durationHint:
-      'Wie lange der Abspann läuft, bevor er von vorn beginnt (10-300 Sekunden). Ein längerer Abspann scrollt erst bis zum Ende.',
+      'Wie lange der Abspann mindestens läuft, bevor er von vorn beginnt (10-300 Sekunden). Ein längerer Abspann scrollt erst bis zum Ende und wartet dann die Pause ab.',
+    restartDelayLabel: 'Pause vor dem Neustart (Sekunden)',
+    restartDelayHint:
+      'Wie lange das Ende des Abspanns stehen bleibt, bevor er von vorn beginnt (0-3600 Sekunden).',
     opacityLabel: 'Hintergrund-Deckkraft (0-1)',
     opacityHint:
       'Mit Clips dunkelt dies nur den Clip hinter dem Abspann ab, höchstens auf halbe Helligkeit, damit der Clip immer sichtbar bleibt.',
@@ -974,6 +986,7 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     streamLinkCleared: 'Stream-Link entfernt',
     officialApiEnabled: 'Offizielle YouTube-API aktiviert',
     officialApiDisabled: 'Offizielle YouTube-API deaktiviert',
+    verticalCompanionSaved: 'Einstellung für den Hochformat-Stream gespeichert',
     relaySaved: 'Relay-Einstellungen gespeichert',
     relaySaveFailed: 'Relay-Einstellungen konnten nicht gespeichert werden',
     engagementSaved: 'Engagement-Einstellungen gespeichert',

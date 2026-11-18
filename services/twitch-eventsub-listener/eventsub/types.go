@@ -16,7 +16,11 @@
 
 package eventsub
 
-import "time"
+import (
+	"encoding/json"
+	"strconv"
+	"time"
+)
 
 // EventSub WebSocket Message Types
 // Reference: https://dev.twitch.tv/docs/eventsub/handling-websocket-events/
@@ -157,6 +161,66 @@ type RaidEvent struct {
 	ToBroadcasterUserLogin   string `json:"to_broadcaster_user_login"`
 	ToBroadcasterUserName    string `json:"to_broadcaster_user_name"`
 	Viewers                  int    `json:"viewers"`
+}
+
+// AdBreakBeginEvent represents the start of a mid-roll ad break, scheduled by Ads Manager or run
+// manually by the broadcaster or an editor.
+// subscription type: channel.ad_break.begin (v1), requires the broadcaster's channel:read:ads grant
+// Reference: https://dev.twitch.tv/docs/eventsub/eventsub-reference/#channel-ad-break-begin-event
+type AdBreakBeginEvent struct {
+	DurationSeconds      lenientInt  `json:"duration_seconds"`
+	StartedAt            time.Time   `json:"started_at"`
+	IsAutomatic          lenientBool `json:"is_automatic"`
+	BroadcasterUserID    string      `json:"broadcaster_user_id"`
+	BroadcasterUserLogin string      `json:"broadcaster_user_login"`
+	BroadcasterUserName  string      `json:"broadcaster_user_name"`
+	RequesterUserID      string      `json:"requester_user_id"`
+	RequesterUserLogin   string      `json:"requester_user_login"`
+	RequesterUserName    string      `json:"requester_user_name"`
+}
+
+// lenientInt and lenientBool accept a JSON number/boolean or the same value quoted. Twitch's
+// reference table types duration_seconds and is_automatic as integer and boolean, but its own example
+// payload sends "60" and "false"; a strict decoder would drop every ad break of whichever shape
+// production turns out to use.
+type lenientInt int
+
+func (n *lenientInt) UnmarshalJSON(b []byte) error {
+	s := unquote(b)
+	if s == "" || s == "null" {
+		*n = 0
+		return nil
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	*n = lenientInt(v)
+	return nil
+}
+
+type lenientBool bool
+
+func (v *lenientBool) UnmarshalJSON(b []byte) error {
+	s := unquote(b)
+	if s == "" || s == "null" {
+		*v = false
+		return nil
+	}
+	parsed, err := strconv.ParseBool(s)
+	if err != nil {
+		return err
+	}
+	*v = lenientBool(parsed)
+	return nil
+}
+
+func unquote(b []byte) string {
+	var s string
+	if err := json.Unmarshal(b, &s); err == nil {
+		return s
+	}
+	return string(b)
 }
 
 // CheerEvent represents a bits/cheer event

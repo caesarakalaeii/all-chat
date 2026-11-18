@@ -142,6 +142,25 @@ func TestResolveUsesTheChatCommandImage(t *testing.T) {
 	assert.Equal(t, "https://cdn.example.com/profile.gif", Resolve(p, a).ImageURL)
 }
 
+// A chat command's own alert (ADR-0080) also brings its sound and its rendered
+// text; without them the profile's sound and template stay.
+func TestResolveUsesTheChatCommandSoundAndText(t *testing.T) {
+	p, ok := DefaultProfile(ChatCommandEvent)
+	require.True(t, ok)
+	p.SoundURL = "https://cdn.example.com/profile.mp3"
+	a := Alert{EventType: ChatCommandEvent, User: User{Name: "Viewer"},
+		EventData: &EventData{Value: &Value{Amount: 3, DisplayText: "!dog"}},
+		SoundURL:  "https://cdn.example.com/bark.mp3", Text: "Viewer called the dog"}
+	r := Resolve(p, a)
+	assert.Equal(t, "https://cdn.example.com/bark.mp3", r.SoundURL)
+	assert.Equal(t, "Viewer called the dog", r.Text, "the command's text is final, not a template")
+
+	a.SoundURL, a.Text = "", ""
+	r = Resolve(p, a)
+	assert.Equal(t, "https://cdn.example.com/profile.mp3", r.SoundURL)
+	assert.Equal(t, "Viewer used !dog", r.Text)
+}
+
 func TestTestAlertMatchesThePipelineEnvelope(t *testing.T) {
 	now := time.Date(2026, 10, 16, 12, 0, 0, 0, time.UTC)
 	a, err := TestAlert("overlay-1", "super_chat", now)

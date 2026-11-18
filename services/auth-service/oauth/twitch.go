@@ -110,7 +110,8 @@ func (t *TwitchOAuth) GetAuthURLWithChatScopes(state string) string {
 // twitchModerationScopesByAction maps a moderation action to the Twitch OAuth scopes
 // it requires. Most actions need exactly one scope; "engagement" (Twitch-native poll +
 // prediction mirroring via EventSub, issue #523) needs read access to both resources.
-// "modlog" (reading a channel's moderation and AutoMod events) needs nine.
+// "modlog" (reading a channel's moderation and AutoMod events) needs nine. "ads" (the
+// channel.ad_break.begin notice in the monitor) needs one read scope.
 // These scopes are requested ONLY through the dedicated opt-in re-consent flow and are
 // never bundled into login or add-source (ADR-0017, least privilege).
 var twitchModerationScopesByAction = map[string][]string{
@@ -126,6 +127,10 @@ var twitchModerationScopesByAction = map[string][]string{
 	// bot) send into this channel via Helix chat/messages. Bot consents themselves
 	// carry user:bot + user:write:chat; this is the broadcaster side of that pair.
 	"bot": {"channel:bot"},
+	// "ads" reads the streamer's own ad breaks (channel.ad_break.begin), so the monitor can
+	// say when one starts. Owner-only like "engagement": it is a scope on the requester's
+	// own channel.
+	"ads": {"channel:read:ads"},
 
 	// The eight moderator:read:* scopes are what channel.moderate v2 requires; Twitch
 	// accepts the corresponding moderator:manage:* as a superset for some of them, but we

@@ -20,7 +20,9 @@ import { describe, expect, it } from 'vitest';
 import {
   connectionCeilingReached,
   budgetRefusalRetryAfterMs,
+  connectDisposition,
   isBudgetRefusalError,
+  parkBlocksConnect,
   isWsFlapError,
   nextFlapRetryDelayMs,
   NoLaneCache,
@@ -250,5 +252,66 @@ describe('isBudgetRefusalError', () => {
     const wrapped = { info: 'WebSocket Error after connecting', exception: new Error('socket hang up') };
     expect(isBudgetRefusalError(wrapped)).toBe(false);
     expect(budgetRefusalRetryAfterMs(wrapped)).toBe(0);
+  });
+});
+
+describe('parkBlocksConnect', () => {
+  it('blocks a connect while the park has time left', () => {
+    expect(parkBlocksConnect(47 * 60_000)).toBe(true);
+    expect(parkBlocksConnect(1)).toBe(true);
+  });
+
+  it('allows a connect once the park has elapsed', () => {
+    // parkRemainingMs clamps at 0, so 0 is the only "no park" value the
+    // call site can produce — an elapsed park and a room that was never
+    // parked are indistinguishable here, and both may dial.
+    expect(parkBlocksConnect(0)).toBe(false);
+  });
+});
+
+describe('connectDisposition', () => {
+  // The gates connectToStream applies before it dials. 'defer' is the
+  // expensive one to get wrong in either direction: dialling a parked room
+  // spends one of the pod's twelve hourly WS-connect slots and re-queues the
+  // room behind everyone (prod 2026-11-18, alfonsooc0304 refused at 01:06:14
+  // for 47 minutes, re-dialled and refused again at 01:10:00), while
+  // deferring a room that is not parked strands it for a poller tick.
+  const clear = { parkRemainingMs: 0, liveConnectionCount: 0, ceiling: 20 };
+
+  it('dials a room that is unparked and under the ceiling', () => {
+    expect(connectDisposition(clear)).toBe('dial');
+  });
+
+  it('defers a room with time left on its park', () => {
+    expect(connectDisposition({ ...clear, parkRemainingMs: 47 * 60_000 })).toBe('parked');
+  });
+
+  it('dials a room whose park has elapsed', () => {
+    expect(connectDisposition({ ...clear, parkRemainingMs: 0 })).toBe('dial');
+  });
+
+  it('defers a room when the pod is at its connection ceiling', () => {
+    expect(connectDisposition({ ...clear, liveConnectionCount: 20 })).toBe('pod-full');
+  });
+
+  it('defers a parked room even when the pod has room to connect', () => {
+    // The park belongs to the signer's rolling hour, not to this pod's
+    // connection count, so spare capacity is not permission to dial.
+    expect(connectDisposition({
+      ...clear,
+      parkRemainingMs: 60_000,
+      liveConnectionCount: 0,
+    })).toBe('parked');
+  });
+
+  it('reports the pod being full ahead of the park', () => {
+    // Only decides which log line the operator gets; both defer. A full pod
+    // is the condition that strands other rooms too, so it is the one worth
+    // naming when both hold.
+    expect(connectDisposition({
+      parkRemainingMs: 60_000,
+      liveConnectionCount: 20,
+      ceiling: 20,
+    })).toBe('pod-full');
   });
 });

@@ -76,9 +76,17 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-// The extras for the beta-only overlay kinds, and for alerts, released to every host (lib/platform-availability.ts).
+// The extras for the beta-only overlay kinds (lib/platform-availability.ts), and
+// those offered to everyone on every host.
 const betaOnlyStems = ['goalOverlay', 'listOverlay'] as const
-const alertsStems = ['alertsOverlay', 'alertsEditor'] as const
+const everyHostStems = [
+  'alertsOverlay',
+  'alertsEditor',
+  'mediaUploads',
+  'chatCommands',
+  'youtubeCommandReplies',
+  'customChatBot',
+] as const
 
 describe('OnboardingChecklist step-viewed tracking', () => {
   it('reports nothing while the guide is inactive', () => {
@@ -160,7 +168,7 @@ describe('OnboardingChecklist optional extras', () => {
     expect(getByText(t('onboarding.extras.youtubeOfficialApiBody'))).toBeInTheDocument()
   })
 
-  it('lists the alerts overlay outside the beta host', () => {
+  it('lists alerts, uploads and chat commands outside the beta host', () => {
     useOnboardingStore.setState({
       status: 'active',
       sessionSteps: { obsCopied: true, extrasDone: false },
@@ -168,7 +176,7 @@ describe('OnboardingChecklist optional extras', () => {
     const { getByText } = render(
       <OnboardingChecklist surface="editor" sourceCount={1} themeId="neon" overlayCount={1} />
     )
-    for (const stem of alertsStems) {
+    for (const stem of everyHostStems) {
       expect(getByText(t(`onboarding.extras.${stem}Title`))).toBeInTheDocument()
     }
   })

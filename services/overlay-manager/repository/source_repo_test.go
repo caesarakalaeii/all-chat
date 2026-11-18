@@ -68,13 +68,16 @@ func setupSourceTestDatabase(t *testing.T) (*SourceRepository, func()) {
 			updated_at TIMESTAMP DEFAULT NOW()
 		);
 
+		-- The columns ListByOverlayIDForUser reads, as migrations 030 and 033 define them.
 		CREATE TABLE IF NOT EXISTS share_requests (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			requester_id UUID NOT NULL,
-			target_id UUID NOT NULL,
-			status VARCHAR(50) NOT NULL DEFAULT 'pending',
-			created_at TIMESTAMP DEFAULT NOW(),
-			updated_at TIMESTAMP DEFAULT NOW()
+			sender_user_id UUID NOT NULL,
+			sender_overlay_id UUID NOT NULL REFERENCES overlays(id),
+			recipient_user_id UUID NOT NULL,
+			status VARCHAR(20) NOT NULL DEFAULT 'pending'
+				CHECK (status IN ('pending', 'accepted', 'rejected', 'expired', 'revoked')),
+			created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			responded_at TIMESTAMP
 		);
 
 		CREATE TABLE IF NOT EXISTS overlay_chat_sources (
@@ -143,6 +146,23 @@ func createTestOverlay(t *testing.T, repo *SourceRepository) string {
 	)
 	require.NoError(t, err)
 	return overlayID
+}
+
+// createTestShare shares a new sender overlay with the owner of recipientOverlayID and
+// returns the sender overlay id, which is what a shared_overlay source stores in channel_id.
+func createTestShare(t *testing.T, repo *SourceRepository, recipientOverlayID, status string) string {
+	t.Helper()
+	senderOverlayID := createTestOverlay(t, repo)
+	tag, err := repo.pool.Exec(context.Background(), `
+		INSERT INTO share_requests (sender_user_id, sender_overlay_id, recipient_user_id, status, responded_at)
+		SELECT s.user_id, s.id, r.user_id, $3, NOW()
+		FROM overlays s, overlays r
+		WHERE s.id = $1 AND r.id = $2`,
+		senderOverlayID, recipientOverlayID, status,
+	)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, tag.RowsAffected())
+	return senderOverlayID
 }
 
 // TestCreateOrUpdateAuto_Idempotent verifies that re-adding the same (overlay, platform,
@@ -263,28 +283,21 @@ func TestListByOverlayID_NonSharedSource(t *testing.T) {
 	assert.Nil(t, sources[0].ShareStatus, "ShareStatus must be nil for non-shared_overlay sources")
 }
 
-// TestListByOverlayID_SharedOverlaySource_Active verifies that a shared_overlay source
+// TestListByOverlayID_SharedOverlaySource_Accepted verifies that a shared_overlay source
 // gets its share_status populated from the share_requests table.
-func TestListByOverlayID_SharedOverlaySource_Active(t *testing.T) {
+func TestListByOverlayID_SharedOverlaySource_Accepted(t *testing.T) {
 	repo, cleanup := setupSourceTestDatabase(t)
 	defer cleanup()
 
 	ctx := context.Background()
 	overlayID := createTestOverlay(t, repo)
+	senderOverlayID := createTestShare(t, repo, overlayID, "accepted")
 
-	// Insert a share_request row with status 'active'
-	shareID := uuid.New().String()
-	_, err := repo.pool.Exec(ctx,
-		`INSERT INTO share_requests (id, requester_id, target_id, status) VALUES ($1, $2, $3, $4)`,
-		shareID, uuid.New().String(), uuid.New().String(), "active",
-	)
-	require.NoError(t, err)
-
-	// Insert a shared_overlay source where channel_id = shareID (Phase 16 convention)
+	// A shared_overlay source stores the sender overlay id in channel_id.
 	src := &models.ChatSource{
 		OverlayID:   overlayID,
 		Platform:    "shared_overlay",
-		ChannelID:   shareID,
+		ChannelID:   senderOverlayID,
 		ChannelName: "Partner Overlay",
 		IsActive:    true,
 	}
@@ -296,7 +309,7 @@ func TestListByOverlayID_SharedOverlaySource_Active(t *testing.T) {
 
 	assert.Equal(t, "shared_overlay", sources[0].Platform)
 	require.NotNil(t, sources[0].ShareStatus, "ShareStatus must be non-nil for shared_overlay sources")
-	assert.Equal(t, "active", *sources[0].ShareStatus)
+	assert.Equal(t, "accepted", *sources[0].ShareStatus)
 }
 
 // TestListByOverlayID_SharedOverlaySource_Revoked verifies that a revoked shared_overlay
@@ -307,18 +320,12 @@ func TestListByOverlayID_SharedOverlaySource_Revoked(t *testing.T) {
 
 	ctx := context.Background()
 	overlayID := createTestOverlay(t, repo)
-
-	shareID := uuid.New().String()
-	_, err := repo.pool.Exec(ctx,
-		`INSERT INTO share_requests (id, requester_id, target_id, status) VALUES ($1, $2, $3, $4)`,
-		shareID, uuid.New().String(), uuid.New().String(), "revoked",
-	)
-	require.NoError(t, err)
+	senderOverlayID := createTestShare(t, repo, overlayID, "revoked")
 
 	src := &models.ChatSource{
 		OverlayID:   overlayID,
 		Platform:    "shared_overlay",
-		ChannelID:   shareID,
+		ChannelID:   senderOverlayID,
 		ChannelName: "Revoked Overlay",
 		IsActive:    false,
 	}
@@ -352,17 +359,12 @@ func TestListByOverlayID_MixedSources(t *testing.T) {
 	require.NoError(t, repo.Create(ctx, twitchSrc))
 
 	// shared_overlay source with a known share_request
-	shareID := uuid.New().String()
-	_, err := repo.pool.Exec(ctx,
-		`INSERT INTO share_requests (id, requester_id, target_id, status) VALUES ($1, $2, $3, $4)`,
-		shareID, uuid.New().String(), uuid.New().String(), "expired",
-	)
-	require.NoError(t, err)
+	senderOverlayID := createTestShare(t, repo, overlayID, "expired")
 
 	sharedSrc := &models.ChatSource{
 		OverlayID:   overlayID,
 		Platform:    "shared_overlay",
-		ChannelID:   shareID,
+		ChannelID:   senderOverlayID,
 		ChannelName: "Shared Partner",
 		IsActive:    false,
 	}

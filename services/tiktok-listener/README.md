@@ -108,6 +108,7 @@ TIKTOK_SELF_SIGN_FALLBACK=true        # Under `self`, fall back to Euler when ou
 TIKTOK_SIGNER_URL=                    # tiktok-signer service URL; empty = no self signer
 TIKTOK_SIGNER_AUTH_TOKEN=             # Bearer token if the signer service runs with auth
 TIKTOK_SIGNER_TIMEOUT_MS=180000       # Self-signer HTTP timeout; signer rotates lanes inside one request
+TIKTOK_MAX_WS_CONNECTS_PER_HOUR=12    # pure-node: this pod's WS-connect signs per rolling hour; divide by replicas
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
 
@@ -130,7 +131,7 @@ TIKTOK_US_RELAY_TOKEN=                # Shared secret, sent as X-Relay-Token
 TIKTOK_HEARTBEAT_INTERVAL_MS=30000     # How often to check (default)
 TIKTOK_HEARTBEAT_TIMEOUT_MS=90000      # Silence before a forced reconnect (default)
 
-# WS connect flap (2026-09-16 transport plan): TikTok answering the upgrade
+# WS connect flap (ADR-0064): TikTok answering the upgrade
 # with HTTP 200 is a transient flap; connect retries immediately up to
 # TIKTOK_FLAP_MAX_FAST_RETRIES before falling into normal error backoff.
 # Retries 1-2 wait TIKTOK_FLAP_RETRY_DELAY_MS, retries 3+ wait 3x that —
@@ -242,7 +243,8 @@ it (constraint: ~15 WS connects/hour flags the session): successful
 lease fetches ≤ 8/hour (10-min cache, single-flight) and WS connect
 signs ≤ 12/hour **per pod** — the session's flag budget is shared by
 every pod leasing it, so keep ONE connect-capable replica in pure-node
-rollouts or divide the cap accordingly. The premium **fallback tier is
+rollouts or divide the cap across replicas with
+`TIKTOK_MAX_WS_CONNECTS_PER_HOUR`. The premium **fallback tier is
 ON** in this mode (PR 3 of the pure-Node transport): promotion warms the
 target-room tab on the signer (`POST /v1/sign` viewer path, one capture
 per attempt, premium-gated) before attaching the relay, and the canary
@@ -282,8 +284,9 @@ sum(rate(tiktok_sign_attempts_total{signer="self",outcome="success",load_bearing
 sum(rate(tiktok_sign_attempts_total{reason="rate_limit"}[5m]))
 
 # How often are we refusing ourselves on the pure-node hourly budgets
-# (WS connects, leases)? A refused room is parked until the window
-# slides — this is capacity signal, not an external fault.
+# (WS connects, leases)? A room refused a WS connect is queued for its
+# own freeing slot, held for it when it frees, so one refusal is one
+# room waiting — this is capacity signal, not an external fault.
 sum(rate(tiktok_sign_attempts_total{reason="budget"}[5m]))
 ```
 
@@ -376,7 +379,7 @@ The service publishes messages to Redis Stream `chat:raw` in the following forma
 
 ## Health Endpoints
 
-- `GET /health/live` - Liveness probe (always returns 200)
+- `GET /health/live` - Liveness probe (503 once the Redis client has been not-ready for 2 minutes, so the kubelet restarts a pod whose client stopped reconnecting)
 - `GET /health/ready` - Readiness probe (checks Redis connection)
 - `GET /status` - Service status with active stream count
 

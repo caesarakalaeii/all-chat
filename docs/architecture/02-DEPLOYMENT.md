@@ -39,13 +39,14 @@ All-Chat is designed as a **Kubernetes-native** application, leveraging Kubernet
 
 **Phase 1 - Early Stages (Current)**:
 - **Platform**: Hetzner VPS with Kubernetes
-- **Storage**: Hetzner Cloud Volumes (hcloud-csi driver)
-- **Backups**: Local volume snapshots (7-day retention)
+- **Storage**: node-local `local-path` volumes (no CSI snapshots)
+- **Backups**: Postgres WAL + nightly base backups to Hetzner Object Storage
+  (30-day PITR window), silo alert media mirrored nightly; both copied on to
+  Backblaze B2. See ADR-0003 → Backups.
 - **Cost**: ~€50-100/month
 
 **Phase 2+ - Production Scale**:
 - **Storage**: Migrate to Hetzner Object Storage or S3-compatible
-- **Backups**: Object storage with 30-day retention + PITR
 - **Multi-region**: Consider geographic distribution
 
 This document provides complete Kubernetes deployment specifications for both phases.
@@ -904,9 +905,9 @@ spec:
       secret:
         name: allchat-pg-credentials
 
-  # Storage configuration (Hetzner Cloud Volumes)
+  # Storage configuration (node-local volumes)
   storage:
-    storageClass: hcloud-volumes  # Hetzner CSI driver
+    storageClass: local-path
     size: 50Gi
 
   # Resource limits
@@ -918,30 +919,14 @@ spec:
       cpu: "2000m"
       memory: "4Gi"
 
-  # Automated backup to local volume (Phase 1 - VPS)
-  # NOTE: For production, migrate to S3/object storage
-  backup:
-    volumeSnapshot:
-      className: hcloud-volumes
-    retentionPolicy: "7d"  # Keep 7 days locally due to space constraints
-
-  # For production with object storage, uncomment:
-  # backup:
-  #   barmanObjectStore:
-  #     destinationPath: s3://allchat-backups/postgresql
-  #     endpointURL: https://fsn1.your-region.hetznerobjects.com
-  #     s3Credentials:
-  #       accessKeyId:
-  #         name: s3-credentials
-  #         key: ACCESS_KEY_ID
-  #       secretAccessKey:
-  #         name: s3-credentials
-  #         key: SECRET_ACCESS_KEY
-  #     wal:
-  #       compression: gzip
-  #     data:
-  #       compression: gzip
-  #   retentionPolicy: "30d"
+  # WAL archiving + base backups through the Barman Cloud plugin; the
+  # ObjectStore, ScheduledBackup and B2 mirror are in caesar-deployment
+  # (ADR-0003 → Backups).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: allchat-hetzner
 
   # Connection pooling (optional but recommended)
   connectionPooler:

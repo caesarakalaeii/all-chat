@@ -48,16 +48,18 @@ import { Input } from '@/components/ui/input'
 import { ChannelLink } from '@/components/ChannelLink'
 import { formatNumber, formatTimestamp, useTranslations } from '@/lib/i18n'
 
+// One platform account (ADR-0034). session_id is null for an identity that never
+// signed in (engagement-service creates one for every chatter who earns points) or
+// logged out; viewer_id is null for a session no identity was resolved for. Ban and
+// activity act on the session, premium on the viewer.
 interface ViewerSession {
-  id: string
+  session_id: string | null
   platform: string
   platform_user_id: string
   username: string
   display_name: string
   avatar_url?: string | null
   last_message_at: string | null
-  message_count_1min: number
-  message_count_1hour: number
   is_premium: boolean
   premium_expires_at?: string | null
   viewer_id: string | null
@@ -103,6 +105,9 @@ const DEFAULT_BAN_REASON = 'No reason provided'
 // typographic symbol standing in for absent data, not copy; the title attribute
 // beside it says the same thing in words.
 const NO_ACCOUNT_DASH = '\u2014'
+
+// Sessions and identities share no id, but each row is one platform account.
+const rowKey = (v: ViewerSession) => `${v.platform}:${v.platform_user_id}`
 
 export default function AdminViewersPage() {
   const router = useRouter()
@@ -190,7 +195,14 @@ export default function AdminViewersPage() {
           `/api/v1/admin/viewers?${params.toString()}`
         )
         if (cancelled) return
-        setViewers(response.viewers ?? [])
+        // An identity without a session has no username; its platform id is the
+        // only name it has, so every label and toast falls back to it.
+        setViewers(
+          (response.viewers ?? []).map((v) => ({
+            ...v,
+            username: v.username || v.platform_user_id,
+          }))
+        )
         setTotal(response.total ?? 0)
       } catch (error) {
         if (cancelled) return
@@ -210,12 +222,13 @@ export default function AdminViewersPage() {
   const refetchViewers = () => setRefreshKey((k) => k + 1)
 
   const openActivity = async (viewer: ViewerSession) => {
+    if (!viewer.session_id) return
     setActivityViewer(viewer)
     setActivity(null)
     setActivityLoading(true)
     try {
       const data = await apiClient.get<ViewerActivity>(
-        `/api/v1/admin/viewers/${viewer.id}/activity`
+        `/api/v1/admin/viewers/${viewer.session_id}/activity`
       )
       setActivity(data)
     } catch (error) {
@@ -233,11 +246,11 @@ export default function AdminViewersPage() {
   }
 
   const handleBan = async () => {
-    if (!selectedViewer) return
+    if (!selectedViewer?.session_id) return
 
     try {
-      setBanningId(selectedViewer.id)
-      await apiClient.post(`/api/v1/admin/viewers/${selectedViewer.id}/ban`, {
+      setBanningId(selectedViewer.session_id)
+      await apiClient.post(`/api/v1/admin/viewers/${selectedViewer.session_id}/ban`, {
         reason: banReason || DEFAULT_BAN_REASON,
       })
       toastManager.add({
@@ -281,7 +294,7 @@ export default function AdminViewersPage() {
       if (granting && durationSeconds != null) {
         body.duration_seconds = durationSeconds
       }
-      await apiClient.post(`/api/v1/admin/viewers/${viewer.id}/premium`, body)
+      await apiClient.post(`/api/v1/admin/viewers/identities/${viewer.viewer_id}/premium`, body)
       toastManager.add({
         title: viewer.is_premium
           ? t('admin.viewers.premiumRevoked', { username: viewer.username })
@@ -340,6 +353,10 @@ export default function AdminViewersPage() {
   }
 
   function renderActionControls(viewer: ViewerSession) {
+    // No session: nothing to ban and no sent messages to show.
+    if (!viewer.session_id) {
+      return <span className="text-xs text-text-dim">{t('admin.viewers.neverSignedIn')}</span>
+    }
     return (
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => openActivity(viewer)}>
@@ -350,14 +367,14 @@ export default function AdminViewersPage() {
             variant="outline"
             size="sm"
             aria-label={
-              banningId === viewer.id
+              banningId === viewer.session_id
                 ? t('admin.viewers.unbanningLabel', { username: viewer.username })
                 : t('admin.viewers.unbanLabel', { username: viewer.username })
             }
-            disabled={banningId === viewer.id}
+            disabled={banningId === viewer.session_id}
             onClick={() => setUnbanDialogViewer(viewer)}
           >
-            {banningId === viewer.id
+            {banningId === viewer.session_id
               ? t('admin.viewers.unbanningButton')
               : t('admin.viewers.unbanButton')}
           </Button>
@@ -366,7 +383,7 @@ export default function AdminViewersPage() {
             variant="destructive"
             size="sm"
             aria-label={t('admin.viewers.banLabel', { username: viewer.username })}
-            disabled={banningId === viewer.id}
+            disabled={banningId === viewer.session_id}
             onClick={() => handleBanClick(viewer)}
           >
             {t('admin.viewers.banButton')}
@@ -385,14 +402,29 @@ export default function AdminViewersPage() {
           size={32}
         />
         <div className="min-w-0">
+          {/* A YouTube viewer's platform id is their UC… channel id; elsewhere the
+              link needs the session's login, which an identity alone lacks. */}
           <ChannelLink
             platform={viewer.platform}
-            channelId={viewer.username}
+            channelId={
+              viewer.platform === 'youtube'
+                ? viewer.platform_user_id
+                : viewer.session_id
+                  ? viewer.username
+                  : ''
+            }
             channelName={viewer.display_name || viewer.username}
             className="truncate text-sm font-medium text-text"
           />
-          <div className="truncate text-xs text-text-sub">@{viewer.username}</div>
-          <div className="truncate font-mono text-xs text-text-dim">{viewer.platform_user_id}</div>
+          {/* Without a session the platform id already is the name above. */}
+          {viewer.session_id && (
+            <>
+              <div className="truncate text-xs text-text-sub">@{viewer.username}</div>
+              <div className="truncate font-mono text-xs text-text-dim">
+                {viewer.platform_user_id}
+              </div>
+            </>
+          )}
         </div>
       </div>
     )
@@ -526,7 +558,7 @@ export default function AdminViewersPage() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {viewers.map((viewer) => (
-                    <tr key={viewer.id} className="transition-colors hover:bg-surface-2">
+                    <tr key={rowKey(viewer)} className="transition-colors hover:bg-surface-2">
                       <th scope="row" className="px-4 py-3 text-left font-normal">
                         {renderIdentity(viewer)}
                       </th>
@@ -570,7 +602,7 @@ export default function AdminViewersPage() {
           {/* Mobile card list */}
           <div className="space-y-3 md:hidden">
             {viewers.map((viewer) => (
-              <Card key={viewer.id} className="p-4">
+              <Card key={rowKey(viewer)} className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   {renderIdentity(viewer)}
                   {viewer.is_banned ? (
@@ -810,8 +842,11 @@ export default function AdminViewersPage() {
               />
               <Button
                 variant="default"
-                disabled={banningId === unbanDialogViewer.id}
-                onClick={() => handleUnban(unbanDialogViewer.id, unbanDialogViewer.username)}
+                disabled={banningId === unbanDialogViewer.session_id}
+                onClick={() =>
+                  unbanDialogViewer.session_id &&
+                  handleUnban(unbanDialogViewer.session_id, unbanDialogViewer.username)
+                }
               >
                 {t('admin.viewers.unbanConfirm')}
               </Button>
@@ -854,17 +889,17 @@ export default function AdminViewersPage() {
           <div className="mt-6 flex justify-end gap-3">
             <Dialog.Close
               render={
-                <Button variant="outline" disabled={banningId === selectedViewer?.id}>
+                <Button variant="outline" disabled={banningId === selectedViewer?.session_id}>
                   {t('admin.viewers.banCancel')}
                 </Button>
               }
             />
             <Button
               variant="destructive"
-              disabled={banningId === selectedViewer?.id}
+              disabled={banningId === selectedViewer?.session_id}
               onClick={handleBan}
             >
-              {banningId === selectedViewer?.id
+              {banningId === selectedViewer?.session_id
                 ? t('admin.viewers.banning')
                 : t('admin.viewers.banConfirm')}
             </Button>

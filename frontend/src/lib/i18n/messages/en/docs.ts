@@ -121,7 +121,7 @@ export const docs = {
     messageTypesChatMessage:
       'A chat message or a platform event. data is the unified message object.',
     messageTypesMessageUpdate:
-      'An update to a previously sent message (e.g. TikTok like aggregates). Same data shape as chat_message.',
+      'An update to a previously sent message: a TikTok like aggregate (matched by event.aggregation_id) or a chat message whose media arrived late, e.g. a Discord GIF link preview (matched by id; ignore it if that message is no longer shown). Same data shape as chat_message.',
     messageTypesConnected: 'Sent once on connect: { overlay_id, message }.',
     messageTypesPlatformStatus: 'Connection status of a source platform.',
     messageTypesPing: 'Heartbeat from the server. Reply with { "type": "pong" }.',

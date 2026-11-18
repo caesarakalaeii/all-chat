@@ -54,6 +54,7 @@ func (r *Repository) FindAlertOverlays(ctx context.Context, platform, channelID 
 		    AND ocs.is_active = true
 		JOIN share_requests sr
 		    ON sr.sender_overlay_id = ocs.channel_id::uuid
+		    AND sr.recipient_user_id = o.user_id
 		    AND sr.status = 'accepted'
 		WHERE o.is_active = true
 		  AND o.overlay_type IN ('alerts','goal','list')

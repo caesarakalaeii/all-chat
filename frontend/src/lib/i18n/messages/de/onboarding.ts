@@ -81,21 +81,30 @@ export const onboarding: LocaleNamespace<'onboarding'> = {
     bubbleColorsTitle: 'Unterschiedlich farbige Sprechblasen',
     bubbleColorsBody:
       'Gib jeder Plattform ihre eigene Blasenfarbe oder Spiele eine Palette über den Chat hinweg durch, unter Blasenfarben in Darstellung. Kostenlos.',
+    adBreaksTitle: 'Twitch-Werbepausen-Meldungen',
+    adBreaksBody:
+      'Das Panel „Aktivität & Events“ im Monitor zeigt, wann eine Twitch-Werbepause startet – geplant oder von Hand –, damit du pausieren kannst. Aktivieren über das Banner im Monitor. Kostenlos.',
     alertsOverlayTitle: 'Alert-Overlays',
     alertsOverlayBody:
-      'Zeige Abos, Bits, Raids, Super Chats und TikTok-Geschenke als eigene OBS-Quelle im Stream, mit Test-Button zum Ausrichten.',
+      'Zeige Abos, Bits, Raids, Super Chats und TikTok-Geschenke als eigene OBS-Quelle im Stream, mit Test-Button zum Ausrichten. Kostenlos.',
     alertsEditorTitle: 'Eigener Alert-Editor',
     alertsEditorBody:
-      'Gib jedem Alert eigenen Text, ein GIF und einen Sound, suche GIFs direkt im Editor oder schreibe eigenes HTML, CSS und JavaScript dafür.',
+      'Gib jedem Alert eigenen Text, ein GIF und einen Sound, suche GIFs direkt im Editor oder schreibe eigenes HTML, CSS und JavaScript dafür. Kostenlos.',
     goalOverlayTitle: 'Ziel-Overlays',
     goalOverlayBody:
       'Ein Fortschrittsbalken für ein Follower-, Abonnenten-, Bits- oder Super-Chat-Ziel, der sich live auf dem Stream füllt.',
     listOverlayTitle: 'Bestenlisten-Overlays',
     listOverlayBody:
       'Zeig deine Top-Cheerer, -Verschenker oder -Super-Chatter der letzten 30 Tage auf dem Stream, aktualisiert bei jedem neuen.',
+    mediaUploadsTitle: 'Eigene Medien hochladen',
+    mediaUploadsBody:
+      'Premium: lade eigene Bilder, GIFs und Sounds für Alerts und Befehls-Alerts hoch. Links einfügen und GIFs suchen bleibt kostenlos.',
     chatCommandsTitle: 'Chat-Befehle',
     chatCommandsBody:
-      'Eigene !Befehle und Stichwörter für jeden Chat: antworte als du selbst, clippe deinen Twitch-Stream auf Zuruf, zeige ein Bild auf deinem Alert-Overlay und nutze Variablen, Web-Abfragen oder JavaScript in Antworten. Antworten im YouTube-Chat sind Premium.',
+      'Eigene !Befehle und Stichwörter für jeden Chat: antworte als du selbst, clippe deinen Twitch-Stream auf Zuruf, zeige einen eigenen Alert (Bild, Sound, Text) auf deinem Alert-Overlay und nutze Variablen, Web-Abfragen oder JavaScript in Antworten. Antworten im YouTube-Chat sind Premium.',
+    youtubeCommandRepliesTitle: 'Befehlsantworten im YouTube-Chat',
+    youtubeCommandRepliesBody:
+      'Premium: deine Chat-Befehle und Timer antworten auch im YouTube-Chat, nicht nur auf Twitch und Kick.',
     customChatBotTitle: 'Dein eigener Chat-Bot',
     customChatBotBody:
       'Premium: verbinde dein eigenes Bot-Konto auf Twitch, Kick oder YouTube, und Befehlsantworten und Timer gehen unter dem Namen deines Bots raus.',

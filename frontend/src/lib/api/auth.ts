@@ -24,7 +24,7 @@
  */
 
 import { apiClient } from './client'
-import type { User, LoginResponse } from '../types/auth'
+import type { User, LoginResponse, ConnectablePlatform, PlatformConnection } from '../types/auth'
 import type { ChatBotPlatform, ChatBotStatus } from '../types/engagement'
 
 export const authApi = {
@@ -79,11 +79,43 @@ export const authApi = {
   },
 
   /**
+   * Everything stored about the signed-in streamer, as the JSON export the
+   * privacy policy promises (DSGVO Art. 15/20).
+   */
+  async exportData(): Promise<unknown> {
+    return apiClient.get<unknown>('/api/v1/auth/me/data-export')
+  },
+
+  /**
    * Set (true = finished/dismissed) or clear (false = restart from Settings)
    * the first-run setup guide state. Rejected with 403 while impersonating.
    */
   async updateOnboarding(completed: boolean): Promise<{ onboarding_completed_at: string | null }> {
     return apiClient.patch('/api/v1/auth/me/onboarding', { completed })
+  },
+
+  /** Every platform whose OAuth tokens the account holds. */
+  async getConnections(): Promise<PlatformConnection[]> {
+    const res = await apiClient.get<{ connections: PlatformConnection[] }>(
+      '/api/v1/auth/me/connections'
+    )
+    return res.connections
+  },
+
+  /**
+   * Delete the account's tokens for a linked platform and revoke them at the provider.
+   * Rejected with 409 for the platform the account signs in with.
+   */
+  async disconnectPlatform(platform: ConnectablePlatform): Promise<void> {
+    await apiClient.delete(`/api/v1/auth/me/connections/${platform}`)
+  },
+
+  /**
+   * Record acceptance of the current Terms of Service and Privacy Policy.
+   * Rejected with 403 while impersonating.
+   */
+  async acceptTos(): Promise<{ tos_accepted: boolean }> {
+    return apiClient.post('/api/v1/auth/me/tos-acceptance', {})
   },
 
   // --- Chat bots (ADR-0081) ---

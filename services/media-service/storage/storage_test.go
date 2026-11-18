@@ -36,6 +36,7 @@ func TestLoadConfig_DefaultsWhenUnset(t *testing.T) {
 	assert.Equal(t, "https://media.allch.at", cfg.PublicBaseURL)
 	assert.Equal(t, 5*time.Minute, cfg.PresignExpiry)
 	assert.Equal(t, 100, cfg.MaxObjectsPerUser)
+	assert.Equal(t, 15*time.Minute, cfg.OrphanSweepInterval, "ADR-0088: a deleted account's files leave the public bucket within 15 minutes")
 }
 
 func TestLoadConfig_ParsesExplicitValues(t *testing.T) {
@@ -47,6 +48,7 @@ func TestLoadConfig_ParsesExplicitValues(t *testing.T) {
 	t.Setenv("MEDIA_PUBLIC_URL", "https://cdn.example.com/allchat-media/")
 	t.Setenv("MEDIA_PRESIGN_EXPIRY", "30s")
 	t.Setenv("MEDIA_MAX_OBJECTS_PER_USER", "7")
+	t.Setenv("MEDIA_ORPHAN_SWEEP_INTERVAL", "1m")
 
 	cfg, err := LoadConfig()
 	require.NoError(t, err)
@@ -59,6 +61,7 @@ func TestLoadConfig_ParsesExplicitValues(t *testing.T) {
 	assert.Equal(t, "https://cdn.example.com/allchat-media", cfg.PublicBaseURL, "trailing slash must be trimmed so public_url joins cleanly")
 	assert.Equal(t, 30*time.Second, cfg.PresignExpiry)
 	assert.Equal(t, 7, cfg.MaxObjectsPerUser)
+	assert.Equal(t, time.Minute, cfg.OrphanSweepInterval)
 }
 
 func TestLoadConfig_RejectsInvalidValues(t *testing.T) {
@@ -70,6 +73,13 @@ func TestLoadConfig_RejectsInvalidValues(t *testing.T) {
 	t.Setenv("MEDIA_MAX_OBJECTS_PER_USER", "not-a-number")
 	_, err = LoadConfig()
 	assert.Error(t, err, "an unparsable quota must not silently fall back to the default")
+
+	t.Setenv("MEDIA_MAX_OBJECTS_PER_USER", "100")
+	for _, bad := range []string{"soon", "0s", "-1m"} {
+		t.Setenv("MEDIA_ORPHAN_SWEEP_INTERVAL", bad)
+		_, err = LoadConfig()
+		assert.Error(t, err, "sweep interval %q must be rejected, not silently stop erasing deleted files", bad)
+	}
 }
 
 func TestLoadConfig_RejectsUnparsableUseSSL(t *testing.T) {

@@ -453,6 +453,25 @@ func main() {
 				}
 			}
 
+			// Ad breaks (channel.ad_break.begin). Opt-in: needs the broadcaster's channel:read:ads
+			// grant from the ?actions=ads re-consent, so a scope error is expected and non-fatal.
+			// Same ADR-0030 limitation as above: a grant made after tracking begins takes effect on
+			// the next channel (re)sync.
+			if _, err := subscriptionMgr.SubscribeToAdBreakBegin(ctx, broadcasterID); err != nil {
+				if strings.Contains(err.Error(), "subscription already exists") {
+					successCount++
+				} else if isScopeError(err) {
+					log.Info("Ad break events require re-authentication with channel:read:ads scope",
+						zap.String("broadcaster_id", broadcasterID))
+					scopeErrorCount++
+				} else {
+					log.Warn("Failed to subscribe to ad breaks", zap.String("broadcaster_id", broadcasterID), zap.Error(err))
+					failCount++
+				}
+			} else {
+				successCount++
+			}
+
 			// Chat (channel.chat.message) is NOT created here — it is managed separately via
 			// the subscribe_chat/unsubscribe_chat actions, gated on chat scope AND live-overlay
 			// demand. Keeping it out of "subscribe" ensures the event subscriptions above are

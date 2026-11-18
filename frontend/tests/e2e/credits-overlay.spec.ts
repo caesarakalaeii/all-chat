@@ -19,8 +19,8 @@
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * The credit roll OBS source: the roll scrolls up at the configured speed, and
- * enabled clips play behind it one after another, as the clip's MP4 when
+ * The credit roll OBS source: the roll scrolls up at the configured speed,
+ * holds its end for the restart delay before it starts over, and enabled clips play behind it one after another, as the clip's MP4 when
  * Twitch's web GQL hands out a signed URL (ADR-0076) and through the muted clip
  * embed otherwise. The public config and credit-roll reads, the GQL lookup and
  * the clip embed are mocked, so the test never reaches Twitch.
@@ -108,6 +108,31 @@ async function boot(page: Page, config: Record<string, unknown>) {
 const headingTop = (page: Page) =>
   page.getByRole('heading', { level: 1 }).evaluate((el) => el.getBoundingClientRect().top)
 
+/**
+ * Pauses the roll's endless scroll (the header's fade-in is the page's other
+ * animation) and reads its cycle length and where the roll sits each of
+ * `msBeforeRestart` before its next pass begins.
+ */
+async function rollCycle(page: Page, msBeforeRestart: number[]) {
+  await expect(page.getByRole('heading', { level: 1 })).toBeAttached()
+  return page.evaluate((msBeforeRestart) => {
+    const animation = document
+      .getAnimations()
+      .find((a) => a.effect?.getTiming().iterations === Infinity)!
+    animation.pause()
+    const cycleMs = Number(animation.effect!.getTiming().duration)
+    const roll = (animation.effect as KeyframeEffect).target!
+    return {
+      cycleMs,
+      boxes: msBeforeRestart.map((ms) => {
+        animation.currentTime = cycleMs - ms
+        const { top, bottom } = roll.getBoundingClientRect()
+        return { top, bottom }
+      }),
+    }
+  }, msBeforeRestart)
+}
+
 test('the roll starts below the screen and scrolls up', async ({ page }) => {
   await boot(page, { scroll_speed: 100, display_duration_seconds: 60 })
   await expect(page.getByRole('heading', { level: 1 })).toBeAttached()
@@ -115,6 +140,28 @@ test('the roll starts below the screen and scrolls up', async ({ page }) => {
   const first = await headingTop(page)
   expect(first).toBeGreaterThan(600)
   await expect.poll(() => headingTop(page)).toBeLessThan(first - 50)
+})
+
+test('the roll holds its end for the restart delay, then starts over from below the screen', async ({
+  page,
+}) => {
+  await boot(page, { scroll_speed: 100, display_duration_seconds: 10, restart_delay_seconds: 120 })
+
+  const {
+    boxes: [scrolling, holding, restarted],
+  } = await rollCycle(page, [121_000, 119_000, 0])
+  expect(scrolling.bottom).toBeGreaterThan(760)
+  expect(holding.bottom).toBeCloseTo(720, 0)
+  expect(restarted.top).toBeCloseTo(720, 0)
+})
+
+test('with a short restart delay the roll still runs the whole display duration', async ({
+  page,
+}) => {
+  await boot(page, { scroll_speed: 100, display_duration_seconds: 300, restart_delay_seconds: 5 })
+
+  const { cycleMs } = await rollCycle(page, [])
+  expect(cycleMs).toBe(300_000)
 })
 
 test('clips play as the MP4 from Twitch, with sound unless muted, and advance when one ends', async ({
