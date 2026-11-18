@@ -332,9 +332,13 @@ normalizers := map[string]normalizer.Normalizer{
    - The per-user entry is written even when the chatter has no emotes of their
      own, in which case it is empty. Its presence is what distinguishes "looked
      up, has nothing" from "never looked up"
-   - A per-user write with no channel entry yet seeds that entry from the same
-     response first, since on a channel whose chatters are all Twitch or Kick
-     nothing else ever writes it
+   - A per-user write with no channel entry yet seeds that entry first, since on
+     a channel whose chatters are all Twitch or Kick nothing else ever writes
+     it. The seed uses its own lookup carrying no user id: the response that
+     triggered it has the chatter's personal set merged in, and storing that
+     under the shared key would serve one chatter's emotes to the whole channel.
+     If the seed fails, the per-user write is skipped rather than splitting
+     against an empty set, which would store a full copy again
 
 4. **Viewer Identity Enrichment** (`enricher/viewer_badge_enricher.go`):
    - Resolve All-Chat platform identity (name_color, avatar frame/flair, admin/premium badges)

@@ -351,7 +351,13 @@ func (e *Enricher) fetchEmotes(ctx context.Context, channel, platform, userID, t
 // half alone would silently drop the chatter's own emotes while serving the
 // personal half alone would drop the channel's.
 //
-// The entry is stale if either half is, so a refresh rewrites both.
+// The entry is stale if either half is. Note that the refresh this triggers
+// rewrites only the personal half: fetchFromService writes the channel key on
+// this path solely to seed a missing one, so a stale-but-present channel entry
+// keeps reporting stale until it expires. The cost is a background refresh per
+// channel rather than a blocked message, which is why it is tolerated here
+// rather than fixed by re-seeding — re-seeding needs its own channel-only
+// fetch, and doing it on every stale read would undo the saving.
 func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID string) (cache.Entry, error) {
 	personal, err := e.cache.GetEntryWithUser(ctx, channel, userID)
 	if err != nil {
@@ -385,7 +391,8 @@ func (e *Enricher) personalPlusChannel(ctx context.Context, channel, userID stri
 // merged can be SHORTER than channelEmotes: emote-service drops a provider's
 // emotes when that provider times out, which its logs show happening routinely.
 // The result is then empty, which is correct — a degraded response adds nothing
-// the channel entry lacks.
+// the channel entry lacks — so the capacity hint must not be derived from the
+// difference in lengths, which would be negative and panic.
 func splitPersonal(merged, channelEmotes []cache.CachedEmote) []cache.CachedEmote {
 	inChannel := make(map[string]struct{}, len(channelEmotes))
 	for _, emote := range channelEmotes {
