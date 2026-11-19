@@ -65,18 +65,34 @@ interface RebalanceState {
  * the least-loaded pod. Ties break alphabetically, matching the Go
  * coordinator: both coordinators facing the same fleet state shed the same
  * streams.
+ *
+ * `isParked` overrides that order for rooms held by the sign budget. The park
+ * is this pod's BackoffManager state and does not travel with the lease, so a
+ * shed parked room is re-dialled by the receiving pod, refused again, and
+ * costs a second of the fleet's hourly slots (prod 2026-11-19: coloboyka,
+ * evilolz, _novils and aniimosync each refused on both pods within a minute,
+ * firing TikTokPureNodeConnectBudgetExhausted). Since each pod now leases its
+ * own TikTok session, that second refusal is a real slot, not a free retry on
+ * a shared pool. A parked room holds no connection, so keeping it costs this
+ * pod nothing — but it is still shed before the pod exceeds its fair share,
+ * because a leased-but-unconnectable room is deaf everywhere (2026-09-14).
  */
 export const HOT_ROOM_THRESHOLD_SECONDS = 60;
 
 export function selectLeasesToRelease(
   leases: string[],
   excess: number,
-  secondsSinceLastMessage: (streamID: string) => number | undefined
+  secondsSinceLastMessage: (streamID: string) => number | undefined,
+  isParked: (streamID: string) => boolean = () => false
 ): string[] {
-  // Most-releasable first: oldest message, a missing monitor entry (never
-  // connected) counting as infinitely old, alphabetical on ties so both
-  // coordinators shed the same streams for the same fleet state.
+  // Most-releasable first: unparked before parked, then oldest message, a
+  // missing monitor entry (never connected) counting as infinitely old,
+  // alphabetical on ties so both coordinators shed the same streams for the
+  // same fleet state.
   const ranked = [...leases].sort((a, b) => {
+    const parkedA = isParked(a);
+    const parkedB = isParked(b);
+    if (parkedA !== parkedB) return parkedA ? 1 : -1;
     const freshnessA = secondsSinceLastMessage(a) ?? Number.POSITIVE_INFINITY;
     const freshnessB = secondsSinceLastMessage(b) ?? Number.POSITIVE_INFINITY;
     if (freshnessA !== freshnessB) return freshnessB - freshnessA;
@@ -234,8 +250,10 @@ export class LeadershipCoordinator {
    * last — because a moved hot room must re-handshake on the receiving pod
    * while an idle room was likely already reconnecting; without the
    * accessor the selection falls back to alphabetical, the Go coordinator's
-   * behaviour. Returns the released stream IDs so the caller can disconnect
-   * them and exclude them from re-acquisition for a cycle.
+   * behaviour. `isParked` keeps sign-budget-parked rooms out of the shed
+   * until nothing unparked is left; see selectLeasesToRelease. Returns the
+   * released stream IDs so the caller can disconnect them and exclude them
+   * from re-acquisition for a cycle.
    *
    * maxPerPod carries the caller's hard connection ceiling
    * (TIKTOK_MAX_STREAMS_PER_POD): the Euler proxy caps concurrent proxied
@@ -252,7 +270,8 @@ export class LeadershipCoordinator {
   async rebalance(
     totalStreams: number,
     maxPerPod?: number,
-    secondsSinceLastMessage?: (streamID: string) => number | undefined
+    secondsSinceLastMessage?: (streamID: string) => number | undefined,
+    isParked?: (streamID: string) => boolean
   ): Promise<string[]> {
     let peerCount: number;
     try {
@@ -291,7 +310,7 @@ export class LeadershipCoordinator {
 
     const candidates = [...this.leases.keys()];
     const toRelease = secondsSinceLastMessage
-      ? selectLeasesToRelease(candidates, excess, secondsSinceLastMessage)
+      ? selectLeasesToRelease(candidates, excess, secondsSinceLastMessage, isParked)
       : candidates.sort().slice(targetLeases);
 
     this.logger.debug('rebalance candidates', {
