@@ -345,6 +345,38 @@ describe('GET /v1/session', () => {
     });
   });
 
+  it('separates two unassigned consumers that lease concurrently', async () => {
+    // Two consumers with no assignment yet walk the same preference order,
+    // so they shared one in-flight resolution and both got pinned to the
+    // room it served. Stickiness then kept them there forever: the fleet
+    // was back on one session's connect budget, which is what this whole
+    // mechanism exists to prevent. Both listener pods re-leasing inside one
+    // cold capture is the normal case after a signer restart, not a rare
+    // race — the capture floor is 90s.
+    const { viewer } = stubbedViewer({
+      leases: {},
+      hasTabs: { rooma: false, roomb: false },
+      captures: { rooma: { lease: lease() }, roomb: { lease: lease() } }
+    });
+    const capture = viewer.captureRoom.bind(viewer);
+    viewer.captureRoom = async (room: string) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return capture(room);
+    };
+    await withServer(
+      { viewer, warmRooms: ['rooma', 'roomb'], warmRoomIsLive: async () => true },
+      async (base) => {
+        const [first, second] = await Promise.all([
+          getJson(base, '/v1/session?consumer=pod-a'),
+          getJson(base, '/v1/session?consumer=pod-b')
+        ]);
+        expect(first.status).toBe(200);
+        expect(second.status).toBe(200);
+        expect(first.body.room).not.toBe(second.body.room);
+      }
+    );
+  });
+
   it('caches the liveness probe across lease requests', async () => {
     const { viewer } = stubbedViewer({ leases: {}, hasTabs: { rooma: false } });
     let probes = 0;
