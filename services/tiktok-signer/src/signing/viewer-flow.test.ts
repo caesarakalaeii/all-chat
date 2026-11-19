@@ -534,14 +534,6 @@ describe('ViewerPool capture flow (fake pages)', () => {
   });
 
   it('two concurrent captures of one room leave exactly one page open', async () => {
-    // Two listener pods lease at the same time and resolveSessionLease
-    // reaches captureCandidates on both: it checks hasTab BEFORE it
-    // awaits, so both calls pass the guard and capture the same room.
-    // The second registration overwrote the first in `tabs`, and nothing
-    // else holds a reference to the first page — evictIdleTabs, closeTab,
-    // recycleTab and giveUp all reach a page through `tabs` — so it stayed
-    // open on the live page forever, rendering under llvmpipe. That is the
-    // leak behind AllChatContainerCPUNearLimit on 2026-11-19.
     const pool = new ViewerPool({ userDataDir: '/tmp/x' });
     const internals = poolInternals(pool);
     const lane = internals.lanes.get('|primary')!;
