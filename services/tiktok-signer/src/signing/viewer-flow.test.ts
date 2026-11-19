@@ -532,6 +532,56 @@ describe('ViewerPool capture flow (fake pages)', () => {
     expect(internals.roomLane.get('primaryroom')).toBe('b:2|primary');
     await pool.close();
   });
+
+  it('two concurrent captures of one room leave exactly one page open', async () => {
+    // Two listener pods lease at the same time and resolveSessionLease
+    // reaches captureCandidates on both: it checks hasTab BEFORE it
+    // awaits, so both calls pass the guard and capture the same room.
+    // The second registration overwrote the first in `tabs`, and nothing
+    // else holds a reference to the first page — evictIdleTabs, closeTab,
+    // recycleTab and giveUp all reach a page through `tabs` — so it stayed
+    // open on the live page forever, rendering under llvmpipe. That is the
+    // leak behind AllChatContainerCPUNearLimit on 2026-11-19.
+    const pool = new ViewerPool({ userDataDir: '/tmp/x' });
+    const internals = poolInternals(pool);
+    const lane = internals.lanes.get('|primary')!;
+    // Both pages must still be navigating when the other starts, so the
+    // two captures overlap rather than running one after the other.
+    const first = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=21', status: 200, body: GOOD_BODY }
+      ],
+      navDelayMs: 50
+    });
+    const second = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=21', status: 200, body: GOOD_BODY }
+      ],
+      navDelayMs: 50
+    });
+    // pop() hands `first` out first.
+    lane.prewarmed.push(second.page, first.page);
+
+    const [a, b] = await Promise.all([
+      pool.captureRoom('warmroom', { timeoutMs: 10_000 }),
+      pool.captureRoom('warmroom', { timeoutMs: 10_000 })
+    ]);
+    expect(a.roomId).toBe('21');
+    expect(b.roomId).toBe('21');
+
+    // Named rather than compared as objects: the page doubles are
+    // function-laden, so a failure on the pages themselves prints pages
+    // of noise instead of which one leaked.
+    const registered = internals.tabs.get('warmroom')!.page;
+    const stillOpen = [
+      { name: 'first', page: first.page },
+      { name: 'second', page: second.page }
+    ]
+      .filter((candidate) => !candidate.page.isClosed())
+      .map((candidate) => candidate.name);
+    expect(stillOpen).toEqual([registered === first.page ? 'first' : 'second']);
+    await pool.close();
+  });
 });
 
 describe('ViewerPool.recycleTab (fake pages)', () => {
