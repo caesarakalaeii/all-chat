@@ -389,16 +389,13 @@ describe('PureNodeSigner WS-connect budget', () => {
   });
 
   it('charges one slot for a room re-dialled through a WS flap retry burst', async () => {
-    // The listener retries a "Unexpected server response: 200" flap up to
+    // A "Unexpected server response: 200" flap is retried in place up to
     // TIKTOK_FLAP_MAX_FAST_RETRIES times (6 in prod) inside ONE connect
-    // attempt, and every retry re-enters the connector's sign route. Charging
-    // each retry a slot lets a single flapping room spend 7 of the hour's 12
-    // connects in ~12 seconds, so two of them exhaust the pod's whole budget
-    // and every other room is refused (TikTokPureNodeConnectBudgetExhausted,
+    // attempt; charged a slot each, one flapping room spent 7 of the hour's
+    // 12 connects in ~12 seconds (TikTokPureNodeConnectBudgetExhausted,
     // still firing 2026-11-19 after the per-session fix: pods logged ~1
     // "TikTok stream connected" per window while the window held ~12
-    // connects). The retries are one room asking for one connect, so they
-    // ride the slot that room already holds.
+    // connects). See CONNECT_BURST_MS.
     vi.useFakeTimers();
     try {
       const { signer } = await leasedSigner();

@@ -160,7 +160,7 @@ export class PureNodeSigner implements WebcastSigner {
   private readonly wsConnectHours: number[] = [];
   /** Rooms refused a connect slot → when the slot promised to them frees. */
   private readonly connectQueue = new Map<string, number>();
-  /** Room → when it last took a slot, so its flap retries can reuse it. */
+  /** Room → when it last took a slot; see CONNECT_BURST_MS. */
   private readonly slotTakenAt = new Map<string, number>();
   /** The warm session the counted connects were spent on; see noteSession. */
   private sessionRoom = '';
@@ -230,7 +230,12 @@ export class PureNodeSigner implements WebcastSigner {
     const free = this.maxWsConnectsPerHour - this.wsConnectHours.length;
     if (free > held) {
       this.wsConnectHours.push(now);
-      this.noteSlotTaken(roomId, now);
+      // Forget rooms whose burst has passed, so the map stays the size of
+      // the rooms currently dialling rather than every room ever served.
+      for (const [room, takenAt] of this.slotTakenAt) {
+        if (takenAt <= now - CONNECT_BURST_MS) this.slotTakenAt.delete(room);
+      }
+      this.slotTakenAt.set(roomId, now);
       return;
     }
     // Every connect, made or promised, frees its slot an hour later; the
@@ -397,19 +402,6 @@ export class PureNodeSigner implements WebcastSigner {
       fetchResultCookieHeader: lease.cookieHeader,
       fetchResultProxyHost: lease.proxyHost || undefined
     };
-  }
-
-  /**
-   * Record the slot this room just took, and forget rooms whose burst has
-   * passed so the map stays the size of the rooms currently dialling
-   * rather than every room this pod has ever served.
-   */
-  private noteSlotTaken(roomId: string, now: number): void {
-    const cutoff = now - CONNECT_BURST_MS;
-    for (const [room, takenAt] of this.slotTakenAt) {
-      if (takenAt <= cutoff) this.slotTakenAt.delete(room);
-    }
-    this.slotTakenAt.set(roomId, now);
   }
 
   /** Drop entries older than one rolling hour. */
