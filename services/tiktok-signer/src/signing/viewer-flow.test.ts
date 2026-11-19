@@ -532,6 +532,82 @@ describe('ViewerPool capture flow (fake pages)', () => {
     expect(internals.roomLane.get('primaryroom')).toBe('b:2|primary');
     await pool.close();
   });
+
+  it('two concurrent captures of one room leave exactly one page open', async () => {
+    const pool = new ViewerPool({ userDataDir: '/tmp/x' });
+    const internals = poolInternals(pool);
+    const lane = internals.lanes.get('|primary')!;
+    // Both pages must still be navigating when the other starts, so the
+    // two captures overlap rather than running one after the other.
+    const first = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=21', status: 200, body: GOOD_BODY }
+      ],
+      navDelayMs: 50
+    });
+    const second = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=21', status: 200, body: GOOD_BODY }
+      ],
+      navDelayMs: 50
+    });
+    // pop() hands `first` out first.
+    lane.prewarmed.push(second.page, first.page);
+
+    const [a, b] = await Promise.all([
+      pool.captureRoom('warmroom', { timeoutMs: 10_000 }),
+      pool.captureRoom('warmroom', { timeoutMs: 10_000 })
+    ]);
+    expect(a.roomId).toBe('21');
+    expect(b.roomId).toBe('21');
+
+    // A page that navigated to the room but is neither registered nor
+    // closed is the leak: nothing can reach it again. Named rather than
+    // compared as objects because the page doubles are function-laden, and
+    // a failure on the pages themselves prints screens of noise instead of
+    // which one leaked.
+    const registered = internals.tabs.get('warmroom')!.page;
+    const leaked = [
+      { name: 'first', ...first },
+      { name: 'second', ...second }
+    ]
+      .filter((candidate) => candidate.navLog.length > 0)
+      .filter((candidate) => candidate.page !== registered && !candidate.page.isClosed())
+      .map((candidate) => candidate.name);
+    expect(leaked).toEqual([]);
+    await pool.close();
+  });
+
+  it('a failed capture is not cached: the next call retries the room', async () => {
+    // Sharing an in-flight capture must not outlive it. A room whose
+    // capture failed has to be capturable again on the next lease, or one
+    // bad capture would wedge the room for the life of the pod.
+    const pool = new ViewerPool({ userDataDir: '/tmp/x' });
+    const internals = poolInternals(pool);
+    const lane = internals.lanes.get('|primary')!;
+    const good = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=31', status: 200, body: GOOD_BODY }
+      ]
+    });
+    lane.prewarmed.push(good.page);
+    const { page: zombie } = fakePage({ livePlayerFoundAt: Number.MAX_SAFE_INTEGER });
+    lane.prewarmed.push(zombie);
+
+    vi.useFakeTimers();
+    const failing = pool.captureRoom('retryroom', { timeoutMs: 60_000 });
+    const failed = expect(failing).rejects.toThrow(/live player not up/);
+    try {
+      await vi.advanceTimersByTimeAsync(15_100);
+      await failed;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const capture = await pool.captureRoom('retryroom', { timeoutMs: 10_000 });
+    expect(capture.roomId).toBe('31');
+    await pool.close();
+  });
 });
 
 describe('ViewerPool.recycleTab (fake pages)', () => {
