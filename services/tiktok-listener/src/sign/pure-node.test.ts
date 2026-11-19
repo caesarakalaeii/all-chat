@@ -388,6 +388,56 @@ describe('PureNodeSigner WS-connect budget', () => {
     await expect(signer.sign(signRequest({ roomId: 'over' }))).rejects.toThrow(/WS connect budget exhausted/);
   });
 
+  it('charges one slot for a room re-dialled through a WS flap retry burst', async () => {
+    // The listener retries a "Unexpected server response: 200" flap up to
+    // TIKTOK_FLAP_MAX_FAST_RETRIES times (6 in prod) inside ONE connect
+    // attempt, and every retry re-enters the connector's sign route. Charging
+    // each retry a slot lets a single flapping room spend 7 of the hour's 12
+    // connects in ~12 seconds, so two of them exhaust the pod's whole budget
+    // and every other room is refused (TikTokPureNodeConnectBudgetExhausted,
+    // still firing 2026-11-19 after the per-session fix: pods logged ~1
+    // "TikTok stream connected" per window while the window held ~12
+    // connects). The retries are one room asking for one connect, so they
+    // ride the slot that room already holds.
+    vi.useFakeTimers();
+    try {
+      const { signer } = await leasedSigner();
+      // One room flapping through a full prod retry burst: 1 + 6 retries.
+      for (let attempt = 0; attempt < 7; attempt++) {
+        await signer.sign(signRequest({ roomId: 'flapper' }));
+        vi.setSystemTime(new Date(Date.now() + 1_000));
+      }
+      // 11 slots must remain for other rooms, not 5.
+      for (let i = 0; i < 11; i++) {
+        await signer.sign(signRequest({ roomId: `other-${i}` }));
+      }
+      await expect(signer.sign(signRequest({ roomId: 'over' }))).rejects.toThrow(
+        /WS connect budget exhausted/
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('charges a second slot when the same room reconnects after the retry burst', async () => {
+    // The burst reuse above must not become a free pass: a room that
+    // genuinely reconnects later in the hour (stream dropped, poller
+    // re-dialled it) is a second real handshake TikTok scores, so it pays.
+    vi.useFakeTimers();
+    try {
+      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 2 });
+      await signer.sign(signRequest({ roomId: 'churny' }));
+      // Past the burst window: this is a new connect attempt, not a retry.
+      vi.setSystemTime(new Date(Date.now() + 120_000));
+      await signer.sign(signRequest({ roomId: 'churny' }));
+      await expect(signer.sign(signRequest({ roomId: 'other' }))).rejects.toThrow(
+        /WS connect budget exhausted/
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('refused rooms queue for distinct slots instead of all waking on the oldest one', async () => {
     // Prod 2026-11-12: 7 rooms refused together were all told to retry when
     // the oldest slot slid, one connected and six were refused again, every
