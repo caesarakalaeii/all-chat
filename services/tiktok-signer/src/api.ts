@@ -847,10 +847,20 @@ async function resolveSessionLease(
   // The per-room outcome (undefined lease = dead page, empty wsUrl =
   // unservable) feeds the recovery pass below.
   const outcomes: RoomOutcome[] = [];
+  let shared: SessionLease | undefined;
   for (const room of warmRooms) {
     const lease = await viewer.sessionLease(room);
     outcomes.push({ room, lease });
-    if (lease && lease.wsUrl !== '') return { lease, outcome: 'success' };
+    if (lease && lease.wsUrl !== '') {
+      if (room === warmRooms[0]) return { lease, outcome: 'success' };
+      // A session another consumer holds. Returning it here is what
+      // funnelled the whole fleet through one session's ~15/hour TikTok
+      // connect budget while the other warm rooms stayed unused: keep it
+      // as the fallback and let the capture phase try to grow this
+      // consumer its own session first.
+      shared = lease;
+      break;
+    }
   }
 
   // A thrown capture or a resolved-but-empty one moves to the next
@@ -885,6 +895,11 @@ async function resolveSessionLease(
 
   const captured = await captureCandidates(warmRooms);
   if (captured) return { lease: captured, outcome: 'captured' };
+
+  // Nothing could be grown, so share after all: more pods than warm
+  // sessions are rationed, not refused. Returning here also keeps the
+  // recovery pass below from closing that tab — it serves its own consumer.
+  if (shared) return { lease: shared, outcome: 'success' };
 
   // Close the tabs whose warm lease could not serve (dead page or empty
   // wsUrl) — unless a relay subscriber is attached — then cold-capture

@@ -424,6 +424,34 @@ describe('GET /v1/session', () => {
     });
   });
 
+  it('captures a second session rather than sharing the only warm one', async () => {
+    // The spread can only spend budget that EXISTS. In prod the signer
+    // held exactly one warm tab (2026-11-19): pod-b's preferred room was
+    // live but tab-less, phase 1 fell through to pod-a's servable rooma
+    // and returned it, and no capture ever ran — so both pods dialled one
+    // session and TikTokPureNodeConnectBudgetExhausted kept firing after
+    // both #1263 (the spread) and #1267 (the token bucket).
+    //
+    // A consumer whose own preferred room is live must get that room
+    // captured for it, not be handed the room another consumer holds.
+    const { viewer, calls } = stubbedViewer({
+      leases: { rooma: lease() },
+      hasTabs: { rooma: true, roomb: false },
+      captures: { roomb: { lease: lease() } }
+    });
+    await withServer(
+      { viewer, warmRooms: ['rooma', 'roomb'], warmRoomIsLive: async () => true },
+      async (base) => {
+        const first = await getJson(base, '/v1/session?consumer=pod-a');
+        const second = await getJson(base, '/v1/session?consumer=pod-b');
+        expect(first.body.room).toBe('rooma');
+        expect(second.status).toBe(200);
+        expect(second.body.room).toBe('roomb');
+        expect(calls.captures).toEqual(['roomb']);
+      }
+    );
+  });
+
   it('reuses a session when consumers outnumber servable warm rooms', async () => {
     // More pods than warm sessions must still be served: sharing a
     // session is the old behaviour and is correct, just rationed.
