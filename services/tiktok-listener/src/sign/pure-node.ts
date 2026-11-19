@@ -47,7 +47,8 @@
  *    session and resets when the signer re-assigns us. A sign that gets no
  *    lease never dials, so it gives its slot back: a signer outage must not
  *    drain the budget. Refused rooms queue, each for its own freeing slot
- *    (takeConnectSlot).
+ *    (takeConnectSlot). One room's slot also covers the flap retries of the
+ *    same connect attempt (CONNECT_BURST_MS); a later reconnect pays again.
  *  - The lane-pin pre-sign re-enters sign() with a fixed
  *    `userAgent: 'ws-pin'` marker; it is a local cache hit, not a WS dial,
  *    and never consumes connect budget.
@@ -81,6 +82,26 @@ const CONNECTOR_APPENDED_WS_KEYS = new Set(['compress', 'room_id', 'internal_ext
  * promised to: the live poller's 30s tick plus the live-status pre-check.
  */
 const CONNECT_QUEUE_HOLD_MS = 90_000;
+
+/**
+ * How long one room's connect slot also covers its immediate re-dials.
+ *
+ * The listener retries a WS flap inside ONE connect attempt
+ * (TIKTOK_FLAP_MAX_FAST_RETRIES, 6 in prod), and every retry re-enters the
+ * connector's sign route. Those retries are one room asking for one
+ * connect, so they ride the slot it already holds: charging each of them
+ * let a single flapping room take 7 of the hour's 12 slots in seconds and
+ * two such rooms starved every other room
+ * (TikTokPureNodeConnectBudgetExhausted, 2026-11-19).
+ *
+ * Sized from the retry schedule it has to span: nextFlapRetryDelayMs gives
+ * 1s, 1s, then 3s for the rest, so six retries wait 14s in total, plus the
+ * handshakes themselves. 60s covers that with room for a slow dial while
+ * staying far below any interval a room legitimately reconnects on — the
+ * poller's fastest re-check is 60s and a dropped stream pays a fresh slot,
+ * which is the behaviour TikTok actually scores.
+ */
+const CONNECT_BURST_MS = 60_000;
 
 export interface PureNodeSignerOptions {
   /** Base URL of the tiktok-signer service, no trailing slash. */
@@ -139,6 +160,8 @@ export class PureNodeSigner implements WebcastSigner {
   private readonly wsConnectHours: number[] = [];
   /** Rooms refused a connect slot → when the slot promised to them frees. */
   private readonly connectQueue = new Map<string, number>();
+  /** Room → when it last took a slot, so its flap retries can reuse it. */
+  private readonly slotTakenAt = new Map<string, number>();
   /** The warm session the counted connects were spent on; see noteSession. */
   private sessionRoom = '';
 
@@ -171,7 +194,12 @@ export class PureNodeSigner implements WebcastSigner {
       // all pass the check; released here because nothing was dialled.
       if (!isPreSign) {
         const slot = this.wsConnectHours.lastIndexOf(now);
-        if (slot >= 0) this.wsConnectHours.splice(slot, 1);
+        if (slot >= 0) {
+          this.wsConnectHours.splice(slot, 1);
+          // Release the burst marker with the slot it refers to, or a room
+          // whose lease fetch failed could dial free for the burst window.
+          this.slotTakenAt.delete(request.roomId);
+        }
       }
       throw error;
     }
@@ -190,6 +218,10 @@ export class PureNodeSigner implements WebcastSigner {
   private takeConnectSlot(roomId: string, now: number): void {
     this.pruneWindow(this.wsConnectHours, now);
     this.connectQueue.delete(roomId);
+    // A re-dial inside the flap-retry burst rides the slot this room
+    // already holds; see CONNECT_BURST_MS.
+    const burstSlot = this.slotTakenAt.get(roomId);
+    if (burstSlot !== undefined && burstSlot > now - CONNECT_BURST_MS) return;
     let held = 0;
     for (const [room, slotAt] of this.connectQueue) {
       if (slotAt < now - CONNECT_QUEUE_HOLD_MS) this.connectQueue.delete(room); // never came back
@@ -198,6 +230,7 @@ export class PureNodeSigner implements WebcastSigner {
     const free = this.maxWsConnectsPerHour - this.wsConnectHours.length;
     if (free > held) {
       this.wsConnectHours.push(now);
+      this.noteSlotTaken(roomId, now);
       return;
     }
     // Every connect, made or promised, frees its slot an hour later; the
@@ -364,6 +397,19 @@ export class PureNodeSigner implements WebcastSigner {
       fetchResultCookieHeader: lease.cookieHeader,
       fetchResultProxyHost: lease.proxyHost || undefined
     };
+  }
+
+  /**
+   * Record the slot this room just took, and forget rooms whose burst has
+   * passed so the map stays the size of the rooms currently dialling
+   * rather than every room this pod has ever served.
+   */
+  private noteSlotTaken(roomId: string, now: number): void {
+    const cutoff = now - CONNECT_BURST_MS;
+    for (const [room, takenAt] of this.slotTakenAt) {
+      if (takenAt <= cutoff) this.slotTakenAt.delete(room);
+    }
+    this.slotTakenAt.set(roomId, now);
   }
 
   /** Drop entries older than one rolling hour. */

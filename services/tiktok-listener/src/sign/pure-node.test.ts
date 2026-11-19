@@ -419,6 +419,44 @@ describe('PureNodeSigner WS-connect budget', () => {
     }
   });
 
+  it('releases the burst reuse with the slot when the sign got no lease', async () => {
+    // A sign that never reached a dial gives its slot back. The burst marker
+    // refers to that slot, so it goes with it: otherwise a signer outage
+    // would leave every room it refused able to dial free for the burst
+    // window, spending connects the budget never counted.
+    vi.useFakeTimers();
+    try {
+      const impl = vi.fn();
+      impl.mockResolvedValueOnce({
+        statusCode: 503,
+        headers: {},
+        body: { text: async () => JSON.stringify({ error: 'no_warm_session' }) }
+      });
+      impl.mockResolvedValue({
+        statusCode: 200,
+        headers: {},
+        body: { text: async () => JSON.stringify(leaseResponse()) }
+      });
+      const signer = new PureNodeSigner({
+        baseUrl: 'http://signer',
+        fetchImpl: impl as never,
+        maxWsConnectsPerHour: 1
+      });
+
+      await expect(signer.sign(signRequest({ roomId: 'outage' }))).rejects.toThrow(
+        /no session lease/
+      );
+      // Still inside the burst window, so a surviving marker would let this
+      // dial for free and leave the single slot unspent.
+      await signer.sign(signRequest({ roomId: 'outage' }));
+      await expect(signer.sign(signRequest({ roomId: 'other' }))).rejects.toThrow(
+        /WS connect budget exhausted/
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('charges a second slot when the same room reconnects after the retry burst', async () => {
     // The burst reuse above must not become a free pass: a room that
     // genuinely reconnects later in the hour (stream dropped, poller

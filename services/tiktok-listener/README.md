@@ -249,7 +249,12 @@ add connect capacity instead of dividing one ceiling — bounded by the
 number of warm rooms the signer holds, since pods beyond that share a
 session and divide its budget. The connect window follows the session:
 if the signer re-assigns a pod, the old session's connects stop counting
-against the new one. Without the key, every pod leases the same session
+against the new one. The WS-flap fast retries below are one connect, not
+`TIKTOK_FLAP_MAX_FAST_RETRIES` + 1 of them: a room's slot covers its
+re-dials for the next minute, so a flapping room cannot spend the budget
+every other room needs (it did until 2026-11-19). A room that reconnects
+later in the hour pays a fresh slot, because TikTok scores that as a
+second handshake. Without the key, every pod leases the same session
 and `TIKTOK_MAX_WS_CONNECTS_PER_HOUR` must be divided across replicas by
 hand, which is the pre-2026-11-19 behaviour. The premium **fallback tier is
 ON** in this mode: promotion warms the
