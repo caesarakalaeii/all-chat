@@ -52,6 +52,16 @@ export class SessionAssignments {
    * holds (the spread that wins back the unused budget), then the rooms
    * other consumers hold, least-shared first, so consumers beyond the
    * number of warm sessions pile up evenly rather than all on room one.
+   *
+   * Asking reserves the head of the list for the consumer, before any
+   * lease is resolved. Two consumers that are both unassigned would
+   * otherwise compute the SAME order, share the caller's in-flight
+   * resolution, and both be recorded against the one room it served —
+   * and stickiness would then pin the pair there permanently, putting
+   * the fleet back on one session's connect budget. Reserving on ask
+   * means the second caller already counts the first as a holder and
+   * prefers a different room. The reservation is provisional: `record`
+   * overwrites it with the room that actually served.
    */
   preferenceFor(consumer: string, rooms: readonly string[]): string[] {
     const holders = new Map<string, number>();
@@ -59,11 +69,16 @@ export class SessionAssignments {
       holders.set(room, (holders.get(room) ?? 0) + 1);
     }
     const current = this.assigned.get(consumer);
-    return [...rooms].sort((a, b) => {
-      if (a === current) return -1;
-      if (b === current) return 1;
-      return (holders.get(a) ?? 0) - (holders.get(b) ?? 0);
-    });
+    // `current` is hoisted rather than special-cased in the comparator:
+    // returning -1 for `a === current` regardless of argument position is
+    // not a consistent ordering, and only V8's sort internals made it
+    // behave.
+    const rest = [...rooms]
+      .filter((room) => room !== current)
+      .sort((a, b) => (holders.get(a) ?? 0) - (holders.get(b) ?? 0));
+    const ordered = current && rooms.includes(current) ? [current, ...rest] : rest;
+    if (ordered.length) this.assigned.set(consumer, ordered[0]);
+    return ordered;
   }
 
   /** Pin the consumer to the room that actually served it. */
