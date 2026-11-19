@@ -143,7 +143,7 @@ export class BackoffManager {
 
   /**
    * Record a self-imposed sign-budget refusal. The retry cannot succeed
-   * until the signer's rolling hour slides, so the room is parked for
+   * until the signer's bucket has a token for it, so the room is parked for
    * exactly that long — the escalating error curve would re-sign, get
    * refused again, and spin the failure counter that fired the
    * 2026-09-23 budget-exhausted alert flap.
@@ -326,11 +326,11 @@ export class BackoffManager {
    * Drop the state a torn-down connection owns, keeping a park that has not
    * yet elapsed.
    *
-   * A park is a promise about the SIGNER's rolling hour, not about the
+   * A park is a promise about the SIGNER's connect bucket, not about the
    * connection going away: PureNodeSigner.takeConnectSlot has already queued
-   * the refused room for the next slot to free, and recordBudgetRefusal parks
+   * the refused room for its own token, and recordBudgetRefusal parks
    * it for exactly that long. Forgetting it lets the room re-dial inside its
-   * own window, spend a second of the pod's twelve hourly slots, and be
+   * own wait, spend one of the pod's connect tokens early, and be
    * re-queued further back than if it had waited (prod 2026-11-18: cotermatha
    * refused at 00:03:51 for 20 minutes, torn down at 00:08:19 by a demand
    * snapshot that briefly dropped it, re-dialled and refused again at

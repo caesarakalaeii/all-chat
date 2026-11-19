@@ -53,6 +53,9 @@ export class PrometheusMetrics {
   // Backoff and detection metrics (NEW)
   private backoffCurrentInterval: Gauge<string>;
   private backoffUsernamesStuck: Gauge;
+  private connectBudgetWaitingRooms: Gauge;
+  private connectBudgetOldestWait: Gauge;
+  private connectBudgetThrottled: Gauge;
   private detectionSkippedTotal: Counter<string>;
   private usernamesAtRisk: Gauge<string>;
   private autoRecoveryTotal: Counter<string>;
@@ -185,6 +188,26 @@ export class PrometheusMetrics {
     this.backoffUsernamesStuck = new Gauge({
       name: 'tiktok_backoff_usernames_stuck',
       help: 'Number of usernames stuck in backoff >5 minutes',
+      registers: [this.registry]
+    });
+
+    // Pure-node connect budget: who is waiting on it, and for how long.
+    // The impact signal behind TikTokPureNodeConnectBudgetExhausted.
+    this.connectBudgetWaitingRooms = new Gauge({
+      name: 'tiktok_connect_budget_waiting_rooms',
+      help: 'Rooms refused a WS connect by the pure-node connect budget and still waiting',
+      registers: [this.registry]
+    });
+
+    this.connectBudgetOldestWait = new Gauge({
+      name: 'tiktok_connect_budget_oldest_wait_seconds',
+      help: 'How long the longest-waiting room has waited on the pure-node connect budget',
+      registers: [this.registry]
+    });
+
+    this.connectBudgetThrottled = new Gauge({
+      name: 'tiktok_connect_budget_throttled',
+      help: 'Whether a refused TikTok handshake has the connect budget on its reduced rate (0/1)',
       registers: [this.registry]
     });
 
@@ -395,6 +418,17 @@ export class PrometheusMetrics {
 
   recordWsFlapExhausted(username: string): void {
     this.wsFlapExhausted.inc({ username });
+  }
+
+  /** Publish the pure-node connect budget's queue, read at scrape time. */
+  setConnectBudgetStatus(status: {
+    waitingRooms: number;
+    oldestWaitMs: number;
+    throttled: boolean;
+  }): void {
+    this.connectBudgetWaitingRooms.set(status.waitingRooms);
+    this.connectBudgetOldestWait.set(status.oldestWaitMs / 1000);
+    this.connectBudgetThrottled.set(status.throttled ? 1 : 0);
   }
 
   // Lane-pinning outcome per connect: pinned | unpinned_no_lane | skipped | failed

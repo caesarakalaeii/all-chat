@@ -167,10 +167,10 @@ describe('PureNodeSigner lease budget', () => {
       headers: {},
       body: { text: async () => JSON.stringify(leaseResponse()) }
     });
-    // Explicit WS-connect cap above the 11 signs this test makes, so the
+    // Explicit WS-connect burst above the 11 signs this test makes, so the
     // final assertion can only be thrown by the LEASE budget — the two
     // budgets stay decoupled from each other's defaults.
-    const signer = new PureNodeSigner({ baseUrl: 'http://signer', staleAfterMs: 1, maxWsConnectsPerHour: 32, fetchImpl: impl as never });
+    const signer = new PureNodeSigner({ baseUrl: 'http://signer', staleAfterMs: 1, wsConnectBurst: 32, fetchImpl: impl as never });
 
     for (let i = 0; i < 3; i++) {
       await expect(signer.sign(signRequest())).rejects.toThrow(SignatureFailure);
@@ -255,10 +255,16 @@ describe('PureNodeSigner classification', () => {
 });
 
 describe('PureNodeSigner WS-connect budget', () => {
-  it('caps connect signs per hour with distinct rooms, and pre-signs survive an exhausted budget', async () => {
+  const refusalOf = (signer: PureNodeSigner, roomId: string) =>
+    signer.sign(signRequest({ roomId })).then(
+      () => undefined,
+      (error: SignatureFailure) => error.retryAfterMs
+    );
+
+  it('caps back-to-back connects at the burst with distinct rooms, and pre-signs survive an empty bucket', async () => {
     const { signer, impl } = await leasedSigner();
     // 12 connect signs with DISTINCT roomIds: a per-room-keyed counter
-    // would pass these; only a pool-wide counter reaches the cap.
+    // would pass these; only a pool-wide bucket runs dry.
     for (let i = 0; i < 12; i++) {
       await signer.sign(signRequest({ roomId: String(i) }));
     }
@@ -271,10 +277,6 @@ describe('PureNodeSigner WS-connect budget', () => {
   });
 
   it('identifies itself as a lease consumer so the signer can assign it a session', async () => {
-    // Without a consumer key the signer serves every pod the same warm
-    // session, and the whole fleet spends one session's ~15/hour TikTok
-    // connect-flag budget (TikTokPureNodeConnectBudgetExhausted,
-    // 2026-11-18).
     const { signer, impl } = await leasedSigner({ consumer: 'tiktok-listener-abc' });
     await signer.sign(signRequest());
     expect(String(impl.mock.calls[0]![0])).toBe(
@@ -288,11 +290,11 @@ describe('PureNodeSigner WS-connect budget', () => {
     expect(String(impl.mock.calls[0]![0])).toBe('http://signer/v1/session');
   });
 
-  it('starts a fresh connect budget when the signer moves it to another session', async () => {
-    // The budget meters ONE session's TikTok flag window. When the signer
-    // re-assigns this consumer (its warm room went offline), the connects
-    // spent on the old session do not count against the new one — holding
-    // them would refuse rooms the new session has budget for.
+  it('does not refill the bucket when the signer moves it to another warm room', async () => {
+    // Warm rooms share one browser profile under direct egress, so a
+    // different room is not known to be a different session to TikTok. A
+    // refill on every move would hand out a fresh burst each time a warm
+    // streamer goes offline.
     const impl = vi.fn();
     impl.mockResolvedValueOnce({
       statusCode: 200,
@@ -306,36 +308,8 @@ describe('PureNodeSigner WS-connect budget', () => {
     });
     const signer = new PureNodeSigner({
       baseUrl: 'http://signer',
-      maxWsConnectsPerHour: 2,
+      wsConnectBurst: 2,
       staleAfterMs: 0, // re-lease on every sign, so the room change lands
-      fetchImpl: impl as never
-    });
-
-    // 'a' connects on warm-a. 'b' is the sign whose lease moves us to
-    // warm-b: it dials on the new session, so warm-b's window starts at
-    // one, not zero. 'c' fills it and 'd' is refused — a window that
-    // carried warm-a's connect over would have refused 'c' too, and one
-    // that dropped 'b' would have let 'd' connect unmetered.
-    await signer.sign(signRequest({ roomId: 'a' }));
-    await signer.sign(signRequest({ roomId: 'b' }));
-    await signer.sign(signRequest({ roomId: 'c' }));
-    await expect(signer.sign(signRequest({ roomId: 'd' }))).rejects.toThrow(
-      /WS connect budget exhausted/
-    );
-  });
-
-  it('keeps counting connects while the session stays the same', async () => {
-    // The reset must key on the session CHANGING; a reset on every lease
-    // fetch would make the budget unenforceable.
-    const impl = vi.fn().mockResolvedValue({
-      statusCode: 200,
-      headers: {},
-      body: { text: async () => JSON.stringify(leaseResponse({ room: 'warm-a' })) }
-    });
-    const signer = new PureNodeSigner({
-      baseUrl: 'http://signer',
-      maxWsConnectsPerHour: 2,
-      staleAfterMs: 0,
       fetchImpl: impl as never
     });
 
@@ -346,21 +320,39 @@ describe('PureNodeSigner WS-connect budget', () => {
     );
   });
 
-  it('the rolling window slides: connects succeed again an hour later', async () => {
+  it('refills at the sustained rate, so a refused room waits minutes and not an hour', async () => {
+    // Prod 2026-11-19: under the rolling-hour count a room refused after a
+    // mass re-dial was still waiting 35 minutes later.
     vi.useFakeTimers();
     try {
-      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 2 });
+      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 6, wsConnectBurst: 2 });
+      const start = Date.now();
       await signer.sign(signRequest({ roomId: 'a' }));
       await signer.sign(signRequest({ roomId: 'b' }));
-      await expect(signer.sign(signRequest({ roomId: 'c' }))).rejects.toThrow(/WS connect budget exhausted/);
-      vi.setSystemTime(new Date(Date.now() + 3_600_001));
-      await signer.sign(signRequest({ roomId: 'd' }));
+      // 6 an hour is a token every 10 minutes.
+      expect(await refusalOf(signer, 'c')).toBe(10 * 60_000);
+      vi.setSystemTime(start + 10 * 60_000);
+      expect(await refusalOf(signer, 'c')).toBeUndefined();
+      expect(await refusalOf(signer, 'd')).toBe(10 * 60_000);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it('a sign that gets no lease gives its connect slot back', async () => {
+  it('saves up no more than the burst over a quiet spell', async () => {
+    vi.useFakeTimers();
+    try {
+      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 6, wsConnectBurst: 2 });
+      vi.setSystemTime(Date.now() + 24 * 3_600_000);
+      await signer.sign(signRequest({ roomId: 'a' }));
+      await signer.sign(signRequest({ roomId: 'b' }));
+      expect(await refusalOf(signer, 'c')).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a sign that gets no lease gives its connect token back', async () => {
     const impl = vi.fn();
     // A signer outage (2026-10-10): every lease fetch answers 503
     // no_warm_session, and nothing is dialled.
@@ -381,48 +373,123 @@ describe('PureNodeSigner WS-connect budget', () => {
     for (let i = 0; i < 12; i++) {
       await expect(signer.sign(signRequest({ roomId: String(i) }))).rejects.toThrow(/no session lease/);
     }
-    // Once the signer recovers, the full hourly budget is still there.
+    // Once the signer recovers, the full burst is still there.
     for (let i = 0; i < 12; i++) {
       await signer.sign(signRequest({ roomId: `r${i}` }));
     }
     await expect(signer.sign(signRequest({ roomId: 'over' }))).rejects.toThrow(/WS connect budget exhausted/);
   });
 
-  it('refused rooms queue for distinct slots instead of all waking on the oldest one', async () => {
-    // Prod 2026-11-12: 7 rooms refused together were all told to retry when
-    // the oldest slot slid, one connected and six were refused again, every
-    // slot, so 37 of 59 refusals in a day were rooms already parked.
+  it('refused rooms queue for distinct tokens instead of all waking on the next one', async () => {
+    // Prod 2026-11-12: 7 rooms refused together were all told to retry at
+    // the same moment, one connected and six were refused again, every
+    // time, so 37 of 59 refusals in a day were rooms already parked.
     vi.useFakeTimers();
     try {
-      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 2 });
+      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 6, wsConnectBurst: 2 });
       const start = Date.now();
-      const refusalOf = async (roomId: string) =>
-        signer.sign(signRequest({ roomId })).then(
-          () => undefined,
-          (error: SignatureFailure) => error.retryAfterMs
-        );
+      const minute = 60_000;
 
       await signer.sign(signRequest({ roomId: 'a' }));
-      vi.setSystemTime(start + 10 * 60_000);
       await signer.sign(signRequest({ roomId: 'b' }));
-      vi.setSystemTime(start + 20 * 60_000);
-      // c waits for a's slot (+60m), d for b's (+70m).
-      expect(await refusalOf('c')).toBe(40 * 60_000);
-      expect(await refusalOf('d')).toBe(50 * 60_000);
+      // c waits for the first token (+10m), d for the second (+20m).
+      expect(await refusalOf(signer, 'c')).toBe(10 * minute);
+      expect(await refusalOf(signer, 'd')).toBe(20 * minute);
 
-      // a's slot frees at +60m but is held for c: a new room is refused,
-      // queued behind d on the slot c's connect will free.
-      vi.setSystemTime(start + 60 * 60_000);
-      expect(await refusalOf('e')).toBe(60 * 60_000);
-      vi.setSystemTime(start + 60 * 60_000 + 30_000);
-      expect(await refusalOf('c')).toBeUndefined();
+      // The first token arrives at +10m but is held for c: a new room is
+      // refused and queued behind d.
+      vi.setSystemTime(start + 10 * minute);
+      expect(await refusalOf(signer, 'e')).toBe(20 * minute);
+      vi.setSystemTime(start + 10 * minute + 30_000);
+      expect(await refusalOf(signer, 'c')).toBeUndefined();
 
-      // d never comes back (went offline): its slot is held for the
+      // d never comes back (went offline): its token is held for the
       // grace period, then anyone may take it.
-      vi.setSystemTime(start + 70 * 60_000 + 30_000);
-      expect(await refusalOf('f')).toBeGreaterThan(0);
-      vi.setSystemTime(start + 72 * 60_000);
-      expect(await refusalOf('f')).toBeUndefined();
+      vi.setSystemTime(start + 20 * minute + 30_000);
+      expect(await refusalOf(signer, 'f')).toBeGreaterThan(0);
+      vi.setSystemTime(start + 22 * minute);
+      expect(await refusalOf(signer, 'f')).toBeUndefined();
+
+      // e still gets the token it was promised for +30m.
+      vi.setSystemTime(start + 30 * minute);
+      expect(await refusalOf(signer, 'e')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a room back before its turn keeps its place in the queue', async () => {
+    vi.useFakeTimers();
+    try {
+      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 6, wsConnectBurst: 1 });
+      const start = Date.now();
+      await signer.sign(signRequest({ roomId: 'a' }));
+      expect(await refusalOf(signer, 'c')).toBe(10 * 60_000);
+      expect(await refusalOf(signer, 'd')).toBe(20 * 60_000);
+      // c is re-dialled early (a rebalance): it is not sent behind d.
+      vi.setSystemTime(start + 4 * 60_000);
+      expect(await refusalOf(signer, 'c')).toBe(6 * 60_000);
+      vi.setSystemTime(start + 10 * 60_000);
+      expect(await refusalOf(signer, 'c')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops to a slow rate with no burst once TikTok refuses a handshake', async () => {
+    // The configured rate is above anything prod has been refused at, not
+    // above anything TikTok might refuse. Dialling at full rate into a
+    // throttled session only extends the throttle.
+    vi.useFakeTimers();
+    try {
+      const { signer } = await leasedSigner();
+      const start = Date.now();
+      expect(signer.connectBudgetStatus().throttled).toBe(false);
+
+      signer.noteHandshakeRefused();
+      expect(signer.connectBudgetStatus().throttled).toBe(true);
+      // The 12-token burst is gone: one connect, then 6 an hour.
+      await signer.sign(signRequest({ roomId: 'a' }));
+      expect(await refusalOf(signer, 'b')).toBe(10 * 60_000);
+      vi.setSystemTime(start + 10 * 60_000);
+      expect(await refusalOf(signer, 'b')).toBeUndefined();
+
+      // An hour after the refusal the configured rate is back.
+      vi.setSystemTime(start + 3_600_000 + 1);
+      expect(signer.connectBudgetStatus().throttled).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports the rooms waiting on the budget and how long the oldest has waited', async () => {
+    vi.useFakeTimers();
+    try {
+      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 6, wsConnectBurst: 1 });
+      const start = Date.now();
+      await signer.sign(signRequest({ roomId: 'a' }));
+      expect(signer.connectBudgetStatus()).toMatchObject({ waitingRooms: 0, oldestWaitMs: 0 });
+
+      await refusalOf(signer, 'c');
+      vi.setSystemTime(start + 2 * 60_000);
+      await refusalOf(signer, 'd');
+      vi.setSystemTime(start + 5 * 60_000);
+      expect(signer.connectBudgetStatus()).toMatchObject({
+        waitingRooms: 2,
+        oldestWaitMs: 5 * 60_000
+      });
+
+      // c connects on its token: only d is still waiting.
+      vi.setSystemTime(start + 10 * 60_000);
+      expect(await refusalOf(signer, 'c')).toBeUndefined();
+      expect(signer.connectBudgetStatus()).toMatchObject({
+        waitingRooms: 1,
+        oldestWaitMs: 8 * 60_000
+      });
+
+      // d never comes back: it stops counting once its held token lapses.
+      vi.setSystemTime(start + 20 * 60_000 + 91_000);
+      expect(signer.connectBudgetStatus()).toMatchObject({ waitingRooms: 0, oldestWaitMs: 0 });
     } finally {
       vi.useRealTimers();
     }
@@ -430,10 +497,10 @@ describe('PureNodeSigner WS-connect budget', () => {
 });
 
 describe('PureNodeSigner budget refusal classification', () => {
-  it('the exhausted WS-connect budget refuses with reason budget and a window-slide retryAfterMs', async () => {
+  it('the exhausted WS-connect budget refuses with reason budget and the wait for its token', async () => {
     vi.useFakeTimers();
     try {
-      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 2 });
+      const { signer } = await leasedSigner({ maxWsConnectsPerHour: 6, wsConnectBurst: 2 });
       const start = Date.now();
       await signer.sign(signRequest({ roomId: 'a' }));
       vi.setSystemTime(new Date(start + 30_000));
@@ -449,9 +516,9 @@ describe('PureNodeSigner budget refusal classification', () => {
 
       expect(refusal).toBeInstanceOf(SignatureFailure);
       expect(classifySignatureFailure(refusal)).toBe('budget');
-      // Window slides 1h after the OLDEST retained connect (start); at
-      // start+60s the room must wait the remaining 59 minutes.
-      expect((refusal as SignatureFailure).retryAfterMs).toBe(59 * 60_000);
+      // 6 an hour is a token every 10 minutes, and the minute since the
+      // bucket ran dry has earned a tenth of one.
+      expect((refusal as SignatureFailure).retryAfterMs).toBe(9 * 60_000);
     } finally {
       vi.useRealTimers();
     }
