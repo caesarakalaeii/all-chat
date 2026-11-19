@@ -50,11 +50,10 @@ export interface SignClientDeps {
   selfTimeoutMs?: number;
   /** PureNodeSigner lease timeout (30 s default — a lease is fast). */
   sessionTimeoutMs?: number;
-  /**
-   * TIKTOK_MAX_WS_CONNECTS_PER_HOUR: the connect budget for one leased
-   * session. Omitted keeps the single-session default.
-   */
+  /** TIKTOK_MAX_WS_CONNECTS_PER_HOUR: this pod's sustained connect rate. */
   maxWsConnectsPerHour?: number;
+  /** TIKTOK_WS_CONNECT_BURST: connects this pod may make back to back. */
+  wsConnectBurst?: number;
   /**
    * TIKTOK_LEASE_CONSUMER: this pod's key at the signer's lease endpoint,
    * which is what gets it a warm session of its own.
@@ -93,6 +92,7 @@ export function pickSignClients(mode: SignerMode, deps: SignClientDeps): SignCli
           authToken: deps.authToken,
           sessionTimeoutMs: deps.sessionTimeoutMs,
           maxWsConnectsPerHour: deps.maxWsConnectsPerHour,
+          wsConnectBurst: deps.wsConnectBurst,
           consumer: deps.leaseConsumer
         })
       };

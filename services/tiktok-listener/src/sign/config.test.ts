@@ -116,17 +116,21 @@ describe('loadSignConfiguration', () => {
     expect(loadSignConfiguration({}).signerBaseUrl).toBe('');
   });
 
-  it('defaults the per-pod WS-connect budget to the single-replica value', () => {
-    expect(loadSignConfiguration({}).maxWsConnectsPerHour).toBe(12);
+  it('defaults the per-pod WS-connect rate and burst', () => {
+    expect(loadSignConfiguration({}).maxWsConnectsPerHour).toBe(18);
+    expect(loadSignConfiguration({}).wsConnectBurst).toBe(12);
   });
 
-  it('reads the per-pod WS-connect budget so N replicas can divide the shared ceiling', () => {
-    // The leased session's flag budget is shared by every pod leasing it, so
-    // the fleet enforces replicas x this value. Two replicas at the 12/hour
-    // default meant 24 against TikTok's measured ~15/hour (alert
-    // TikTokPureNodeConnectBudgetExhausted, 2026-11-18).
-    expect(loadSignConfiguration({ TIKTOK_MAX_WS_CONNECTS_PER_HOUR: '6' }).maxWsConnectsPerHour)
-      .toBe(6);
+  it('reads the per-pod WS-connect rate and burst from the manifest', () => {
+    // Every pod dials on the one session the signer keeps warm, so the
+    // session carries replicas x these values and the manifest must be
+    // able to size them without a code change.
+    const config = loadSignConfiguration({
+      TIKTOK_MAX_WS_CONNECTS_PER_HOUR: '6',
+      TIKTOK_WS_CONNECT_BURST: '4'
+    });
+    expect(config.maxWsConnectsPerHour).toBe(6);
+    expect(config.wsConnectBurst).toBe(4);
   });
 
   it('reads the lease consumer key so the signer assigns this pod its own session', () => {
@@ -149,7 +153,8 @@ describe('loadSignConfiguration', () => {
       expect(
         loadSignConfiguration({ TIKTOK_MAX_WS_CONNECTS_PER_HOUR: bad }).maxWsConnectsPerHour,
         bad
-      ).toBe(12);
+      ).toBe(18);
+      expect(loadSignConfiguration({ TIKTOK_WS_CONNECT_BURST: bad }).wsConnectBurst, bad).toBe(12);
     }
   });
 });
@@ -162,7 +167,8 @@ describe('eulerStillReachableForSignature', () => {
     disableEulerFallbacks: true,
     enableExtendedGiftInfo: false,
     eulerApiKey: '',
-    maxWsConnectsPerHour: 12,
+    maxWsConnectsPerHour: 18,
+    wsConnectBurst: 12,
     leaseConsumer: ''
   };
 

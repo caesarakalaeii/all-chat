@@ -661,6 +661,7 @@ class TikTokListenerService {
       authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
       selfTimeoutMs: TIKTOK_SIGNER_TIMEOUT_MS,
       maxWsConnectsPerHour: SIGN_CONFIG.maxWsConnectsPerHour,
+      wsConnectBurst: SIGN_CONFIG.wsConnectBurst,
       leaseConsumer: SIGN_CONFIG.leaseConsumer
     });
     this.selfSigner = signClients.selfSigner;
@@ -933,6 +934,9 @@ class TikTokListenerService {
         }));
       } else if (req.url === '/metrics' && req.method === 'GET') {
         // Prometheus metrics endpoint
+        if (this.pureNodeSigner) {
+          this.metrics.setConnectBudgetStatus(this.pureNodeSigner.connectBudgetStatus());
+        }
         this.metrics.getMetrics().then((metrics) => {
           res.writeHead(200, { 'Content-Type': this.metrics.getContentType() });
           res.end(metrics);
@@ -1669,6 +1673,9 @@ class TikTokListenerService {
               username,
               attempts: attempt
             });
+            // TikTok is refusing handshakes on the leased session: slow
+            // every room's connects down, not only this room's.
+            this.pureNodeSigner?.noteHandshakeRefused();
             // Premium fallback (phase 3): the primary tier failed its
             // retry budget; a premium room's delivery can switch to the
             // signer relay instead of parking in error backoff.
@@ -1691,7 +1698,7 @@ class TikTokListenerService {
       logger.error('Failed to connect to TikTok stream', { username, error });
 
       // A self-imposed budget refusal is not an error: the sign cannot
-      // succeed until the signer's rolling hour slides, so the room is
+      // succeed until the signer's bucket has a token for it, so the room is
       // parked for exactly that long. The escalating error curve would
       // re-sign every few seconds, get refused again, and spin the failure
       // counter that fired the budget-exhausted alert flap.

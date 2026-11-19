@@ -43,7 +43,7 @@ export function connectionCeilingReached(liveConnectionCount: number, ceiling: n
  *
  * A silent-failure streak above SILENT_FAILURE_STREAK_THRESHOLD means
  * reconnecting did not fix the silence. Every reconnect is a WS-connect sign
- * against the pod's 12/hour pure-node budget, so the room is parked on a
+ * against the pod's pure-node connect budget, so the room is parked on a
  * doubling curve (10, 20, then 30 min) instead of retried. The error backoff
  * cannot do this: every 'connected' resets consecutiveErrors, so a deaf
  * room's curve never left its 4s first step (prod 2026-10-27: one deaf room
@@ -139,9 +139,8 @@ export function isBudgetRefusalError(error: unknown): boolean {
 /**
  * Whether a room with `parkRemainingMs` left on its park may be dialled.
  *
- * A park is a promise about the SIGNER's rolling hour, not about this pod's
- * connection, so dialling inside it costs a slot and re-queues the room
- * further back than if it had waited — see BackoffManager.forgetConnectionState
+ * A park is a promise about the SIGNER's connect bucket, not about this pod's
+ * connection, so dialling inside it only spends a sign the signer will refuse — see BackoffManager.forgetConnectionState
  * for the mechanism and the 2026-11-18 incident.
  */
 export function parkBlocksConnect(parkRemainingMs: number): boolean {

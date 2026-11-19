@@ -108,8 +108,9 @@ TIKTOK_SELF_SIGN_FALLBACK=true        # Under `self`, fall back to Euler when ou
 TIKTOK_SIGNER_URL=                    # tiktok-signer service URL; empty = no self signer
 TIKTOK_SIGNER_AUTH_TOKEN=             # Bearer token if the signer service runs with auth
 TIKTOK_SIGNER_TIMEOUT_MS=180000       # Self-signer HTTP timeout; signer rotates lanes inside one request
-TIKTOK_MAX_WS_CONNECTS_PER_HOUR=12    # pure-node: WS-connect signs per rolling hour, per leased session
-TIKTOK_LEASE_CONSUMER=                # pure-node: pod name (downward API); gets this pod its own warm session
+TIKTOK_MAX_WS_CONNECTS_PER_HOUR=18    # pure-node: sustained WS-connect signs per hour, per pod (token-bucket refill)
+TIKTOK_WS_CONNECT_BURST=12            # pure-node: WS-connect signs a pod may make back to back (token-bucket size)
+TIKTOK_LEASE_CONSUMER=                # pure-node: pod name (downward API), sent to the signer's lease endpoint
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
 
@@ -128,7 +129,7 @@ TIKTOK_US_RELAY_TOKEN=                # Shared secret, sent as X-Relay-Token
 # for launch-day streams rather than disabling monitoring. A room that is
 # still deaf after one reconnect is parked for 10, then 20, then 30 min
 # ("Silent failure streak - parking deaf room") so it cannot spend the pod's
-# 12/hour pure-node connect budget that every other room shares.
+# pure-node connect budget that every other room shares.
 TIKTOK_HEARTBEAT_INTERVAL_MS=30000     # How often to check (default)
 TIKTOK_HEARTBEAT_TIMEOUT_MS=90000      # Silence before a forced reconnect (default)
 
@@ -240,18 +241,27 @@ synthesizes the connector's initial fetch result in-process
 (they are handshake-load-bearing; the bare push origin is rejected),
 `cursor=0` rides the WS query (validated on the wire), and the room's
 chat arrives via the connector's own `im_enter_room`. Two budgets pace
-it (constraint: ~15 WS connects/hour flags the session): successful
-lease fetches ≤ 8/hour (10-min cache, single-flight) and WS connect
-signs ≤ 12/hour **per leased session**, which is the granularity TikTok
-scores the flag threshold at. `TIKTOK_LEASE_CONSUMER` (the pod name, via
-the downward API) is what gets a pod a session of its own, so replicas
-add connect capacity instead of dividing one ceiling — bounded by the
-number of warm rooms the signer holds, since pods beyond that share a
-session and divide its budget. The connect window follows the session:
-if the signer re-assigns a pod, the old session's connects stop counting
-against the new one. Without the key, every pod leases the same session
-and `TIKTOK_MAX_WS_CONNECTS_PER_HOUR` must be divided across replicas by
-hand, which is the pre-2026-11-19 behaviour. The premium **fallback tier is
+it: successful lease fetches ≤ 8/hour (10-min cache, single-flight), and
+WS connect signs through a per-pod token bucket that refills at
+`TIKTOK_MAX_WS_CONNECTS_PER_HOUR` (18) and holds at most
+`TIKTOK_WS_CONNECT_BURST` (12). The burst covers the moments TikTok cuts
+every socket at once and each room re-dials; a room the bucket refuses is
+queued for its own token and waits its place in the queue divided by the
+refill rate, a few minutes rather than up to an hour.
+
+**Every pod dials on the same session.** The signer keeps one warm tab
+and its lease endpoint serves whichever warm room already has one, so
+`TIKTOK_LEASE_CONSUMER` does not give a pod a session of its own in
+practice, and the session carries replicas x the per-pod rate (2 x 18 =
+36/hour sustained in prod). TikTok has never refused a handshake at the
+rates prod has reached: 28 connects in an hour and 12 in 40 seconds on
+one session, with no refusal in 30 days of logs (2026-11-19). The only
+measurement of a limit is one lab observation of about 15 connect
+attempts in an hour on a session a fetch burst had already flagged
+(2026-09-18). The rate is therefore set from prod, not proven safe, and
+the bucket defends itself: when a room's WS flap retries run out, which
+is TikTok refusing handshakes, the pod drops to 6 connects/hour with no
+burst for an hour (`tiktok_connect_budget_throttled`). The premium **fallback tier is
 ON** in this mode: promotion warms the
 target-room tab on the signer (`POST /v1/sign` viewer path, one capture
 per attempt, premium-gated) before attaching the relay, and the canary
@@ -290,11 +300,17 @@ sum(rate(tiktok_sign_attempts_total{signer="self",outcome="success",load_bearing
 # Are we still hitting an external rate limit (Euler's free tier, TikTok)?
 sum(rate(tiktok_sign_attempts_total{reason="rate_limit"}[5m]))
 
-# How often are we refusing ourselves on the pure-node hourly budgets
-# (WS connects, leases)? A room refused a WS connect is queued for its
-# own freeing slot, held for it when it frees, so one refusal is one
-# room waiting — this is capacity signal, not an external fault.
+# How often are we refusing ourselves on the pure-node budgets (WS
+# connects, leases)? A room refused a WS connect is queued for its own
+# token, held for it when it falls due, so one refusal is one room
+# waiting — this is capacity signal, not an external fault.
 sum(rate(tiktok_sign_attempts_total{reason="budget"}[5m]))
+
+# What that costs the rooms: how many are waiting on the connect budget
+# and how long the oldest has waited. TikTokPureNodeConnectBudgetExhausted
+# fires on the wait, not on the refusal count.
+max(tiktok_connect_budget_waiting_rooms)
+max(tiktok_connect_budget_oldest_wait_seconds)
 ```
 
 ### Transport tiers and the premium fallback (ADR-0064)

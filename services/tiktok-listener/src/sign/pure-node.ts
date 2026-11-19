@@ -39,15 +39,18 @@
  *    serving its original URL and stamp for hours, so a capturedAt-keyed
  *    window made every lease stale on arrival: every sign, pre-signs
  *    included, re-fetched and burned the 8/h lease budget in ~4 connects.
- *  - WS connects flag a session by burst rate (~15/hour observed): a
- *    rolling-hour connect budget paces flap storms. The budget is PER
- *    LEASED SESSION, not per room and not per pod: TikTok scores the rate
- *    against the session, and the signer assigns this pod its own warm
- *    session (GET /v1/session?consumer=...), so the window follows that
- *    session and resets when the signer re-assigns us. A sign that gets no
- *    lease never dials, so it gives its slot back: a signer outage must not
- *    drain the budget. Refused rooms queue, each for its own freeing slot
- *    (takeConnectSlot).
+ *  - WS connects are paced by a per-pod token bucket (takeConnectSlot): a
+ *    sustained rate plus a burst. TikTok can throttle a session's WS
+ *    surface on connect rate (one lab observation, ~15 attempts in an hour
+ *    on a session a fetch burst had already flagged), but prod has never
+ *    been refused: one session carried 28 connects in an hour and 12 in 40
+ *    seconds (2026-11-19) with no handshake refusal in 30 days of logs. In
+ *    prod every pod leases the SAME session: the signer keeps one warm tab
+ *    and serves whichever room has one, so the fleet's rate is replicas x
+ *    this pod's rate. A sign that gets no lease never dials, so it gives
+ *    its token back: a signer outage must not drain the budget. Refused
+ *    rooms queue in order. If TikTok does refuse handshakes, the bucket
+ *    throttles itself (noteHandshakeRefused).
  *  - The lane-pin pre-sign re-enters sign() with a fixed
  *    `userAgent: 'ws-pin'` marker; it is a local cache hit, not a WS dial,
  *    and never consumes connect budget.
@@ -77,10 +80,32 @@ interface SessionLeaseResponse {
 const CONNECTOR_APPENDED_WS_KEYS = new Set(['compress', 'room_id', 'internal_ext', 'cursor']);
 
 /**
- * How long a freed connect slot stays held for the queued room it was
- * promised to: the live poller's 30s tick plus the live-status pre-check.
+ * How long a connect token stays held for the queued room it was promised
+ * to: the live poller's 30s tick plus the live-status pre-check.
  */
 const CONNECT_QUEUE_HOLD_MS = 90_000;
+
+/** Connects per hour, with no burst, while TikTok is refusing handshakes. */
+const THROTTLED_CONNECTS_PER_HOUR = 6;
+
+/** How long one refused handshake keeps the bucket throttled. */
+const HANDSHAKE_REFUSAL_THROTTLE_MS = 3_600_000;
+
+/** A room refused a connect token: when its token is due, and since when it has waited. */
+interface QueuedRoom {
+  readyAt: number;
+  since: number;
+}
+
+/** What the connect budget is doing right now, for the metrics endpoint. */
+export interface ConnectBudgetStatus {
+  /** Rooms refused a connect that have not connected since. */
+  waitingRooms: number;
+  /** How long the longest-waiting of those rooms has waited. */
+  oldestWaitMs: number;
+  /** Whether a refused handshake has the bucket on its reduced rate. */
+  throttled: boolean;
+}
 
 export interface PureNodeSignerOptions {
   /** Base URL of the tiktok-signer service, no trailing slash. */
@@ -94,13 +119,18 @@ export interface PureNodeSignerOptions {
   /** Successful lease fetches per rolling hour (constraint 1). */
   maxLeasesPerHour?: number;
   /**
-   * WS-connect signs per rolling hour against ONE leased session, which is
-   * the granularity TikTok scores its ~15/hour flag budget at
-   * (TIKTOK_MAX_WS_CONNECTS_PER_HOUR). Pods leasing distinct sessions each
-   * get this budget; pods sharing a session still divide it, so size it
-   * for the number of pods that can land on one warm room.
+   * Sustained WS-connect signs per hour for this pod: the refill rate of
+   * the connect token bucket (TIKTOK_MAX_WS_CONNECTS_PER_HOUR). Every pod
+   * dials on the one session the signer keeps warm, so the session sees
+   * replicas x this rate.
    */
   maxWsConnectsPerHour?: number;
+  /**
+   * Connect signs this pod may make back to back after a quiet spell: the
+   * capacity of the token bucket (TIKTOK_WS_CONNECT_BURST). Sized for the
+   * moments TikTok cuts every socket at once and each room re-dials.
+   */
+  wsConnectBurst?: number;
   /**
    * Stable key identifying this pod to the signer's lease endpoint, so it
    * is assigned its own warm session instead of sharing the fleet's first
@@ -130,17 +160,20 @@ export class PureNodeSigner implements WebcastSigner {
   private readonly staleAfterMs: number;
   private readonly maxLeasesPerHour: number;
   private readonly maxWsConnectsPerHour: number;
+  private readonly wsConnectBurst: number;
   private readonly consumer: string;
   private readonly fetchImpl: typeof undiciRequest;
 
   private lease: CachedLease | undefined;
   private inFlight: Promise<void> | undefined;
   private readonly leaseFetchHours: number[] = [];
-  private readonly wsConnectHours: number[] = [];
-  /** Rooms refused a connect slot → when the slot promised to them frees. */
-  private readonly connectQueue = new Map<string, number>();
-  /** The warm session the counted connects were spent on; see noteSession. */
-  private sessionRoom = '';
+  /** Connect tokens in the bucket, as of connectTokensAt. Starts full. */
+  private connectTokens: number;
+  private connectTokensAt = Date.now();
+  /** Rooms refused a connect token, in the order their tokens fall due. */
+  private readonly connectQueue = new Map<string, QueuedRoom>();
+  /** Until when a refused handshake keeps the bucket throttled. */
+  private throttledUntil = 0;
 
   constructor(options: PureNodeSignerOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -150,7 +183,9 @@ export class PureNodeSigner implements WebcastSigner {
     this.timeoutMs = options.sessionTimeoutMs ?? 30_000;
     this.staleAfterMs = options.staleAfterMs ?? 600_000;
     this.maxLeasesPerHour = options.maxLeasesPerHour ?? 8;
-    this.maxWsConnectsPerHour = options.maxWsConnectsPerHour ?? 12;
+    this.maxWsConnectsPerHour = options.maxWsConnectsPerHour ?? 18;
+    this.wsConnectBurst = options.wsConnectBurst ?? 12;
+    this.connectTokens = this.wsConnectBurst;
     this.consumer = options.consumer ?? '';
     this.fetchImpl = options.fetchImpl ?? undiciRequest;
   }
@@ -167,52 +202,117 @@ export class PureNodeSigner implements WebcastSigner {
       const lease = await this.currentLease();
       return this.synthesize(request, lease);
     } catch (error) {
-      // The slot is reserved before the await so concurrent signs cannot
-      // all pass the check; released here because nothing was dialled.
-      if (!isPreSign) {
-        const slot = this.wsConnectHours.lastIndexOf(now);
-        if (slot >= 0) this.wsConnectHours.splice(slot, 1);
-      }
+      // The token is taken before the await so concurrent signs cannot
+      // all pass the check; returned here because nothing was dialled.
+      if (!isPreSign) this.connectTokens += 1;
       throw error;
     }
   }
 
   /**
-   * Take a WS-connect slot, or refuse and queue the room for its own slot.
+   * Take a connect token, or refuse and queue the room for its own token.
    *
-   * Every refused room is told when a slot frees that no room ahead of it
-   * is promised, and a slot that frees for a queued room is held for it
-   * until CONNECT_QUEUE_HOLD_MS after that time. Told to retry when the
-   * oldest slot slid, every refused room came back together, one connected
-   * and the rest were refused again, slot after slot (prod 2026-11-12: 37
-   * of a day's 59 refusals were rooms already parked).
+   * A token bucket, not a rolling-hour count: the bucket refills at the
+   * sustained rate and holds at most the burst. A rolling hour made a
+   * refused room wait for a connect from up to an hour earlier to age out
+   * (prod 2026-11-19: TikTok cut all 15 sockets at once, the re-dials used
+   * up the hour, and rooms going live were still waiting 35 minutes
+   * later). Here the wait is the room's place in the queue divided by the
+   * refill rate.
+   *
+   * Each refused room is told when its own token falls due, and that token
+   * is held for it until CONNECT_QUEUE_HOLD_MS after that time. Told to
+   * retry at one shared moment, every refused room came back together, one
+   * connected and the rest were refused again (prod 2026-11-12: 37 of a
+   * day's 59 refusals were rooms already parked).
    */
   private takeConnectSlot(roomId: string, now: number): void {
-    this.pruneWindow(this.wsConnectHours, now);
-    this.connectQueue.delete(roomId);
-    let held = 0;
-    for (const [room, slotAt] of this.connectQueue) {
-      if (slotAt < now - CONNECT_QUEUE_HOLD_MS) this.connectQueue.delete(room); // never came back
-      else if (slotAt <= now) held++;
+    const mine = this.connectQueue.get(roomId);
+    for (const [room, queued] of this.connectQueue) {
+      if (queued.readyAt < now - CONNECT_QUEUE_HOLD_MS) this.connectQueue.delete(room); // never came back
     }
-    const free = this.maxWsConnectsPerHour - this.wsConnectHours.length;
-    if (free > held) {
-      this.wsConnectHours.push(now);
+    // Refill while this room still counts towards the queue: the bucket
+    // may hold one token per queued room, however small the burst.
+    this.refillConnectTokens(now);
+    this.connectQueue.delete(roomId);
+
+    let held = 0;
+    for (const queued of this.connectQueue.values()) {
+      if (queued.readyAt <= now) held++;
+    }
+    if (this.connectTokens - held >= 1 - 1e-9) {
+      this.connectTokens = Math.max(0, this.connectTokens - 1);
       return;
     }
-    // Every connect, made or promised, frees its slot an hour later; the
-    // rooms already queued take the earliest of those in turn.
-    const slotsFreeAt = [...this.wsConnectHours, ...this.connectQueue.values()]
-      .map((t) => t + 3_600_000)
-      .sort((a, b) => a - b);
-    const slotAt = slotsFreeAt[this.connectQueue.size - free]!;
-    this.connectQueue.set(roomId, slotAt);
-    throw new SignatureFailure(
+
+    // Back before its turn, the room keeps its place. Otherwise every room
+    // already queued takes a token before this one does.
+    let readyAt = mine?.readyAt ?? 0;
+    if (readyAt <= now) {
+      const missing = this.connectQueue.size + 1 - this.connectTokens;
+      readyAt = now + Math.ceil(missing / this.connectRatePerMs(now) - 1e-6);
+    }
+    this.connectQueue.set(roomId, { readyAt, since: mine?.since ?? now });
+    throw this.connectRefusal(readyAt - now);
+  }
+
+  private connectRefusal(retryAfterMs: number): SignatureFailure {
+    return new SignatureFailure(
       this.name,
-      'WS connect budget exhausted: too many connects this hour (rate limiting self-imposed)',
+      'WS connect budget exhausted: too many connects in a row (rate limiting self-imposed)',
       undefined,
-      slotAt - now
+      retryAfterMs
     );
+  }
+
+  private connectRatePerMs(now: number): number {
+    const perHour =
+      now < this.throttledUntil
+        ? Math.min(THROTTLED_CONNECTS_PER_HOUR, this.maxWsConnectsPerHour)
+        : this.maxWsConnectsPerHour;
+    return perHour / 3_600_000;
+  }
+
+  /** Add the tokens earned since the last refill, up to the bucket's capacity. */
+  private refillConnectTokens(now: number): void {
+    const burst = now < this.throttledUntil ? 1 : this.wsConnectBurst;
+    const capacity = Math.max(burst, this.connectQueue.size);
+    const earned = Math.max(0, now - this.connectTokensAt) * this.connectRatePerMs(now);
+    this.connectTokens = Math.min(capacity, this.connectTokens + earned);
+    this.connectTokensAt = now;
+  }
+
+  /**
+   * TikTok refused a WS handshake and the flap retries did not clear it.
+   *
+   * That is the one real sign that the session's connect rate is being
+   * scored against us, so the bucket drops to THROTTLED_CONNECTS_PER_HOUR
+   * with no burst for an hour. The configured rate is above anything prod
+   * has been refused at, not above anything TikTok might ever refuse, and
+   * a pod that kept dialling at full rate into a throttled session would
+   * only extend the throttle.
+   */
+  noteHandshakeRefused(now: number = Date.now()): void {
+    this.refillConnectTokens(now);
+    this.throttledUntil = now + HANDSHAKE_REFUSAL_THROTTLE_MS;
+    this.connectTokens = Math.min(this.connectTokens, 1);
+  }
+
+  /**
+   * Rooms waiting on the connect budget, for the metrics endpoint.
+   *
+   * A room that was refused and then went offline, or was claimed by
+   * another pod, still counts until its held token lapses.
+   */
+  connectBudgetStatus(now: number = Date.now()): ConnectBudgetStatus {
+    let waitingRooms = 0;
+    let oldestWaitMs = 0;
+    for (const queued of this.connectQueue.values()) {
+      if (queued.readyAt < now - CONNECT_QUEUE_HOLD_MS) continue;
+      waitingRooms++;
+      oldestWaitMs = Math.max(oldestWaitMs, now - queued.since);
+    }
+    return { waitingRooms, oldestWaitMs, throttled: now < this.throttledUntil };
   }
 
   /**
@@ -302,34 +402,6 @@ export class PureNodeSigner implements WebcastSigner {
       proxyHost: bodyJson.proxyHost ?? '',
       fetchedAt: now
     };
-    this.noteSession(this.lease.room);
-  }
-
-  /**
-   * Follow the leased session, dropping the connect window when it changes.
-   *
-   * The window counts against one session's ~15/hour TikTok flag budget. A
-   * re-assignment hands us a session with its own untouched window, and
-   * carrying the old counts over would refuse rooms that session has room
-   * for. Only a CHANGE resets: resetting per lease fetch (one every ten
-   * minutes) would leave the budget unenforceable.
-   *
-   * A signer too old to report `room` sends '', which never changes, so the
-   * budget keeps its previous single-session meaning.
-   *
-   * The sign that triggered this lease fetch has already taken its slot and
-   * will dial on the NEW session, so one slot is carried over rather than
-   * dropped: clearing the window wholesale would let it connect for free.
-   * Learning the first session's name is not a re-assignment and keeps the
-   * window as it stands.
-   */
-  private noteSession(room: string): void {
-    if (room === this.sessionRoom) return;
-    const reassigned = this.sessionRoom !== '';
-    this.sessionRoom = room;
-    if (!reassigned) return;
-    this.wsConnectHours.splice(0, this.wsConnectHours.length - 1);
-    this.connectQueue.clear();
   }
 
   /**

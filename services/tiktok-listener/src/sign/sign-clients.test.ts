@@ -72,13 +72,13 @@ describe('pickSignClients', () => {
   });
 
   it('gives the PureNodeSigner the configured per-pod WS-connect budget', async () => {
-    // The budget is enforced per pod but spent against ONE leased session,
-    // so a two-replica rollout must be able to halve it. Asserted through
-    // the signer's own refusal point rather than a field: the budget is
-    // only meaningful as "the Nth connect this hour is refused".
+    // Asserted through the signer's own refusal point rather than a field:
+    // the budget is only meaningful as "the Nth connect in a row is
+    // refused, and for this long".
     const { pureNodeSigner } = pickSignClients('pure-node', {
       ...URL_DEPS,
-      maxWsConnectsPerHour: 2
+      maxWsConnectsPerHour: 6,
+      wsConnectBurst: 2
     });
     const connect = (roomId: string): Promise<unknown> =>
       pureNodeSigner!.sign({ roomId, username: 'someone', userAgent: 'test-ua' });

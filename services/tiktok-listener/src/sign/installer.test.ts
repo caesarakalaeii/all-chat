@@ -91,7 +91,8 @@ const baseConfig: SignConfiguration = {
   disableEulerFallbacks: true,
   enableExtendedGiftInfo: false,
   eulerApiKey: '',
-  maxWsConnectsPerHour: 12,
+  maxWsConnectsPerHour: 18,
+  wsConnectBurst: 12,
   leaseConsumer: ''
 };
 
