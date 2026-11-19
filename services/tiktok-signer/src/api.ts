@@ -852,17 +852,12 @@ async function resolveSessionLease(
     const lease = await viewer.sessionLease(room);
     outcomes.push({ room, lease });
     if (lease && lease.wsUrl !== '') {
-      // The consumer's own room (the head of its preference list) serves
-      // it: nothing to grow.
       if (room === warmRooms[0]) return { lease, outcome: 'success' };
-      // Otherwise this is a session another consumer already holds. Keep
-      // it as the fallback but stop walking: serving it immediately is
-      // what funnelled the whole fleet through one session's ~15/hour
-      // TikTok connect budget while the other warm rooms stayed unused
-      // (TikTokPureNodeConnectBudgetExhausted, still firing after both
-      // the spread in #1263 and the token bucket in #1267). The capture
-      // phase below gets its chance to grow a session for this consumer
-      // first.
+      // A session another consumer holds. Returning it here is what
+      // funnelled the whole fleet through one session's ~15/hour TikTok
+      // connect budget while the other warm rooms stayed unused: keep it
+      // as the fallback and let the capture phase try to grow this
+      // consumer its own session first.
       shared = lease;
       break;
     }
@@ -901,10 +896,9 @@ async function resolveSessionLease(
   const captured = await captureCandidates(warmRooms);
   if (captured) return { lease: captured, outcome: 'captured' };
 
-  // No session could be grown for this consumer, so share the one another
-  // consumer holds: more pods than warm sessions must still be served,
-  // rationed rather than refused. Returning here also keeps the recovery
-  // pass below from closing that tab — it is serving its own consumer.
+  // Nothing could be grown, so share after all: more pods than warm
+  // sessions are rationed, not refused. Returning here also keeps the
+  // recovery pass below from closing that tab — it serves its own consumer.
   if (shared) return { lease: shared, outcome: 'success' };
 
   // Close the tabs whose warm lease could not serve (dead page or empty
