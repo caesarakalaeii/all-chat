@@ -42,6 +42,7 @@ import { CaptureBreaker } from './signing/capture-breaker.js';
 import { type ViewerPool, type SessionLease } from './signing/viewer.js';
 import { VIEWER_IDENTITY, VIEWER_UA, browserVersionFromUserAgent } from './signing/identity.js';
 import { RelayHub, type RelayLogger, type RelayMessage } from './signing/relay.js';
+import { SessionAssignments } from './signing/session-assignments.js';
 
 /**
  * Is the streamer live right now, per TikTok's own user route (user.status
@@ -514,9 +515,16 @@ export function createServer(options: ServerOptions): http.Server {
     liveness.set(room, { live, at: Date.now() });
     return live;
   };
+  // Which warm session each consumer leases. Consumers are spread across
+  // the warm rooms so the fleet stops funnelling every WS connect through
+  // one session's TikTok flag budget (see session-assignments.ts).
+  const assignments = new SessionAssignments();
   // Concurrent lease requests share one resolution: two requests racing
   // the same cold capture doubled the failures that rotate a lane profile.
-  let leaseInFlight: Promise<LeaseResolution> | undefined;
+  // Keyed by the room order the resolution walks, so two consumers
+  // preferring different sessions are not collapsed onto one answer while
+  // two preferring the same order still share a single capture.
+  const leaseInFlight = new Map<string, Promise<LeaseResolution>>();
 
   const server = http.createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -604,8 +612,14 @@ export function createServer(options: ServerOptions): http.Server {
     // listener's pure-Node client re-enters per target room (cross-room
     // entry, measured 2026-09-18). No capture cadence — harvest only on
     // request (budget discipline, constraint 1).
-    if (req.method === 'GET' && url === '/v1/session') {
-      const rooms = [...warmRooms];
+    const sessionUrl = req.method === 'GET' ? url.match(/^\/v1\/session(?:\?(.*))?$/) : null;
+    if (sessionUrl) {
+      // A consumer key (the listener's pod name) pins this caller to one
+      // warm session; absent, the caller keeps the old first-servable
+      // behaviour so a rolling update leases throughout.
+      const consumer = new URLSearchParams(sessionUrl[1] ?? '').get('consumer') ?? '';
+      const warm = [...warmRooms];
+      const rooms = consumer ? assignments.preferenceFor(consumer, warm) : warm;
       if (!rooms.length) {
         leaseOutcome('disabled');
         res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -618,17 +632,21 @@ export function createServer(options: ServerOptions): http.Server {
         res.end(JSON.stringify({ error: 'viewer mode not enabled' }));
         return;
       }
-      if (!leaseInFlight) {
-        leaseInFlight = resolveSessionLease(viewer, rooms, captureBreaker, relay, isLive).finally(() => {
-          leaseInFlight = undefined;
+      const key = rooms.join(',');
+      let inFlight = leaseInFlight.get(key);
+      if (!inFlight) {
+        inFlight = resolveSessionLease(viewer, rooms, captureBreaker, relay, isLive).finally(() => {
+          leaseInFlight.delete(key);
         });
-        void leaseInFlight.then((result) => {
+        leaseInFlight.set(key, inFlight);
+        void inFlight.then((result) => {
           if (!result.lease) options.onNoSession?.();
         });
       }
-      const result = await leaseInFlight;
+      const result = await inFlight;
       leaseOutcome(result.outcome);
       if (result.lease) {
+        if (consumer) assignments.record(consumer, result.lease.room);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result.lease));
         return;

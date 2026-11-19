@@ -533,6 +533,7 @@ export class ViewerPool {
       wsUrl: entry.wsUrl,
       cookieHeader: cookies,
       roomId: entry.roomId,
+      room: username,
       userAgent: VIEWER_UA,
       proxyHost: lane?.host ?? '',
       capturedAt: entry.capturedAt
@@ -1288,6 +1289,10 @@ export interface SessionLease {
   wsUrl: string;
   cookieHeader: string;
   roomId: string;
+  /** The warm room whose tab captured this session. Names the session
+   * itself: TikTok scores its connect-flag budget per session, so a
+   * consumer meters its WS connects against this value. */
+  room: string;
   userAgent: string;
   /** The lane the capture rode ("" = direct): the WS handshake must egress
    * via the same proxy or TikTok rejects it. */

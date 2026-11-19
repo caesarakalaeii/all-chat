@@ -214,6 +214,7 @@ function lease(over: Partial<SessionLease> = {}): SessionLease {
     wsUrl: 'wss://webcast-ws.example/ws',
     cookieHeader: 'ttwid=1; msToken=2',
     roomId: '42',
+    room: 'rooma',
     userAgent: 'viewer-ua',
     proxyHost: 'p:1',
     capturedAt: Date.now(),
@@ -230,7 +231,10 @@ function stubbedViewer(config: {
   const calls = { closedTabs: [] as string[], captures: [] as string[] };
   const viewer = {
     async sessionLease(username: string) {
-      return config.leases[username];
+      const served = config.leases[username];
+      // The real pool names the lease after the room whose tab served it;
+      // the per-room table would otherwise hand back the fixture's room.
+      return served && { ...served, room: username };
     },
     hasTab(username: string) {
       return config.hasTabs?.[username] ?? false;
