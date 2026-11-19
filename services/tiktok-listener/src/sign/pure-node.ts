@@ -328,9 +328,7 @@ export class PureNodeSigner implements WebcastSigner {
     const reassigned = this.sessionRoom !== '';
     this.sessionRoom = room;
     if (!reassigned) return;
-    const carried = this.wsConnectHours.slice(-1);
-    this.wsConnectHours.length = 0;
-    this.wsConnectHours.push(...carried);
+    this.wsConnectHours.splice(0, this.wsConnectHours.length - 1);
     this.connectQueue.clear();
   }
 
