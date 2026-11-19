@@ -54,7 +54,7 @@
  *                  trust it.
  * - `self`       — We sign via the signer service's page capture. Euler is used only if our
  *                  signer throws and `selfSignFallback` is on.
- * - `pure-node`  — We lease the signer's shared WS session (GET /v1/session: a warm classic
+ * - `pure-node`  — We lease a warm WS session from the signer (GET /v1/session: a warm classic
  *                  room's wsUrl + cookie jar, cross-room entry per target room) and synthesize
  *                  the initial fetch result in-process. No Euler, no per-room capture. The
  *                  connect budget (maxWsConnectsPerHour) is PER LEASED SESSION, which is
