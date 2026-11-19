@@ -355,6 +355,78 @@ describe('GET /v1/session', () => {
     expect(probes).toBe(1);
   });
 
+  it('serves distinct warm sessions to distinct consumers', async () => {
+    // The connect-flag budget TikTok enforces is PER SESSION (~15/hour),
+    // and each warm room is its own tab, lane profile and cookie jar — a
+    // distinct session. Serving every consumer the first servable room
+    // funnelled the whole listener fleet through ONE session's budget and
+    // left the other warm sessions' capacity unspent
+    // (TikTokPureNodeConnectBudgetExhausted, 2026-11-18).
+    const { viewer } = stubbedViewer({ leases: { rooma: lease(), roomb: lease() } });
+    await withServer({ viewer, warmRooms: ['rooma', 'roomb'] }, async (base) => {
+      const first = await getJson(base, '/v1/session?consumer=pod-a');
+      const second = await getJson(base, '/v1/session?consumer=pod-b');
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(first.body.room).toBe('rooma');
+      expect(second.body.room).toBe('roomb');
+    });
+  });
+
+  it('keeps a consumer on the same session across leases', async () => {
+    // Stickiness is what makes the listener's per-session connect budget
+    // meaningful: a consumer that hopped sessions would spend a fresh
+    // budget on each hop while its old session's connects still counted
+    // against TikTok's window for that session.
+    const { viewer } = stubbedViewer({ leases: { rooma: lease(), roomb: lease() } });
+    await withServer({ viewer, warmRooms: ['rooma', 'roomb'] }, async (base) => {
+      await getJson(base, '/v1/session?consumer=pod-b'); // pod-b takes rooma
+      const again = await getJson(base, '/v1/session?consumer=pod-b');
+      const other = await getJson(base, '/v1/session?consumer=pod-a');
+      expect(again.body.room).toBe('rooma');
+      expect(other.body.room).toBe('roomb');
+    });
+  });
+
+  it('reuses a session when consumers outnumber servable warm rooms', async () => {
+    // More pods than warm sessions must still be served: sharing a
+    // session is the old behaviour and is correct, just rationed.
+    const { viewer } = stubbedViewer({ leases: { rooma: lease() } });
+    await withServer({ viewer, warmRooms: ['rooma'] }, async (base) => {
+      const first = await getJson(base, '/v1/session?consumer=pod-a');
+      const second = await getJson(base, '/v1/session?consumer=pod-b');
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(first.body.room).toBe('rooma');
+      expect(second.body.room).toBe('rooma');
+    });
+  });
+
+  it('re-assigns a consumer whose session stopped being servable', async () => {
+    // A warm room goes offline and its tab stops serving. The consumer
+    // pinned to it must move to a servable session rather than keep
+    // asking for the dead one.
+    const { viewer } = stubbedViewer({ leases: { rooma: lease(), roomb: lease() } });
+    await withServer({ viewer, warmRooms: ['rooma', 'roomb'] }, async (base) => {
+      expect((await getJson(base, '/v1/session?consumer=pod-a')).body.room).toBe('rooma');
+      viewer.closeTab('rooma');
+      const after = await getJson(base, '/v1/session?consumer=pod-a');
+      expect(after.status).toBe(200);
+      expect(after.body.room).toBe('roomb');
+    });
+  });
+
+  it('serves a lease without a consumer key from the whole warm set', async () => {
+    // A listener that predates the consumer key (rolling update) still
+    // leases: no key means no assignment, first servable room.
+    const { viewer } = stubbedViewer({ leases: { rooma: lease() } });
+    await withServer({ viewer, warmRooms: ['rooma'] }, async (base) => {
+      const res = await getJson(base, '/v1/session');
+      expect(res.status).toBe(200);
+      expect(res.body.room).toBe('rooma');
+    });
+  });
+
   it('nudges the curator when no lease can be served', async () => {
     const { viewer } = stubbedViewer({ leases: {}, hasTabs: { rooma: false } });
     let nudges = 0;
