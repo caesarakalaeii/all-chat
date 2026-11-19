@@ -36,9 +36,22 @@
  * its previous connects still counted against TikTok's window for the old
  * session — exactly the overrun the per-session budget exists to prevent.
  */
+/**
+ * How long a consumer keeps counting as a holder after its last lease.
+ *
+ * Consumer keys are pod names, so a rollout retires one forever. A live
+ * pod leases up to 8 times an hour (the listener's own lease budget), so
+ * an hour is comfortably longer than any healthy gap while still letting
+ * a retired pod's room return to the free pool within one window.
+ */
+const HOLDER_KEEPALIVE_MS = 60 * 60 * 1000;
+
 export class SessionAssignments {
-  /** Consumer key (a listener pod) → the warm room it leases. */
-  private readonly assigned = new Map<string, string>();
+  /** Consumer key (a listener pod) → the warm room it leases, and when it last asked. */
+  private readonly assigned = new Map<string, { room: string; seenAt: number }>();
+
+  /** @param now Injected for tests; the eviction below is the only clock use. */
+  constructor(private readonly now: () => number = Date.now) {}
 
   /**
    * The rooms to try for this consumer, most preferred first.
@@ -64,11 +77,12 @@ export class SessionAssignments {
    * overwrites it with the room that actually served.
    */
   preferenceFor(consumer: string, rooms: readonly string[]): string[] {
+    this.evictStale();
     const holders = new Map<string, number>();
-    for (const room of this.assigned.values()) {
+    for (const { room } of this.assigned.values()) {
       holders.set(room, (holders.get(room) ?? 0) + 1);
     }
-    const current = this.assigned.get(consumer);
+    const current = this.assigned.get(consumer)?.room;
     // `current` is hoisted rather than special-cased in the comparator:
     // returning -1 for `a === current` regardless of argument position is
     // not a consistent ordering, and only V8's sort internals made it
@@ -77,12 +91,23 @@ export class SessionAssignments {
       .filter((room) => room !== current)
       .sort((a, b) => (holders.get(a) ?? 0) - (holders.get(b) ?? 0));
     const ordered = current && rooms.includes(current) ? [current, ...rest] : rest;
-    if (ordered.length) this.assigned.set(consumer, ordered[0]);
+    if (ordered.length) this.record(consumer, ordered[0]);
     return ordered;
   }
 
   /** Pin the consumer to the room that actually served it. */
   record(consumer: string, room: string): void {
-    this.assigned.set(consumer, room);
+    this.assigned.set(consumer, { room, seenAt: this.now() });
+  }
+
+  /**
+   * Forget consumers that stopped leasing, so a retired pod's room goes
+   * back to the free pool instead of making the spread count ghosts.
+   */
+  private evictStale(): void {
+    const cutoff = this.now() - HOLDER_KEEPALIVE_MS;
+    for (const [consumer, held] of this.assigned) {
+      if (held.seenAt < cutoff) this.assigned.delete(consumer);
+    }
   }
 }

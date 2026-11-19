@@ -524,6 +524,16 @@ export function createServer(options: ServerOptions): http.Server {
   // Keyed by the room order the resolution walks, so two consumers
   // preferring different sessions are not collapsed onto one answer while
   // two preferring the same order still share a single capture.
+  //
+  // Note this narrows the original guarantee, which was effectively
+  // per-room because every caller shared one promise. Two consumers with
+  // DIFFERENT orders can still cold-capture the same room: captureCandidates
+  // checks hasTab before it awaits, so both pass that check and both call
+  // captureRoom. Accepted rather than fixed here because serving every
+  // consumer one session is the bug this endpoint exists to fix, and the
+  // per-pod 8/hour lease budget bounds how often the race can be run. The
+  // tighter fix is a per-room in-flight lock inside ViewerPool.captureRoom,
+  // which would make this key irrelevant.
   const leaseInFlight = new Map<string, Promise<LeaseResolution>>();
 
   const server = http.createServer((req, res) => {
