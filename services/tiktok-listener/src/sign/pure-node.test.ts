@@ -39,6 +39,7 @@ function leaseResponse(over: Record<string, unknown> = {}): unknown {
     wsUrl: LEASE_URL,
     cookieHeader: 'ttwid=1; msToken=2',
     roomId: '111',
+    room: 'warm-a',
     userAgent: 'viewer-ua',
     proxyHost: 'p:1',
     capturedAt: Date.now(),
@@ -265,6 +266,77 @@ describe('PureNodeSigner WS-connect budget', () => {
     // ...but a pre-sign (ws-pin marker) still succeeds on the cached lease.
     const pre = await signer.sign({ roomId: 'unused', username: 'someone', userAgent: 'ws-pin' });
     expect((pre.fetchResult as Record<string, unknown>).cursor).toBe('0');
+  });
+
+  it('identifies itself as a lease consumer so the signer can assign it a session', async () => {
+    // Without a consumer key the signer serves every pod the same warm
+    // session, and the whole fleet spends one session's ~15/hour TikTok
+    // connect-flag budget (TikTokPureNodeConnectBudgetExhausted,
+    // 2026-11-18).
+    const { signer, impl } = await leasedSigner({ consumer: 'tiktok-listener-abc' });
+    await signer.sign(signRequest());
+    expect(String(impl.mock.calls[0]![0])).toBe(
+      'http://signer/v1/session?consumer=tiktok-listener-abc'
+    );
+  });
+
+  it('omits the consumer parameter when no consumer key is configured', async () => {
+    const { signer, impl } = await leasedSigner();
+    await signer.sign(signRequest());
+    expect(String(impl.mock.calls[0]![0])).toBe('http://signer/v1/session');
+  });
+
+  it('starts a fresh connect budget when the signer moves it to another session', async () => {
+    // The budget meters ONE session's TikTok flag window. When the signer
+    // re-assigns this consumer (its warm room went offline), the connects
+    // spent on the old session do not count against the new one — holding
+    // them would refuse rooms the new session has budget for.
+    const impl = vi.fn();
+    impl.mockResolvedValueOnce({
+      statusCode: 200,
+      headers: {},
+      body: { text: async () => JSON.stringify(leaseResponse({ room: 'warm-a' })) }
+    });
+    impl.mockResolvedValue({
+      statusCode: 200,
+      headers: {},
+      body: { text: async () => JSON.stringify(leaseResponse({ room: 'warm-b' })) }
+    });
+    const signer = new PureNodeSigner({
+      baseUrl: 'http://signer',
+      maxWsConnectsPerHour: 2,
+      staleAfterMs: 0, // re-lease on every sign, so the room change lands
+      fetchImpl: impl as never
+    });
+
+    await signer.sign(signRequest({ roomId: 'a' })); // on warm-a
+    await signer.sign(signRequest({ roomId: 'b' })); // on warm-b, fresh budget
+    await signer.sign(signRequest({ roomId: 'c' })); // still warm-b
+    await expect(signer.sign(signRequest({ roomId: 'd' }))).rejects.toThrow(
+      /WS connect budget exhausted/
+    );
+  });
+
+  it('keeps counting connects while the session stays the same', async () => {
+    // The reset must key on the session CHANGING; a reset on every lease
+    // fetch would make the budget unenforceable.
+    const impl = vi.fn().mockResolvedValue({
+      statusCode: 200,
+      headers: {},
+      body: { text: async () => JSON.stringify(leaseResponse({ room: 'warm-a' })) }
+    });
+    const signer = new PureNodeSigner({
+      baseUrl: 'http://signer',
+      maxWsConnectsPerHour: 2,
+      staleAfterMs: 0,
+      fetchImpl: impl as never
+    });
+
+    await signer.sign(signRequest({ roomId: 'a' }));
+    await signer.sign(signRequest({ roomId: 'b' }));
+    await expect(signer.sign(signRequest({ roomId: 'c' }))).rejects.toThrow(
+      /WS connect budget exhausted/
+    );
   });
 
   it('the rolling window slides: connects succeed again an hour later', async () => {
