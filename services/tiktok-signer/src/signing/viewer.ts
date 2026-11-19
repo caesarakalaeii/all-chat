@@ -286,6 +286,8 @@ export class ViewerPool {
   private readonly tabs = new Map<string, TabEntry>();
   /** username -> compound lane key, so a room keeps its browser identity. */
   private readonly roomLane = new Map<string, string>();
+  /** In-flight capture per room; concurrent callers share it (captureRoom). */
+  private readonly capturing = new Map<string, Promise<RoomCapture>>();
   private roundRobin = 0;
   /** Idle eviction on a clock: captures can be hours apart. */
   private readonly sweep: ReturnType<typeof setInterval>;
@@ -630,8 +632,36 @@ export class ViewerPool {
    * one attempt, not maxLaneAttempts sequential ones. Race losers are
    * cancelled clean: their page closes, but the lane is not benched and the
    * winner's warm tab stays registered.
+   *
+   * Concurrent callers for the SAME room share one capture. Each capture
+   * opens its own page and registration is last-writer-wins, so a second
+   * concurrent capture displaces the first's entry in `tabs` — and every
+   * path that can close a page (evictIdleTabs, closeTab, recycleTab,
+   * giveUp) reaches it through `tabs`, so the displaced page would stay
+   * open on the live room forever, rendering under llvmpipe. That leak is
+   * what pinned the signer at 97% of its CPU limit on 2026-11-19; the lease
+   * path reaches it whenever two listener pods lease at once, because
+   * captureCandidates checks hasTab before it awaits and both callers pass.
+   *
+   * `freshPage` captures (the TabRecycler) neither join nor are joined: the
+   * recycler exists to replace a room's page and manages the old page's
+   * lifetime itself.
    */
   async captureRoom(
+    username: string,
+    options: { timeoutMs?: number; freshPage?: boolean } = {}
+  ): Promise<RoomCapture> {
+    if (options.freshPage) return this.runCapture(username, options);
+    const running = this.capturing.get(username);
+    if (running) return running;
+    const capture = this.runCapture(username, options).finally(() => {
+      this.capturing.delete(username);
+    });
+    this.capturing.set(username, capture);
+    return capture;
+  }
+
+  private async runCapture(
     username: string,
     { timeoutMs = 180_000, freshPage = false }: { timeoutMs?: number; freshPage?: boolean } = {}
   ): Promise<RoomCapture> {

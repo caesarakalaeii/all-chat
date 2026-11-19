@@ -569,17 +569,51 @@ describe('ViewerPool capture flow (fake pages)', () => {
     expect(a.roomId).toBe('21');
     expect(b.roomId).toBe('21');
 
-    // Named rather than compared as objects: the page doubles are
-    // function-laden, so a failure on the pages themselves prints pages
-    // of noise instead of which one leaked.
+    // A page that navigated to the room but is neither registered nor
+    // closed is the leak: nothing can reach it again. Named rather than
+    // compared as objects because the page doubles are function-laden, and
+    // a failure on the pages themselves prints screens of noise instead of
+    // which one leaked.
     const registered = internals.tabs.get('warmroom')!.page;
-    const stillOpen = [
-      { name: 'first', page: first.page },
-      { name: 'second', page: second.page }
+    const leaked = [
+      { name: 'first', ...first },
+      { name: 'second', ...second }
     ]
-      .filter((candidate) => !candidate.page.isClosed())
+      .filter((candidate) => candidate.navLog.length > 0)
+      .filter((candidate) => candidate.page !== registered && !candidate.page.isClosed())
       .map((candidate) => candidate.name);
-    expect(stillOpen).toEqual([registered === first.page ? 'first' : 'second']);
+    expect(leaked).toEqual([]);
+    await pool.close();
+  });
+
+  it('a failed capture is not cached: the next call retries the room', async () => {
+    // Sharing an in-flight capture must not outlive it. A room whose
+    // capture failed has to be capturable again on the next lease, or one
+    // bad capture would wedge the room for the life of the pod.
+    const pool = new ViewerPool({ userDataDir: '/tmp/x' });
+    const internals = poolInternals(pool);
+    const lane = internals.lanes.get('|primary')!;
+    const good = fakePage({
+      responses: [
+        { url: 'https://webcast.tiktok.com/webcast/im/fetch/?room_id=31', status: 200, body: GOOD_BODY }
+      ]
+    });
+    lane.prewarmed.push(good.page);
+    const { page: zombie } = fakePage({ livePlayerFoundAt: Number.MAX_SAFE_INTEGER });
+    lane.prewarmed.push(zombie);
+
+    vi.useFakeTimers();
+    const failing = pool.captureRoom('retryroom', { timeoutMs: 60_000 });
+    const failed = expect(failing).rejects.toThrow(/live player not up/);
+    try {
+      await vi.advanceTimersByTimeAsync(15_100);
+      await failed;
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const capture = await pool.captureRoom('retryroom', { timeoutMs: 10_000 });
+    expect(capture.roomId).toBe('31');
     await pool.close();
   });
 });
