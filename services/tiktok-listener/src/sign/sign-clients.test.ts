@@ -88,6 +88,26 @@ describe('pickSignClients', () => {
     await expect(connect('c')).rejects.toThrow(/WS connect budget exhausted/);
   });
 
+  it('gives the PureNodeSigner the configured lease consumer key', async () => {
+    // The consumer key is the whole mechanism: without it the signer
+    // serves every pod the first servable warm room, so the fleet funnels
+    // back through one session's ~15/hour TikTok connect budget
+    // (TikTokPureNodeConnectBudgetExhausted, 2026-11-18). Asserted on the
+    // lease URL because that is the only place the key is observable —
+    // dropping it on the way to the PureNodeSigner is otherwise silent.
+    const { request } = await import('undici');
+    vi.mocked(request).mockClear();
+    const { pureNodeSigner } = pickSignClients('pure-node', {
+      ...URL_DEPS,
+      leaseConsumer: 'pod-a'
+    });
+
+    await pureNodeSigner!.sign({ roomId: 'a', username: 'someone', userAgent: 'test-ua' });
+
+    const leaseUrl = vi.mocked(request).mock.calls[0]![0] as string;
+    expect(leaseUrl).toBe('http://signer:8092/v1/session?consumer=pod-a');
+  });
+
   it('no signer URL constructs nothing, in every mode', () => {
     for (const mode of ['euler', 'shadow', 'self', 'pure-node'] as const) {
       const clients = pickSignClients(mode, { signerBaseUrl: '', authToken: 't' });

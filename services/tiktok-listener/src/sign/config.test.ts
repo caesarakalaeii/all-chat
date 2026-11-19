@@ -129,6 +129,18 @@ describe('loadSignConfiguration', () => {
       .toBe(6);
   });
 
+  it('reads the lease consumer key so the signer assigns this pod its own session', () => {
+    // The pod name, from the downward API. Without it every pod leases the
+    // same warm session and the fleet shares one session's connect budget
+    // (TikTokPureNodeConnectBudgetExhausted, 2026-11-18).
+    expect(loadSignConfiguration({ TIKTOK_LEASE_CONSUMER: 'tiktok-listener-77d-whf8z' }).leaseConsumer)
+      .toBe('tiktok-listener-77d-whf8z');
+  });
+
+  it('defaults the lease consumer key to empty so an unset pod still leases', () => {
+    expect(loadSignConfiguration({}).leaseConsumer).toBe('');
+  });
+
   it('keeps the default WS-connect budget when the value is not a positive integer', () => {
     // Same reasoning as the signer mode: a typo in the manifest should leave
     // the listener on the known-good budget, not start it with a budget of
@@ -150,7 +162,8 @@ describe('eulerStillReachableForSignature', () => {
     disableEulerFallbacks: true,
     enableExtendedGiftInfo: false,
     eulerApiKey: '',
-    maxWsConnectsPerHour: 12
+    maxWsConnectsPerHour: 12,
+    leaseConsumer: ''
   };
 
   it('reports Euler reachable under plain euler mode', () => {

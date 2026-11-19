@@ -108,7 +108,8 @@ TIKTOK_SELF_SIGN_FALLBACK=true        # Under `self`, fall back to Euler when ou
 TIKTOK_SIGNER_URL=                    # tiktok-signer service URL; empty = no self signer
 TIKTOK_SIGNER_AUTH_TOKEN=             # Bearer token if the signer service runs with auth
 TIKTOK_SIGNER_TIMEOUT_MS=180000       # Self-signer HTTP timeout; signer rotates lanes inside one request
-TIKTOK_MAX_WS_CONNECTS_PER_HOUR=12    # pure-node: this pod's WS-connect signs per rolling hour; divide by replicas
+TIKTOK_MAX_WS_CONNECTS_PER_HOUR=12    # pure-node: WS-connect signs per rolling hour, per leased session
+TIKTOK_LEASE_CONSUMER=                # pure-node: pod name (downward API); gets this pod its own warm session
 TIKTOK_EXTENDED_GIFT_INFO=            # Defaults on only under `self` (see below)
 SIGN_API_KEY=                         # Euler Stream API key; empty means the free tier
 
@@ -232,7 +233,7 @@ the signing algorithm takes TikTok ingest down until we fix it, where today it i
 That break-fix cycle lands on the signer service; see its README for the update procedure.
 
 `pure-node` details (measured 2026-09-18):
-the signer leases a **shared WS session** — one warm classic room's
+the signer leases a **warm WS session** — one warm classic room's
 webcast URL + cookie jar, freshness-stamped — and the listener
 synthesizes the connector's initial fetch result in-process
 (`src/sign/pure-node.ts`): every recorded identity param is forwarded
@@ -241,10 +242,16 @@ synthesizes the connector's initial fetch result in-process
 chat arrives via the connector's own `im_enter_room`. Two budgets pace
 it (constraint: ~15 WS connects/hour flags the session): successful
 lease fetches ≤ 8/hour (10-min cache, single-flight) and WS connect
-signs ≤ 12/hour **per pod** — the session's flag budget is shared by
-every pod leasing it, so keep ONE connect-capable replica in pure-node
-rollouts or divide the cap across replicas with
-`TIKTOK_MAX_WS_CONNECTS_PER_HOUR`. The premium **fallback tier is
+signs ≤ 12/hour **per leased session**, which is the granularity TikTok
+scores the flag threshold at. `TIKTOK_LEASE_CONSUMER` (the pod name, via
+the downward API) is what gets a pod a session of its own, so replicas
+add connect capacity instead of dividing one ceiling — bounded by the
+number of warm rooms the signer holds, since pods beyond that share a
+session and divide its budget. The connect window follows the session:
+if the signer re-assigns a pod, the old session's connects stop counting
+against the new one. Without the key, every pod leases the same session
+and `TIKTOK_MAX_WS_CONNECTS_PER_HOUR` must be divided across replicas by
+hand, which is the pre-2026-11-19 behaviour. The premium **fallback tier is
 ON** in this mode: promotion warms the
 target-room tab on the signer (`POST /v1/sign` viewer path, one capture
 per attempt, premium-gated) before attaching the relay, and the canary

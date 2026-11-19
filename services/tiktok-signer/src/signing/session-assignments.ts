@@ -1,0 +1,113 @@
+/**
+ * This file is part of All-Chat.
+ * Copyright (C) 2026 caesarakalaeii
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published
+ * by the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ */
+
+/**
+ * Which warm session each lease consumer gets (GET /v1/session?consumer=...).
+ *
+ * TikTok scores its ~15/hour WS-connect flag budget PER SESSION, and every
+ * warm room is already a distinct session: its own viewer tab, its own proxy
+ * lane, its own profile directory and cookie jar. Serving the first servable
+ * room to everyone therefore funnelled the whole listener fleet through one
+ * session's budget while the other warm sessions stayed idle — the cause of
+ * TikTokPureNodeConnectBudgetExhausted (2026-11-18).
+ *
+ * Spreading consumers across rooms multiplies the fleet's real ceiling by the
+ * number of warm sessions without raising any single session's connect rate,
+ * which is the number TikTok actually judges.
+ *
+ * Assignment is sticky, and that is load-bearing rather than cosmetic: the
+ * consumer meters its own connects against the session it was given, so a
+ * consumer that hopped sessions would start a fresh budget on each hop while
+ * its previous connects still counted against TikTok's window for the old
+ * session — exactly the overrun the per-session budget exists to prevent.
+ */
+/**
+ * How long a consumer keeps counting as a holder after its last lease.
+ *
+ * Consumer keys are pod names, so a rollout retires one forever. A live
+ * pod leases up to 8 times an hour (the listener's own lease budget), so
+ * an hour is comfortably longer than any healthy gap while still letting
+ * a retired pod's room return to the free pool within one window.
+ */
+const HOLDER_KEEPALIVE_MS = 60 * 60 * 1000;
+
+export class SessionAssignments {
+  /** Consumer key (a listener pod) → the warm room it leases, and when it last asked. */
+  private readonly assigned = new Map<string, { room: string; seenAt: number }>();
+
+  /** @param now Injected for tests; the eviction below is the only clock use. */
+  constructor(private readonly now: () => number = Date.now) {}
+
+  /**
+   * The rooms to try for this consumer, most preferred first.
+   *
+   * The caller resolves the list in order and serves the first room that
+   * yields a servable lease, so this is a preference, never a restriction:
+   * a consumer whose room went offline still falls through to the rest and
+   * is re-assigned by `record` to whatever actually served.
+   *
+   * Preference order: the consumer's current room, then rooms no consumer
+   * holds (the spread that wins back the unused budget), then the rooms
+   * other consumers hold, least-shared first, so consumers beyond the
+   * number of warm sessions pile up evenly rather than all on room one.
+   *
+   * Asking reserves the head of the list for the consumer, before any
+   * lease is resolved. Two consumers that are both unassigned would
+   * otherwise compute the SAME order, share the caller's in-flight
+   * resolution, and both be recorded against the one room it served —
+   * and stickiness would then pin the pair there permanently, putting
+   * the fleet back on one session's connect budget. Reserving on ask
+   * means the second caller already counts the first as a holder and
+   * prefers a different room. The reservation is provisional: `record`
+   * overwrites it with the room that actually served.
+   */
+  preferenceFor(consumer: string, rooms: readonly string[]): string[] {
+    this.evictStale();
+    const holders = new Map<string, number>();
+    for (const { room } of this.assigned.values()) {
+      holders.set(room, (holders.get(room) ?? 0) + 1);
+    }
+    const current = this.assigned.get(consumer)?.room;
+    // `current` is hoisted rather than special-cased in the comparator:
+    // returning -1 for `a === current` regardless of argument position is
+    // not a consistent ordering, and only V8's sort internals made it
+    // behave.
+    const rest = [...rooms]
+      .filter((room) => room !== current)
+      .sort((a, b) => (holders.get(a) ?? 0) - (holders.get(b) ?? 0));
+    const ordered = current && rooms.includes(current) ? [current, ...rest] : rest;
+    if (ordered.length) this.record(consumer, ordered[0]);
+    return ordered;
+  }
+
+  /** Pin the consumer to the room that actually served it. */
+  record(consumer: string, room: string): void {
+    this.assigned.set(consumer, { room, seenAt: this.now() });
+  }
+
+  /**
+   * Forget consumers that stopped leasing, so a retired pod's room goes
+   * back to the free pool instead of making the spread count ghosts.
+   */
+  private evictStale(): void {
+    const cutoff = this.now() - HOLDER_KEEPALIVE_MS;
+    for (const [consumer, held] of this.assigned) {
+      if (held.seenAt < cutoff) this.assigned.delete(consumer);
+    }
+  }
+}

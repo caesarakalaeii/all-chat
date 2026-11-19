@@ -660,7 +660,8 @@ class TikTokListenerService {
       signerBaseUrl: SIGN_CONFIG.signerBaseUrl,
       authToken: TIKTOK_SIGNER_AUTH_TOKEN || undefined,
       selfTimeoutMs: TIKTOK_SIGNER_TIMEOUT_MS,
-      maxWsConnectsPerHour: SIGN_CONFIG.maxWsConnectsPerHour
+      maxWsConnectsPerHour: SIGN_CONFIG.maxWsConnectsPerHour,
+      leaseConsumer: SIGN_CONFIG.leaseConsumer
     });
     this.selfSigner = signClients.selfSigner;
     this.pureNodeSigner = signClients.pureNodeSigner;
