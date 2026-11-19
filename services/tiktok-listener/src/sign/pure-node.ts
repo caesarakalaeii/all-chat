@@ -26,9 +26,6 @@
  * `im_enter_room` for the target room on the leased socket (cross-room
  * entry, measured 2026-09-18). No Euler, no per-room page capture.
  *
- * The session is leased per pod: passing a `consumer` key gets this pod its
- * own warm session, so pods no longer share one session's connect budget.
- *
  * Measured constraints this implementation encodes (measured 2026-09-18,
  * Task 1, 2026-09-18):
  *  - The lease wsUrl's recorded identity params are LOAD-BEARING at the WS
@@ -118,7 +115,6 @@ export interface PureNodeSignerOptions {
 interface CachedLease {
   wsUrl: string;
   cookieHeader: string;
-  /** Which warm session this lease is on; see sessionRoom. */
   room: string;
   userAgent: string;
   proxyHost: string;
@@ -143,12 +139,7 @@ export class PureNodeSigner implements WebcastSigner {
   private readonly wsConnectHours: number[] = [];
   /** Rooms refused a connect slot → when the slot promised to them frees. */
   private readonly connectQueue = new Map<string, number>();
-  /**
-   * The warm session the counted connects were spent on. The budget meters
-   * ONE session's TikTok flag window, so when the signer re-assigns this
-   * pod (its warm room went offline) the old session's connects stop
-   * applying — see noteSession.
-   */
+  /** The warm session the counted connects were spent on; see noteSession. */
   private sessionRoom = '';
 
   constructor(options: PureNodeSignerOptions) {

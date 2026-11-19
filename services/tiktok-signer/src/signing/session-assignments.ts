@@ -70,9 +70,4 @@ export class SessionAssignments {
   record(consumer: string, room: string): void {
     this.assigned.set(consumer, room);
   }
-
-  /** The room a consumer currently holds, for tests and diagnostics. */
-  roomFor(consumer: string): string | undefined {
-    return this.assigned.get(consumer);
-  }
 }

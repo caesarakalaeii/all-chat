@@ -48,9 +48,9 @@ function leaseResponse(over: Record<string, unknown> = {}): unknown {
 }
 
 function okFetch(response: unknown = leaseResponse()) {
-  // The url parameter is declared so the lease URL the signer builds (the
-  // consumer key rides on it) is visible to assertions on mock.calls.
-  const impl = vi.fn(async (url: string | URL) => ({
+  // Declared so mock.calls is typed with the lease URL the signer builds
+  // (the consumer key rides on it), which assertions below read.
+  const impl = vi.fn(async (_url: string | URL) => ({
     statusCode: 200,
     headers: {},
     body: { text: async () => JSON.stringify(response) }
