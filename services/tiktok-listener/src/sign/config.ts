@@ -57,11 +57,11 @@
  * - `pure-node`  — We lease the signer's shared WS session (GET /v1/session: a warm classic
  *                  room's wsUrl + cookie jar, cross-room entry per target room) and synthesize
  *                  the initial fetch result in-process. No Euler, no per-room capture. The
- *                  connect budget (maxWsConnectsPerHour) is PER POD: the leased session's
- *                  flag budget is shared by every pod leasing it, so N connect-capable
- *                  replicas enforce N x the per-pod cap — keep ONE connect-capable replica
- *                  in pure-node rollouts, or divide the cap across them with
- *                  TIKTOK_MAX_WS_CONNECTS_PER_HOUR.
+ *                  connect budget (maxWsConnectsPerHour) is PER LEASED SESSION, which is
+ *                  how TikTok scores its ~15/hour flag threshold. With TIKTOK_LEASE_CONSUMER
+ *                  set, the signer assigns each pod its own warm session, so replicas add
+ *                  capacity instead of dividing one ceiling; pods beyond the number of warm
+ *                  rooms share a session and divide its budget.
  *                  The premium fallback tier is ON in this mode: promotion
  *                  warms the target-room tab on the signer before attaching the relay
  *                  (sign/warm-target-tab.ts).
@@ -125,15 +125,23 @@ export interface SignConfiguration {
   /**
    * WS connects this pod may sign per rolling hour, under `pure-node`.
    *
-   * Per pod, but spent against the ONE session leased from the signer, so the
-   * fleet enforces `replicas x this`. It has to be divided by the number of
-   * connect-capable replicas to stay under that session's ~15/hour flag
-   * threshold — see the `pure-node` note on SignerMode. Configurable because
-   * nothing inside the pod can know its own replica count, and the
-   * two-replica rollout at the 12/hour default exhausted the shared budget in
-   * production (2026-11-18).
+   * Spent against the session the signer leases this pod, which is the
+   * granularity TikTok scores its ~15/hour flag threshold at. With
+   * `leaseConsumer` set each pod gets its own warm session, so the value
+   * sizes ONE session rather than being divided across replicas; pods that
+   * end up sharing a session (more pods than warm rooms) still divide it.
    */
   maxWsConnectsPerHour: number;
+
+  /**
+   * Stable key identifying this pod to the signer's lease endpoint, so it is
+   * assigned its own warm session rather than the fleet's first servable one.
+   *
+   * The pod name, passed in by the downward API: nothing inside the pod can
+   * otherwise distinguish itself from its replicas. Empty keeps the
+   * pre-assignment behaviour, where every pod shares one session.
+   */
+  leaseConsumer: string;
 }
 
 function readBool(raw: string | undefined, fallback: boolean): boolean {
@@ -183,7 +191,8 @@ export function loadSignConfiguration(env: NodeJS.ProcessEnv = process.env): Sig
     // the Business-plan error on every connect.
     enableExtendedGiftInfo: readBool(env.TIKTOK_EXTENDED_GIFT_INFO, signerMode === 'self'),
     eulerApiKey: (env.SIGN_API_KEY ?? '').trim(),
-    maxWsConnectsPerHour: readPositiveInt(env.TIKTOK_MAX_WS_CONNECTS_PER_HOUR, 12)
+    maxWsConnectsPerHour: readPositiveInt(env.TIKTOK_MAX_WS_CONNECTS_PER_HOUR, 12),
+    leaseConsumer: (env.TIKTOK_LEASE_CONSUMER ?? '').trim()
   };
 }
 

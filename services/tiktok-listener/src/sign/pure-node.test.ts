@@ -48,7 +48,9 @@ function leaseResponse(over: Record<string, unknown> = {}): unknown {
 }
 
 function okFetch(response: unknown = leaseResponse()) {
-  const impl = vi.fn(async () => ({
+  // The url parameter is declared so the lease URL the signer builds (the
+  // consumer key rides on it) is visible to assertions on mock.calls.
+  const impl = vi.fn(async (url: string | URL) => ({
     statusCode: 200,
     headers: {},
     body: { text: async () => JSON.stringify(response) }
@@ -309,9 +311,14 @@ describe('PureNodeSigner WS-connect budget', () => {
       fetchImpl: impl as never
     });
 
-    await signer.sign(signRequest({ roomId: 'a' })); // on warm-a
-    await signer.sign(signRequest({ roomId: 'b' })); // on warm-b, fresh budget
-    await signer.sign(signRequest({ roomId: 'c' })); // still warm-b
+    // 'a' connects on warm-a. 'b' is the sign whose lease moves us to
+    // warm-b: it dials on the new session, so warm-b's window starts at
+    // one, not zero. 'c' fills it and 'd' is refused — a window that
+    // carried warm-a's connect over would have refused 'c' too, and one
+    // that dropped 'b' would have let 'd' connect unmetered.
+    await signer.sign(signRequest({ roomId: 'a' }));
+    await signer.sign(signRequest({ roomId: 'b' }));
+    await signer.sign(signRequest({ roomId: 'c' }));
     await expect(signer.sign(signRequest({ roomId: 'd' }))).rejects.toThrow(
       /WS connect budget exhausted/
     );

@@ -26,6 +26,9 @@
  * `im_enter_room` for the target room on the leased socket (cross-room
  * entry, measured 2026-09-18). No Euler, no per-room page capture.
  *
+ * The session is leased per pod: passing a `consumer` key gets this pod its
+ * own warm session, so pods no longer share one session's connect budget.
+ *
  * Measured constraints this implementation encodes (measured 2026-09-18,
  * Task 1, 2026-09-18):
  *  - The lease wsUrl's recorded identity params are LOAD-BEARING at the WS
@@ -39,12 +42,15 @@
  *    serving its original URL and stamp for hours, so a capturedAt-keyed
  *    window made every lease stale on arrival: every sign, pre-signs
  *    included, re-fetched and burned the 8/h lease budget in ~4 connects.
- *  - WS connects flag the shared session by burst rate (~15/hour observed):
- *    a per-pod rolling-hour connect budget paces flap storms. Per-pod, not
- *    per-room: the session's flag budget is shared by all rooms and all
- *    pods leasing it. A sign that gets no lease never dials, so it gives
- *    its slot back: a signer outage must not drain the budget. Refused
- *    rooms queue, each for its own freeing slot (takeConnectSlot).
+ *  - WS connects flag a session by burst rate (~15/hour observed): a
+ *    rolling-hour connect budget paces flap storms. The budget is PER
+ *    LEASED SESSION, not per room and not per pod: TikTok scores the rate
+ *    against the session, and the signer assigns this pod its own warm
+ *    session (GET /v1/session?consumer=...), so the window follows that
+ *    session and resets when the signer re-assigns us. A sign that gets no
+ *    lease never dials, so it gives its slot back: a signer outage must not
+ *    drain the budget. Refused rooms queue, each for its own freeing slot
+ *    (takeConnectSlot).
  *  - The lane-pin pre-sign re-enters sign() with a fixed
  *    `userAgent: 'ws-pin'` marker; it is a local cache hit, not a WS dial,
  *    and never consumes connect budget.
@@ -63,6 +69,8 @@ interface SessionLeaseResponse {
   wsUrl?: string;
   cookieHeader?: string;
   roomId?: string;
+  /** The warm room whose tab captured the session: its identity. */
+  room?: string;
   userAgent?: string;
   proxyHost?: string;
   error?: string;
@@ -89,12 +97,20 @@ export interface PureNodeSignerOptions {
   /** Successful lease fetches per rolling hour (constraint 1). */
   maxLeasesPerHour?: number;
   /**
-   * Per-pod WS-connect signs per rolling hour. The session's flag budget is
-   * shared across pods, so the caller divides this by the connect-capable
-   * replica count (TIKTOK_MAX_WS_CONNECTS_PER_HOUR). The default suits one
-   * replica.
+   * WS-connect signs per rolling hour against ONE leased session, which is
+   * the granularity TikTok scores its ~15/hour flag budget at
+   * (TIKTOK_MAX_WS_CONNECTS_PER_HOUR). Pods leasing distinct sessions each
+   * get this budget; pods sharing a session still divide it, so size it
+   * for the number of pods that can land on one warm room.
    */
   maxWsConnectsPerHour?: number;
+  /**
+   * Stable key identifying this pod to the signer's lease endpoint, so it
+   * is assigned its own warm session instead of sharing the fleet's first
+   * servable one (TIKTOK_LEASE_CONSUMER, the pod name). Empty leaves the
+   * signer's pre-assignment behaviour, which every pod shares.
+   */
+  consumer?: string;
   /** Injectable fetch for tests. */
   fetchImpl?: typeof undiciRequest;
 }
@@ -102,6 +118,8 @@ export interface PureNodeSignerOptions {
 interface CachedLease {
   wsUrl: string;
   cookieHeader: string;
+  /** Which warm session this lease is on; see sessionRoom. */
+  room: string;
   userAgent: string;
   proxyHost: string;
   fetchedAt: number;
@@ -116,6 +134,7 @@ export class PureNodeSigner implements WebcastSigner {
   private readonly staleAfterMs: number;
   private readonly maxLeasesPerHour: number;
   private readonly maxWsConnectsPerHour: number;
+  private readonly consumer: string;
   private readonly fetchImpl: typeof undiciRequest;
 
   private lease: CachedLease | undefined;
@@ -124,6 +143,13 @@ export class PureNodeSigner implements WebcastSigner {
   private readonly wsConnectHours: number[] = [];
   /** Rooms refused a connect slot → when the slot promised to them frees. */
   private readonly connectQueue = new Map<string, number>();
+  /**
+   * The warm session the counted connects were spent on. The budget meters
+   * ONE session's TikTok flag window, so when the signer re-assigns this
+   * pod (its warm room went offline) the old session's connects stop
+   * applying — see noteSession.
+   */
+  private sessionRoom = '';
 
   constructor(options: PureNodeSignerOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -134,6 +160,7 @@ export class PureNodeSigner implements WebcastSigner {
     this.staleAfterMs = options.staleAfterMs ?? 600_000;
     this.maxLeasesPerHour = options.maxLeasesPerHour ?? 8;
     this.maxWsConnectsPerHour = options.maxWsConnectsPerHour ?? 12;
+    this.consumer = options.consumer ?? '';
     this.fetchImpl = options.fetchImpl ?? undiciRequest;
   }
 
@@ -234,7 +261,10 @@ export class PureNodeSigner implements WebcastSigner {
     let bodyJson: SessionLeaseResponse;
     let status: number;
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}/v1/session`, {
+      const leaseUrl = this.consumer
+        ? `${this.baseUrl}/v1/session?consumer=${encodeURIComponent(this.consumer)}`
+        : `${this.baseUrl}/v1/session`;
+      const response = await this.fetchImpl(leaseUrl, {
         headers: this.headers,
         bodyTimeout: this.timeoutMs,
         headersTimeout: this.timeoutMs
@@ -276,10 +306,41 @@ export class PureNodeSigner implements WebcastSigner {
     this.lease = {
       wsUrl: bodyJson.wsUrl,
       cookieHeader: bodyJson.cookieHeader ?? '',
+      room: bodyJson.room ?? '',
       userAgent: bodyJson.userAgent ?? '',
       proxyHost: bodyJson.proxyHost ?? '',
       fetchedAt: now
     };
+    this.noteSession(this.lease.room);
+  }
+
+  /**
+   * Follow the leased session, dropping the connect window when it changes.
+   *
+   * The window counts against one session's ~15/hour TikTok flag budget. A
+   * re-assignment hands us a session with its own untouched window, and
+   * carrying the old counts over would refuse rooms that session has room
+   * for. Only a CHANGE resets: resetting per lease fetch (one every ten
+   * minutes) would leave the budget unenforceable.
+   *
+   * A signer too old to report `room` sends '', which never changes, so the
+   * budget keeps its previous single-session meaning.
+   *
+   * The sign that triggered this lease fetch has already taken its slot and
+   * will dial on the NEW session, so one slot is carried over rather than
+   * dropped: clearing the window wholesale would let it connect for free.
+   * Learning the first session's name is not a re-assignment and keeps the
+   * window as it stands.
+   */
+  private noteSession(room: string): void {
+    if (room === this.sessionRoom) return;
+    const reassigned = this.sessionRoom !== '';
+    this.sessionRoom = room;
+    if (!reassigned) return;
+    const carried = this.wsConnectHours.slice(-1);
+    this.wsConnectHours.length = 0;
+    this.wsConnectHours.push(...carried);
+    this.connectQueue.clear();
   }
 
   /**
