@@ -200,6 +200,8 @@ export const docs = {
     tocModeration: 'Moderate your chat',
     tocEngagement: 'Polls, predictions & points',
     tocEventsCredits: 'Events & credit roll',
+    tocAlerts: 'Alert overlays',
+    tocCommands: 'Chat commands & timers',
     tocSharing: 'Share an overlay',
     tocThemes: 'Pick a theme',
     tocCustomize: 'Make it your own',
@@ -319,6 +321,16 @@ export const docs = {
     creditsEmphasis: 'Credits',
     creditRollEmphasis: 'Credit Roll',
     creditsCopyUrlEmphasis: 'Copy Credits OBS URL',
+    alertsHeading: 'Alert overlays',
+    alertsBody:
+      'Create an overlay of kind {kind} to get an alert box as its own OBS Browser Source. Twitch subs, bits, raids and follows, YouTube Super Chats and memberships and TikTok gifts pop up with your own text, GIF and sound, or with your own HTML, CSS and JavaScript. Alert overlays are free; uploading your own media is premium. The {guide} walks through the setup.',
+    alertsKindEmphasis: 'Alerts',
+    alertsGuideLinkText: 'stream alerts guide',
+    commandsHeading: 'Chat commands & timers',
+    commandsBody:
+      'Under {nav} in the top bar you define !commands, keyword triggers and timers once, and they answer in every chat your overlays carry. Replies come from the All-Chat Bot or your own account. They are free in Twitch and Kick chat and premium in YouTube chat. The {guide} has the details.',
+    commandsNavEmphasis: 'Commands',
+    commandsGuideLinkText: 'chat bot guide',
     sharingHeading: 'Share an overlay',
     sharingBody:
       "{share} lets another streamer pull your overlay's chat into theirs — handy for collabs and raids. Send a request to their Twitch username; once they accept, your overlay appears in their editor under {sharedOverlays} to add as a source, and either of you can revoke it later. Sharing is a {premium} feature.",

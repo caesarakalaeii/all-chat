@@ -58,6 +58,16 @@ export const GUIDES = [
     descriptionKey: 'guides.multistream.metaDescription',
   },
   {
+    path: '/stream-alerts',
+    labelKey: 'guides.shared.linkAlerts',
+    descriptionKey: 'guides.alerts.metaDescription',
+  },
+  {
+    path: '/multistream-chat-bot',
+    labelKey: 'guides.shared.linkChatBot',
+    descriptionKey: 'guides.chatBot.metaDescription',
+  },
+  {
     path: '/compare',
     labelKey: 'guides.shared.linkCompare',
     descriptionKey: 'guides.compare.metaDescription',
@@ -116,7 +126,10 @@ export function howToLd(name: string, description: string, steps: readonly Guide
 }
 
 interface GuidePageProps {
-  path: GuidePath
+  /** A guide from GUIDES, or a per-tool page below /compare. */
+  path: GuidePath | `/compare/${string}`
+  /** A crumb between Guides and this page, for pages below another guide. */
+  parent?: { name: string; path: string }
   breadcrumb: string
   heading: string
   intro: string
@@ -127,6 +140,7 @@ interface GuidePageProps {
 
 export function GuidePage({
   path,
+  parent,
   breadcrumb,
   heading,
   intro,
@@ -137,13 +151,16 @@ export function GuidePage({
     <PublicPageShell
       crumbs={[
         { name: t('guides.index.breadcrumb'), path: '/guides' },
+        ...(parent ? [parent] : []),
         { name: breadcrumb, path },
       ]}
       structuredData={structuredData}
     >
       <header className="mb-8 space-y-2">
         <p className="mono-label text-xs">{t('guides.shared.eyebrow')}</p>
-        <h1 className="text-3xl">{heading}</h1>
+        {/* break-words: a product name such as "StreamElements" is wider than a
+            phone in the display face and would widen the whole page. */}
+        <h1 className="text-3xl wrap-break-word">{heading}</h1>
         <p className="text-sub text-sm">{intro}</p>
       </header>
 

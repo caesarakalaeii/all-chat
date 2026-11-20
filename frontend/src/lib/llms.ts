@@ -24,6 +24,7 @@
  * FAQ), it is read from there so the two cannot drift apart.
  */
 
+import { VS_TOOLS } from '@/components/guides/compareData'
 import { POSTS } from '@/content/blog'
 import {
   DISCORD_INVITE_URL,
@@ -77,17 +78,21 @@ const LIMITS = `- YouTube: public live streams are found automatically. An unlis
 - TikTok is the platform most likely to see short interruptions when TikTok changes its web player.
 - TikTok has no moderation or send API, so neither works for TikTok. Sending messages from the chat monitor works for Twitch, YouTube and Kick.
 - Chat messages are deleted after about an hour. All-Chat is not a chat archive.
+- Alerts cover Twitch, YouTube and TikTok events. Kick events such as subs and follows are not shown as alerts.
 - Command replies and timers post to Twitch, Kick and YouTube chat. TikTok and Discord chats can trigger a command, but cannot be replied to.
 - All-Chat does not relay video. Sending one stream to several platforms is done by OBS or a restreaming service; All-Chat adds the merged chat, alerts and chat bot on top of any of them.`
 
-const LINKS = `## Guides
+const links = (): string => `## Guides
 
 - [All guides](${SITE_URL}/guides): the table of contents for the guides below
 - [OBS chat overlay](${SITE_URL}/obs-chat-overlay): add merged chat to OBS as a Browser Source
 - [OBS chat dock](${SITE_URL}/obs-chat-dock): put the chat monitor into an OBS custom browser dock
 - [TikTok LIVE chat overlay](${SITE_URL}/tiktok-live-chat-overlay): how TikTok LIVE chat is read, and its limits
 - [Multistream chat](${SITE_URL}/multistream-chat): one chat for Twitch, YouTube, Kick, TikTok and Discord at once
+- [Stream alerts](${SITE_URL}/stream-alerts): one alert box for Twitch, YouTube and TikTok events
+- [Multistream chat bot](${SITE_URL}/multistream-chat-bot): commands, keyword triggers and timers for Twitch, YouTube and Kick chat
 - [Compare](${SITE_URL}/compare): All-Chat next to other multistream chat tools
+${VS_TOOLS.map(({ id, slug }) => `- [${getTranslations()(`guides.vs.${id}Heading`)}](${SITE_URL}/compare/${slug}): ${getTranslations()(`guides.vs.${id}MetaDescription`)}`).join('\n')}
 
 ## Blog
 
@@ -139,7 +144,7 @@ ${FREE_AND_PREMIUM}
 
 ${LIMITS}
 
-${LINKS}
+${links()}
 `
 }
 
@@ -215,6 +220,6 @@ ${LIMITS}
 
 ${faq()}
 
-${LINKS}
+${links()}
 `
 }

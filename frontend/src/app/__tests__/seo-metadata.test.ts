@@ -179,6 +179,50 @@ describe('alerts and chat commands are stated as shipped', () => {
   })
 
   it('the comparison lists Multistream with a source', () => {
-    expect(read('compare/page.tsx')).toContain('https://multistream.gg/')
+    expect(
+      readFileSync(join(__dirname, '..', '..', 'components', 'guides', 'compareData.ts'), 'utf-8')
+    ).toContain('https://multistream.gg/')
+  })
+})
+
+describe('alerts, chat bot and per-tool comparison pages', () => {
+  const urls = sitemap().map((entry) => entry.url)
+  const lib = (rel: string) => readFileSync(join(__dirname, '..', '..', 'lib', rel), 'utf-8')
+
+  it.each(['/stream-alerts', '/multistream-chat-bot'])(
+    '%s is in the sitemap and llms.txt',
+    (path) => {
+      expect(urls).toContain(`https://allch.at${path}`)
+      expect(lib('llms.ts')).toContain('${SITE_URL}' + path)
+    }
+  )
+
+  it.each([
+    'multistream-gg',
+    'social-stream-ninja',
+    'streamlabs',
+    'streamelements',
+    'sleepychat',
+    'restream-chat',
+  ])('/compare/%s is in the sitemap', (slug) => {
+    expect(urls).toContain(`https://allch.at/compare/${slug}`)
+  })
+
+  it('the alerts guide claims no Kick events, which shared/alerts does not have', () => {
+    // eventDefs in shared/alerts/alerts.go lists twitch, youtube and tiktok only.
+    const defs = readFileSync(
+      join(__dirname, '..', '..', '..', '..', 'shared', 'alerts', 'alerts.go'),
+      'utf-8'
+    )
+    expect(defs).not.toMatch(/\{"[a-z_]+", "kick"/)
+    expect(lib('i18n/messages/en/guides.ts')).toMatch(
+      /metaTitle: 'Stream Alerts for OBS: Twitch, YouTube and TikTok/
+    )
+  })
+
+  it('the docs page has an alerts and a commands section', () => {
+    const src = read('docs/page.tsx')
+    expect(src).toContain('<section id="alerts">')
+    expect(src).toContain('<section id="commands">')
   })
 })

@@ -173,6 +173,8 @@ export const docs: LocaleNamespace<'docs'> = {
     tocModeration: 'Deinen Chat moderieren',
     tocEngagement: 'Umfragen, Vorhersagen & Punkte',
     tocEventsCredits: 'Events & Abspann',
+    tocAlerts: 'Alert-Overlays',
+    tocCommands: 'Chat-Befehle & Timer',
     tocSharing: 'Overlay teilen',
     tocThemes: 'Ein Theme wählen',
     tocCustomize: 'Dein eigenes Ding machen',
@@ -292,6 +294,16 @@ export const docs: LocaleNamespace<'docs'> = {
     creditsEmphasis: 'Credits',
     creditRollEmphasis: 'Abspann',
     creditsCopyUrlEmphasis: 'Credits-OBS-URL kopieren',
+    alertsHeading: 'Alert-Overlays',
+    alertsBody:
+      'Erstelle ein Overlay der Art {kind}, um eine Alert-Box als eigene OBS-Browser-Quelle zu bekommen. Twitch-Abos, Bits, Raids und Follows, YouTube-Super-Chats und Mitgliedschaften sowie TikTok-Geschenke erscheinen mit deinem eigenen Text, GIF und Sound oder mit eigenem HTML, CSS und JavaScript. Alert-Overlays sind kostenlos; eigene Medien hochzuladen ist Premium. Der {guide} führt durch die Einrichtung.',
+    alertsKindEmphasis: 'Alerts',
+    alertsGuideLinkText: 'Guide zu Stream-Alerts',
+    commandsHeading: 'Chat-Befehle & Timer',
+    commandsBody:
+      'Unter {nav} in der oberen Leiste legst du !Befehle, Stichwörter und Timer einmal an, und sie antworten in jedem Chat, den deine Overlays führen. Antworten kommen vom All-Chat Bot oder von deinem eigenen Konto. Im Twitch- und Kick-Chat sind sie kostenlos, im YouTube-Chat Premium. Der {guide} hat die Details.',
+    commandsNavEmphasis: 'Befehle',
+    commandsGuideLinkText: 'Chatbot-Guide',
     sharingHeading: 'Overlay teilen',
     sharingBody:
       '{share} lässt einen anderen Streamer den Chat deines Overlays in sein eigenes ziehen — praktisch für Collabs und Raids. Sende eine Anfrage an ihren Twitch-Benutzernamen; sobald sie sie annehmen, erscheint dein Overlay in ihrem Editor unter {sharedOverlays}, um es als Quelle hinzuzufügen, und jeder von euch kann es später zurückziehen. Teilen ist eine {premium}-Funktion.',

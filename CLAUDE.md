@@ -165,13 +165,49 @@ Fixes may still go to `main` through PRs.
 
 **Gap:** only frontend and api-gateway have a beta deployment next to prod. The beta-platform listeners (facebook, goodgame, owncast, picarto) run from `:beta` only, and every other service runs from `:main` only. A backend feature in any other service has no beta environment, so a human decides how to stage it.
 
-On top of the cycle, a new user-facing feature is not "done" until all three of these release steps are covered:
+On top of the cycle, a new user-facing feature is not "done" until all four of these release steps are covered:
 
 1. **Premium toggle.** New features ship behind a premium feature gate (ADR-0008: the `feature_gates` table, enforced via `shared/middleware` RequirePremium/RequireEarlyAccess, managed through the admin feature-gates API). This lets premium/beta access be flipped without a deploy.
 2. **Onboarding extras tour.** Because features are premium-toggled, every new feature must be added to the optional tour in the first-run setup guide: the "Optional: go further" list in `frontend/src/components/onboarding/OnboardingChecklist.tsx` AND the premium features list in `frontend/src/app/upgrade/page.tsx`. The tour copy mirrors `/upgrade` and the two must stay in sync (there is a keep-in-sync comment at both sites).
-3. **Patreon post.** Treat the announcement as part of the release: once the feature is merged and deployed, publish a Patreon update describing what changed and what it does for streamers.
+3. **Public pages.** The public pages are documentation, and they must say what the product does today in the same PR that ships, releases, renames or removes the feature. The files and the rules are under [Public pages are documentation](#public-pages-are-documentation) below.
+4. **Patreon post.** Treat the announcement as part of the release: once the feature is merged and deployed, publish a Patreon update describing what changed and what it does for streamers.
 
 > A workflow to help draft and publish these posts is planned. Until it exists, write the post manually.
+
+### Public pages are documentation
+
+Search engines and AI assistants quote the public pages as fact, and they keep
+quoting them long after the product has moved on. When alerts shipped, the
+site went on saying "alerts are in development", and assistants told streamers
+All-Chat had no alerts and recommended a competitor. A change that ships,
+releases (beta to everyone, premium to free), renames or removes a
+user-facing feature is not done until every page below says what the product
+does today, in the same PR:
+
+- `frontend/src/lib/llms.ts`: `/llms.txt` and `/llms-full.txt`. Summary line, feature
+  list, free and premium split, limits.
+- `frontend/src/app/docs/page.tsx` and `docs.guide.*`: the public docs.
+- The guides (`GUIDES` in `frontend/src/components/guides/GuidePage.tsx`, copy in
+  `guides.*`). A feature people would search for by name gets its own guide.
+- `frontend/src/components/guides/compareData.ts`: the All-Chat row of `/compare` and
+  the `/compare/<tool>` pages, plus the `guides.vs.*` prose.
+- The landing FAQ (`frontend/src/lib/faq.ts`, `marketing.faq.*`), the homepage
+  `SoftwareApplication` `featureList` in `frontend/src/app/page.tsx`, and
+  `metadata.site` / `metadata.home`.
+- `frontend/src/app/upgrade/page.tsx` and the onboarding tour (step 2 above).
+
+Rules for that copy:
+
+- Claim only what works today. Read the code for the exact scope (which
+  platforms, which tier) before writing a sentence; do not copy it from another
+  page.
+- State limits plainly. A missing platform or a premium part goes under
+  "Limits", not out of sight.
+- A statement about another product needs a source on that product's own
+  pages; without one the cell is "not documented".
+- English and German change together.
+- `frontend/src/app/__tests__/seo-metadata.test.ts` locks the claims that have gone
+  stale before. When a page gains a claim worth protecting, add it there.
 
 ---
 
