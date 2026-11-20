@@ -35,17 +35,19 @@ export const guides: LocaleNamespace<'guides'> = {
     linkObsDock: 'Dock de chat para OBS',
     linkTiktok: 'Chat de TikTok LIVE en OBS',
     linkMultistream: 'Chat multistream',
+    linkAlerts: 'Alertas de stream para OBS',
+    linkChatBot: 'Bot de chat multistream',
     linkCompare: 'Comparativa con otras herramientas de chat',
   },
   index: {
     metaTitle:
-      'Guías: overlay de chat para OBS, dock de chat, chat de TikTok LIVE y chat multistream',
+      'Guías: overlay de chat para OBS, dock de chat, alertas de stream, bot de chat y chat multistream',
     metaDescription:
-      'Guías paso a paso de All-Chat: lleva el chat unificado a OBS, acóplalo dentro de OBS, muestra el chat de TikTok LIVE, une el chat multistream y compara herramientas de chat.',
+      'Guías paso a paso de All-Chat: lleva el chat unificado a OBS, acóplalo dentro de OBS, muestra el chat de TikTok LIVE, une el chat multistream, añade alertas de stream y un bot de chat, y compara herramientas de chat.',
     breadcrumb: 'Guías',
     heading: 'Guías',
     intro:
-      'Cómo llevar a OBS el chat unificado de Twitch, YouTube, Kick, TikTok y Discord, y cómo se compara All-Chat con otras herramientas de chat.',
+      'Cómo llevar a OBS el chat unificado de Twitch, YouTube, Kick, TikTok y Discord, cómo añadirle alertas y un bot de chat, y cómo se compara All-Chat con otras herramientas de chat.',
   },
   obsOverlay: {
     metaTitle: 'Overlay de chat para OBS con Twitch, YouTube, Kick y TikTok',
@@ -224,11 +226,11 @@ export const guides: LocaleNamespace<'guides'> = {
   compare: {
     metaTitle: 'Comparativa de herramientas de chat multistream',
     metaDescription:
-      'All-Chat frente a Streamlabs Chat Box, StreamElements SE.Live, Social Stream Ninja, SleepyChat y Restream Chat: plataformas, instalación, overlay y dock de OBS, emotes, precio, código abierto, alertas y TTS, con una fuente para cada celda.',
+      'All-Chat frente a Streamlabs Chat Box, StreamElements SE.Live, Social Stream Ninja, SleepyChat, Restream Chat y Multistream: plataformas, instalación, overlay y dock de OBS, emotes, precio, código abierto, alertas y TTS, con una fuente para cada celda.',
     breadcrumb: 'Comparativa',
     heading: 'All-Chat comparado con otras herramientas de chat multistream',
     intro:
-      'Esta tabla pone All-Chat junto a otras cinco herramientas que unen el chat de varias plataformas. All-Chat lo hacemos nosotros, así que léela teniéndolo en cuenta. Cada afirmación sobre otra herramienta enlaza a las páginas de esa herramienta, y donde no encontramos ninguna declaración escribimos "no documentado" en lugar de suponer.',
+      'Esta tabla pone All-Chat junto a otras seis herramientas que unen el chat de varias plataformas. All-Chat lo hacemos nosotros, así que léela teniéndolo en cuenta. Cada afirmación sobre otra herramienta enlaza a las páginas de esa herramienta, y donde no encontramos ninguna declaración escribimos "no documentado" en lugar de suponer.',
     lastChecked: 'Última comprobación: {date}',
     caption:
       'Herramientas de chat multistream por función, última comprobación el {date}. Los enlaces numerados llevan a las fuentes que aparecen debajo de la tabla.',
@@ -254,7 +256,7 @@ export const guides: LocaleNamespace<'guides'> = {
     allChatPrice: 'Gratis. Extras Premium a través de Patreon',
     allChatOpenSource: 'Sí, AGPL-3.0',
     allChatSelfHost: 'Sí, con Docker Compose',
-    allChatAlerts: 'En desarrollo',
+    allChatAlerts: 'Sí, un overlay de alertas, con HTML, CSS y JavaScript propios si quieres',
     allChatTts: 'Sí. Voces del navegador gratis, ElevenLabs con Premium y tu propia clave',
     toolStreamlabs: 'Streamlabs Chat Box y Multichat',
     streamlabsPlatforms:
@@ -302,6 +304,17 @@ export const guides: LocaleNamespace<'guides'> = {
     restreamPrice:
       'El plan gratuito incluye chat. Los mensajes solo llegan mientras haces stream a través de Restream',
     restreamTts: 'Alertas de texto a voz en la app de chat de escritorio',
+    toolMultistream: 'Multistream (multistream.gg)',
+    multistreamPlatforms: 'Las cuatro, más Instagram',
+    multistreamInstall: 'Sí, una app de escritorio para Windows o Mac. Linux no es compatible',
+    multistreamOverlay:
+      'Sí, un enlace de fuente de navegador a la app local. Solo funciona mientras la app está abierta en el mismo PC que OBS',
+    multistreamDock:
+      'Los widgets privados se pueden añadir como docks de OBS. Un dock de chat no está documentado',
+    multistreamPrice:
+      'Gratis en la app de escritorio. El chat en la web forma parte de Pro, 10 $ al mes',
+    multistreamAlerts: 'Sí, follows, suscripciones, regalos y raids',
+    multistreamTts: 'Sí, voces integradas, mientras la app está abierta',
     sourcesHeading: 'Fuentes',
     sourceAllChatReadme: 'README de All-Chat en GitHub',
     sourceStreamlabsChatBox: 'Streamlabs: widget Chat Box',
@@ -330,10 +343,16 @@ export const guides: LocaleNamespace<'guides'> = {
     sourceRestreamEncoders: 'Ayuda de Restream: cómo usar Restream Chat con codificadores',
     sourceRestreamEmbed: 'Ayuda de Restream: insertar el chat en tu software de streaming',
     sourceRestreamFree: 'Ayuda de Restream: ¿puedo usar Restream gratis?',
+    sourceMultistreamHome: 'Página de inicio de Multistream',
+    sourceMultistreamDownload: 'Multistream: descargar la app',
+    sourceMultistreamOverlay: 'Tutorial de Multistream: añadir un overlay a OBS',
+    sourceMultistreamChats: 'Guía de Multistream: ver todos los chats de tu stream en una ventana',
+    sourceMultistreamPricing: 'Multistream: precios',
+    sourceMultistreamTts: 'Tutorial de Multistream: leer el chat en voz alta',
     betterHeading: 'Cuándo es mejor elegir otra herramienta',
     betterIntro: 'Ninguna herramienta de esta lista es la mejor en todo. Elige otra si:',
-    betterAlerts:
-      'Necesitas alertas en el stream hoy mismo. Las alertas de All-Chat siguen en desarrollo, mientras que SleepyChat, Streamlabs y StreamElements ya las ofrecen.',
+    betterAllInOne:
+      'Quieres que la herramienta que une tu chat envíe también tu vídeo a todas las plataformas. Multistream y Restream hacen las dos cosas, y Streamlabs Multistream también con Ultra. All-Chat no retransmite vídeo; añade chat, alertas y un bot de chat sobre lo que sea que emita tu stream.',
     betterTts:
       'Quieres texto a voz vinculado a propinas y alertas. Streamlabs lee en voz alta propinas y bits en su Alert Box, y SleepyChat mantiene el TTS de las cuatro plataformas en una sola cola junto a sus alertas.',
     betterPlatforms:
@@ -342,9 +361,169 @@ export const guides: LocaleNamespace<'guides'> = {
       'Ya haces multistream a través de Restream y quieres responder y reenviar mensajes entre plataformas desde una sola ventana. Restream Chat está integrado en ese flujo de trabajo.',
     fitHeading: 'Dónde encaja All-Chat',
     fitBody:
-      'All-Chat no necesita instalación, cubre TikTok junto a Twitch, YouTube, Kick y Discord, muestra emotes de 7TV, BTTV y FFZ, y es de código abierto bajo AGPL-3.0. El chat unificado es gratis; la moderación desde el monitor de chat y algunos extras son Premium.',
+      'All-Chat no necesita instalación, cubre TikTok junto a Twitch, YouTube, Kick y Discord, muestra emotes de 7TV, BTTV y FFZ, y es de código abierto bajo AGPL-3.0. Los overlays de alertas, los comandos de chat, los activadores por palabra clave y los temporizadores vienen integrados, así que el chat, las alertas y el bot de chat salen de una sola pestaña del navegador, sin ninguna app abierta junto a OBS. El chat unificado, las alertas y los comandos son gratis; la moderación desde el monitor de chat y algunos extras son Premium.',
     corrections:
       'Los productos cambian. Si una celda está desactualizada, {issue} y la corregiremos.',
     correctionsLinkText: 'abre una incidencia en GitHub',
+  },
+  alerts: {
+    metaTitle: 'Alertas de stream para OBS: Twitch, YouTube y TikTok en una sola caja de alertas',
+    metaDescription:
+      'Caja de alertas gratuita para OBS que cubre Twitch, YouTube y TikTok a la vez: suscripciones, bits, raids, follows, Super Chats, membresías y regalos de TikTok, con tu propio GIF, sonido y texto o con HTML, CSS y JavaScript propios.',
+    breadcrumb: 'Alertas de stream',
+    heading: 'Alertas de stream para Twitch, YouTube y TikTok en una sola caja de alertas',
+    intro:
+      'Un overlay de alertas de All-Chat es una caja de alertas que añades a OBS como fuente de navegador. Muestra los eventos de todas las plataformas a las que está conectado, así que un multistream necesita una sola fuente de alertas en lugar de una por plataforma. Es gratis y funciona en el navegador, sin nada que instalar.',
+    eventsHeading: 'Qué muestra',
+    eventsTwitch:
+      'Twitch: suscripciones, resuscripciones, suscripciones regaladas, bits, raids, follows, canjes de puntos de canal y donaciones benéficas.',
+    eventsYoutube:
+      'YouTube: Super Chats, Super Stickers, nuevos miembros, hitos de miembro, membresías regaladas y nuevos suscriptores.',
+    eventsTiktok: 'TikTok LIVE: regalos, compartidos y suscripciones.',
+    eventsBody:
+      'Las alertas aparecen de una en una con su texto, una imagen o GIF y un sonido, y después la fuente vuelve a quedar vacía.',
+    stepsHeading: 'Añade una caja de alertas a OBS',
+    stepCreate: 'Inicia sesión en allch.at y crea un overlay de tipo {kind}.',
+    stepCreateKind: 'Alertas',
+    stepSources:
+      'Añade una fuente de chat por cada plataforma en la que haces stream. Un overlay de alertas usa las mismas fuentes que un overlay de chat.',
+    stepStyle:
+      'En la sección {section} del editor del overlay, define el aspecto de todas las alertas en {all}: una imagen o GIF, un sonido, una duración y un volumen.',
+    stepStyleSection: 'Alertas',
+    stepStyleAll: 'Todos los eventos (estilo por defecto)',
+    stepObs: 'Copia la URL del overlay y añádela a OBS como fuente de navegador.',
+    stepTest: 'Haz clic en {test}. La alerta se reproduce en la vista previa del editor y en OBS.',
+    stepTestButton: 'Enviar alerta de prueba',
+    customHeading: 'Haz tuya cada alerta',
+    customBody:
+      'Elige un tipo de evento para darle su propio texto o su propia imagen y sonido. El texto admite estas variables: {placeholders}. Los campos que dejes vacíos usan el estilo por defecto. Busca GIF en el editor o pega un enlace.',
+    codeBody:
+      'Para tener control total, escribe tu propio HTML, CSS y JavaScript para una alerta. Se ejecuta en un entorno aislado dentro del overlay.',
+    commandsBody:
+      'Un {commands} puede mostrar su propia alerta en el mismo overlay: una imagen, un sonido y un texto, activados desde cualquier chat.',
+    commandsLinkText: 'comando de chat',
+    limitKick:
+      'Los eventos de Kick, como suscripciones y follows, no se muestran como alertas. Un comando de chat escrito en el chat de Kick sí puede activar su propia alerta.',
+    limitUploads:
+      'Subir tus propias imágenes, GIF y sonidos es una función {premium}. Buscar GIF y pegar un enlace es gratis.',
+    limitTiktok:
+      'TikTok es la plataforma con más probabilidad de caerse durante un rato, y sus alertas se detienen con ella. La {guide} tiene los detalles.',
+  },
+  chatBot: {
+    metaTitle: 'Bot de chat multistream: comandos y temporizadores para Twitch, YouTube y Kick',
+    metaDescription:
+      'Bot de chat gratuito para multistreamers: define una sola vez tus !comandos, activadores por palabra clave y temporizadores, y responden en los chats de Twitch, Kick y YouTube. Variables, consultas web, JavaScript, clips de Twitch y alertas en el stream.',
+    breadcrumb: 'Bot de chat',
+    heading:
+      'Un solo bot de chat para Twitch, YouTube y Kick: comandos, palabras clave y temporizadores',
+    intro:
+      'All-Chat lleva un bot de chat integrado. Defines un comando una vez y responde en todos los chats que llevan tus overlays, así que un multistream no necesita un bot por plataforma. Funciona en los servidores de All-Chat: nada que instalar y nada que dejar abierto.',
+    kindsHeading: 'Comandos, palabras clave y temporizadores',
+    kindCommand:
+      'Un comando se activa cuando un mensaje empieza por su activador, por ejemplo !discord.',
+    kindKeyword:
+      'Una palabra clave se activa cuando su palabra o frase aparece en cualquier parte de un mensaje, por ejemplo clip that.',
+    kindTimer:
+      'Un temporizador publica un mensaje cada X minutos, cada X mensajes de chat, o cada X minutos una vez que han llegado suficientes mensajes.',
+    stepsHeading: 'Crea tu primer comando',
+    stepOpen: 'Inicia sesión en allch.at y abre {commands} en la barra superior.',
+    stepOpenNav: 'Comandos',
+    stepNew: 'Haz clic en {create} y escribe un activador como !discord.',
+    stepNewButton: 'Nuevo comando',
+    stepReply: 'Escribe la respuesta. Se publica en el chat del que vino el mensaje.',
+    stepSave: 'Guarda. El comando queda activo en todos los chats que llevan tus overlays.',
+    repliesHeading: 'Qué puede hacer una respuesta',
+    repliesBody:
+      'Las respuestas son plantillas. Las variables insertan al usuario del chat, el texto tras el activador, un contador, un número aleatorio, un elemento de una lista o la hora en una zona horaria. Una variable urlfetch inserta lo que responde una dirección web, y un bloque js ejecuta JavaScript en un entorno aislado.',
+    actionsBody:
+      'Un comando también puede crear un clip de tu directo de Twitch, o mostrar su propia alerta con una imagen, un sonido y un texto en tu {alerts}.',
+    actionsAlertsLinkText: 'overlay de alertas',
+    accessBody:
+      'Cada comando tiene un tiempo de espera y se puede limitar a suscriptores, VIP, moderadores o a ti.',
+    senderHeading: 'Quién envía las respuestas',
+    senderBody:
+      'Por defecto responde el All-Chat Bot, en Twitch, Kick y YouTube, sin una cuenta aparte. También puedes hacer que las respuestas salgan de tu propia cuenta. Conectar tu propia cuenta de bot, para que las respuestas lleven su nombre, es una función {premium}.',
+    limitYoutube:
+      'Las respuestas y los temporizadores son gratis en los chats de Twitch y Kick. En el chat de YouTube son una función {premium}, porque cada uno gasta cuota de la API de YouTube.',
+    limitReadOnly:
+      'Los chats de TikTok y Discord pueden activar un comando, por ejemplo un clip o una alerta, pero no se puede responder en ellos.',
+  },
+  vs: {
+    colFeature: 'Función',
+    caption:
+      'All-Chat y {tool} por función, última comprobación el {date}. Los enlaces numerados llevan a las fuentes listadas más abajo.',
+    pickThemHeading: 'Cuándo es mejor elegir {tool}',
+    pickUsHeading: 'Cuándo es mejor elegir All-Chat',
+    fullComparison: 'Todas las herramientas, una junto a otra, están en la {compare}.',
+    fullComparisonLinkText: 'página de comparativa',
+    listHeading: 'Comparativas uno a uno',
+    multistreamName: 'Multistream',
+    multistreamMetaTitle:
+      'All-Chat vs Multistream (multistream.gg): overlay de chat, alertas y bot de chat',
+    multistreamMetaDescription:
+      'All-Chat y Multistream frente a frente: los dos unen los chats de Twitch, YouTube, Kick y TikTok y añaden alertas y un bot de chat. Uno funciona en el navegador, el otro es una app de escritorio para Windows y Mac. Una fuente para cada celda.',
+    multistreamHeading: 'All-Chat vs Multistream',
+    multistreamIntro:
+      'Las dos herramientas ponen los chats de Twitch, YouTube, Kick y TikTok en un solo overlay de OBS y añaden alertas, un bot de chat y texto a voz. La diferencia está en dónde se ejecutan. Multistream es una app de escritorio que además envía tu vídeo a las plataformas. All-Chat es un servicio alojado y de código abierto que añades a OBS como una URL. All-Chat lo hacemos nosotros; cada celda de Multistream enlaza a sus propias páginas.',
+    multistreamPickThem:
+      'Quieres que la misma app envíe también tu stream a todas las plataformas. Multistream emite gratis desde tu propio ordenador y desde su nube con Pro, y su chat, sus alertas y su bot de chat viven en la misma app de Windows o Mac.',
+    multistreamPickUs:
+      'No quieres otra app abierta junto a OBS. Un overlay de All-Chat es una URL que funciona en cualquier ordenador, Linux incluido, mientras que el enlace de overlay de Multistream solo funciona mientras su app está abierta en el mismo PC que OBS. All-Chat además lee Discord, muestra emotes de 7TV, BTTV y FFZ, acepta tu propio CSS, y es de código abierto y se puede autoalojar.',
+    ssnName: 'Social Stream Ninja',
+    ssnMetaTitle:
+      'All-Chat vs Social Stream Ninja: overlay de chat alojado o basado en una extensión',
+    ssnMetaDescription:
+      'All-Chat y Social Stream Ninja frente a frente: los dos son gratis y de código abierto y unen los chats de Twitch, YouTube, Kick y TikTok. Uno está alojado, el otro funciona en una extensión de navegador o una app de escritorio.',
+    ssnHeading: 'All-Chat vs Social Stream Ninja',
+    ssnIntro:
+      'Las dos son herramientas gratuitas y de código abierto que unen el chat de varias plataformas en un overlay de OBS y un dock. Social Stream Ninja captura el chat con una extensión de navegador o una app de escritorio en tu ordenador. All-Chat lee las plataformas en sus servidores y te da una URL. All-Chat lo hacemos nosotros; cada celda de Social Stream Ninja enlaza a sus propias páginas.',
+    ssnPickThem:
+      'Haces stream en plataformas más allá de Twitch, YouTube, Kick, TikTok y Discord, o quieres que todo se ejecute en tu propia máquina. Social Stream Ninja cubre más de 100 sitios.',
+    ssnPickUs:
+      'No quieres instalar nada ni tener nada que deba seguir abierto. All-Chat no necesita extensión ni app: la URL del overlay funciona en OBS en cualquier ordenador. La moderación, las encuestas, las alertas, los comandos de chat y los temporizadores se gestionan desde la misma cuenta.',
+    streamlabsName: 'Streamlabs',
+    streamlabsMetaTitle: 'All-Chat vs Streamlabs Chat Box: chat multistream con TikTok',
+    streamlabsMetaDescription:
+      'All-Chat frente a Chat Box y Multichat de Streamlabs: plataformas, chat de TikTok, overlay y dock de OBS, emotes, precio, alertas y TTS, con una fuente para cada celda.',
+    streamlabsHeading: 'All-Chat vs Streamlabs Chat Box y Multichat',
+    streamlabsIntro:
+      'Streamlabs tiene dos herramientas de chat: el widget Chat Box, una fuente de navegador para Twitch, YouTube y Kick, y Multichat, que viene con Streamlabs Multistream. All-Chat es un overlay de chat alojado y de código abierto que incluye TikTok y Discord. All-Chat lo hacemos nosotros; cada celda de Streamlabs enlaza a sus propias páginas.',
+    streamlabsPickThem:
+      'Ya haces stream con Streamlabs Desktop y quieres el chat, la Alert Box y las propinas en una sola cuenta, o quieres que las propinas y los bits se lean en voz alta con texto a voz.',
+    streamlabsPickUs:
+      'También haces stream en TikTok. TikTok no está en la lista de plataformas de Chat Box, mientras que All-Chat une el chat de TikTok LIVE en el mismo overlay que Twitch, YouTube, Kick y Discord. El chat unificado de todas las plataformas es gratis en All-Chat, mientras que Streamlabs Multistream es una función de Ultra, y All-Chat es de código abierto y se puede autoalojar.',
+    seLiveName: 'StreamElements SE.Live',
+    seLiveMetaTitle: 'All-Chat vs StreamElements SE.Live: overlay de chat unificado para OBS',
+    seLiveMetaDescription:
+      'All-Chat y StreamElements SE.Live frente a frente: overlay de chat unificado, dock Multi-Chat, TikTok, instalación, precio, alertas y TTS, con una fuente para cada celda.',
+    seLiveHeading: 'All-Chat vs StreamElements SE.Live',
+    seLiveIntro:
+      'SE.Live es el plugin de StreamElements para OBS en Windows, con una ventana Multi-Chat para el streamer. All-Chat es un servicio alojado y de código abierto que pone el chat unificado en el stream como fuente de navegador. All-Chat lo hacemos nosotros; cada celda de StreamElements enlaza a sus propias páginas.',
+    seLivePickThem:
+      'Ya usas los overlays, las alertas y una Stream Store de StreamElements en Windows y sobre todo quieres leer tú todos los chats en un dock de OBS.',
+    seLivePickUs:
+      'Quieres que los espectadores vean el chat unificado en el stream. No encontramos ningún overlay de chat unificado en la documentación de StreamElements, y en febrero de 2025 su equipo dijo que el widget de chat solo muestra la plataforma principal. All-Chat además mantiene TikTok dentro del chat unificado en lugar de en un dock aparte, y no necesita ningún plugin ni un sistema operativo concreto.',
+    sleepyChatName: 'SleepyChat',
+    sleepyChatMetaTitle: 'All-Chat vs SleepyChat: comparativa de overlays de chat multistream',
+    sleepyChatMetaDescription:
+      'All-Chat y SleepyChat frente a frente: los dos unen los chats de Twitch, YouTube, Kick y TikTok desde un panel web, sin instalación. Emotes, precio, código abierto, alertas y TTS, con una fuente para cada celda.',
+    sleepyChatHeading: 'All-Chat vs SleepyChat',
+    sleepyChatIntro:
+      'Son las dos herramientas más parecidas de nuestra comparativa: las dos están alojadas, no necesitan instalación y te dan un overlay de OBS y un dock para los chats de Twitch, YouTube, Kick y TikTok. All-Chat lo hacemos nosotros; cada celda de SleepyChat enlaza a sus propias páginas.',
+    sleepyChatPickThem:
+      'Quieres el texto a voz en el centro del stream. SleepyChat mantiene el TTS de las cuatro plataformas en una sola cola junto a sus alertas animadas personalizadas.',
+    sleepyChatPickUs:
+      'Quieres código abierto. All-Chat es AGPL-3.0 y se puede autoalojar con Docker Compose. Además lee Discord y muestra emotes de 7TV, BTTV y FFZ, y su chat unificado es gratis, mientras que el plan gratuito de SleepyChat tiene límites de uso.',
+    restreamName: 'Restream Chat',
+    restreamMetaTitle: 'All-Chat vs Restream Chat: chat multistream con TikTok',
+    restreamMetaDescription:
+      'All-Chat y Restream Chat frente a frente: plataformas, chat de TikTok, overlay y dock de OBS, precio, alertas y TTS, con una fuente para cada celda.',
+    restreamHeading: 'All-Chat vs Restream Chat',
+    restreamIntro:
+      'Restream Chat es la herramienta de chat integrada en Restream, el servicio que envía un stream a varias plataformas. All-Chat no retransmite vídeo; une el chat llegue como llegue tu stream a las plataformas. All-Chat lo hacemos nosotros; cada celda de Restream enlaza a sus propias páginas.',
+    restreamPickThem:
+      'Ya haces multistream a través de Restream y quieres responder y reenviar mensajes entre plataformas desde una sola ventana.',
+    restreamPickUs:
+      'Haces stream en TikTok, o no envías tu stream a través de Restream. Restream Chat no lee el chat de TikTok, y sus mensajes solo llegan mientras haces stream a través de Restream. All-Chat lee el chat de TikTok LIVE y funciona con cualquier forma de emitir en directo, y añade emotes de 7TV, BTTV y FFZ, alertas y un bot de chat.',
   },
 }

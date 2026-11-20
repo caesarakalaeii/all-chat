@@ -177,6 +177,8 @@ export const docs: LocaleNamespace<'docs'> = {
     tocModeration: 'Modérer votre chat',
     tocEngagement: 'Sondages, prédictions et points',
     tocEventsCredits: 'Événements et générique',
+    tocAlerts: "Overlays d'alertes",
+    tocCommands: 'Commandes de chat et minuteurs',
     tocSharing: 'Partager un overlay',
     tocThemes: 'Choisir un thème',
     tocCustomize: 'Le personnaliser',
@@ -296,6 +298,16 @@ export const docs: LocaleNamespace<'docs'> = {
     creditsEmphasis: 'Générique',
     creditRollEmphasis: 'Générique de fin',
     creditsCopyUrlEmphasis: "Copier l'URL OBS du générique",
+    alertsHeading: "Overlays d'alertes",
+    alertsBody:
+      "Créez un overlay de type {kind} pour obtenir une boîte d'alertes dans sa propre source navigateur OBS. Les abonnements, Bits, raids et follows Twitch, les Super Chats et souscriptions YouTube et les cadeaux TikTok s'affichent avec votre texte, votre GIF et votre son, ou avec votre propre HTML, CSS et JavaScript. Les overlays d'alertes sont gratuits ; l'envoi de vos propres médias est premium. Le {guide} détaille la mise en place.",
+    alertsKindEmphasis: 'Alertes',
+    alertsGuideLinkText: 'guide des alertes de stream',
+    commandsHeading: 'Commandes de chat et minuteurs',
+    commandsBody:
+      "Sous {nav} dans la barre supérieure, vous définissez une seule fois vos !commandes, déclencheurs par mot-clé et minuteurs, et ils répondent dans chaque chat que vos overlays regroupent. Les réponses viennent de l'All-Chat Bot ou de votre propre compte. Elles sont gratuites dans les chats Twitch et Kick et premium dans le chat YouTube. Le {guide} donne les détails.",
+    commandsNavEmphasis: 'Commandes',
+    commandsGuideLinkText: 'guide du bot de chat',
     sharingHeading: 'Partager un overlay',
     sharingBody:
       "{share} permet à un autre streamer d'intégrer le chat de votre overlay au sien, pratique pour les collabs et les raids. Envoyez une demande à son nom d'utilisateur Twitch ; une fois acceptée, votre overlay apparaît dans son éditeur sous {sharedOverlays} pour être ajouté comme source, et chacun de vous peut révoquer le partage plus tard. Le partage est une fonctionnalité {premium}.",

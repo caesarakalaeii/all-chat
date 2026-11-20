@@ -205,7 +205,7 @@ Rules for that copy:
   "Limits", not out of sight.
 - A statement about another product needs a source on that product's own
   pages; without one the cell is "not documented".
-- English and German change together.
+- English, German, French and Spanish change together.
 - `frontend/src/app/__tests__/seo-metadata.test.ts` locks the claims that have gone
   stale before. When a page gains a claim worth protecting, add it there.
 

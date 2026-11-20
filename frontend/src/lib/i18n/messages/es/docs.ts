@@ -175,6 +175,8 @@ export const docs: LocaleNamespace<'docs'> = {
     tocModeration: 'Modera tu chat',
     tocEngagement: 'Encuestas, predicciones y puntos',
     tocEventsCredits: 'Eventos y créditos finales',
+    tocAlerts: 'Overlays de alertas',
+    tocCommands: 'Comandos de chat y temporizadores',
     tocSharing: 'Compartir un overlay',
     tocThemes: 'Elige un tema',
     tocCustomize: 'Hazlo tuyo',
@@ -294,6 +296,16 @@ export const docs: LocaleNamespace<'docs'> = {
     creditsEmphasis: 'Créditos',
     creditRollEmphasis: 'Créditos finales',
     creditsCopyUrlEmphasis: 'Copiar URL de OBS de los créditos',
+    alertsHeading: 'Overlays de alertas',
+    alertsBody:
+      'Crea un overlay de tipo {kind} para tener una caja de alertas como fuente de navegador de OBS propia. Las suscripciones, bits, raids y follows de Twitch, los Super Chats y membresías de YouTube y los regalos de TikTok aparecen con tu texto, tu GIF y tu sonido, o con tu propio HTML, CSS y JavaScript. Los overlays de alertas son gratis; subir tus propios archivos es premium. La {guide} explica la configuración paso a paso.',
+    alertsKindEmphasis: 'Alertas',
+    alertsGuideLinkText: 'guía de alertas de stream',
+    commandsHeading: 'Comandos de chat y temporizadores',
+    commandsBody:
+      'En {nav}, en la barra superior, defines una sola vez tus !comandos, activadores por palabra clave y temporizadores, y responden en todos los chats que llevan tus overlays. Las respuestas las envía el All-Chat Bot o tu propia cuenta. Son gratis en los chats de Twitch y Kick y premium en el chat de YouTube. La {guide} tiene los detalles.',
+    commandsNavEmphasis: 'Comandos',
+    commandsGuideLinkText: 'guía del bot de chat',
     sharingHeading: 'Compartir un overlay',
     sharingBody:
       '{share} permite que otro streamer lleve el chat de tu overlay al suyo, algo muy útil para colaboraciones y raids. Envía una solicitud a su nombre de usuario de Twitch; cuando la acepte, tu overlay aparecerá en su editor en {sharedOverlays} para añadirlo como fuente, y cualquiera de los dos puede revocarlo más adelante. Compartir es una función {premium}.',
