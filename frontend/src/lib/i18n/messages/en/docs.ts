@@ -323,7 +323,7 @@ export const docs = {
     creditsCopyUrlEmphasis: 'Copy Credits OBS URL',
     alertsHeading: 'Alert overlays',
     alertsBody:
-      'Create an overlay of kind {kind} to get an alert box as its own OBS Browser Source. Twitch subs, bits, raids and follows, YouTube Super Chats and memberships and TikTok gifts pop up with your own text, GIF and sound, or with your own HTML, CSS and JavaScript. Alert overlays are free; uploading your own media is premium. The {guide} walks through the setup.',
+      'Create an overlay of kind {kind} to get an alert box as its own OBS Browser Source. Twitch subs, bits, raids and follows, YouTube Super Chats and memberships, Kick subs and hosts and TikTok gifts pop up with your own text, GIF and sound, or with your own HTML, CSS and JavaScript. Alert overlays are free; uploading your own media is premium. The {guide} walks through the setup.',
     alertsKindEmphasis: 'Alerts',
     alertsGuideLinkText: 'stream alerts guide',
     commandsHeading: 'Chat commands & timers',

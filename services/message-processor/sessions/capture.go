@@ -109,27 +109,32 @@ func (ec *EventCapture) shouldCaptureEvent(msg *models.UnifiedChatMessage) bool 
 	// published as treasure_chest), so it joins that category. like_aggregate is
 	// further gated per-message: only the window-final frame is captured (gate).
 	captureTypes := map[string]bool{
-		"subscription":        true,
-		"resubscription":      true,
-		"gift_subscription":   true,
-		"mystery_gift":        true,
-		"bits":                true,
-		"power_up":            true, // Bits Power-ups: bits spent (PR #1042)
-		"raid":                true,
-		"super_chat":          true,
-		"super_sticker":       true,
-		"new_sponsor":         true,
-		"member_milestone":    true,
-		"membership_gift":     true,
-		"follow":              true,
-		"gift":                true, // TikTok/Kick
-		"channel_points":      true,
-		"tiktok_subscription": true,
-		"super_fan_join":      true,
-		"super_fan_box":       true,
-		"treasure_chest":      true,
-		"share":               true,
-		"like_aggregate":      true,
+		"subscription":           true,
+		"resubscription":         true,
+		"gift_subscription":      true,
+		"mystery_gift":           true,
+		"bits":                   true,
+		"power_up":               true, // Bits Power-ups: bits spent (PR #1042)
+		"raid":                   true,
+		"super_chat":             true,
+		"super_sticker":          true,
+		"new_sponsor":            true,
+		"member_milestone":       true,
+		"membership_gift":        true,
+		"follow":                 true,
+		"gift":                   true, // TikTok/Kick
+		"channel_points":         true,
+		"tiktok_subscription":    true,
+		"super_fan_join":         true,
+		"super_fan_box":          true,
+		"treasure_chest":         true,
+		"share":                  true,
+		"like_aggregate":         true,
+		"kick_subscription":      true,
+		"kick_gift_subscription": true,
+		"kick_host":              true,
+		"kick_kicks":             true,
+		"kick_follow":            true,
 	}
 
 	return captureTypes[msg.Event.Type]
@@ -138,27 +143,32 @@ func (ec *EventCapture) shouldCaptureEvent(msg *models.UnifiedChatMessage) bool 
 // getEventCategory maps event types to leaderboard categories
 func (ec *EventCapture) getEventCategory(eventType string) string {
 	categories := map[string]string{
-		"subscription":        "subs",
-		"resubscription":      "subs",
-		"gift_subscription":   "gifts",
-		"mystery_gift":        "gifts",
-		"bits":                "bits",
-		"power_up":            "bits",
-		"raid":                "raids",
-		"super_chat":          "super_chats",
-		"super_sticker":       "super_chats",
-		"new_sponsor":         "memberships",
-		"member_milestone":    "memberships",
-		"super_fan_join":      "memberships",
-		"membership_gift":     "gifts",
-		"follow":              "follows",
-		"gift":                "gifts", // TikTok/Kick
-		"channel_points":      "points",
-		"tiktok_subscription": "subs",
-		"super_fan_box":       "treasure_chests",
-		"treasure_chest":      "treasure_chests",
-		"share":               "shares",
-		"like_aggregate":      "likes",
+		"subscription":           "subs",
+		"resubscription":         "subs",
+		"gift_subscription":      "gifts",
+		"mystery_gift":           "gifts",
+		"bits":                   "bits",
+		"power_up":               "bits",
+		"raid":                   "raids",
+		"super_chat":             "super_chats",
+		"super_sticker":          "super_chats",
+		"new_sponsor":            "memberships",
+		"member_milestone":       "memberships",
+		"super_fan_join":         "memberships",
+		"membership_gift":        "gifts",
+		"follow":                 "follows",
+		"gift":                   "gifts", // TikTok/Kick
+		"channel_points":         "points",
+		"tiktok_subscription":    "subs",
+		"super_fan_box":          "treasure_chests",
+		"treasure_chest":         "treasure_chests",
+		"share":                  "shares",
+		"like_aggregate":         "likes",
+		"kick_subscription":      "subs",
+		"kick_gift_subscription": "gifts",
+		"kick_host":              "raids",
+		"kick_kicks":             "gifts",
+		"kick_follow":            "follows",
 	}
 
 	if category, ok := categories[eventType]; ok {
@@ -204,6 +214,10 @@ const giftMembershipPriceUSD = 4.99
 // roughly 1.1 to 1.5 US cents depending on pack size and region. APPROXIMATE.
 const diamondPriceUSD = 0.013
 
+// kickPriceUSD is what a viewer pays for one KICK, Kick's gifting currency.
+// APPROXIMATE: packs sell at about one US cent per KICK before fees.
+const kickPriceUSD = 0.01
+
 // weightedGiftScore prices a gifts-category event in estimated USD of viewer
 // spend. Unknown sub tiers fall back to the Tier-1 price rather than scoring 0.
 func weightedGiftScore(event *models.EventInfo) float64 {
@@ -213,7 +227,8 @@ func weightedGiftScore(event *models.EventInfo) float64 {
 	}
 
 	switch {
-	case event.Type == "gift_subscription" || event.Type == "mystery_gift":
+	case event.Type == "gift_subscription" || event.Type == "mystery_gift" || event.Type == "kick_gift_subscription":
+		// Kick gift subs carry no tier, so they take the Tier-1 price below.
 		tier, _ := event.Metadata["tier"].(string)
 		price, ok := giftSubPriceUSD[tier]
 		if !ok {
@@ -225,6 +240,8 @@ func weightedGiftScore(event *models.EventInfo) float64 {
 		return count * giftMembershipPriceUSD
 	case event.Value != nil && event.Value.Currency == "diamonds":
 		return event.Value.Amount * diamondPriceUSD
+	case event.Value != nil && event.Value.Currency == "kicks":
+		return event.Value.Amount * kickPriceUSD
 	default:
 		// A gift with no known price (e.g. a platform added later) still ranks, by count.
 		return count

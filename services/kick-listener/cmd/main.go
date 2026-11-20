@@ -30,6 +30,7 @@ import (
 
 	"github.com/caesar/all-chat/services/kick-listener/channels"
 	"github.com/caesar/all-chat/services/kick-listener/handlers"
+	"github.com/caesar/all-chat/services/kick-listener/kickevents"
 	"github.com/caesar/all-chat/services/kick-listener/metrics"
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
 	"github.com/caesar/all-chat/services/kick-listener/status"
@@ -44,6 +45,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -191,6 +193,10 @@ func main() {
 	providers := parseList(listener.Env("KICK_REALTIME_PROVIDERS", "centrifugo,pusher"))
 	wsClient := newRealtimeClient(ctx, websocket.KickRealtimeConnectionURL, providers, wsConfig, messageHandler, log)
 
+	wsClient.SetEventHandler(func(event *websocket.KickEvent) {
+		handlePlatformEvent(event, streamPublisher, channelMgr, log)
+	})
+
 	// Set deletion handler
 	wsClient.SetDeletionHandler(func(channel string, event *websocket.KickMessageDeletedEvent) {
 		handleDeletionEvent(channel, event, streamPublisher, channelMgr, log)
@@ -224,6 +230,21 @@ func main() {
 	router.GET("/health/ready", healthHandler.ReadinessProbe)
 	router.GET("/status", healthHandler.Status)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+
+	// Follows and KICKs gifts come from Kick's official webhooks (ADR-0094).
+	// Without the app's credentials the route is absent and Kick gets a 404.
+	if clientID, clientSecret := os.Getenv("KICK_CLIENT_ID"), os.Getenv("KICK_CLIENT_SECRET"); clientID != "" && clientSecret != "" {
+		kickEvents := &kickevents.Service{
+			ClientID: clientID, ClientSecret: clientSecret,
+			TokenURL: kickevents.DefaultTokenURL, APIURL: kickevents.DefaultAPIURL,
+			Sources: channelRepo, Store: redisStore{redisClient}, Publisher: streamPublisher,
+			HTTP: &http.Client{Timeout: 15 * time.Second}, Logger: log,
+		}
+		router.POST("/webhooks/kick", kickEvents.Webhook)
+		go kickEvents.Run(ctx)
+	} else {
+		log.Warn("KICK_CLIENT_ID/KICK_CLIENT_SECRET not set: no Kick follow or KICKs gift events")
+	}
 
 	// Get port
 	port := listener.Env("PORT", "8089")
@@ -391,6 +412,58 @@ func handleChatMessage(
 		}
 		cancel()
 	}
+}
+
+// redisStore is the set-if-absent the webhook receiver shares between pods.
+type redisStore struct{ client *redis.Client }
+
+func (s redisStore) SetNX(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	return s.client.SetNX(ctx, key, 1, ttl).Result()
+}
+
+// handlePlatformEvent publishes a Kick subscription, gifted-sub or host event
+// to every overlay that reads the chatroom.
+func handlePlatformEvent(event *websocket.KickEvent, pub *publisher.StreamPublisher, channelMgr *channels.Manager, log *zap.Logger) {
+	if channelMgr == nil {
+		return
+	}
+	targets, found := channelMgr.GetOverlayTargetsForChatroom(event.ChatroomID)
+	if !found {
+		metrics.IncDropped("unknown_chatroom")
+		return
+	}
+	for _, target := range targets {
+		publishKickEvent(event, target.OverlayID, target.ChannelSlug, time.Now().UTC(), pub, log)
+	}
+}
+
+func publishKickEvent(event *websocket.KickEvent, overlayID, channelSlug string, at time.Time, pub rawPublisher, log *zap.Logger) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := pub.Publish(ctx, &publisher.RawMessage{
+		MessageID:   event.ID,
+		Platform:    "kick",
+		OverlayID:   overlayID,
+		ChannelID:   channelSlug,
+		ChannelName: channelSlug,
+		Username:    event.Username,
+		Text:        event.Text,
+		Tags:        map[string]string{"chatroom_id": strconv.Itoa(event.ChatroomID)},
+		Timestamp:   at,
+		EventType:   event.Type,
+		EventData:   event.Data,
+	})
+	if err != nil {
+		log.Error("Failed to publish Kick event", zap.Error(err), zap.String("event_type", event.Type), zap.String("overlay_id", overlayID))
+		metrics.IncDropped("publish_error")
+		return
+	}
+	metrics.IncMessage("published", "success")
+}
+
+// rawPublisher is the part of the stream publisher an event needs.
+type rawPublisher interface {
+	Publish(ctx context.Context, msg *publisher.RawMessage) error
 }
 
 func buildKickTags(message *websocket.KickChatMessage, chatroomID int) map[string]string {

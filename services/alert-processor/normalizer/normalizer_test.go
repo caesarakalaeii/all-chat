@@ -86,15 +86,31 @@ func TestNormalize_YouTubeSuperChat(t *testing.T) {
 }
 
 // TestNormalize_UnsupportedPlatform: a platform whose normalizer has no event
-// path (Kick, Discord today) must return a deterministic error the processor
+// path (Discord today) must return a deterministic error the processor
 // can treat as permanent — not a panic, and not an invented EventInfo.
 func TestNormalize_UnsupportedPlatform(t *testing.T) {
 	raw := &mpmodels.RawChatMessage{
-		Platform:  "kick",
+		Platform:  "discord",
 		EventType: "gift",
 		EventData: map[string]interface{}{"count": 5},
 	}
 
 	_, _, err := Normalize(raw)
 	assert.Error(t, err, "platforms without an event normalizer must not produce alerts")
+}
+
+// TestNormalize_Kick: Kick events reach alert overlays through the
+// message-processor's Kick event normalizer.
+func TestNormalize_Kick(t *testing.T) {
+	event, user, err := Normalize(&mpmodels.RawChatMessage{
+		Platform:  "kick",
+		ChannelID: "somestreamer",
+		Username:  "bob",
+		EventType: "kick_gift_subscription",
+		EventData: map[string]interface{}{"gift_count": float64(5)},
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, "kick_gift_subscription", event.Type)
+	assert.Equal(t, float64(5), event.Value.Amount)
+	assert.Equal(t, "bob", user.Username)
 }

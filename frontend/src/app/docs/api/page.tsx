@@ -146,6 +146,17 @@ const EVENT_TYPES_BY_PLATFORM = [
     ],
   },
   {
+    platformKey: 'common.platforms.kick',
+    className: 'text-kick',
+    types: [
+      'kick_subscription',
+      'kick_gift_subscription',
+      'kick_host',
+      'kick_kicks',
+      'kick_follow',
+    ],
+  },
+  {
     platformKey: 'common.platforms.tiktok',
     className: 'text-tiktok',
     types: [

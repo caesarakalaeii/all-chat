@@ -189,10 +189,14 @@ func mapEventTypeToColumn(platform, eventType string) string {
 
 	case "kick":
 		switch eventType {
-		case "subscription":
+		case "subscription", "kick_subscription":
 			return "enable_kick_subs"
-		case "gift_subscription", "donation":
+		case "gift_subscription", "donation", "kick_gift_subscription", "kick_kicks":
 			return "enable_kick_gifts"
+		case "kick_host":
+			return "enable_kick_hosts"
+		case "kick_follow":
+			return "enable_kick_follows"
 		default:
 			return ""
 		}

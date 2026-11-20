@@ -208,15 +208,26 @@ describe('alerts, chat bot and per-tool comparison pages', () => {
     expect(urls).toContain(`https://allch.at/compare/${slug}`)
   })
 
-  it('the alerts guide claims no Kick events, which shared/alerts does not have', () => {
-    // eventDefs in shared/alerts/alerts.go lists twitch, youtube and tiktok only.
+  it('the alerts guide names exactly the Kick events shared/alerts has', () => {
+    // The guide lists the Kick events of eventDefs in shared/alerts/alerts.go, no more.
     const defs = readFileSync(
       join(__dirname, '..', '..', '..', '..', 'shared', 'alerts', 'alerts.go'),
       'utf-8'
     )
-    expect(defs).not.toMatch(/\{"[a-z_]+", "kick"/)
+    const kick = [...defs.matchAll(/\{"([a-z_]+)", "kick"/g)].map((m) => m[1])
+    expect(kick).toEqual([
+      'kick_subscription',
+      'kick_gift_subscription',
+      'kick_host',
+      'kick_kicks',
+      'kick_follow',
+    ])
+    const guide = lib('i18n/messages/en/guides.ts')
+    expect(guide).toContain(
+      "eventsKick: 'Kick: subscriptions, gifted subs, hosts, KICKs gifts and follows.'"
+    )
     expect(lib('i18n/messages/en/guides.ts')).toMatch(
-      /metaTitle: 'Stream Alerts for OBS: Twitch, YouTube and TikTok/
+      /metaTitle: 'Stream Alerts for OBS: Twitch, YouTube, Kick and TikTok/
     )
   })
 

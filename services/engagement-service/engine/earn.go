@@ -55,12 +55,12 @@ func PointsForEvent(cfg models.EarnConfig, ev *mpmodels.EventInfo) (EarnAward, b
 		amt := valueAmount(ev)
 		return awardIfPositive(scalePoints(amt, cfg.USDMultiplier), "earn_donation")
 
-	case "subscription", "resubscription", "new_sponsor", "member_milestone", "tiktok_subscription":
+	case "subscription", "resubscription", "new_sponsor", "member_milestone", "tiktok_subscription", "kick_subscription":
 		// tiktok_subscription has no raw plan in its metadata, so subTier assigns
 		// the base tier — the same treatment a Kick sub already gets.
 		return awardIfPositive(subPoints(cfg, subTier(ev)), "earn_sub")
 
-	case "gift_subscription", "mystery_gift", "membership_gift":
+	case "gift_subscription", "mystery_gift", "membership_gift", "kick_gift_subscription":
 		// Award the gifter proportional to how many subs/memberships they gifted.
 		count := valueAmount(ev)
 		if count < 1 {

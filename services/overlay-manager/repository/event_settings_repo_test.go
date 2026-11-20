@@ -162,6 +162,8 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 	settings.EnableYouTubeSubscribers = false
 	settings.EnableKickSubs = false
 	settings.EnableKickGifts = true
+	settings.EnableKickHosts = false
+	settings.EnableKickFollows = true
 	settings.EnableTikTokLikes = false
 	settings.EnableTikTokGifts = true
 	settings.EnableTikTokFollows = false
@@ -204,6 +206,7 @@ func TestEventSettingsUpdateRoundTripKeepsEveryTogglePositioned(t *testing.T) {
 		&reloaded.EnableYouTubeMemberMilestones, &reloaded.EnableYouTubeMemberGifts,
 		&reloaded.EnableYouTubeSubscribers,
 		&reloaded.EnableKickSubs, &reloaded.EnableKickGifts,
+		&reloaded.EnableKickHosts, &reloaded.EnableKickFollows,
 		&reloaded.EnableTikTokLikes, &reloaded.EnableTikTokGifts, &reloaded.EnableTikTokFollows,
 		&reloaded.EnableTikTokShares, &reloaded.EnableTikTokTreasureChests,
 		&reloaded.EnableTikTokSubscriptions, &reloaded.EnableTikTokSuperFans, &reloaded.EnableTikTokQuestions,
@@ -253,6 +256,8 @@ func eventToggles(s *models.EventSettings) map[string]bool {
 		"enable_youtube_subscribers":       s.EnableYouTubeSubscribers,
 		"enable_kick_subs":                 s.EnableKickSubs,
 		"enable_kick_gifts":                s.EnableKickGifts,
+		"enable_kick_hosts":                s.EnableKickHosts,
+		"enable_kick_follows":              s.EnableKickFollows,
 		"enable_tiktok_likes":              s.EnableTikTokLikes,
 		"enable_tiktok_gifts":              s.EnableTikTokGifts,
 		"enable_tiktok_follows":            s.EnableTikTokFollows,

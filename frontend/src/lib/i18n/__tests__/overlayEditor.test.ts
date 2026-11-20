@@ -1266,16 +1266,13 @@ describe('event display settings page copy', () => {
     )
   })
 
-  it('keeps the Kick event toggles and the reverse-engineering caveat', () => {
+  it('keeps the Kick event toggles and says which events ride the undocumented feed', () => {
     expect(t('overlayEditor.eventSettings.kickSubsLabel')).toBe('Subscriptions')
-    expect(t('overlayEditor.eventSettings.kickSubsDescription')).toBe('Kick channel subscriptions')
-    // The render site spelled the ampersand &amp;; a catalog string is not HTML.
-    expect(t('overlayEditor.eventSettings.kickGiftsLabel')).toBe('Gifts & Donations')
-    expect(t('overlayEditor.eventSettings.kickGiftsDescription')).toBe(
-      'Gift subscriptions and donations'
-    )
-    expect(t('overlayEditor.eventSettings.kickCaveat')).toBe(
-      '⚠️ Kick events require reverse-engineering and may not be available yet.'
+    expect(t('overlayEditor.eventSettings.kickGiftsLabel')).toBe('Gifted subs & KICKs')
+    expect(t('overlayEditor.eventSettings.kickHostsLabel')).toBe('Hosts')
+    expect(t('overlayEditor.eventSettings.kickFollowsLabel')).toBe('Follows')
+    expect(t('overlayEditor.eventSettings.kickCaveat')).toContain(
+      'Kick does not document and can change without notice'
     )
   })
 

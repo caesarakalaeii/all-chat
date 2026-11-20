@@ -60,6 +60,7 @@ type CentrifugoClient struct {
 	onMessage MessageHandler
 	handlerMu sync.RWMutex
 	onDelete  DeletionHandler
+	onEvent   EventHandler
 
 	maxPerConn int
 	minBackoff time.Duration
@@ -87,6 +88,13 @@ func NewCentrifugoClient(url, tokenURL string, onMessage MessageHandler, logger 
 		cancel:     cancel,
 		byChannel:  make(map[string]*centrifugoConn),
 	}
+}
+
+// SetEventHandler sets the platform event handler. Call it before Connect.
+func (c *CentrifugoClient) SetEventHandler(handler EventHandler) {
+	c.handlerMu.Lock()
+	defer c.handlerMu.Unlock()
+	c.onEvent = handler
 }
 
 // SetDeletionHandler sets the deletion event handler.
@@ -136,12 +144,23 @@ func (c *CentrifugoClient) Disconnect() error {
 // Subscribe adds a chatroom to a connection with room, opening a new
 // connection when every existing one is full.
 func (c *CentrifugoClient) Subscribe(chatroomID int) error {
-	channel := fmt.Sprintf(kickChannelFormat, chatroomID)
+	for _, channel := range chatroomChannels(chatroomID) {
+		c.subscribeChannel(channel)
+	}
+	return nil
+}
 
+// chatroomChannels are the two aliases one chatroom is read from: chat,
+// deletions, subscriptions and hosts on the first, gifted subs on the second.
+func chatroomChannels(chatroomID int) []string {
+	return []string{fmt.Sprintf(kickChannelFormat, chatroomID), fmt.Sprintf(kickGiftChannelFormat, chatroomID)}
+}
+
+func (c *CentrifugoClient) subscribeChannel(channel string) {
 	c.mu.Lock()
 	if _, ok := c.byChannel[channel]; ok {
 		c.mu.Unlock()
-		return nil
+		return
 	}
 	var conn *centrifugoConn
 	for _, k := range c.conns {
@@ -161,10 +180,9 @@ func (c *CentrifugoClient) Subscribe(chatroomID int) error {
 	if !started {
 		// Its first session subscribes everything in its channel set.
 		go conn.run(nil)
-		return nil
+		return
 	}
 	conn.subscribe(channel)
-	return nil
 }
 
 // SubscribeWithAuth subscribes like Subscribe: Kick chatrooms are public
@@ -176,13 +194,18 @@ func (c *CentrifugoClient) SubscribeWithAuth(chatroomID int, _ string) error {
 // Unsubscribe drops a chatroom, and closes its connection if that left it
 // empty (except the first one).
 func (c *CentrifugoClient) Unsubscribe(chatroomID int) error {
-	channel := fmt.Sprintf(kickChannelFormat, chatroomID)
+	for _, channel := range chatroomChannels(chatroomID) {
+		c.unsubscribeChannel(channel)
+	}
+	return nil
+}
 
+func (c *CentrifugoClient) unsubscribeChannel(channel string) {
 	c.mu.Lock()
 	conn, ok := c.byChannel[channel]
 	if !ok {
 		c.mu.Unlock()
-		return nil
+		return
 	}
 	delete(c.byChannel, channel)
 	empty := conn.removeChannel(channel) == 0
@@ -200,12 +223,11 @@ func (c *CentrifugoClient) Unsubscribe(chatroomID int) error {
 	if closeConn {
 		conn.stop()
 		c.updateState()
-		return nil
+		return
 	}
 	if conn.isConnected() {
 		_ = conn.send("unsubscribe", map[string]string{"channel": channel})
 	}
-	return nil
 }
 
 // IsConnected reports whether every connection in the pool is up.
@@ -271,9 +293,9 @@ func (c *CentrifugoClient) updateState() {
 
 func (c *CentrifugoClient) dispatch(channel, event string, data json.RawMessage) {
 	c.handlerMu.RLock()
-	onDelete := c.onDelete
+	onDelete, onEvent := c.onDelete, c.onEvent
 	c.handlerMu.RUnlock()
-	dispatchKickEvent(c.logger, event, channel, data, c.onMessage, onDelete)
+	dispatchKickEvent(c.logger, event, channel, data, c.onMessage, onDelete, onEvent)
 }
 
 // centrifugoConn is one websocket in the pool.

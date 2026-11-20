@@ -51,9 +51,12 @@ type EventSettings struct {
 	// subscriptions.list?myRecentSubscribers polling — hence a dedicated toggle.
 	EnableYouTubeSubscribers bool `json:"enable_youtube_subscribers" db:"enable_youtube_subscribers"`
 
-	// Kick Events
-	EnableKickSubs  bool `json:"enable_kick_subs" db:"enable_kick_subs"`
-	EnableKickGifts bool `json:"enable_kick_gifts" db:"enable_kick_gifts"`
+	// Kick Events. Gifts covers gifted subs and KICKs gifts; hosts are Kick's
+	// raids; follows arrive only for a linked Kick account (official webhooks).
+	EnableKickSubs    bool `json:"enable_kick_subs" db:"enable_kick_subs"`
+	EnableKickGifts   bool `json:"enable_kick_gifts" db:"enable_kick_gifts"`
+	EnableKickHosts   bool `json:"enable_kick_hosts" db:"enable_kick_hosts"`
+	EnableKickFollows bool `json:"enable_kick_follows" db:"enable_kick_follows"`
 
 	// TikTok Events
 	EnableTikTokLikes   bool `json:"enable_tiktok_likes" db:"enable_tiktok_likes"`

@@ -296,7 +296,7 @@ export const docs: LocaleNamespace<'docs'> = {
     creditsCopyUrlEmphasis: 'Credits-OBS-URL kopieren',
     alertsHeading: 'Alert-Overlays',
     alertsBody:
-      'Erstelle ein Overlay der Art {kind}, um eine Alert-Box als eigene OBS-Browser-Quelle zu bekommen. Twitch-Abos, Bits, Raids und Follows, YouTube-Super-Chats und Mitgliedschaften sowie TikTok-Geschenke erscheinen mit deinem eigenen Text, GIF und Sound oder mit eigenem HTML, CSS und JavaScript. Alert-Overlays sind kostenlos; eigene Medien hochzuladen ist Premium. Der {guide} führt durch die Einrichtung.',
+      'Erstelle ein Overlay der Art {kind}, um eine Alert-Box als eigene OBS-Browser-Quelle zu bekommen. Twitch-Abos, Bits, Raids und Follows, YouTube-Super-Chats und Mitgliedschaften, Kick-Abos und Hosts sowie TikTok-Geschenke erscheinen mit deinem eigenen Text, GIF und Sound oder mit eigenem HTML, CSS und JavaScript. Alert-Overlays sind kostenlos; eigene Medien hochzuladen ist Premium. Der {guide} führt durch die Einrichtung.',
     alertsKindEmphasis: 'Alerts',
     alertsGuideLinkText: 'Guide zu Stream-Alerts',
     commandsHeading: 'Chat-Befehle & Timer',

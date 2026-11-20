@@ -67,8 +67,15 @@ export function EventContent({ message }: { message: ChatMessage }) {
       case 'resubscription':
       case 'gift_subscription':
       case 'kick_subscription':
+      case 'kick_gift_subscription':
       case 'new_sponsor':
         return '⭐'
+      case 'kick_host':
+        return '🚀'
+      case 'kick_kicks':
+        return '🎁'
+      case 'kick_follow':
+        return '❤️'
       case 'bits':
         return '💎'
       case 'raid':
@@ -194,7 +201,16 @@ export function EventContent({ message }: { message: ChatMessage }) {
       case 'treasure_chest':
         return 'Coin Chest!'
       case 'tiktok_subscription':
+      case 'kick_subscription':
         return 'New Subscriber!'
+      case 'kick_gift_subscription':
+        return 'Gift Subscription!'
+      case 'kick_host':
+        return 'Host Incoming!'
+      case 'kick_kicks':
+        return 'KICKs Gifted!'
+      case 'kick_follow':
+        return 'New Follower!'
       case 'super_fan_join':
         return 'New Super Fan!'
       case 'super_fan_box':

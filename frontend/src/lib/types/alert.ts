@@ -40,6 +40,11 @@ export const ALERT_EVENT_TYPES = [
   'tiktok_subscription',
   'power_up',
   'gift_received',
+  'kick_subscription',
+  'kick_gift_subscription',
+  'kick_host',
+  'kick_kicks',
+  'kick_follow',
   // A chat command's image, sound and text (ADR-0080).
   'chat_command',
 ] as const

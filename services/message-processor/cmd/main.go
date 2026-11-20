@@ -449,6 +449,8 @@ func main() {
 					unified, err = platformNormalizer.(*normalizer.YouTubeNormalizer).NormalizeEvent(rawMsg, overlay.OverlayID)
 				case *normalizer.TikTokNormalizer:
 					unified, err = platformNormalizer.(*normalizer.TikTokNormalizer).NormalizeEvent(rawMsg, overlay.OverlayID)
+				case *normalizer.KickNormalizer:
+					unified, err = platformNormalizer.(*normalizer.KickNormalizer).NormalizeEvent(rawMsg, overlay.OverlayID)
 				case *normalizer.SystemNormalizer:
 					unified, err = platformNormalizer.(*normalizer.SystemNormalizer).NormalizeEvent(rawMsg, overlay.OverlayID)
 				default:

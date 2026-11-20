@@ -367,11 +367,12 @@ export const guides: LocaleNamespace<'guides'> = {
     correctionsLinkText: 'abre una incidencia en GitHub',
   },
   alerts: {
-    metaTitle: 'Alertas de stream para OBS: Twitch, YouTube y TikTok en una sola caja de alertas',
+    metaTitle:
+      'Alertas de stream para OBS: Twitch, YouTube, Kick y TikTok en una sola caja de alertas',
     metaDescription:
-      'Caja de alertas gratuita para OBS que cubre Twitch, YouTube y TikTok a la vez: suscripciones, bits, raids, follows, Super Chats, membresías y regalos de TikTok, con tu propio GIF, sonido y texto o con HTML, CSS y JavaScript propios.',
+      'Caja de alertas gratuita para OBS que cubre Twitch, YouTube, Kick y TikTok a la vez: suscripciones, bits, raids, follows, Super Chats, membresías y regalos de TikTok, con tu propio GIF, sonido y texto o con HTML, CSS y JavaScript propios.',
     breadcrumb: 'Alertas de stream',
-    heading: 'Alertas de stream para Twitch, YouTube y TikTok en una sola caja de alertas',
+    heading: 'Alertas de stream para Twitch, YouTube, Kick y TikTok en una sola caja de alertas',
     intro:
       'Un overlay de alertas de All-Chat es una caja de alertas que añades a OBS como fuente de navegador. Muestra los eventos de todas las plataformas a las que está conectado, así que un multistream necesita una sola fuente de alertas en lugar de una por plataforma. Es gratis y funciona en el navegador, sin nada que instalar.',
     eventsHeading: 'Qué muestra',
@@ -379,6 +380,7 @@ export const guides: LocaleNamespace<'guides'> = {
       'Twitch: suscripciones, resuscripciones, suscripciones regaladas, bits, raids, follows, canjes de puntos de canal y donaciones benéficas.',
     eventsYoutube:
       'YouTube: Super Chats, Super Stickers, nuevos miembros, hitos de miembro, membresías regaladas y nuevos suscriptores.',
+    eventsKick: 'Kick: suscripciones, suscripciones regaladas, hosts, regalos de KICKs y follows.',
     eventsTiktok: 'TikTok LIVE: regalos, compartidos y suscripciones.',
     eventsBody:
       'Las alertas aparecen de una en una con su texto, una imagen o GIF y un sonido, y después la fuente vuelve a quedar vacía.',
@@ -403,7 +405,7 @@ export const guides: LocaleNamespace<'guides'> = {
       'Un {commands} puede mostrar su propia alerta en el mismo overlay: una imagen, un sonido y un texto, activados desde cualquier chat.',
     commandsLinkText: 'comando de chat',
     limitKick:
-      'Los eventos de Kick, como suscripciones y follows, no se muestran como alertas. Un comando de chat escrito en el chat de Kick sí puede activar su propia alerta.',
+      'Las suscripciones, las suscripciones regaladas y los hosts de Kick vienen de un feed que Kick no documenta y puede cambiar sin aviso. Los regalos de KICKs anónimos no se muestran.',
     limitUploads:
       'Subir tus propias imágenes, GIF y sonidos es una función {premium}. Buscar GIF y pegar un enlace es gratis.',
     limitTiktok:

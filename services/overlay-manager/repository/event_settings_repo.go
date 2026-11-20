@@ -67,7 +67,8 @@ func (r *EventSettingsRepository) GetByOverlayID(ctx context.Context, overlayID 
 		       enable_token_warnings,
 		       tiktok_like_aggregation_window_seconds, event_display_duration_multiplier,
 		       twitch_channel_points_name,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       enable_kick_hosts, enable_kick_follows
 		FROM overlay_event_settings
 		WHERE overlay_id = $1
 	`
@@ -108,6 +109,8 @@ func (r *EventSettingsRepository) Update(ctx context.Context, settings *models.E
 		    tiktok_like_aggregation_window_seconds = $26,
 		    event_display_duration_multiplier = $27,
 		    twitch_channel_points_name = $28,
+		    enable_kick_hosts = $30,
+		    enable_kick_follows = $31,
 		    updated_at = NOW()
 		WHERE overlay_id = $29
 		RETURNING id, overlay_id,
@@ -123,7 +126,8 @@ func (r *EventSettingsRepository) Update(ctx context.Context, settings *models.E
 		          enable_token_warnings,
 		          tiktok_like_aggregation_window_seconds, event_display_duration_multiplier,
 		          twitch_channel_points_name,
-		          created_at, updated_at
+		          created_at, updated_at,
+		          enable_kick_hosts, enable_kick_follows
 	`
 
 	row := r.pool.QueryRow(ctx, query,
@@ -156,6 +160,8 @@ func (r *EventSettingsRepository) Update(ctx context.Context, settings *models.E
 		settings.EventDisplayDurationMultiplier,
 		settings.TwitchChannelPointsName,
 		settings.OverlayID,
+		settings.EnableKickHosts,
+		settings.EnableKickFollows,
 	)
 
 	updated, err := scanEventSettings(row)
@@ -204,6 +210,8 @@ func scanEventSettings(row pgx.Row) (*models.EventSettings, error) {
 		&settings.TwitchChannelPointsName,
 		&settings.CreatedAt,
 		&settings.UpdatedAt,
+		&settings.EnableKickHosts,
+		&settings.EnableKickFollows,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

@@ -285,7 +285,7 @@ func TestCentrifugo_AnswersPingWhileHandlerBlocks(t *testing.T) {
 func TestCentrifugo_PoolsConnectionsAtCapacity(t *testing.T) {
 	f := newFakeCentrifugo(t, 2700)
 	c := newTestCentrifugo(f, nil)
-	c.maxPerConn = 2
+	c.maxPerConn = 4 // two chatrooms: each takes its chat and its gift alias
 	if err := c.Connect(); err != nil {
 		t.Fatalf("Connect: %v", err)
 	}
@@ -299,12 +299,11 @@ func TestCentrifugo_PoolsConnectionsAtCapacity(t *testing.T) {
 	}
 	second := f.nextConn(t)
 
-	got := map[string]bool{
-		subscribedChannel(t, first.nextCmd(t, "subscribe")):  true,
-		subscribedChannel(t, first.nextCmd(t, "subscribe")):  true,
-		subscribedChannel(t, second.nextCmd(t, "subscribe")): true,
+	got := map[string]bool{}
+	for _, conn := range []*fakeConn{first, first, first, first, second, second} {
+		got[subscribedChannel(t, conn.nextCmd(t, "subscribe"))] = true
 	}
-	for _, want := range []string{"chatrooms.1.v2", "chatrooms.2.v2", "chatrooms.3.v2"} {
+	for _, want := range []string{"chatrooms.1.v2", "chatroom_1", "chatrooms.2.v2", "chatroom_2", "chatrooms.3.v2", "chatroom_3"} {
 		if !got[want] {
 			t.Errorf("%s never subscribed; got %v", want, got)
 		}

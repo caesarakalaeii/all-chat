@@ -145,6 +145,8 @@ export interface EventSettings {
   // Kick
   enable_kick_subs: boolean
   enable_kick_gifts: boolean
+  enable_kick_hosts: boolean
+  enable_kick_follows: boolean
   // TikTok
   enable_tiktok_likes: boolean
   enable_tiktok_gifts: boolean

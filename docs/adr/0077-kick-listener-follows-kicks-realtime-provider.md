@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-18
 **Status**: Accepted
+**Revised**: 2026-11-20
 **Deciders**: All-Chat Platform Team
 
 ## Context
@@ -46,7 +47,10 @@ At startup the listener posts to the realtime connection endpoint with the provi
 builds the client for the provider Kick returns; a failed lookup starts the Pusher client
 with the configured key as before. Setting `KICK_REALTIME_PROVIDERS=pusher` forces Pusher
 without a rebuild. The Centrifugo client (`services/kick-listener/websocket/
-centrifugo.go`) pools connections at 100 chatrooms each, below Kick's 128 limit; each
+centrifugo.go`) pools connections at 100 channels each, below Kick's 128 limit. A chatroom
+takes two channels: `chatrooms.<id>.v2` for chat, deletions, subscriptions and hosts, and
+`chatroom_<id>`, the only alias that carries gifted subscriptions (measured 2026-11-20).
+The Pusher fallback reads the first alias only, so it delivers no gifted subs. Each
 connection fetches its own guest token, refreshes before expiry, answers pings and
 reconnects with backoff, resubscribing its own chatrooms; emptied connections close
 except the first. Both clients satisfy one `websocket.Realtime` interface, share event
