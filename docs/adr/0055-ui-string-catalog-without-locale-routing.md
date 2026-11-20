@@ -26,10 +26,11 @@ standalone under a required CI gate).
 ## Decision
 
 **A pure, typed catalog module at `frontend/src/lib/i18n/`. English is the
-default and source locale, German the second (ADR-0066, ADR-0078). Locale never
+default and source locale; German, French and Spanish are translated
+(ADR-0066, ADR-0078). Locale never
 enters the URL, and it is not resolved at request time.**
 
-- `config.ts` — `SUPPORTED_LOCALES = ['en', 'de'] as const`, `Locale`,
+- `config.ts` — `SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es'] as const`, `Locale`,
   `DEFAULT_LOCALE`, `LOCALE_NATIVE_NAMES`, `isSupportedLocale`; adding a
   language is this array, an entry, and one directory under `messages/`.
 - `messages/en/` — one file per namespace (`as const`), composed by a barrel

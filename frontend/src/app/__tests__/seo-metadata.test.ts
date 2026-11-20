@@ -86,7 +86,7 @@ describe('blog metadata', () => {
   // itself renders as '... | All-Chat | All-Chat'.
   it('leaves the brand suffix to the layout template', () => {
     expect(read('blog/[slug]/page.tsx')).not.toMatch(/\| All-Chat/)
-    for (const locale of ['en', 'de']) {
+    for (const locale of ['en', 'de', 'fr', 'es']) {
       const catalog = readFileSync(
         join(__dirname, '..', '..', 'lib', 'i18n', 'messages', locale, 'blog.ts'),
         'utf-8'

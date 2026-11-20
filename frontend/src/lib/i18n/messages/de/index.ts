@@ -24,7 +24,7 @@
  * or added to a German file is a compile error. `legal` is absent on purpose:
  * the privacy policy and terms are binding text, and a machine translation of
  * them must not be published without a legal review, so they resolve to
- * English. __tests__/de.test.ts pins that list.
+ * English. __tests__/locales.test.ts pins that list.
  */
 
 import type { LocaleMessages } from '../../translate'
