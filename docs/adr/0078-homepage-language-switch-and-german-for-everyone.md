@@ -2,6 +2,7 @@
 
 **Date**: 2026-10-19
 **Status**: Accepted
+**Revised**: 2026-11-20 (French and Spanish added, open to everyone like German)
 **Deciders**: caesarakalaeii
 
 ## Context
@@ -35,9 +36,11 @@ URL, and nothing reads request state (ADR-0066).
 
 Option 1.
 
-- `components/home/LanguageToggle.tsx` renders one button per entry in
-  `SUPPORTED_LOCALES` at the right end of the lanes nav, and calls
-  `chooseLocale()` like the settings card. It makes no request. Below 480px the
+- `components/home/LanguageToggle.tsx` renders a native `<select>` with one
+  option per entry in `SUPPORTED_LOCALES` (German, French, Spanish next to
+  English) at the right end of the lanes nav, and calls `chooseLocale()` like
+  the settings card. It was a row of buttons while there were two languages; a
+  closed select stays one code wide, which the 360px nav row needs. It makes no request. Below 480px the
   nav's "themes" link is hidden to make room; `/docs` links to it.
 - The `ui_languages` gate is flipped to `early_access=FALSE` in the admin UI,
   so the `/settings` card offers German to every signed-in user too.

@@ -2,7 +2,7 @@
 
 **Date**: 2026-10-15
 **Status**: Accepted
-**Revised**: 2026-11-03 (brought in line with the current implementation)
+**Revised**: 2026-11-20 (French and Spanish added)
 **Deciders**: caesarakalaeii
 
 ## Context and Problem Statement
@@ -48,8 +48,10 @@ anyone choosing it).
   resolves to English, never to the raw key; hand-written namespace files are
   annotated with the complete `LocaleNamespace` shape, so a missing or extra
   key is a compile error.
-- German translates every namespace except `legal`, which stays English until
-  legal review signs off the German texts. The picker is a card on
+- German, French and Spanish translate every namespace except `legal`, which
+  stays English until legal review signs off a translated text. French and
+  Spanish were added on 2026-11-20: machine translated, with the French strings
+  volunteers submitted through the contributor tool (ADR-0063) taken over. The picker is a card on
   `/settings`; who may pick a non-English language is the `ui_languages`
   feature gate (migration 103), probed via share-service's
   `GET /api/v1/ui-languages` and enforced on the card. English stays
@@ -68,22 +70,22 @@ grow per language; rollout reversible from the admin UI. Costs:
   own storage (intended), and a second device needs the choice again.
 - The gate controls who can pick, not what renders: a stored choice keeps
   applying after a gate flip.
-- The German catalog is not in the localization tool's DB: regenerating
-  `messages/de/` from an export overwrites each namespace file whole; merge
+- The shipped catalogs are not in the localization tool's DB (French only in
+  part): regenerating `messages/<locale>/` from an export overwrites each namespace file whole; merge
   instead.
 
 ## Implementation
 
 - **Files**: `frontend/src/lib/i18n/{config,active-locale,translators,use-translations,translate,format,index}.ts`,
-  `frontend/src/lib/i18n/messages/de/`, `frontend/src/components/LocaleSync.tsx`,
+  `frontend/src/lib/i18n/messages/{de,fr,es}/`, `frontend/src/components/LocaleSync.tsx`,
   `frontend/src/components/settings/LanguageSettingsCard.tsx`,
   `frontend/src/components/home/LanguageToggle.tsx` (ADR-0078),
   `shared/featuregates/cache.go` (`GateUILanguages`),
   `services/share-service/cmd/main.go`, `services/api-gateway/` (route + proxy prefix),
   `migrations/103_ui_languages_gate.sql`.
 - **Tests**: `frontend/src/lib/i18n/__tests__/index.test.tsx` (switching without
-  re-running effects, fallback, stored choice), `__tests__/de.test.ts`
-  (namespace coverage, placeholder parity),
+  re-running effects, fallback, stored choice), `__tests__/locales.test.ts`
+  (key coverage, placeholder parity, per locale),
   `frontend/src/components/settings/__tests__/LanguageSettingsCard.test.tsx`
   (gate states), `shared/featuregates/ui_languages_gate_test.go` (seed).
 
@@ -92,7 +94,7 @@ grow per language; rollout reversible from the admin UI. Costs:
 - [ADR-0055](./0055-ui-string-catalog-without-locale-routing.md): the catalog, and
   the rejection of locale routing and request-time resolution this builds on.
 - [ADR-0063](./0063-localization-contribution.md): the contributor tool that
-  improves the German catalog.
+  improves the translated catalogs.
 - [ADR-0078](./0078-homepage-language-switch-and-german-for-everyone.md): amends
   where the picker lives (a homepage switch too) and who the gate admits
   (everyone).

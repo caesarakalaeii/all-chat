@@ -29,7 +29,7 @@
  * exists. See docs/adr/0055-ui-string-catalog-without-locale-routing.md.
  */
 
-export const SUPPORTED_LOCALES = ['en', 'de'] as const
+export const SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es'] as const
 
 export type Locale = (typeof SUPPORTED_LOCALES)[number]
 
@@ -43,6 +43,8 @@ export const DEFAULT_LOCALE = 'en' satisfies Locale
 export const LOCALE_NATIVE_NAMES: Record<Locale, string> = {
   en: 'English',
   de: 'Deutsch',
+  fr: 'Français',
+  es: 'Español',
 }
 
 export function isSupportedLocale(value: string): value is Locale {

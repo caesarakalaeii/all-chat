@@ -116,7 +116,7 @@ Each service has a detailed README:
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Pull request process, code review guidelines
 - [Testing](./docs/TESTING.md) - Test targets and CI workflows
 - [Accessibility](./docs/ACCESSIBILITY.md) - WCAG 2.2 AA scope, CI gates (shrink-only ratchets), contracts for new UI code
-- [Frontend i18n](./docs/frontend/I18N.md) - the UI string catalog (English, German): how to add a string, placeholder syntax, how a locale is chosen and what stays English, why there is no provider and no locale in the URL
+- [Frontend i18n](./docs/frontend/I18N.md) - the UI string catalog (English, German, French, Spanish): how to add a string, placeholder syntax, how a locale is chosen and what stays English, why there is no provider and no locale in the URL
 - [Agent UI verification](./docs/frontend/AGENT_UI_VERIFICATION.md) - the screenshot ritual and pixel-baseline gate every UI change must pass before "done"
 - [Design System](./frontend/DESIGN_SYSTEM.md) - shadcn primitives, design tokens, and the CI gates that keep the UI consistent (ADR-0056). Agents: use the `shadcn-ui` skill
 

@@ -31,22 +31,20 @@ afterEach(async () => {
 })
 
 describe('LanguageToggle', () => {
-  it('switches to German without a gate probe and remembers the choice', async () => {
+  it.each([
+    ['de', 'Deutsch', 'Sprache'],
+    ['fr', 'Français', 'Langue'],
+    ['es', 'Español', 'Idioma'],
+  ])('switches to %s without a gate probe and remembers the choice', async (code, name, label) => {
     render(<LanguageToggle />)
-    expect(screen.getByRole('button', { name: 'en, English' })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    )
+    expect(screen.getByRole('combobox', { name: 'Language' })).toHaveValue('en')
 
-    fireEvent.click(screen.getByRole('button', { name: 'de, Deutsch' }))
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: code } })
 
-    // The group label is itself catalog copy, so it proves the re-render too.
-    expect(await screen.findByRole('group', { name: 'Sprache' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'de, Deutsch' })).toHaveAttribute(
-      'aria-pressed',
-      'true'
-    )
-    expect(document.documentElement.lang).toBe('de')
-    expect(localStorage.getItem('allchat_locale')).toBe('de')
+    // The label is itself catalog copy, so it proves the re-render too.
+    expect(await screen.findByRole('combobox', { name: label })).toHaveValue(code)
+    expect(screen.getByRole('option', { name: `${code}, ${name}` })).toHaveAttribute('lang', code)
+    expect(document.documentElement.lang).toBe(code)
+    expect(localStorage.getItem('allchat_locale')).toBe(code)
   })
 })
