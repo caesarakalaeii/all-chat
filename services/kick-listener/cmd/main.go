@@ -239,6 +239,7 @@ func main() {
 			TokenURL: kickevents.DefaultTokenURL, APIURL: kickevents.DefaultAPIURL,
 			Sources: channelRepo, Store: redisStore{redisClient}, Publisher: streamPublisher,
 			HTTP: &http.Client{Timeout: 15 * time.Second}, Logger: log,
+			Pace: kickevents.DefaultPace,
 		}
 		router.POST("/webhooks/kick", kickEvents.Webhook)
 		go kickEvents.Run(ctx)

@@ -86,6 +86,8 @@ With `KICK_CLIENT_ID` and `KICK_CLIENT_SECRET` set, the listener serves
 - A reconciler runs every ten minutes on one pod (Redis lock `kick:events:reconcile`):
   it lists the app's subscriptions with an app access token, requests the two events for
   every Kick source of an active overlay, and deletes those of channels that are gone.
+  Requests are one second apart, at most 400 a pass, and a pass stops at Kick's first
+  `429`; the next pass requests what is still missing.
 - A delivery must carry Kick's RSA signature over `<message id>.<timestamp>.<body>`
   (key from `GET /public/v1/public-key`) and a timestamp within ten minutes; message ids
   are kept in Redis for an hour (`kick:events:seen:<id>`), so a retry publishes once.
