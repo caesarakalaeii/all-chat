@@ -234,6 +234,40 @@ describe('selectLeasesToRelease', () => {
     expect(released).toEqual(['cold-start']);
   });
 
+  it('keeps a parked room over an idle one, so the park is not shed to a peer', () => {
+    // Prod 2026-11-19: coloboyka was refused by the sign budget on rc4bn at
+    // 18:42:10, rebalanced to mxkpg, and refused again at 18:43:03 — one room,
+    // two of the fleet's hourly slots. The park lives in this pod's
+    // BackoffManager, so shedding a parked room hands the next pod a dial it
+    // cannot know is futile. A parked room holds no connection, so keeping it
+    // costs nothing.
+    const released = selectLeasesToRelease(
+      ['parked', 'idle'],
+      1,
+      byMap({ idle: 900 }),
+      (streamID) => streamID === 'parked'
+    );
+    expect(released).toEqual(['idle']);
+  });
+
+  it('sheds a parked room only when nothing unparked is left to shed', () => {
+    // The park must not become a way to pin a pod over its fair share: at the
+    // ceiling a leased-but-unconnectable room is deaf everywhere (2026-09-14).
+    const released = selectLeasesToRelease(
+      ['parked', 'hot'],
+      2,
+      byMap({ hot: 5 }),
+      (streamID) => streamID === 'parked'
+    );
+    expect(released).toEqual(['hot', 'parked']);
+  });
+
+  it('ranks by freshness as before when no park accessor is given', () => {
+    // The accessor is optional so the Go-parity call site keeps working.
+    const released = selectLeasesToRelease(['hot', 'idle'], 1, byMap({ hot: 5, idle: 900 }));
+    expect(released).toEqual(['idle']);
+  });
+
   it('breaks freshness ties alphabetically, matching the Go coordinator', () => {
     const released = selectLeasesToRelease(['b', 'a', 'c'], 1, byMap({ a: 500, b: 500, c: 5 }));
     expect(released).toEqual(['a']);

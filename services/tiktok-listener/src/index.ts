@@ -1219,15 +1219,22 @@ class TikTokListenerService {
         const released = await this.leadershipCoordinator.rebalance(
           demanded.size,
           TIKTOK_MAX_STREAMS_PER_POD,
-          (username) => freshness.get(username)
+          (username) => freshness.get(username),
+          (username) => this.backoffManager.parkRemainingMs(username) > 0
         );
         // Set every hold synchronously before any teardown awaits: a Pub/Sub
         // snapshot can arrive mid-teardown, and a lease released by rebalance()
         // but not yet held would be re-claimable in that window. A room parked
         // on this pod (sign budget or deaf room) is held until the park ends:
         // the teardown below drops its backoff state, and an earlier re-claim
-        // would re-dial into the same refusal. Another pod, with its own
-        // budget, may claim it.
+        // would re-dial into the same refusal.
+        //
+        // The hold only binds THIS pod. Since each pod leases its own TikTok
+        // session (ADR-0052), a peer that claims a parked room spends a slot
+        // of its own budget rediscovering the refusal, which is what fired
+        // TikTokPureNodeConnectBudgetExhausted on 2026-11-19. The selection
+        // above therefore keeps parked rooms off the shed list in the first
+        // place; this hold remains for the ones shed anyway at the ceiling.
         for (const username of released) {
           const holdMs = Math.max(REBALANCE_HOLD_MS, this.backoffManager.parkRemainingMs(username));
           this.rebalanceHolds.set(username, Date.now() + holdMs);
