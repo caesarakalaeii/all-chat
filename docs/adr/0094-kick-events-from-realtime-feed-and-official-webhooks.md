@@ -84,7 +84,9 @@ alerts overlays have a profile per event (`shared/alerts`).
 - Three of the five events depend on an undocumented feed. If Kick renames an event or
   moves it to another alias, those alerts stop silently while chat keeps working.
 - Follows and KICKs gifts depend on Kick accepting app-token subscriptions for any
-  broadcaster, as its API reference states. If Kick refuses one, the reconciler logs
+  broadcaster, as its API reference states (confirmed on 2026-11-20 with a
+  `channel.followed` subscription for a channel that never linked an account). If Kick
+  refuses one, the reconciler logs
   `Kick event subscription refused` with Kick's reason and that channel gets no follow or
   KICKs alerts; the fallback would be user-token subscriptions for linked accounts.
 - Anonymous KICKs gifts carry no sender and are not published.
