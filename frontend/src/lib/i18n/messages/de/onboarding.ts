@@ -112,9 +112,9 @@ export const onboarding: LocaleNamespace<'onboarding'> = {
     streamDeckTitle: 'Stream-Deck-Tasten',
     streamDeckBody:
       'Steuere Umfragen, Vorhersagen und vorbereitete Nachrichten über eine physische Taste. Kopple ein Stream Deck oder StreamController unter Gekoppelte Geräte – ohne etwas zu kopieren oder einzufügen. Eine Umfrage oder Vorhersage zu starten bleibt Premium.',
-    languageTitle: 'All-Chat auf Deutsch nutzen',
+    languageTitle: 'All-Chat in deiner Sprache nutzen',
     languageBody:
-      'Wechsle die Sprache der Oberfläche unter Einstellungen. Deutsch ist die erste Sprache neben Englisch, und die Auswahl wird pro Browser gemerkt.',
+      'Wechsle die Sprache der Oberfläche unter Einstellungen. Deutsch, Französisch und Spanisch sind verfügbar, und die Auswahl wird pro Browser gemerkt.',
     translateTitle: 'Hilf beim Übersetzen von All-Chat',
     translateBody:
       'Betatester können die Oberfläche unter Übersetzen in der Navigation in weitere Sprachen übertragen. Alles wird vor der Veröffentlichung geprüft.',

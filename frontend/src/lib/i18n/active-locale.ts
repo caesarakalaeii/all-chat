@@ -41,6 +41,8 @@ const catalogLoaders: {
   readonly [L in Exclude<Locale, typeof DEFAULT_LOCALE>]: () => Promise<LocaleMessages>
 } = {
   de: () => import('./messages/de').then((module) => module.deMessages),
+  fr: () => import('./messages/fr').then((module) => module.frMessages),
+  es: () => import('./messages/es').then((module) => module.esMessages),
 }
 
 const loadedCatalogs = new Map<Locale, LocaleMessages>()

@@ -18,8 +18,13 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { DEFAULT_LOCALE, LOCALE_NATIVE_NAMES, SUPPORTED_LOCALES } from '@/lib/i18n/config'
 import { deMessages } from '@/lib/i18n/messages/de'
 import { enMessages } from '@/lib/i18n/messages/en'
+import { esMessages } from '@/lib/i18n/messages/es'
+import { frMessages } from '@/lib/i18n/messages/fr'
+
+const translated = { de: deMessages, es: esMessages, fr: frMessages }
 
 /** Every string leaf as [dotted key, value]. */
 function leaves(node: object, prefix = ''): [string, string][] {
@@ -33,20 +38,32 @@ function leaves(node: object, prefix = ''): [string, string][] {
 const placeholders = (template: string) =>
   [...template.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort()
 
-describe('the German catalog', () => {
-  it('translates every namespace except the binding legal text', () => {
+it('has a translated catalog and a native name for every supported locale', () => {
+  const nonDefault = SUPPORTED_LOCALES.filter((locale) => locale !== DEFAULT_LOCALE)
+  expect(Object.keys(translated).sort()).toEqual([...nonDefault].sort())
+  expect(LOCALE_NATIVE_NAMES).toMatchObject({ fr: 'Français', es: 'Español' })
+})
+
+describe.each(Object.entries(translated))('the %s catalog', (_locale, messages) => {
+  it('translates every key of every namespace except the binding legal text', () => {
     // The namespace files are typed complete, but the barrel is not: a namespace
     // dropped from it would silently render English. legal.* stays English until
-    // a legal review signs off a German privacy policy and terms.
-    const expected = Object.keys(enMessages).filter((ns) => ns !== 'legal')
-    expect(Object.keys(deMessages).sort()).toEqual(expected.sort())
+    // a legal review signs off a translated privacy policy and terms.
+    const expected = leaves(enMessages)
+      .map(([key]) => key)
+      .filter((key) => !key.startsWith('legal.'))
+    expect(
+      leaves(messages)
+        .map(([key]) => key)
+        .sort()
+    ).toEqual(expected.sort())
   })
 
   it('keeps exactly the placeholders of the English string', () => {
     // A renamed or dropped placeholder is not a type error; it renders as a
     // literal {name}, or loses the value, on someone's screen.
     const en = new Map(leaves(enMessages))
-    const mismatches = leaves(deMessages)
+    const mismatches = leaves(messages)
       .filter(([key, value]) => {
         const source = en.get(key)
         return source === undefined || placeholders(source).join() !== placeholders(value).join()
@@ -54,15 +71,19 @@ describe('the German catalog', () => {
       .map(([key]) => key)
     expect(mismatches).toEqual([])
   })
-})
 
-describe('KLIPY attribution', () => {
-  it('uses the REQUIRED "Search KLIPY" placeholder verbatim in every locale', () => {
+  it('uses the REQUIRED "Search KLIPY" placeholder verbatim', () => {
     // docs.klipy.com/attribution: "Set 'Search KLIPY' as the default
     // placeholder text in the search input field - REQUIRED". Mandated
     // wording, so it is not translated.
-    for (const messages of [enMessages, deMessages]) {
-      expect(messages.overlayEditor?.alertsEditor?.gifSearchPlaceholder).toBe('Search KLIPY')
-    }
+    expect(messages.overlayEditor?.alertsEditor?.gifSearchPlaceholder).toBe('Search KLIPY')
+  })
+})
+
+describe('the French catalog', () => {
+  it('keeps the wording our volunteer translators submitted', () => {
+    // Samples from the /translate contributor tool (ADR-0063).
+    expect(frMessages.errors?.networkError?.title).toBe('Erreur de connexion')
+    expect(frMessages.maintenanceBanner?.popoverScheduledHeading).toBe('Maintenance programmée')
   })
 })

@@ -28,7 +28,7 @@ describe('isSupportedLocale', () => {
   })
 
   it('rejects a locale that is not in SUPPORTED_LOCALES', () => {
-    expect(isSupportedLocale('fr')).toBe(false)
+    expect(isSupportedLocale('pt')).toBe(false)
   })
 
   it('rejects a region-tagged form of a supported locale', () => {

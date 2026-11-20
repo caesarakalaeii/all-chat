@@ -29,8 +29,7 @@ export const translate: LocaleNamespace<'translate'> = {
   localeNone: 'Noch keine Sprachen',
   localeRequestButton: 'Sprache anfragen',
   localeRequestTitle: 'Sprache anfragen',
-  localeRequestBody:
-    'Reiche Übersetzungen als Betatester ein. Frag im Discord, wenn du helfen willst und noch nicht im Beta-Programm bist.',
+  localeRequestBody: 'Angefragte Sprachen erscheinen für alle, sobald ein Admin sie freigibt.',
   localeCodeLabel: 'Sprachcode',
   localeCodePlaceholder: 'de, fr, pt-BR…',
   localeEnglishNameLabel: 'Name auf Englisch',

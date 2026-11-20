@@ -942,29 +942,27 @@ span.font-semibold.text-sm.username-gradient {
 }
 
 /* Language switch at the right end of the nav, set off from the links by a
- * rule. Inactive codes keep full ink (the chip behind is translucent, dimmed
- * ink would drop below AA over the light bands); the active one is bold and
- * underlined. */
+ * rule: a native select in the chrome's ink, showing the active code. The
+ * option list is drawn by the browser, so it gets solid colours. */
 .lanes-lang {
-  display: flex;
-  gap: 6px;
-  padding-left: clamp(10px, 3vw, 20px);
-  border-left: 1px solid rgba(244, 243, 239, 0.45);
-}
-.lanes-lang button {
+  appearance: none;
   font: inherit;
+  font-weight: 700;
   color: #f4f3ef;
   background: none;
   border: 0;
-  padding: 0;
-  cursor: pointer;
-}
-.lanes-lang button[aria-pressed='true'] {
-  font-weight: 700;
+  border-left: 1px solid rgba(244, 243, 239, 0.45);
+  border-radius: 0;
+  padding: 0 0 0 clamp(10px, 3vw, 20px);
   text-decoration: underline;
   text-underline-offset: 3px;
+  cursor: pointer;
 }
-.lanes-lang button:focus-visible {
+.lanes-lang option {
+  color: #f4f3ef;
+  background: #000;
+}
+.lanes-lang:focus-visible {
   outline: 2px solid #f4f3ef;
   outline-offset: 2px;
 }

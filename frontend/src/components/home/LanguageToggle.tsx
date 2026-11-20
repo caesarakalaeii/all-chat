@@ -28,6 +28,7 @@ import {
   LOCALE_NATIVE_NAMES,
   SUPPORTED_LOCALES,
   chooseLocale,
+  isSupportedLocale,
   useActiveLocale,
   useTranslations,
 } from '@/lib/i18n'
@@ -36,23 +37,28 @@ export function LanguageToggle() {
   const t = useTranslations()
   const locale = useActiveLocale()
 
+  // A native select, not a button per language: the nav row has no spare
+  // pixels at 360px, and a closed select stays one code wide however many
+  // languages there are.
   return (
-    <div className="lanes-lang" role="group" aria-label={t('marketing.lanes.languageLabel')}>
+    <select
+      className="lanes-lang"
+      aria-label={t('marketing.lanes.languageLabel')}
+      value={locale}
+      onChange={(event) => {
+        if (isSupportedLocale(event.target.value)) void chooseLocale(event.target.value)
+      }}
+    >
       {SUPPORTED_LOCALES.map((code) => (
-        <button
+        <option
           key={code}
-          type="button"
+          value={code}
           lang={code}
-          // The visible label is the code, so the name must start with it (WCAG
-          // 2.5.3): a voice-control user says what they see. Not "English (en)":
-          // axe drops parentheticals before comparing.
           aria-label={`${code}, ${LOCALE_NATIVE_NAMES[code]}`}
-          aria-pressed={code === locale}
-          onClick={() => void chooseLocale(code)}
         >
           {code}
-        </button>
+        </option>
       ))}
-    </div>
+    </select>
   )
 }
