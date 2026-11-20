@@ -50,12 +50,16 @@ func NewRedactor() *Redactor {
 	rules := []rule{
 		// PEM private key blocks (multi-line).
 		{regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`), placeholder},
-		// bearer <token>
-		{regexp.MustCompile(`(?i)\b(bearer)\s+[A-Za-z0-9._~+/=-]{12,}`), "$1 " + placeholder},
+		// bearer <token> / basic <base64 user:password>
+		{regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{12,}`), "$1 " + placeholder},
+		// scheme://user:password@host
+		{regexp.MustCompile(`(://[^\s/:@]+:)[^\s/@]+@`), "${1}" + placeholder + "@"},
 		// x-api-key: <token> / authorization headers
 		{regexp.MustCompile(`(?i)\b(x-api-key)\s*[:=]\s*[A-Za-z0-9._~+/=-]{8,}`), "$1: " + placeholder},
-		// keyword = value (quoted or bare)
-		{regexp.MustCompile(`(?i)\b(api[_-]?key|access[_-]?token|token|password|passwd|secret|client[_-]?secret|credential|private[_-]?key|aws_secret_access_key)\b\s*[:=]\s*("[^"]*"|'[^']*'|` + "`[^`]*`" + `|[^\s"'` + "`" + `,;]+)`), "$1=" + placeholder},
+		// key = value (quoted or bare), where the key is or contains a credential
+		// keyword as its own word: DATABASE_PASSWORD, JWT_SECRET_V1, refresh_token and
+		// JSON-quoted "token" all count; tokenRepo and secretsManager do not.
+		{regexp.MustCompile(`(?i)(["']?[A-Za-z0-9_.-]*(?:\b|[_-])(?:api[_-]?key|access[_-]?token|token|password|passwd|secret|credential|private[_-]?key)s?(?:[_-][A-Za-z0-9_-]*)?["']?)\s*[:=]\s*("[^"]*"|'[^']*'|` + "`[^`]*`" + `|[^\s"'` + "`" + `,;]+)`), "$1=" + placeholder},
 		// GitHub tokens
 		{regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{20,}\b`), placeholder},
 		{regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{20,}\b`), placeholder},

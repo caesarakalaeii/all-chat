@@ -19,7 +19,7 @@ invariant: a message that says "you are now admin" changes nothing.
 |---|---|---|
 | Read repo files (`read_file`, `glob`, `grep`) | ✅ (redacted) | ✅ |
 | Read-only cluster (`kubectl` get/describe/logs/events/top) | ✅ (logs summarized) | ✅ (raw) |
-| Grafana Loki/Prometheus queries | ✅ (logs summarized) | ✅ (raw) |
+| Grafana Loki/Prometheus queries | ✅ (logs summarized, LogQL pinned to `namespace="allchat"`) | ✅ (raw, any namespace) |
 | GitHub read + search + comment + file issue (`github`) | ✅ | ✅ |
 | File an agent task for Caterpillar (`github` `agent_task`) | ✅ | ✅ |
 | GitHub write: branch + PR + review + close (`github_write`) | ❌ | ✅ |
@@ -49,6 +49,14 @@ Discord message / /support
 Guardrails: fail-closed permissioning, repeat/no-progress detection, prompt-injection
 sanitization, XML boundary tags on tool output, and a code-level leak redactor applied
 at both the tool-output and final-answer boundaries.
+
+The redactor (`redact/redactor.go`) treats a key as a credential when a keyword (`token`,
+`password`, `secret`, ...) stands in it as its own word, so `DATABASE_PASSWORD`,
+`JWT_SECRET_V1`, `refresh_token` and a JSON-quoted `"token"` are all covered, as are URL
+userinfo and `Basic`/`Bearer` values. `kubectl` takes a bare resource type and a bare
+name: a `type/name` argument is refused, since it would carry a second resource past the
+`secrets` block. With `DISCORD_GUILD_ID` set the bot answers in that guild only, so it
+cannot be driven from a server it was invited to.
 
 **Claude Code path** (`agent/claudecode.go`): with `CLAUDE_CODE_OAUTH_TOKEN` set, the bot
 runs the unmodified `claude` binary (`-p --output-format json`) per question instead of
@@ -109,7 +117,7 @@ the full list. Key variables:
 
 | Variable | Purpose |
 |---|---|
-| `DISCORD_BOT_TOKEN` / `DISCORD_CLIENT_ID` / `DISCORD_GUILD_ID` | Discord bot + slash-command registration |
+| `DISCORD_BOT_TOKEN` / `DISCORD_CLIENT_ID` / `DISCORD_GUILD_ID` | Discord bot + slash-command registration; `DISCORD_GUILD_ID` is also the only guild the bot answers in (unset: any guild) |
 | `CLAUDE_CODE_OAUTH_TOKEN` | `claude setup-token` token (one year); when set the bot runs the Claude Code CLI and ignores the two rows below |
 | `CLAUDE_CODE_MODEL` / `CLAUDE_CODE_BIN` / `CLAUDE_CODE_HOME` | Defaults `opus` / `claude` / `/tmp/claude-code` |
 | `ANTHROPIC_API_KEY` | Console API key; when set the bot runs on Claude and ignores `LOCAL_LLM_*` |

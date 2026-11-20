@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -55,7 +56,7 @@ func (t *GrafanaLogsTool) Def() tool.ToolDef {
 	return tool.ToolDef{
 		Name: "grafana_logs",
 		Description: "Query recent service logs via Grafana Loki (LogQL). Example query: {namespace=\"allchat\",app=\"api-gateway\"} |= \"error\". " +
-			"In support mode the result is an aggregate (counts + normalized patterns), not raw lines.",
+			"In support mode the stream selector must contain namespace=\"allchat\" and the result is an aggregate (counts + normalized patterns), not raw lines.",
 		Parameters: json.RawMessage(`{"type":"object","properties":{` +
 			`"query":{"type":"string","description":"LogQL query"},` +
 			`"since":{"type":"string","description":"optional look-back window, e.g. 15m (default 15m)"},` +
@@ -71,6 +72,15 @@ func (t *GrafanaLogsTool) Invoke(ctx context.Context, tctx *tool.ToolCtx, args j
 	}
 	if strings.TrimSpace(p.Query) == "" {
 		return tool.ToolOutput{}, fmt.Errorf("query is required")
+	}
+	if tctx.Mode == access.ModeSupport {
+		ns := tctx.Namespace
+		if ns == "" {
+			ns = "allchat"
+		}
+		if err := pinLokiNamespace(p.Query, ns); err != nil {
+			return tool.ToolOutput{}, err
+		}
 	}
 	since := t.defaultTail
 	if p.Since != "" {
@@ -95,6 +105,25 @@ func (t *GrafanaLogsTool) Invoke(ctx context.Context, tctx *tool.ToolCtx, args j
 		joined = joined[:maxKubeOutput] + "\n... (truncated)"
 	}
 	return tool.ToolOutput{Content: joined}, nil
+}
+
+var lokiSelectorRe = regexp.MustCompile(`^\s*\{([^}]*)\}`)
+
+// pinLokiNamespace rejects a LogQL query whose leading stream selector does not carry
+// an exact namespace="<ns>" matcher. Loki holds every namespace's logs, and matchers
+// on one label are ANDed, so that one matcher confines the query whatever else is in
+// the selector. Backticks and backslashes are refused because a raw or escaped string
+// value could otherwise spell the matcher without being one.
+func pinLokiNamespace(query, ns string) error {
+	want := `namespace="` + ns + `"`
+	if m := lokiSelectorRe.FindStringSubmatch(query); m != nil && !strings.ContainsAny(m[1], "`\\") {
+		for _, part := range strings.Split(m[1], ",") {
+			if strings.Join(strings.Fields(part), "") == want {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("the query must start with a stream selector containing %s (no backticks or backslashes in the selector), e.g. {%s,app=\"api-gateway\"} |= \"error\"", want, want)
 }
 
 // GrafanaMetricsTool queries Prometheus metrics via Grafana.

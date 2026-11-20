@@ -170,6 +170,10 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		}
 	}
 
+	if !b.inHomeGuild(m.GuildID) {
+		return
+	}
+
 	inThread := b.inBotThread(s, m.ChannelID)
 	if !inThread && !b.mentionsBot(m) {
 		return
@@ -253,7 +257,7 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 		return
 	}
 	data := i.ApplicationCommandData()
-	if data.Name != "support" {
+	if data.Name != "support" || !b.inHomeGuild(i.GuildID) {
 		return
 	}
 	question := ""
@@ -493,6 +497,13 @@ func (b *Bot) autoBan(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 	b.log.Info("auto-banned cross-channel spammer",
 		zap.String("user", m.Author.ID), zap.String("guild", m.GuildID))
+}
+
+// inHomeGuild reports whether the bot answers in this guild. With DISCORD_GUILD_ID set
+// it serves that guild only: a bot invited to someone else's server (or reached by DM)
+// would otherwise run its cluster and GitHub tools where no maintainer can see it.
+func (b *Bot) inHomeGuild(guildID string) bool {
+	return b.cfg.DiscordGuildID == "" || guildID == b.cfg.DiscordGuildID
 }
 
 func (b *Bot) isPrivileged(uid string) bool {

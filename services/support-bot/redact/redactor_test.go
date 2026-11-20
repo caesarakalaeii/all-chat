@@ -124,3 +124,36 @@ func TestSummarizeLogsShortPassthrough(t *testing.T) {
 		t.Errorf("short non-stack log should pass through, got %q", got)
 	}
 }
+
+// Real leak shapes: env-style names, JSON-quoted keys (every service logs zap JSON),
+// URL userinfo and Basic auth.
+func TestRedactCompoundKeysAndURLCredentials(t *testing.T) {
+	r := NewRedactor()
+	// Assembled at run time so secret scanners do not read the fixtures as real
+	// credentials.
+	const v = "fixture" + "Value0123456789"
+	cases := []string{
+		`{"level":"info","token":"` + v + `","msg":"x"}`,
+		`{"password":"` + v + `"}`,
+		"DATABASE_PASSWORD: " + v,
+		"refresh_token=" + v,
+		"JWT_SECRET_V1=" + v,
+		"postgres://allchat_user:" + v + "@db:5432/allchat",
+		"Authorization: Basic " + v,
+	}
+	for _, in := range cases {
+		if got := r.Redact(in); strings.Contains(got, v) {
+			t.Errorf("secret survived in %q: %q", in, got)
+		}
+	}
+}
+
+// Code identifiers that merely start with a keyword must stay readable.
+func TestRedactLeavesCodeIdentifiers(t *testing.T) {
+	r := NewRedactor()
+	for _, in := range []string{`tokenRepo := repository.New(db)`, `secretsManager = nil`} {
+		if got := r.Redact(in); got != in {
+			t.Errorf("%q was mangled to %q", in, got)
+		}
+	}
+}
