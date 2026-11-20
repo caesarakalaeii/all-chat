@@ -147,3 +147,82 @@ describe('login-gated pages', () => {
     expect(robots).not.toContain("'/overlay',")
   })
 })
+
+describe('alerts and chat commands are stated as shipped', () => {
+  // Search engines and language models quote these pages as fact. While they
+  // said "alerts are in development", assistants answered that All-Chat has no
+  // alerts and no chat bot, months after both were released.
+  const lib = (rel: string) => readFileSync(join(__dirname, '..', '..', 'lib', rel), 'utf-8')
+
+  it.each(['llms.ts', 'i18n/messages/en/guides.ts', 'i18n/messages/de/guides.ts'])(
+    '%s no longer calls alerts unreleased',
+    (rel) => {
+      expect(lib(rel)).not.toMatch(/in development|in Entwicklung|not available yet/i)
+    }
+  )
+
+  it('llms.txt describes alert overlays, chat commands and timers', () => {
+    const src = lib('llms.ts')
+    expect(src).toMatch(/alert overlays/i)
+    expect(src).toMatch(/chat commands/i)
+    expect(src).toMatch(/timers/i)
+  })
+
+  it('the homepage description and structured data name alerts and chat commands', () => {
+    expect(metadataCatalog()).toMatch(/home:[\s\S]*?alerts, chat commands/)
+    expect(read('page.tsx')).toMatch(/Alert overlays/)
+    expect(read('page.tsx')).toMatch(/Chat commands/)
+  })
+
+  it('the FAQ answers whether there are alerts and a chat bot', () => {
+    expect(lib('faq.ts')).toContain("'alertsBot'")
+  })
+
+  it('the comparison lists Multistream with a source', () => {
+    expect(
+      readFileSync(join(__dirname, '..', '..', 'components', 'guides', 'compareData.ts'), 'utf-8')
+    ).toContain('https://multistream.gg/')
+  })
+})
+
+describe('alerts, chat bot and per-tool comparison pages', () => {
+  const urls = sitemap().map((entry) => entry.url)
+  const lib = (rel: string) => readFileSync(join(__dirname, '..', '..', 'lib', rel), 'utf-8')
+
+  it.each(['/stream-alerts', '/multistream-chat-bot'])(
+    '%s is in the sitemap and llms.txt',
+    (path) => {
+      expect(urls).toContain(`https://allch.at${path}`)
+      expect(lib('llms.ts')).toContain('${SITE_URL}' + path)
+    }
+  )
+
+  it.each([
+    'multistream-gg',
+    'social-stream-ninja',
+    'streamlabs',
+    'streamelements',
+    'sleepychat',
+    'restream-chat',
+  ])('/compare/%s is in the sitemap', (slug) => {
+    expect(urls).toContain(`https://allch.at/compare/${slug}`)
+  })
+
+  it('the alerts guide claims no Kick events, which shared/alerts does not have', () => {
+    // eventDefs in shared/alerts/alerts.go lists twitch, youtube and tiktok only.
+    const defs = readFileSync(
+      join(__dirname, '..', '..', '..', '..', 'shared', 'alerts', 'alerts.go'),
+      'utf-8'
+    )
+    expect(defs).not.toMatch(/\{"[a-z_]+", "kick"/)
+    expect(lib('i18n/messages/en/guides.ts')).toMatch(
+      /metaTitle: 'Stream Alerts for OBS: Twitch, YouTube and TikTok/
+    )
+  })
+
+  it('the docs page has an alerts and a commands section', () => {
+    const src = read('docs/page.tsx')
+    expect(src).toContain('<section id="alerts">')
+    expect(src).toContain('<section id="commands">')
+  })
+})

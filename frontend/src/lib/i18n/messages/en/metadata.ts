@@ -36,7 +36,7 @@ export const metadata = {
     // Copy, not configuration: it places the page title relative to the brand.
     titleTemplate: '%s | All-Chat',
     description:
-      'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS chat overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.',
+      'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS chat overlay, with alerts and a chat bot on top. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.',
     // openGraph and twitter carried identical strings, so one key each. The
     // title matches the social card's headline ("EVERY CHAT. ONE URL.").
     socialTitle: 'All-Chat — Every chat. One URL.',
@@ -46,7 +46,7 @@ export const metadata = {
   home: {
     title: 'Multi-Platform Chat Overlay for Twitch, YouTube, Kick & TikTok | All-Chat',
     description:
-      'Free multi-platform chat overlay for OBS. Merge your Twitch, YouTube, Kick, TikTok, and Discord chat into one overlay, with 7TV, BTTV, and FFZ emotes built in. Open source, no install.',
+      'Free multi-platform chat overlay for OBS. Merge your Twitch, YouTube, Kick, TikTok, and Discord chat into one overlay, with alerts, chat commands, and 7TV, BTTV, and FFZ emotes built in. Open source, no install.',
   },
   docs: {
     title: 'Documentation',

@@ -48,7 +48,7 @@ describe('site-wide metadata (layout.tsx)', () => {
     // the brand, and a language that puts the brand first has to move it.
     expect(t('metadata.site.titleTemplate')).toBe('%s | All-Chat')
     expect(t('metadata.site.description')).toBe(
-      'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS chat overlay. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.'
+      'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one OBS chat overlay, with alerts and a chat bot on top. Drop it into OBS and go. 7TV, BTTV, and FFZ emotes built in. Free and open source.'
     )
   })
 })
@@ -59,7 +59,7 @@ describe('homepage metadata', () => {
       'Multi-Platform Chat Overlay for Twitch, YouTube, Kick & TikTok | All-Chat'
     )
     expect(t('metadata.home.description')).toBe(
-      'Free multi-platform chat overlay for OBS. Merge your Twitch, YouTube, Kick, TikTok, and Discord chat into one overlay, with 7TV, BTTV, and FFZ emotes built in. Open source, no install.'
+      'Free multi-platform chat overlay for OBS. Merge your Twitch, YouTube, Kick, TikTok, and Discord chat into one overlay, with alerts, chat commands, and 7TV, BTTV, and FFZ emotes built in. Open source, no install.'
     )
   })
 })

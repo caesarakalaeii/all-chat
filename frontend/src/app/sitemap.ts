@@ -17,6 +17,7 @@
  */
 
 import type { MetadataRoute } from 'next'
+import { VS_TOOLS } from '@/components/guides/compareData'
 import { POSTS } from '@/content/blog'
 
 // No lastModified: stamping every URL with the request time on every fetch is
@@ -74,6 +75,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
     {
+      url: `${baseUrl}/stream-alerts`,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
+      url: `${baseUrl}/multistream-chat-bot`,
+      changeFrequency: 'monthly',
+      priority: 0.8,
+    },
+    {
       url: `${baseUrl}/browser-extension`,
       changeFrequency: 'monthly',
       priority: 0.8,
@@ -83,6 +94,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'monthly',
       priority: 0.7,
     },
+    ...VS_TOOLS.map(({ slug }) => ({
+      url: `${baseUrl}/compare/${slug}`,
+      changeFrequency: 'monthly' as const,
+      priority: 0.6,
+    })),
     {
       url: `${baseUrl}/blog`,
       changeFrequency: 'weekly',

@@ -241,6 +241,8 @@ const toc = [
   { id: 'moderation', labelKey: 'docs.guide.tocModeration' },
   { id: 'engagement', labelKey: 'docs.guide.tocEngagement' },
   { id: 'events-credits', labelKey: 'docs.guide.tocEventsCredits' },
+  { id: 'alerts', labelKey: 'docs.guide.tocAlerts' },
+  { id: 'commands', labelKey: 'docs.guide.tocCommands' },
   { id: 'sharing', labelKey: 'docs.guide.tocSharing' },
   { id: 'themes', labelKey: 'docs.guide.tocThemes' },
   { id: 'customize', labelKey: 'docs.guide.tocCustomize' },
@@ -588,6 +590,31 @@ export default function DocsPage() {
                   credits: <strong>{t('docs.guide.creditsEmphasis')}</strong>,
                   creditRoll: <strong>{t('docs.guide.creditRollEmphasis')}</strong>,
                   copyUrl: <strong>{t('docs.guide.creditsCopyUrlEmphasis')}</strong>,
+                })}
+              </p>
+            </section>
+
+            {/* Alerts and chat commands: short on purpose, the guides carry the detail */}
+            <section id="alerts">
+              <h2>{t('docs.guide.alertsHeading')}</h2>
+              <p>
+                {interpolateElements(t('docs.guide.alertsBody'), {
+                  kind: <strong>{t('docs.guide.alertsKindEmphasis')}</strong>,
+                  guide: <Link href="/stream-alerts">{t('docs.guide.alertsGuideLinkText')}</Link>,
+                })}
+              </p>
+            </section>
+
+            <section id="commands">
+              <h2>{t('docs.guide.commandsHeading')}</h2>
+              <p>
+                {interpolateElements(t('docs.guide.commandsBody'), {
+                  nav: <strong>{t('docs.guide.commandsNavEmphasis')}</strong>,
+                  guide: (
+                    <Link href="/multistream-chat-bot">
+                      {t('docs.guide.commandsGuideLinkText')}
+                    </Link>
+                  ),
                 })}
               </p>
             </section>
