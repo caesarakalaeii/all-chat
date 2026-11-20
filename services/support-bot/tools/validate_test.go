@@ -114,3 +114,46 @@ func TestKubectlBuildArgsReadOnly(t *testing.T) {
 		t.Fatal("get secrets must be blocked")
 	}
 }
+
+// TYPE/NAME positionals would let a second resource ride along past isBlockedResource
+// (kubectl get pod/x secret/y), so neither field may carry a slash.
+func TestKubectlBuildArgsRejectsSlashForms(t *testing.T) {
+	var kt KubectlTool
+	for _, p := range []kubectlParams{
+		{Action: "get", Resource: "pod/x", Name: "secret/allchat-secrets"},
+		{Action: "describe", Resource: "pods", Name: "secret/allchat-secrets"},
+		{Action: "get", Resource: "pod/x"},
+		{Action: "logs", Name: "secret/allchat-secrets"},
+	} {
+		if _, err := kt.buildArgs(p, "allchat"); err == nil {
+			t.Errorf("%+v must be rejected", p)
+		}
+	}
+}
+
+func TestPinLokiNamespace(t *testing.T) {
+	ok := []string{
+		`{namespace="allchat"}`,
+		`{namespace="allchat",app="api-gateway"} |= "error"`,
+		` { app="api-gateway" , namespace = "allchat" } | json`,
+	}
+	for _, q := range ok {
+		if err := pinLokiNamespace(q, "allchat"); err != nil {
+			t.Errorf("%q should be allowed: %v", q, err)
+		}
+	}
+	bad := []string{
+		`{namespace="umami"}`,
+		`{app="api-gateway"}`,
+		`{namespace=~".+"}`,
+		"{namespace=\"umami\",app=`,namespace=\"allchat\"`}",
+		`{namespace="umami",app="a\",namespace=\"allchat\""}`,
+		`{app="}",namespace="allchat"}`,
+		`sum(rate({namespace="allchat"}[5m]))`,
+	}
+	for _, q := range bad {
+		if err := pinLokiNamespace(q, "allchat"); err == nil {
+			t.Errorf("%q must be rejected", q)
+		}
+	}
+}

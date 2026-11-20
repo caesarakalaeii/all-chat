@@ -48,7 +48,7 @@ type Config struct {
 	// Discord
 	DiscordToken      string
 	DiscordAppID      string
-	DiscordGuildID    string // optional: guild-scoped slash-command registration (instant)
+	DiscordGuildID    string // optional: the only guild the bot answers in; also scopes slash-command registration (instant)
 	ModerationGuildID string // optional: enables cross-channel-spam auto-ban in this guild
 
 	// Local LLM (OpenAI-compatible /v1/chat/completions)

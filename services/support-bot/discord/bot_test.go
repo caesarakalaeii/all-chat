@@ -153,3 +153,18 @@ func TestBusyQueueExpiresStaleRequests(t *testing.T) {
 		t.Fatalf("expired request should be dropped, queue len %d", got)
 	}
 }
+
+func TestInHomeGuild(t *testing.T) {
+	b := &Bot{cfg: &config.Config{DiscordGuildID: "111"}}
+	if !b.inHomeGuild("111") {
+		t.Error("the configured guild must be served")
+	}
+	for _, g := range []string{"222", ""} {
+		if b.inHomeGuild(g) {
+			t.Errorf("guild %q must be ignored", g)
+		}
+	}
+	if !(&Bot{cfg: &config.Config{}}).inHomeGuild("222") {
+		t.Error("no configured guild means no restriction (local dev)")
+	}
+}

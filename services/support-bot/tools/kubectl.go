@@ -125,6 +125,11 @@ func (t KubectlTool) buildArgs(p kubectlParams, ns string) ([]string, error) {
 	if err := validateSince(p.Since); err != nil {
 		return nil, err
 	}
+	// A TYPE/NAME positional would carry a second resource past isBlockedResource
+	// (kubectl get pod/x secret/y), so neither field takes a slash.
+	if strings.Contains(p.Resource, "/") || strings.Contains(p.Name, "/") {
+		return nil, fmt.Errorf("resource and name must not contain '/': pass the type as resource and the bare name as name")
+	}
 	if p.Resource != "" {
 		if err := validateKubeName("resource", p.Resource); err != nil {
 			return nil, err
