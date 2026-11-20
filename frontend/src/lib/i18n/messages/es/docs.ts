@@ -298,7 +298,7 @@ export const docs: LocaleNamespace<'docs'> = {
     creditsCopyUrlEmphasis: 'Copiar URL de OBS de los créditos',
     alertsHeading: 'Overlays de alertas',
     alertsBody:
-      'Crea un overlay de tipo {kind} para tener una caja de alertas como fuente de navegador de OBS propia. Las suscripciones, bits, raids y follows de Twitch, los Super Chats y membresías de YouTube y los regalos de TikTok aparecen con tu texto, tu GIF y tu sonido, o con tu propio HTML, CSS y JavaScript. Los overlays de alertas son gratis; subir tus propios archivos es premium. La {guide} explica la configuración paso a paso.',
+      'Crea un overlay de tipo {kind} para tener una caja de alertas como fuente de navegador de OBS propia. Las suscripciones, bits, raids y follows de Twitch, los Super Chats y membresías de YouTube, las suscripciones y hosts de Kick y los regalos de TikTok aparecen con tu texto, tu GIF y tu sonido, o con tu propio HTML, CSS y JavaScript. Los overlays de alertas son gratis; subir tus propios archivos es premium. La {guide} explica la configuración paso a paso.',
     alertsKindEmphasis: 'Alertas',
     alertsGuideLinkText: 'guía de alertas de stream',
     commandsHeading: 'Comandos de chat y temporizadores',

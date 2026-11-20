@@ -69,6 +69,9 @@ export type EventType =
   | 'kick_subscription'
   | 'kick_gift_subscription'
   | 'kick_donation'
+  | 'kick_host'
+  | 'kick_kicks'
+  | 'kick_follow'
   // TikTok
   | 'gift'
   | 'follow'

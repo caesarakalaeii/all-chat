@@ -72,6 +72,7 @@ export default function StreamAlertsPage() {
         <ul>
           <li>{t('guides.alerts.eventsTwitch')}</li>
           <li>{t('guides.alerts.eventsYoutube')}</li>
+          <li>{t('guides.alerts.eventsKick')}</li>
           <li>{t('guides.alerts.eventsTiktok')}</li>
         </ul>
         <p>{t('guides.alerts.eventsBody')}</p>

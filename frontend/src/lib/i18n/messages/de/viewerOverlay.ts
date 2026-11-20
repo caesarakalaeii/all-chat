@@ -312,6 +312,7 @@ export const viewerOverlay: LocaleNamespace<'viewerOverlay'> = {
     eventYoutubeSubscribers: 'YouTube-Abonnenten',
     eventKickSubs: 'Kick-Subs',
     eventKickGifts: 'Kick-Geschenke',
+    eventKickHosts: 'Kick-Hosts',
     eventTiktokLikes: 'TikTok-Likes',
     eventTiktokGifts: 'TikTok-Geschenke',
     eventTiktokFollows: 'TikTok-Follower',

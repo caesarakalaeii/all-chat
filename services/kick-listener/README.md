@@ -51,10 +51,13 @@ Both clients implement `websocket.Realtime`, decode events with the same code
 
 #### Centrifugo client (`websocket/centrifugo.go`)
 
-- Channels are `chatrooms.{chatroom_id}.v2`, as on Pusher, and are public.
+- Each chatroom is read from two public channels: `chatrooms.{chatroom_id}.v2` (chat,
+  deletions, subscriptions, hosts) and `chatroom_{chatroom_id}` (gifted subscriptions,
+  which Kick sends on that alias only). The second alias repeats chat under the same event
+  name with another payload, so chat is taken from the first only.
 - **One connection may hold at most 128 subscriptions** (Kick answers error
-  `106 limit exceeded` after that), so chatrooms are spread over a pool of connections,
-  at most 100 each. A connection left empty by unsubscribes is closed, except the first.
+  `106 limit exceeded` after that), so channels are spread over a pool of connections,
+  at most 100 each (50 chatrooms). A connection left empty by unsubscribes is closed, except the first.
 - Each connection gets its own guest token from
   `POST https://web.kick.com/api/v1/realtime/auth/connection` `{"client_id"}` (a 45-minute
   JWT, no login), refreshes it at three quarters of its ttl, answers the server's `{}`
@@ -65,7 +68,20 @@ Both clients implement `websocket.Realtime`, decode events with the same code
   manager holds its subscription lock through a whole channel sync.
 - Readiness is up only when every pooled connection is connected.
 
+#### Platform events (`websocket/events.go`)
+
+`parseKickEvent` turns three of Kick's events into `kick_subscription`,
+`kick_gift_subscription` and `kick_host` raw messages (`event_type` plus `event_data`
+with `months`, `gift_count` or `viewers`), which the message-processor and the
+alert-processor normalize with `KickNormalizer.NormalizeEvent`. The payloads in
+`events_test.go` were captured live. Not read: follows (no public channel carries the
+follower's name) and KICKs gifts (on `channel_{channel_id}`, which needs the channel id
+the listener does not store).
+
 #### Pusher client (`websocket/client.go`)
+
+The fallback transport. It reads `chatrooms.{id}.v2` only, so it delivers subscriptions
+and hosts but no gifted subs.
 
 Implements the Pusher WebSocket Protocol 7.
 

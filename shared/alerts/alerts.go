@@ -148,6 +148,12 @@ var eventDefs = []eventDef{
 	{"tiktok_subscription", "tiktok", "{username} just subscribed!", Value{1, "months", "Subscribed"}},
 	{"power_up", "twitch", "{username} used {amount}!", Value{50, "bits", "On-Screen Celebration"}},
 	{"gift_received", "youtube", "{username} received a gift membership!", Value{1, "gift", "Received gift membership"}},
+	// Kick, from the events its chat feed carries. Follows and KICKs gifts are
+	// not among them: the feed has no follower name, and KICKs sit on a
+	// per-channel feed the listener does not read.
+	{"kick_subscription", "kick", "{username} just subscribed!", Value{1, "months", "New subscriber"}},
+	{"kick_gift_subscription", "kick", "{username} gifted {count} subs!", Value{5, "gifts", "5 gift subs"}},
+	{"kick_host", "kick", "{username} is hosting with {count} viewers!", Value{42, "viewers", "42 viewers"}},
 	// Fired from any platform's chat; the platform here is only the test alert's.
 	{"chat_command", "twitch", "{username} used {amount}", Value{1, "uses", "!hype"}},
 }

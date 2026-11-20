@@ -736,6 +736,9 @@ export const overlayEditor = {
     tiktok_subscription: 'TikTok subscription',
     power_up: 'Power-up',
     gift_received: 'Received gift membership',
+    kick_subscription: 'Kick subscription',
+    kick_gift_subscription: 'Kick gifted subs',
+    kick_host: 'Kick host',
     chat_command: 'Chat command',
   },
   // Injecting a fake chat message so a streamer can see their overlay react.
@@ -1034,9 +1037,12 @@ export const overlayEditor = {
     kickSubsLabel: 'Subscriptions',
     kickSubsDescription: 'Kick channel subscriptions',
     // The render site spelled the ampersand &amp;; a catalog string is not HTML.
-    kickGiftsLabel: 'Gifts & Donations',
-    kickGiftsDescription: 'Gift subscriptions and donations',
-    kickCaveat: '⚠️ Kick events require reverse-engineering and may not be available yet.',
+    kickGiftsLabel: 'Gifted subs',
+    kickGiftsDescription: 'Gifted subscriptions',
+    kickHostsLabel: 'Hosts',
+    kickHostsDescription: 'Another Kick channel hosts yours',
+    kickCaveat:
+      'Kick events come from the feed kick.com itself uses. Kick does not document it and can change it without notice. Follows and KICKs gifts are not part of it.',
     tiktokLikesLabel: 'Likes',
     tiktokLikesDescription: 'Likes sent during stream (aggregated)',
     tiktokGiftsLabel: 'Gifts',

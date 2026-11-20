@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/caesar/all-chat/services/message-processor/classifier"
 	"github.com/caesar/all-chat/services/message-processor/models"
 )
 
@@ -451,4 +452,71 @@ type kickMessagePart struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 	URL   string `json:"url"`
+}
+
+// NormalizeEvent turns a Kick platform event into a unified event message.
+// The kick-listener flattens Kick's payloads into EventData with these keys:
+// months (kick_subscription), gift_count (kick_gift_subscription), viewers
+// (kick_host), kicks and gift_name (kick_kicks). raw.Username is the viewer
+// who acted, raw.Text the message they attached, if any.
+func (n *KickNormalizer) NormalizeEvent(raw *models.RawChatMessage, overlayID string) (*models.UnifiedChatMessage, error) {
+	if raw.Platform != "kick" {
+		return nil, fmt.Errorf("unsupported platform: %s", raw.Platform)
+	}
+
+	count := func(key string) int {
+		f, _ := raw.EventData[key].(float64)
+		return int(f)
+	}
+
+	var value *models.EventValue
+	switch raw.EventType {
+	case "kick_subscription":
+		// A first month has no tenure worth printing, as with Twitch subs.
+		months := count("months")
+		display := "New subscriber"
+		if months > 1 {
+			display = fmt.Sprintf("%d months", months)
+		}
+		value = &models.EventValue{Amount: float64(months), Currency: "months", DisplayText: display}
+	case "kick_gift_subscription":
+		gifts := count("gift_count")
+		value = &models.EventValue{Amount: float64(gifts), Currency: "gifts", DisplayText: fmt.Sprintf("%d gift sub%s", gifts, pluralize(gifts))}
+	case "kick_host":
+		viewers := count("viewers")
+		value = &models.EventValue{Amount: float64(viewers), Currency: "viewers", DisplayText: fmt.Sprintf("%d viewer%s", viewers, pluralize(viewers))}
+	case "kick_kicks":
+		kicks := count("kicks")
+		name, _ := raw.EventData["gift_name"].(string)
+		value = &models.EventValue{Amount: float64(kicks), Currency: "kicks", DisplayText: fmt.Sprintf("%s (%d KICKs)", firstNonEmpty(name, "Gift"), kicks)}
+	case "kick_follow":
+		value = &models.EventValue{Amount: 1, Currency: "follow", DisplayText: "New follower"}
+	default:
+		return nil, fmt.Errorf("unknown kick event type %q", raw.EventType)
+	}
+
+	tier, duration := classifier.ClassifyEvent("kick", raw.EventType, value)
+
+	return &models.UnifiedChatMessage{
+		ID:          raw.MessageID,
+		OverlayID:   overlayID,
+		Platform:    "kick",
+		ChannelID:   raw.ChannelID,
+		ChannelName: firstNonEmpty(raw.ChannelName, raw.ChannelID),
+		User: models.UserInfo{
+			ID:          raw.UserID,
+			Username:    raw.Username,
+			DisplayName: raw.Username,
+			Badges:      []models.Badge{},
+		},
+		Message:   models.MessageInfo{Text: raw.Text, Emotes: []models.Emote{}},
+		Timestamp: raw.Timestamp,
+		Event: &models.EventInfo{
+			Type:     raw.EventType,
+			Tier:     tier,
+			Value:    value,
+			Duration: duration,
+			Metadata: raw.EventData,
+		},
+	}, nil
 }

@@ -56,6 +56,8 @@ interface EventSettings {
   // Kick
   enable_kick_subs: boolean
   enable_kick_gifts: boolean
+  enable_kick_hosts: boolean
+  enable_kick_follows: boolean
   // TikTok
   enable_tiktok_likes: boolean
   enable_tiktok_gifts: boolean
@@ -121,6 +123,7 @@ const EVENT_TOGGLES = {
   kick: [
     { key: 'enable_kick_subs', messageStem: 'kickSubs' },
     { key: 'enable_kick_gifts', messageStem: 'kickGifts' },
+    { key: 'enable_kick_hosts', messageStem: 'kickHosts' },
   ],
   tiktok: [
     { key: 'enable_tiktok_likes', messageStem: 'tiktokLikes' },

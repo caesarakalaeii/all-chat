@@ -159,3 +159,16 @@ func TestIsEventEnabled_AlwaysEnabledSentinelNeverQueries(t *testing.T) {
 		})
 	}
 }
+
+func TestMapEventTypeToColumn_KickEvents(t *testing.T) {
+	for eventType, want := range map[string]string{
+		"kick_subscription":      "enable_kick_subs",
+		"kick_gift_subscription": "enable_kick_gifts",
+		"kick_kicks":             "enable_kick_gifts",
+		"kick_host":              "enable_kick_hosts",
+		"kick_follow":            "enable_kick_follows",
+		"kick_teleport":          "",
+	} {
+		assert.Equal(t, want, mapEventTypeToColumn("kick", eventType), eventType)
+	}
+}

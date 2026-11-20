@@ -191,6 +191,10 @@ func main() {
 	providers := parseList(listener.Env("KICK_REALTIME_PROVIDERS", "centrifugo,pusher"))
 	wsClient := newRealtimeClient(ctx, websocket.KickRealtimeConnectionURL, providers, wsConfig, messageHandler, log)
 
+	wsClient.SetEventHandler(func(event *websocket.KickEvent) {
+		handlePlatformEvent(event, streamPublisher, channelMgr, log)
+	})
+
 	// Set deletion handler
 	wsClient.SetDeletionHandler(func(channel string, event *websocket.KickMessageDeletedEvent) {
 		handleDeletionEvent(channel, event, streamPublisher, channelMgr, log)
@@ -391,6 +395,51 @@ func handleChatMessage(
 		}
 		cancel()
 	}
+}
+
+// handlePlatformEvent publishes a Kick subscription, gifted-sub or host event
+// to every overlay that reads the chatroom.
+func handlePlatformEvent(event *websocket.KickEvent, pub *publisher.StreamPublisher, channelMgr *channels.Manager, log *zap.Logger) {
+	if channelMgr == nil {
+		return
+	}
+	targets, found := channelMgr.GetOverlayTargetsForChatroom(event.ChatroomID)
+	if !found {
+		metrics.IncDropped("unknown_chatroom")
+		return
+	}
+	for _, target := range targets {
+		publishKickEvent(event, target.OverlayID, target.ChannelSlug, time.Now().UTC(), pub, log)
+	}
+}
+
+func publishKickEvent(event *websocket.KickEvent, overlayID, channelSlug string, at time.Time, pub rawPublisher, log *zap.Logger) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err := pub.Publish(ctx, &publisher.RawMessage{
+		MessageID:   event.ID,
+		Platform:    "kick",
+		OverlayID:   overlayID,
+		ChannelID:   channelSlug,
+		ChannelName: channelSlug,
+		Username:    event.Username,
+		Text:        event.Text,
+		Tags:        map[string]string{"chatroom_id": strconv.Itoa(event.ChatroomID)},
+		Timestamp:   at,
+		EventType:   event.Type,
+		EventData:   event.Data,
+	})
+	if err != nil {
+		log.Error("Failed to publish Kick event", zap.Error(err), zap.String("event_type", event.Type), zap.String("overlay_id", overlayID))
+		metrics.IncDropped("publish_error")
+		return
+	}
+	metrics.IncMessage("published", "success")
+}
+
+// rawPublisher is the part of the stream publisher an event needs.
+type rawPublisher interface {
+	Publish(ctx context.Context, msg *publisher.RawMessage) error
 }
 
 func buildKickTags(message *websocket.KickChatMessage, chatroomID int) map[string]string {

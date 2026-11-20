@@ -63,6 +63,8 @@ function eventSettings(over: Partial<EventSettings> = {}): EventSettings {
     enable_youtube_subscribers: true,
     enable_kick_subs: false,
     enable_kick_gifts: false,
+    enable_kick_hosts: false,
+    enable_kick_follows: false,
     enable_tiktok_likes: false,
     enable_tiktok_gifts: false,
     enable_tiktok_follows: false,

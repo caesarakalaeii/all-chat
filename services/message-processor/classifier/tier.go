@@ -217,6 +217,26 @@ func classifyKickEvent(eventType string, value *models.EventValue) (tier string,
 		// Gift subs are high value
 		return "high", 30
 
+	case "kick_subscription", "kick_gift_subscription":
+		return "high", 30
+
+	case "kick_host":
+		// Hosts are Kick's raids: tier on viewer count, as for Twitch raids.
+		if value != nil && value.Amount >= 100 {
+			return "high", 30
+		}
+		return "medium", 20
+
+	case "kick_kicks":
+		// About a cent per KICK, so 1000 is a ten-dollar gift.
+		if value != nil && value.Amount >= 1000 {
+			return "high", 30
+		}
+		return "medium", 20
+
+	case "kick_follow":
+		return "low", 10
+
 	case "donation":
 		// Donations: tier based on amount
 		if value != nil && value.Amount >= 50 {

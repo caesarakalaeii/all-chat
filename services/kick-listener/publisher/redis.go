@@ -52,6 +52,10 @@ type RawMessage struct {
 	Tags        map[string]string `json:"tags,omitempty"`
 	RawMessage  json.RawMessage   `json:"raw_message,omitempty"`
 	Timestamp   time.Time         `json:"timestamp"`
+
+	// Platform events (subscriptions, gifted subs, hosts); empty for chat.
+	EventType string         `json:"event_type,omitempty"`
+	EventData map[string]any `json:"event_data,omitempty"`
 }
 
 // StreamPublisher publishes messages to Redis Streams, wrapped with a

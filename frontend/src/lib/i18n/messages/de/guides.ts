@@ -363,11 +363,11 @@ export const guides: LocaleNamespace<'guides'> = {
   // /stream-alerts. The event lists mirror shared/alerts eventDefs: name a
   // platform's event here only once that file has it.
   alerts: {
-    metaTitle: 'Stream-Alerts für OBS: Twitch, YouTube und TikTok in einer Alert-Box',
+    metaTitle: 'Stream-Alerts für OBS: Twitch, YouTube, Kick und TikTok in einer Alert-Box',
     metaDescription:
-      'Kostenlose Alert-Box für OBS, die Twitch, YouTube und TikTok zugleich abdeckt: Abos, Bits, Raids, Follows, Super Chats, Mitgliedschaften und TikTok-Geschenke, mit eigenem GIF, Sound und Text oder eigenem HTML, CSS und JavaScript.',
+      'Kostenlose Alert-Box für OBS, die Twitch, YouTube, Kick und TikTok zugleich abdeckt: Abos, Bits, Raids, Follows, Super Chats, Mitgliedschaften und TikTok-Geschenke, mit eigenem GIF, Sound und Text oder eigenem HTML, CSS und JavaScript.',
     breadcrumb: 'Stream-Alerts',
-    heading: 'Stream-Alerts für Twitch, YouTube und TikTok in einer Alert-Box',
+    heading: 'Stream-Alerts für Twitch, YouTube, Kick und TikTok in einer Alert-Box',
     intro:
       'Ein All-Chat-Alert-Overlay ist eine Alert-Box, die du als Browser-Quelle in OBS einfügst. Es zeigt Events von jeder verbundenen Plattform, sodass ein Multistream eine Alert-Quelle braucht statt einer pro Plattform. Es ist kostenlos und läuft im Browser, ohne Installation.',
     eventsHeading: 'Was es zeigt',
@@ -375,6 +375,7 @@ export const guides: LocaleNamespace<'guides'> = {
       'Twitch: Abos, Resubs, Geschenk-Abos, Bits, Raids, Follows, Kanalpunkte-Einlösungen und Charity-Spenden.',
     eventsYoutube:
       'YouTube: Super Chats, Super Sticker, neue Mitglieder, Mitglieder-Meilensteine, verschenkte Mitgliedschaften und neue Abonnenten.',
+    eventsKick: 'Kick: Abos, verschenkte Abos und Hosts.',
     eventsTiktok: 'TikTok LIVE: Geschenke, Shares und Abos.',
     eventsBody:
       'Alerts erscheinen nacheinander mit ihrem Text, einem Bild oder GIF und einem Sound, danach ist die Quelle wieder leer.',
@@ -399,7 +400,7 @@ export const guides: LocaleNamespace<'guides'> = {
       'Ein {commands} kann seinen eigenen Alert im selben Overlay zeigen: ein Bild, einen Sound und einen Text, ausgelöst aus jedem Chat.',
     commandsLinkText: 'Chat-Befehl',
     limitKick:
-      'Kick-Events wie Abos und Follows werden nicht als Alerts gezeigt. Ein Chat-Befehl im Kick-Chat kann trotzdem seinen eigenen Alert auslösen.',
+      'Kick-Follows und KICKs-Geschenke werden nicht als Alerts gezeigt. Kick-Events kommen aus einem Feed, den Kick nicht dokumentiert und ohne Ankündigung ändern kann.',
     limitUploads:
       'Eigene Bilder, GIFs und Sounds hochzuladen ist eine {premium}-Funktion. GIFs suchen und einen Link einfügen sind kostenlos.',
     limitTiktok:

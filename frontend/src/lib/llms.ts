@@ -78,7 +78,7 @@ const LIMITS = `- YouTube: public live streams are found automatically. An unlis
 - TikTok is the platform most likely to see short interruptions when TikTok changes its web player.
 - TikTok has no moderation or send API, so neither works for TikTok. Sending messages from the chat monitor works for Twitch, YouTube and Kick.
 - Chat messages are deleted after about an hour. All-Chat is not a chat archive.
-- Alerts cover Twitch, YouTube and TikTok events. Kick events such as subs and follows are not shown as alerts.
+- Alerts cover Twitch, YouTube, Kick and TikTok events. On Kick that is subscriptions, gifted subs and hosts; Kick follows and KICKs gifts are not shown as alerts.
 - Command replies and timers post to Twitch, Kick and YouTube chat. TikTok and Discord chats can trigger a command, but cannot be replied to.
 - All-Chat does not relay video. Sending one stream to several platforms is done by OBS or a restreaming service; All-Chat adds the merged chat, alerts and chat bot on top of any of them.`
 
@@ -89,7 +89,7 @@ const links = (): string => `## Guides
 - [OBS chat dock](${SITE_URL}/obs-chat-dock): put the chat monitor into an OBS custom browser dock
 - [TikTok LIVE chat overlay](${SITE_URL}/tiktok-live-chat-overlay): how TikTok LIVE chat is read, and its limits
 - [Multistream chat](${SITE_URL}/multistream-chat): one chat for Twitch, YouTube, Kick, TikTok and Discord at once
-- [Stream alerts](${SITE_URL}/stream-alerts): one alert box for Twitch, YouTube and TikTok events
+- [Stream alerts](${SITE_URL}/stream-alerts): one alert box for Twitch, YouTube, Kick and TikTok events
 - [Multistream chat bot](${SITE_URL}/multistream-chat-bot): commands, keyword triggers and timers for Twitch, YouTube and Kick chat
 - [Compare](${SITE_URL}/compare): All-Chat next to other multistream chat tools
 ${VS_TOOLS.map(({ id, slug }) => `- [${getTranslations()(`guides.vs.${id}Heading`)}](${SITE_URL}/compare/${slug}): ${getTranslations()(`guides.vs.${id}MetaDescription`)}`).join('\n')}
@@ -173,7 +173,7 @@ For an OBS instance that runs around the clock, add ?passive=true to the Browser
 
 ## Alerts
 
-Create an overlay of kind Alerts and add its URL to OBS as its own Browser Source. It uses the same chat sources as a chat overlay. The Alerts section of the overlay editor opens on a default style for all events: one image or GIF (searched in the editor, pasted as a link, or uploaded with premium), a sound, a duration and a volume. Each event type can then get its own text with {username}, {amount}, {count} and {message} placeholders, its own media, or custom HTML, CSS and JavaScript, which runs in an isolated sandbox. Send test alert plays the alert in the editor preview and in OBS.
+Create an overlay of kind Alerts and add its URL to OBS as its own Browser Source. It uses the same chat sources as a chat overlay and shows Twitch subs, bits, raids and follows, YouTube Super Chats and memberships, Kick subscriptions, gifted subs and hosts, and TikTok gifts. The Alerts section of the overlay editor opens on a default style for all events: one image or GIF (searched in the editor, pasted as a link, or uploaded with premium), a sound, a duration and a volume. Each event type can then get its own text with {username}, {amount}, {count} and {message} placeholders, its own media, or custom HTML, CSS and JavaScript, which runs in an isolated sandbox. Send test alert plays the alert in the editor preview and in OBS.
 
 ## Chat commands and timers
 

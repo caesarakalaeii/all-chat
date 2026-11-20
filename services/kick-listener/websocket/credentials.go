@@ -62,6 +62,7 @@ type Realtime interface {
 	IsStale() bool
 	ReconnectChan() <-chan struct{}
 	SetDeletionHandler(handler DeletionHandler)
+	SetEventHandler(handler EventHandler)
 }
 
 // RealtimeConnection is the provider Kick chose and what it needs:

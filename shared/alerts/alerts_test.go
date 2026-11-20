@@ -50,6 +50,7 @@ func TestEventTypesMatchTheNamesThePipelineEmits(t *testing.T) {
 		"follow", "channel_points", "charity_donation", "super_chat", "super_sticker",
 		"new_sponsor", "member_milestone", "membership_gift", "subscriber", "gift", "share",
 		"tiktok_subscription", "power_up", "gift_received", ChatCommandEvent,
+		"kick_subscription", "kick_gift_subscription", "kick_host",
 	} {
 		assert.True(t, IsKnownEventType(et), et)
 	}

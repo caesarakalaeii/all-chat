@@ -142,6 +142,7 @@ type Client struct {
 	logger          *zap.Logger
 	messageHandler  MessageHandler
 	deletionHandler DeletionHandler
+	eventHandler    EventHandler
 	config          Config
 	clusterOrder    []string
 	activeCluster   string
@@ -185,6 +186,14 @@ func NewClient(cfg Config, messageHandler MessageHandler, logger *zap.Logger) *C
 		ctx:                ctx,
 		cancel:             cancel,
 	}
+}
+
+// SetEventHandler sets the platform event handler. Call it before Connect.
+// ponytail: the Pusher fallback reads chatrooms.<id>.v2 only, so it delivers
+// subscriptions and hosts but no gifted subs; subscribe chatroom_<id> here too
+// if Kick ever makes Pusher the main transport again.
+func (c *Client) SetEventHandler(handler EventHandler) {
+	c.eventHandler = handler
 }
 
 // SetDeletionHandler sets the deletion event handler
@@ -733,13 +742,24 @@ func (c *Client) handleMessage(data []byte) {
 		c.handlerMu.RLock()
 		onDelete := c.deletionHandler
 		c.handlerMu.RUnlock()
-		dispatchKickEvent(c.logger, msg.Event, msg.Channel, msg.Data, c.messageHandler, onDelete)
+		dispatchKickEvent(c.logger, msg.Event, msg.Channel, msg.Data, c.messageHandler, onDelete, c.eventHandler)
 	}
 }
 
 // dispatchKickEvent decodes a Kick chat event and hands it to the handlers.
 // Event names and payloads are the same on Pusher and Centrifugo (ADR-0077).
-func dispatchKickEvent(logger *zap.Logger, event, channel string, data json.RawMessage, onMessage MessageHandler, onDelete DeletionHandler) {
+func dispatchKickEvent(logger *zap.Logger, event, channel string, data json.RawMessage, onMessage MessageHandler, onDelete DeletionHandler, onEvent EventHandler) {
+	if platformEvent := parseKickEvent(event, channel, data); platformEvent != nil {
+		if onEvent != nil {
+			onEvent(platformEvent)
+		}
+		return
+	}
+	// The gift alias repeats chat under the same event name with another
+	// payload shape; chat and deletions are read from chatrooms.<id>.v2 only.
+	if strings.HasPrefix(channel, kickGiftChannelPrefix) {
+		return
+	}
 	switch event {
 	case kickChatMessageEvent, kickChatMessageEventAlt:
 		var chatMsg KickChatMessage

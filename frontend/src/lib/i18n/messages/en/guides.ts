@@ -375,11 +375,11 @@ export const guides = {
   // /stream-alerts. The event lists mirror shared/alerts eventDefs: name a
   // platform's event here only once that file has it.
   alerts: {
-    metaTitle: 'Stream Alerts for OBS: Twitch, YouTube and TikTok in One Alert Box',
+    metaTitle: 'Stream Alerts for OBS: Twitch, YouTube, Kick and TikTok in One Alert Box',
     metaDescription:
-      'Free alert box for OBS that covers Twitch, YouTube and TikTok at once: subs, bits, raids, follows, Super Chats, memberships and TikTok gifts, with your own GIF, sound and text or custom HTML, CSS and JavaScript.',
+      'Free alert box for OBS that covers Twitch, YouTube, Kick and TikTok at once: subs, bits, raids, follows, Super Chats, memberships and TikTok gifts, with your own GIF, sound and text or custom HTML, CSS and JavaScript.',
     breadcrumb: 'Stream alerts',
-    heading: 'Stream alerts for Twitch, YouTube and TikTok in one alert box',
+    heading: 'Stream alerts for Twitch, YouTube, Kick and TikTok in one alert box',
     intro:
       'An All-Chat alerts overlay is an alert box you add to OBS as a Browser Source. It shows events from every platform it is connected to, so a multistream needs one alert source instead of one per platform. It is free and runs in the browser, with nothing to install.',
     eventsHeading: 'What it shows',
@@ -387,6 +387,7 @@ export const guides = {
       'Twitch: subs, resubs, gift subs, bits, raids, follows, channel point redemptions and charity donations.',
     eventsYoutube:
       'YouTube: Super Chats, Super Stickers, new members, member milestones, gifted memberships and new subscribers.',
+    eventsKick: 'Kick: subscriptions, gifted subs and hosts.',
     eventsTiktok: 'TikTok LIVE: gifts, shares and subscriptions.',
     eventsBody:
       'Alerts pop up one at a time with their text, an image or GIF and a sound, then the source goes empty again.',
@@ -411,7 +412,7 @@ export const guides = {
       'A {commands} can show its own alert on the same overlay: an image, a sound and a text, triggered from any chat.',
     commandsLinkText: 'chat command',
     limitKick:
-      'Kick events such as subs and follows are not shown as alerts. A chat command typed in Kick chat can still trigger its own alert.',
+      'Kick follows and KICKs gifts are not shown as alerts. Kick events come from a feed Kick does not document and can change without notice.',
     limitUploads:
       'Uploading your own images, GIFs and sounds is a {premium} feature. Searching GIFs and pasting a link are free.',
     limitTiktok:
