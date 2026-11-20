@@ -1266,13 +1266,13 @@ describe('event display settings page copy', () => {
     )
   })
 
-  it('keeps the Kick event toggles and names the limit of the unofficial feed', () => {
+  it('keeps the Kick event toggles and says which events ride the undocumented feed', () => {
     expect(t('overlayEditor.eventSettings.kickSubsLabel')).toBe('Subscriptions')
-    expect(t('overlayEditor.eventSettings.kickGiftsLabel')).toBe('Gifted subs')
+    expect(t('overlayEditor.eventSettings.kickGiftsLabel')).toBe('Gifted subs & KICKs')
     expect(t('overlayEditor.eventSettings.kickHostsLabel')).toBe('Hosts')
-    // Neither is on Kick's chat feed; the page must not promise them.
+    expect(t('overlayEditor.eventSettings.kickFollowsLabel')).toBe('Follows')
     expect(t('overlayEditor.eventSettings.kickCaveat')).toContain(
-      'Follows and KICKs gifts are not part of it'
+      'Kick does not document and can change without notice'
     )
   })
 

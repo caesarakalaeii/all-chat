@@ -74,9 +74,26 @@ Both clients implement `websocket.Realtime`, decode events with the same code
 `kick_gift_subscription` and `kick_host` raw messages (`event_type` plus `event_data`
 with `months`, `gift_count` or `viewers`), which the message-processor and the
 alert-processor normalize with `KickNormalizer.NormalizeEvent`. The payloads in
-`events_test.go` were captured live. Not read: follows (no public channel carries the
-follower's name) and KICKs gifts (on `channel_{channel_id}`, which needs the channel id
-the listener does not store).
+`events_test.go` were captured live. The feed has no follower names, and KICKs gifts sit
+on `channel_{channel_id}`; both come from the official webhooks below instead.
+
+#### Official webhooks (`kickevents/`, ADR-0094)
+
+With `KICK_CLIENT_ID` and `KICK_CLIENT_SECRET` set, the listener serves
+`POST /webhooks/kick` and publishes `kick_follow` (`channel.followed`) and `kick_kicks`
+(`kicks.gifted`, `event_data` `kicks` and `gift_name`).
+
+- A reconciler runs every ten minutes on one pod (Redis lock `kick:events:reconcile`):
+  it lists the app's subscriptions with an app access token, requests the two events for
+  every Kick source of an active overlay, and deletes those of channels that are gone.
+- A delivery must carry Kick's RSA signature over `<message id>.<timestamp>.<body>`
+  (key from `GET /public/v1/public-key`) and a timestamp within ten minutes; message ids
+  are kept in Redis for an hour (`kick:events:seen:<id>`), so a retry publishes once.
+- Verified deliveries always get `200`. Kick drops a subscription after a day of failed
+  deliveries; the reconciler restores it.
+- The webhook URL is set in the Kick developer dashboard, not per subscription.
+- `Kick event subscription refused` in the log carries Kick's reason for a channel that
+  could not be subscribed.
 
 #### Pusher client (`websocket/client.go`)
 
@@ -212,6 +229,8 @@ KICK_REALTIME_PROVIDERS=centrifugo,pusher
 # Kick Pusher (fallbacks; the app key is normally resolved from Kick at connect time)
 KICK_PUSHER_APP_KEY=34bf7a0ff419a2a775b9
 KICK_PUSHER_CLUSTER=us2
+KICK_CLIENT_ID=                  # with KICK_CLIENT_SECRET: enables /webhooks/kick (ADR-0094)
+KICK_CLIENT_SECRET=
 KICK_PUSHER_CLUSTER_FALLBACKS=   # comma-separated extra clusters to try
 
 # Application

@@ -111,5 +111,6 @@ ADRs capture single architectural decisions: their context, the decision taken, 
 | [0091](./0091-discord-relay-webhook-encrypted-and-server-owned.md) | Discord relay webhook URLs are encrypted at rest and server-owned | Accepted | Relay webhook URLs are encrypted at rest and never returned by the API. |
 | [0092](./0092-distroless-runtime-images.md) | Distroless runtime images | Accepted | Service images run distroless instead of Alpine. |
 | [0093](./0093-support-bot-on-claude-hands-fixes-to-caterpillar.md) | Support bot runs on Claude and hands confirmed fixes to Caterpillar | Accepted | The support bot answered via Claude and hands confirmed fixes onward. |
+| [0094](./0094-kick-events-from-realtime-feed-and-official-webhooks.md) | Kick events come from the realtime feed and from Kick's official webhooks | Accepted | Subscriptions, gifted subs and hosts are read from the chat feed; follows and KICKs gifts from signed webhooks kept subscribed per Kick source with an app token. |
 
 ADR numbers are shared with the deployment repository (0021, 0022 and 0085 live there), so gaps in this list are expected.

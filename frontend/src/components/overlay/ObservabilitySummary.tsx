@@ -48,6 +48,7 @@ const EVENT_TOGGLES = [
   { key: 'enable_kick_subs', messageStem: 'KickSubs' },
   { key: 'enable_kick_gifts', messageStem: 'KickGifts' },
   { key: 'enable_kick_hosts', messageStem: 'KickHosts' },
+  { key: 'enable_kick_follows', messageStem: 'KickFollows' },
   { key: 'enable_tiktok_likes', messageStem: 'TiktokLikes' },
   { key: 'enable_tiktok_gifts', messageStem: 'TiktokGifts' },
   { key: 'enable_tiktok_follows', messageStem: 'TiktokFollows' },

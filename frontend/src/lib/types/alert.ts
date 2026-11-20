@@ -43,6 +43,8 @@ export const ALERT_EVENT_TYPES = [
   'kick_subscription',
   'kick_gift_subscription',
   'kick_host',
+  'kick_kicks',
+  'kick_follow',
   // A chat command's image, sound and text (ADR-0080).
   'chat_command',
 ] as const

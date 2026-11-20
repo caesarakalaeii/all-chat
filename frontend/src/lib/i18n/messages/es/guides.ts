@@ -380,7 +380,7 @@ export const guides: LocaleNamespace<'guides'> = {
       'Twitch: suscripciones, resuscripciones, suscripciones regaladas, bits, raids, follows, canjes de puntos de canal y donaciones benéficas.',
     eventsYoutube:
       'YouTube: Super Chats, Super Stickers, nuevos miembros, hitos de miembro, membresías regaladas y nuevos suscriptores.',
-    eventsKick: 'Kick: suscripciones, suscripciones regaladas y hosts.',
+    eventsKick: 'Kick: suscripciones, suscripciones regaladas, hosts, regalos de KICKs y follows.',
     eventsTiktok: 'TikTok LIVE: regalos, compartidos y suscripciones.',
     eventsBody:
       'Las alertas aparecen de una en una con su texto, una imagen o GIF y un sonido, y después la fuente vuelve a quedar vacía.',
@@ -405,7 +405,7 @@ export const guides: LocaleNamespace<'guides'> = {
       'Un {commands} puede mostrar su propia alerta en el mismo overlay: una imagen, un sonido y un texto, activados desde cualquier chat.',
     commandsLinkText: 'comando de chat',
     limitKick:
-      'Los follows de Kick y los regalos de KICKs no se muestran como alertas. Los eventos de Kick vienen de un feed que Kick no documenta y puede cambiar sin aviso.',
+      'Las suscripciones, las suscripciones regaladas y los hosts de Kick vienen de un feed que Kick no documenta y puede cambiar sin aviso. Los regalos de KICKs anónimos no se muestran.',
     limitUploads:
       'Subir tus propias imágenes, GIF y sonidos es una función {premium}. Buscar GIF y pegar un enlace es gratis.',
     limitTiktok:

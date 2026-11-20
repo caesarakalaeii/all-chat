@@ -30,6 +30,7 @@ import (
 
 	"github.com/caesar/all-chat/services/kick-listener/channels"
 	"github.com/caesar/all-chat/services/kick-listener/handlers"
+	"github.com/caesar/all-chat/services/kick-listener/kickevents"
 	"github.com/caesar/all-chat/services/kick-listener/metrics"
 	"github.com/caesar/all-chat/services/kick-listener/publisher"
 	"github.com/caesar/all-chat/services/kick-listener/status"
@@ -44,6 +45,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -229,6 +231,21 @@ func main() {
 	router.GET("/status", healthHandler.Status)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
+	// Follows and KICKs gifts come from Kick's official webhooks (ADR-0094).
+	// Without the app's credentials the route is absent and Kick gets a 404.
+	if clientID, clientSecret := os.Getenv("KICK_CLIENT_ID"), os.Getenv("KICK_CLIENT_SECRET"); clientID != "" && clientSecret != "" {
+		kickEvents := &kickevents.Service{
+			ClientID: clientID, ClientSecret: clientSecret,
+			TokenURL: kickevents.DefaultTokenURL, APIURL: kickevents.DefaultAPIURL,
+			Sources: channelRepo, Store: redisStore{redisClient}, Publisher: streamPublisher,
+			HTTP: &http.Client{Timeout: 15 * time.Second}, Logger: log,
+		}
+		router.POST("/webhooks/kick", kickEvents.Webhook)
+		go kickEvents.Run(ctx)
+	} else {
+		log.Warn("KICK_CLIENT_ID/KICK_CLIENT_SECRET not set: no Kick follow or KICKs gift events")
+	}
+
 	// Get port
 	port := listener.Env("PORT", "8089")
 
@@ -395,6 +412,13 @@ func handleChatMessage(
 		}
 		cancel()
 	}
+}
+
+// redisStore is the set-if-absent the webhook receiver shares between pods.
+type redisStore struct{ client *redis.Client }
+
+func (s redisStore) SetNX(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	return s.client.SetNX(ctx, key, 1, ttl).Result()
 }
 
 // handlePlatformEvent publishes a Kick subscription, gifted-sub or host event

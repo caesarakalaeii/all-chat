@@ -375,7 +375,7 @@ export const guides: LocaleNamespace<'guides'> = {
       'Twitch: Abos, Resubs, Geschenk-Abos, Bits, Raids, Follows, Kanalpunkte-Einlösungen und Charity-Spenden.',
     eventsYoutube:
       'YouTube: Super Chats, Super Sticker, neue Mitglieder, Mitglieder-Meilensteine, verschenkte Mitgliedschaften und neue Abonnenten.',
-    eventsKick: 'Kick: Abos, verschenkte Abos und Hosts.',
+    eventsKick: 'Kick: Abos, verschenkte Abos, Hosts, KICKs-Geschenke und Follows.',
     eventsTiktok: 'TikTok LIVE: Geschenke, Shares und Abos.',
     eventsBody:
       'Alerts erscheinen nacheinander mit ihrem Text, einem Bild oder GIF und einem Sound, danach ist die Quelle wieder leer.',
@@ -400,7 +400,7 @@ export const guides: LocaleNamespace<'guides'> = {
       'Ein {commands} kann seinen eigenen Alert im selben Overlay zeigen: ein Bild, einen Sound und einen Text, ausgelöst aus jedem Chat.',
     commandsLinkText: 'Chat-Befehl',
     limitKick:
-      'Kick-Follows und KICKs-Geschenke werden nicht als Alerts gezeigt. Kick-Events kommen aus einem Feed, den Kick nicht dokumentiert und ohne Ankündigung ändern kann.',
+      'Kick-Abos, verschenkte Abos und Hosts kommen aus einem Feed, den Kick nicht dokumentiert und ohne Ankündigung ändern kann. Anonyme KICKs-Geschenke werden nicht gezeigt.',
     limitUploads:
       'Eigene Bilder, GIFs und Sounds hochzuladen ist eine {premium}-Funktion. GIFs suchen und einen Link einfügen sind kostenlos.',
     limitTiktok:

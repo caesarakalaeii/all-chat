@@ -387,7 +387,7 @@ export const guides = {
       'Twitch: subs, resubs, gift subs, bits, raids, follows, channel point redemptions and charity donations.',
     eventsYoutube:
       'YouTube: Super Chats, Super Stickers, new members, member milestones, gifted memberships and new subscribers.',
-    eventsKick: 'Kick: subscriptions, gifted subs and hosts.',
+    eventsKick: 'Kick: subscriptions, gifted subs, hosts, KICKs gifts and follows.',
     eventsTiktok: 'TikTok LIVE: gifts, shares and subscriptions.',
     eventsBody:
       'Alerts pop up one at a time with their text, an image or GIF and a sound, then the source goes empty again.',
@@ -412,7 +412,7 @@ export const guides = {
       'A {commands} can show its own alert on the same overlay: an image, a sound and a text, triggered from any chat.',
     commandsLinkText: 'chat command',
     limitKick:
-      'Kick follows and KICKs gifts are not shown as alerts. Kick events come from a feed Kick does not document and can change without notice.',
+      'Kick subscriptions, gifted subs and hosts come from a feed Kick does not document and can change without notice. Anonymous KICKs gifts are not shown.',
     limitUploads:
       'Uploading your own images, GIFs and sounds is a {premium} feature. Searching GIFs and pasting a link are free.',
     limitTiktok:
