@@ -43,7 +43,7 @@ const DOCK_URL = `${MONITOR_URL}?dock=1`
 
 const HEADER = `# All-Chat
 
-> All-Chat is a free, open-source (AGPL-3.0) chat overlay for OBS. It merges live chat from Twitch, YouTube, Kick, TikTok and Discord into one feed, with 7TV, BTTV and FFZ emotes. The hosted service runs at ${SITE_URL}; the source code is on GitHub.`
+> All-Chat is a free, open-source (AGPL-3.0) chat overlay for OBS. It merges live chat from Twitch, YouTube, Kick, TikTok and Discord into one feed, with 7TV, BTTV and FFZ emotes. Alert overlays, a chat bot with chat commands and timers, text-to-speech, polls and moderation are built in. It runs in the browser, so there is nothing to install. The hosted service runs at ${SITE_URL}; the source code is on GitHub.`
 
 function overview(): string {
   return `Sign in at ${SITE_URL} with a Twitch, YouTube or Kick account, create an overlay, add the chat sources you want, and paste the overlay URL into an OBS Browser Source. One account can have several overlays, each with its own mix of chat sources and its own theme.
@@ -53,6 +53,9 @@ function overview(): string {
 - OBS dock: ${DOCK_URL}, the chat monitor laid out for a narrow OBS panel, added under View > Docks > Custom Browser Docks. Streamlabs custom browser docks take the same URL.
 - Emotes: 7TV, BTTV and FFZ, plus native Twitch and YouTube emotes.
 - Look: 16 built-in themes, or your own CSS.
+- Alert overlays: an overlay of kind Alerts is an alert box in its own Browser Source. Subs, bits, raids, follows, Super Chats, memberships and TikTok gifts pop up one at a time with text, an image or GIF and a sound. Each event type can have its own look, or custom HTML, CSS and JavaScript.
+- Chat bot: chat commands (!commands), keyword triggers and timers, defined once and active in every merged chat. Replies are templates with variables, web lookups and sandboxed JavaScript, sent by the All-Chat Bot or your own account. A command can also clip the live Twitch stream or show its own alert on the alerts overlay.
+- Text-to-speech: chat read aloud with browser voices, or with ElevenLabs voices on premium.
 - Engagement: cross-platform polls, predictions and per-overlay viewer points, an events feed (subs, bits, raids, Super Chats, memberships, follows) and an end-of-stream credit roll.
 - Browser extension for Chrome and Firefox that replaces native Twitch, YouTube and Kick chat with the All-Chat feed on channels whose streamer uses All-Chat, described at ${SITE_URL}/browser-extension.
 - Developer API: a public WebSocket stream of the normalized chat, documented at ${SITE_URL}/docs/api.
@@ -62,19 +65,20 @@ function overview(): string {
 
 const PLATFORMS = `- Twitch: read through Twitch EventSub.
 - YouTube: read through the YouTube Data API or through an InnerTube poller that uses no API quota.
-- Kick: read through Kick's Pusher WebSocket.
+- Kick: read through Kick's realtime WebSocket (Centrifugo or Pusher, whichever Kick serves).
 - TikTok: TikTok has no public API for LIVE chat. Every tool that shows TikTok LIVE chat, All-Chat included, reads it the way TikTok's own web player does. All-Chat signs those connections with its own open-source signing service (${REPO_URL}/tree/main/services/tiktok-signer); no third-party sign server is involved. When TikTok started requiring browser-grade sessions on 2026-09-09, All-Chat adapted within a week. For premium streamers, a second delivery path takes over when TikTok refuses the primary connection.
 - Discord: the All-Chat Discord bot relays messages from a channel you pick. Connect your Discord server under Settings first.`
 
-const FREE_AND_PREMIUM = `The merged chat overlay is free for every platform above, together with themes, custom CSS, the chat monitor and dock, viewer points, the events feed, the credit roll, the browser extension and the developer API.
+const FREE_AND_PREMIUM = `The merged chat overlay is free for every platform above, together with themes, custom CSS, the chat monitor and dock, alert overlays and the alerts editor (custom HTML, CSS and JavaScript and GIF search included), chat commands, keyword triggers and timers with replies in Twitch and Kick chat, viewer points, the events feed, the credit roll, the browser extension and the developer API.
 
-Premium is funded through Patreon and covers: moderation from the chat monitor, delegated moderators, text-to-speech with ElevenLabs voices (you bring your own ElevenLabs API key), YouTube stream selection, reading your own YouTube channel through the official YouTube API (members-only streams), shared chat between overlays, starting polls and predictions, and viewer flairs. The current list is at ${SITE_URL}/upgrade.`
+Premium is funded through Patreon and covers: moderation from the chat monitor, delegated moderators, text-to-speech with ElevenLabs voices (you bring your own ElevenLabs API key), YouTube stream selection, reading your own YouTube channel through the official YouTube API (members-only streams), shared chat between overlays, starting polls and predictions, viewer flairs, uploading your own images, GIFs and sounds for alerts, command replies and timers in YouTube chat, and connecting your own bot account. The current list is at ${SITE_URL}/upgrade.`
 
 const LIMITS = `- YouTube: public live streams are found automatically. An unlisted stream works once its link is pasted into the source's settings. Members-only chat on your own channel needs premium official-API mode. Private streams of other channels do not work.
 - TikTok is the platform most likely to see short interruptions when TikTok changes its web player.
 - TikTok has no moderation or send API, so neither works for TikTok. Sending messages from the chat monitor works for Twitch, YouTube and Kick.
 - Chat messages are deleted after about an hour. All-Chat is not a chat archive.
-- Custom alerts are in development and not available yet.`
+- Command replies and timers post to Twitch, Kick and YouTube chat. TikTok and Discord chats can trigger a command, but cannot be replied to.
+- All-Chat does not relay video. Sending one stream to several platforms is done by OBS or a restreaming service; All-Chat adds the merged chat, alerts and chat bot on top of any of them.`
 
 const LINKS = `## Guides
 
@@ -161,6 +165,14 @@ Streamlabs custom browser docks take the same URL and the same steps. Without ?d
 ## 24/7 and IRL streams
 
 For an OBS instance that runs around the clock, add ?passive=true to the Browser Source URL. A passive overlay shows chat like a normal one but does not start YouTube capture on its own, so YouTube discovery cannot time out while you are offline. When you go live, open the chat monitor and press Rediscover if chat is not flowing yet. Capture keeps running while the monitor stays open.
+
+## Alerts
+
+Create an overlay of kind Alerts and add its URL to OBS as its own Browser Source. It uses the same chat sources as a chat overlay. The Alerts section of the overlay editor opens on a default style for all events: one image or GIF (searched in the editor, pasted as a link, or uploaded with premium), a sound, a duration and a volume. Each event type can then get its own text with {username}, {amount}, {count} and {message} placeholders, its own media, or custom HTML, CSS and JavaScript, which runs in an isolated sandbox. Send test alert plays the alert in the editor preview and in OBS.
+
+## Chat commands and timers
+
+Commands are under Commands in the top bar. A command answers to a !name or to a keyword anywhere in a message, in every chat the overlays carry, and the reply goes to the chat the message came from. Replies are templates: {user}, {touser}, {query}, {count}, {random 1 6}, {pick a | b}, {time Europe/Berlin}, {clip}, {urlfetch https://...} and {js ...} for sandboxed JavaScript. A command can be limited to subscribers, VIPs, moderators or the streamer, has a cooldown, and can show its own alert (image, sound, text) on the alerts overlay. Timers post a message every X minutes, after every X chat messages, or both. Replies come from the All-Chat Bot or from the streamer's own account; a custom bot account is premium. Replies and timers are free in Twitch and Kick chat and premium in YouTube chat, where each one spends YouTube API quota.
 
 ## Moderation
 

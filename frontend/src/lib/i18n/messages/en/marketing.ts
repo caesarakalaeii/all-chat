@@ -448,6 +448,9 @@ export const marketing = {
     overlaysQuestion: 'Can I run more than one overlay?',
     overlaysAnswer:
       'Yes. One account can create several overlays, each with its own mix of chat sources, its own theme and its own OBS URL. For example, one overlay for Twitch and TikTok on a gaming stream and a YouTube-only one for a podcast.',
+    alertsBotQuestion: 'Does All-Chat have alerts and a chat bot?',
+    alertsBotAnswer:
+      'Yes, and both are free. An Alerts overlay is its own OBS Browser Source: subs, bits, raids, follows, Super Chats, memberships and TikTok gifts pop up with your text, GIF and sound, or with your own HTML, CSS and JavaScript. Chat commands, keyword triggers and timers work in every chat you merge, and replies are sent by the All-Chat Bot or your own account. Uploading your own alert media, replies in YouTube chat and your own bot account are premium.',
     freeQuestion: 'Is All-Chat free?',
     freeAnswer: 'Yes. All-Chat is free and open source under the AGPL-3.0 license.',
     premiumQuestion: 'Why are some features premium?',

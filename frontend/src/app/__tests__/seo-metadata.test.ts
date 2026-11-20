@@ -147,3 +147,38 @@ describe('login-gated pages', () => {
     expect(robots).not.toContain("'/overlay',")
   })
 })
+
+describe('alerts and chat commands are stated as shipped', () => {
+  // Search engines and language models quote these pages as fact. While they
+  // said "alerts are in development", assistants answered that All-Chat has no
+  // alerts and no chat bot, months after both were released.
+  const lib = (rel: string) => readFileSync(join(__dirname, '..', '..', 'lib', rel), 'utf-8')
+
+  it.each(['llms.ts', 'i18n/messages/en/guides.ts', 'i18n/messages/de/guides.ts'])(
+    '%s no longer calls alerts unreleased',
+    (rel) => {
+      expect(lib(rel)).not.toMatch(/in development|in Entwicklung|not available yet/i)
+    }
+  )
+
+  it('llms.txt describes alert overlays, chat commands and timers', () => {
+    const src = lib('llms.ts')
+    expect(src).toMatch(/alert overlays/i)
+    expect(src).toMatch(/chat commands/i)
+    expect(src).toMatch(/timers/i)
+  })
+
+  it('the homepage description and structured data name alerts and chat commands', () => {
+    expect(metadataCatalog()).toMatch(/home:[\s\S]*?alerts, chat commands/)
+    expect(read('page.tsx')).toMatch(/Alert overlays/)
+    expect(read('page.tsx')).toMatch(/Chat commands/)
+  })
+
+  it('the FAQ answers whether there are alerts and a chat bot', () => {
+    expect(lib('faq.ts')).toContain("'alertsBot'")
+  })
+
+  it('the comparison lists Multistream with a source', () => {
+    expect(read('compare/page.tsx')).toContain('https://multistream.gg/')
+  })
+})

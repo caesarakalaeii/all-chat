@@ -222,11 +222,11 @@ export const guides: LocaleNamespace<'guides'> = {
   compare: {
     metaTitle: 'Multistream-Chat-Tools im Vergleich',
     metaDescription:
-      'All-Chat neben Streamlabs Chat Box, StreamElements SE.Live, Social Stream Ninja, SleepyChat und Restream Chat: Plattformen, Installation, OBS-Overlay und Dock, Emotes, Preis, Open Source, Alerts und TTS, mit einer Quelle pro Zelle.',
+      'All-Chat neben Streamlabs Chat Box, StreamElements SE.Live, Social Stream Ninja, SleepyChat, Restream Chat und Multistream: Plattformen, Installation, OBS-Overlay und Dock, Emotes, Preis, Open Source, Alerts und TTS, mit einer Quelle pro Zelle.',
     breadcrumb: 'Vergleich',
     heading: 'All-Chat im Vergleich mit anderen Multistream-Chat-Tools',
     intro:
-      'Diese Tabelle stellt All-Chat neben fünf weitere Tools, die Chat von mehreren Plattformen zusammenführen. Wir bauen All-Chat, lies sie also mit diesem Wissen. Jede Aussage über ein anderes Tool verlinkt auf dessen eigene Seiten, und wo wir keine Aussage fanden, haben wir „nicht dokumentiert“ statt zu raten.',
+      'Diese Tabelle stellt All-Chat neben sechs weitere Tools, die Chat von mehreren Plattformen zusammenführen. Wir bauen All-Chat, lies sie also mit diesem Wissen. Jede Aussage über ein anderes Tool verlinkt auf dessen eigene Seiten, und wo wir keine Aussage fanden, haben wir „nicht dokumentiert“ statt zu raten.',
     lastChecked: 'Zuletzt geprüft: {date}',
     caption:
       'Multistream-Chat-Tools nach Funktion, zuletzt geprüft {date}. Nummerierte Links zeigen auf die unten unter der Tabelle gelisteten Quellen.',
@@ -252,7 +252,7 @@ export const guides: LocaleNamespace<'guides'> = {
     allChatPrice: 'Kostenlos. Premium-Extras über Patreon',
     allChatOpenSource: 'Ja, AGPL-3.0',
     allChatSelfHost: 'Ja, mit Docker Compose',
-    allChatAlerts: 'In Entwicklung',
+    allChatAlerts: 'Ja, ein Alert-Overlay, auf Wunsch mit eigenem HTML, CSS und JavaScript',
     allChatTts: 'Ja. Browser-Stimmen kostenlos, ElevenLabs mit Premium und eigenem Key',
     toolStreamlabs: 'Streamlabs Chat Box und Multichat',
     streamlabsPlatforms:
@@ -300,6 +300,17 @@ export const guides: LocaleNamespace<'guides'> = {
     restreamPrice:
       'Der Gratisplan enthält Chat. Nachrichten kommen nur an, während du über Restream streamst',
     restreamTts: 'Sprachausgabe-Alerts in der Desktop-Chat-App',
+    toolMultistream: 'Multistream (multistream.gg)',
+    multistreamPlatforms: 'Alle vier, plus Instagram',
+    multistreamInstall: 'Ja, eine Desktop-App für Windows oder Mac. Linux wird nicht unterstützt',
+    multistreamOverlay:
+      'Ja, ein Browser-Quellen-Link zur lokalen App. Er funktioniert nur, solange die App auf demselben PC wie OBS geöffnet ist',
+    multistreamDock:
+      'Private Widgets lassen sich als OBS-Docks einbinden. Ein Chat-Dock ist nicht dokumentiert',
+    multistreamPrice:
+      'Kostenlos in der Desktop-App. Chat auf der Website gehört zu Pro, 10 $ im Monat',
+    multistreamAlerts: 'Ja, Follows, Abos, Geschenke und Raids',
+    multistreamTts: 'Ja, eingebaute Stimmen, solange die App läuft',
     sourcesHeading: 'Quellen',
     sourceAllChatReadme: 'All-Chat-README auf GitHub',
     sourceStreamlabsChatBox: 'Streamlabs: Das Chat-Box-Widget',
@@ -325,10 +336,16 @@ export const guides: LocaleNamespace<'guides'> = {
     sourceRestreamEncoders: 'Restream-Hilfe: Restream Chat mit Encodern verwenden',
     sourceRestreamEmbed: 'Restream-Hilfe: Chat in deine Streaming-Software einbetten',
     sourceRestreamFree: 'Restream-Hilfe: Kann ich Restream kostenlos nutzen?',
+    sourceMultistreamHome: 'Multistream-Startseite',
+    sourceMultistreamDownload: 'Multistream: App herunterladen',
+    sourceMultistreamOverlay: 'Multistream-Tutorial: Ein Overlay zu OBS hinzufügen',
+    sourceMultistreamChats: 'Multistream-Guide: Alle Stream-Chats in einem Fenster',
+    sourceMultistreamPricing: 'Multistream: Preise',
+    sourceMultistreamTts: 'Multistream-Tutorial: Chat vorlesen lassen',
     betterHeading: 'Wann ein anderes Tool die bessere Wahl ist',
     betterIntro: 'Kein Tool auf dieser Liste ist in allem am besten. Nimm ein anderes, wenn:',
-    betterAlerts:
-      'Du brauchst heute Alerts im Stream. All-Chat-Alerts sind noch in Entwicklung, während SleepyChat, Streamlabs und StreamElements sie schon jetzt ausliefern.',
+    betterAllInOne:
+      'Du willst, dass das Tool, das deinen Chat zusammenführt, auch dein Video an jede Plattform sendet. Multistream und Restream machen beides, Streamlabs Multistream mit Ultra. All-Chat überträgt kein Video; es legt Chat, Alerts und einen Chatbot über das, womit du streamst.',
     betterTts:
       'Du willst Sprachausgabe an Tips und Alerts gekoppelt. Streamlabs liest Tips und Bits in seiner Alert Box vor, und SleepyChat hält TTS von allen vier Plattformen in einer Warteschlange neben seinen Alerts.',
     betterPlatforms:
@@ -337,7 +354,7 @@ export const guides: LocaleNamespace<'guides'> = {
       'Du multistreamst schon über Restream und willst aus einem Fenster heraus antworten und Nachrichten über Plattformen hinweg weiterleiten. Restream Chat ist in diesen Workflow eingebaut.',
     fitHeading: 'Wo All-Chat passt',
     fitBody:
-      'All-Chat braucht keine Installation, deckt TikTok neben Twitch, YouTube, Kick und Discord ab, rendert 7TV-, BTTV- und FFZ-Emotes und ist unter AGPL-3.0 quelloffen. Zusammengeführter Chat ist kostenlos; Moderation aus dem Chat-Monitor und einige Extras sind Premium.',
+      'All-Chat braucht keine Installation, deckt TikTok neben Twitch, YouTube, Kick und Discord ab, rendert 7TV-, BTTV- und FFZ-Emotes und ist unter AGPL-3.0 quelloffen. Alert-Overlays, Chat-Befehle, Stichwörter und Timer sind eingebaut: Chat, Alerts und Chatbot kommen aus einem Browser-Tab, ohne dass neben OBS eine App laufen muss. Zusammengeführter Chat, Alerts und Befehle sind kostenlos; Moderation aus dem Chat-Monitor und einige Extras sind Premium.',
     corrections: 'Produkte ändern sich. Falls eine Zelle veraltet ist, {issue}, und wir fixen sie.',
     correctionsLinkText: 'ein Issue auf GitHub',
   },

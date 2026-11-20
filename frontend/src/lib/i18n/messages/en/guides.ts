@@ -25,8 +25,10 @@
  * `metadata`, so a guide and its search snippet are edited together.
  *
  * These pages are read by search engines and language models as statements of
- * fact. Claim nothing the product does not do today: custom alerts are in
- * development, and the comparison cells about other tools must each stay
+ * fact. Claim nothing the product does not do today, and correct a claim
+ * in the same change that ships or removes the feature: assistants kept
+ * answering that All-Chat has no alerts for weeks after alerts were released. The
+ * comparison cells about other tools must each stay
  * backed by the source the /compare page lists for them.
  */
 
@@ -237,11 +239,11 @@ export const guides = {
   compare: {
     metaTitle: 'Multistream Chat Tools Compared',
     metaDescription:
-      'All-Chat next to Streamlabs Chat Box, StreamElements SE.Live, Social Stream Ninja, SleepyChat and Restream Chat: platforms, install, OBS overlay and dock, emotes, price, open source, alerts and TTS, with a source for every cell.',
+      'All-Chat next to Streamlabs Chat Box, StreamElements SE.Live, Social Stream Ninja, SleepyChat, Restream Chat and Multistream: platforms, install, OBS overlay and dock, emotes, price, open source, alerts and TTS, with a source for every cell.',
     breadcrumb: 'Comparison',
     heading: 'All-Chat compared with other multistream chat tools',
     intro:
-      'This table puts All-Chat next to five other tools that merge chat from several platforms. We make All-Chat, so read it with that in mind. Every claim about another tool links to that tool\'s own pages, and where we found no statement we wrote "not documented" instead of guessing.',
+      'This table puts All-Chat next to six other tools that merge chat from several platforms. We make All-Chat, so read it with that in mind. Every claim about another tool links to that tool\'s own pages, and where we found no statement we wrote "not documented" instead of guessing.',
     lastChecked: 'Last checked: {date}',
     caption:
       'Multistream chat tools by feature, last checked {date}. Numbered links point to the sources listed below the table.',
@@ -267,7 +269,7 @@ export const guides = {
     allChatPrice: 'Free. Premium extras through Patreon',
     allChatOpenSource: 'Yes, AGPL-3.0',
     allChatSelfHost: 'Yes, with Docker Compose',
-    allChatAlerts: 'In development',
+    allChatAlerts: 'Yes, an alerts overlay, with custom HTML, CSS and JavaScript if you want',
     allChatTts: 'Yes. Browser voices free, ElevenLabs on Premium with your own key',
     toolStreamlabs: 'Streamlabs Chat Box and Multichat',
     streamlabsPlatforms:
@@ -313,6 +315,15 @@ export const guides = {
     restreamPrice:
       'Free plan includes chat. Messages arrive only while you stream through Restream',
     restreamTts: 'Text-to-speech alerts in the desktop chat app',
+    toolMultistream: 'Multistream (multistream.gg)',
+    multistreamPlatforms: 'All four, plus Instagram',
+    multistreamInstall: 'Yes, a desktop app for Windows or Mac. Linux is not supported',
+    multistreamOverlay:
+      'Yes, a Browser Source link to the local app. It works only while the app is open on the same PC as OBS',
+    multistreamDock: 'Private widgets can be added as OBS docks. A chat dock is not documented',
+    multistreamPrice: 'Free in the desktop app. Chat on the website is part of Pro, $10 a month',
+    multistreamAlerts: 'Yes, follows, subs, gifts and raids',
+    multistreamTts: 'Yes, built-in voices, while the app is running',
     sourcesHeading: 'Sources',
     sourceAllChatReadme: 'All-Chat README on GitHub',
     sourceStreamlabsChatBox: 'Streamlabs: Chat Box widget',
@@ -337,10 +348,16 @@ export const guides = {
     sourceRestreamEncoders: 'Restream Help: How to use Restream Chat with encoders',
     sourceRestreamEmbed: 'Restream Help: Embed chat on your streaming software',
     sourceRestreamFree: 'Restream Help: Can I use Restream for free?',
+    sourceMultistreamHome: 'Multistream home page',
+    sourceMultistreamDownload: 'Multistream: Download the app',
+    sourceMultistreamOverlay: 'Multistream tutorial: Add an overlay to OBS',
+    sourceMultistreamChats: 'Multistream guide: See all your stream chats in one window',
+    sourceMultistreamPricing: 'Multistream: Pricing',
+    sourceMultistreamTts: 'Multistream tutorial: Read chat out loud',
     betterHeading: 'Where another tool is the better pick',
     betterIntro: 'No tool on this list is best at everything. Pick another one if:',
-    betterAlerts:
-      'You need on-stream alerts today. All-Chat alerts are still in development, while SleepyChat, Streamlabs and StreamElements ship them now.',
+    betterAllInOne:
+      'You want the tool that merges your chat to also send your video to every platform. Multistream and Restream do both, and Streamlabs Multistream does on Ultra. All-Chat does not relay video; it adds chat, alerts and a chat bot on top of whatever sends your stream.',
     betterTts:
       'You want text-to-speech tied to tips and alerts. Streamlabs reads tips and bits aloud in its Alert Box, and SleepyChat keeps TTS from all four platforms in one queue next to its alerts.',
     betterPlatforms:
@@ -349,7 +366,7 @@ export const guides = {
       'You already multistream through Restream and want to reply and relay messages across platforms from one window. Restream Chat is built into that workflow.',
     fitHeading: 'Where All-Chat fits',
     fitBody:
-      'All-Chat needs no install, covers TikTok next to Twitch, YouTube, Kick and Discord, renders 7TV, BTTV and FFZ emotes, and is open source under AGPL-3.0. Merged chat is free; moderation from the chat monitor and a few extras are Premium.',
+      'All-Chat needs no install, covers TikTok next to Twitch, YouTube, Kick and Discord, renders 7TV, BTTV and FFZ emotes, and is open source under AGPL-3.0. Alert overlays, chat commands, keyword triggers and timers are built in, so chat, alerts and a chat bot come from one browser tab with no app left running next to OBS. Merged chat, alerts and commands are free; moderation from the chat monitor and a few extras are Premium.',
     corrections: 'Products change. If a cell is out of date, {issue} and we will fix it.',
     correctionsLinkText: 'open an issue on GitHub',
   },

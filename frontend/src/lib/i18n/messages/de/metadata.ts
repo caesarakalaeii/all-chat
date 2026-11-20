@@ -27,7 +27,7 @@ export const metadata: LocaleNamespace<'metadata'> = {
     titleDefault: 'All-Chat — Jeder Chat. Ein Overlay.',
     titleTemplate: '%s | All-Chat',
     description:
-      'Sieh den Chat von Twitch, YouTube, Kick, TikTok und Discord in einem OBS-Chat-Overlay. Einfach in OBS einfügen und loslegen. 7TV-, BTTV- und FFZ-Emotes eingebaut. Kostenlos und Open Source.',
+      'Sieh den Chat von Twitch, YouTube, Kick, TikTok und Discord in einem OBS-Chat-Overlay, dazu Alerts und ein Chatbot. Einfach in OBS einfügen und loslegen. 7TV-, BTTV- und FFZ-Emotes eingebaut. Kostenlos und Open Source.',
     socialTitle: 'All-Chat — Jeder Chat. Eine URL.',
     socialDescription:
       'Kostenloses Multistream-Chat-Overlay und OBS-Dock für Twitch, YouTube, Kick, TikTok und Discord. 7TV-, BTTV- und FFZ-Emotes eingebaut.',
@@ -35,7 +35,7 @@ export const metadata: LocaleNamespace<'metadata'> = {
   home: {
     title: 'Multi-Plattform-Chat-Overlay für Twitch, YouTube, Kick & TikTok | All-Chat',
     description:
-      'Kostenloses Multi-Plattform-Chat-Overlay für OBS. Führe den Chat von Twitch, YouTube, Kick, TikTok und Discord in einem Overlay zusammen, mit 7TV-, BTTV- und FFZ-Emotes eingebaut. Open Source, keine Installation.',
+      'Kostenloses Multi-Plattform-Chat-Overlay für OBS. Führe den Chat von Twitch, YouTube, Kick, TikTok und Discord in einem Overlay zusammen, mit Alerts, Chat-Befehlen sowie 7TV-, BTTV- und FFZ-Emotes eingebaut. Open Source, keine Installation.',
   },
   docs: {
     title: 'Dokumentation',

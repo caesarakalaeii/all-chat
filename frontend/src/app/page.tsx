@@ -56,7 +56,7 @@ const softwareApplicationLd = {
   license: 'https://www.gnu.org/licenses/agpl-3.0.html',
   softwareHelp: { '@type': 'CreativeWork', url: 'https://allch.at/docs' },
   description:
-    'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one overlay. Drop it into OBS as a browser source, and open the chat monitor as an OBS dock. 7TV, BTTV, and FFZ emotes built in.',
+    'See all your Twitch, YouTube, Kick, TikTok, and Discord chat in one overlay. Drop it into OBS as a browser source, and open the chat monitor as an OBS dock. 7TV, BTTV, and FFZ emotes, alert overlays and a chat bot with commands and timers built in.',
   featureList: [
     'Twitch chat (EventSub)',
     'YouTube Live chat',
@@ -70,6 +70,8 @@ const softwareApplicationLd = {
     '16 built-in themes and custom CSS',
     'Cross-platform polls, predictions and viewer points',
     'Events feed and credit roll',
+    'Alert overlays with custom HTML, CSS and JavaScript',
+    'Chat commands, keyword triggers and timers (chat bot)',
     'Moderation from the chat monitor (premium)',
     'Text-to-speech (premium)',
     'Browser extension for Chrome and Firefox',

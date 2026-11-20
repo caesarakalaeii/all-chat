@@ -153,6 +153,36 @@ const SOURCES = [
     url: 'https://support.restream.io/en/articles/9127747-can-i-use-restream-for-free-yes',
     labelKey: 'guides.compare.sourceRestreamFree',
   },
+  {
+    id: 'multistreamHome',
+    url: 'https://multistream.gg/',
+    labelKey: 'guides.compare.sourceMultistreamHome',
+  },
+  {
+    id: 'multistreamDownload',
+    url: 'https://multistream.gg/download',
+    labelKey: 'guides.compare.sourceMultistreamDownload',
+  },
+  {
+    id: 'multistreamOverlay',
+    url: 'https://multistream.gg/tutorials/add-an-overlay-to-obs',
+    labelKey: 'guides.compare.sourceMultistreamOverlay',
+  },
+  {
+    id: 'multistreamChats',
+    url: 'https://multistream.gg/guides/see-all-your-stream-chats-in-one-window',
+    labelKey: 'guides.compare.sourceMultistreamChats',
+  },
+  {
+    id: 'multistreamPricing',
+    url: 'https://multistream.gg/pricing',
+    labelKey: 'guides.compare.sourceMultistreamPricing',
+  },
+  {
+    id: 'multistreamTts',
+    url: 'https://multistream.gg/tutorials/read-chat-out-loud',
+    labelKey: 'guides.compare.sourceMultistreamTts',
+  },
 ] as const satisfies readonly { id: string; url: string; labelKey: MessageKey }[]
 
 type SourceId = (typeof SOURCES)[number]['id']
@@ -193,7 +223,7 @@ const ROWS: readonly { nameKey: MessageKey; cells: Readonly<Record<ColumnId, Cel
       price: cell('guides.compare.allChatPrice'),
       openSource: cell('guides.compare.allChatOpenSource', 'allChatReadme'),
       selfHost: cell('guides.compare.allChatSelfHost', 'allChatReadme'),
-      alerts: cell('guides.compare.allChatAlerts'),
+      alerts: cell('guides.compare.allChatAlerts', 'allChatReadme'),
       tts: cell('guides.compare.allChatTts'),
     },
   },
@@ -280,6 +310,21 @@ const ROWS: readonly { nameKey: MessageKey; cells: Readonly<Record<ColumnId, Cel
       tts: cell('guides.compare.restreamTts', 'restreamChat'),
     },
   },
+  {
+    nameKey: 'guides.compare.toolMultistream',
+    cells: {
+      platforms: cell('guides.compare.multistreamPlatforms', 'multistreamHome'),
+      install: cell('guides.compare.multistreamInstall', 'multistreamDownload'),
+      overlay: cell('guides.compare.multistreamOverlay', 'multistreamOverlay'),
+      dock: cell('guides.compare.multistreamDock', 'multistreamOverlay'),
+      emotes: NOT_DOCUMENTED,
+      price: cell('guides.compare.multistreamPrice', 'multistreamPricing', 'multistreamChats'),
+      openSource: NOT_DOCUMENTED,
+      selfHost: NOT_DOCUMENTED,
+      alerts: cell('guides.compare.multistreamAlerts', 'multistreamHome'),
+      tts: cell('guides.compare.multistreamTts', 'multistreamTts'),
+    },
+  },
 ]
 
 function SourceRefs({ ids }: { ids: readonly SourceId[] }) {
@@ -356,7 +401,7 @@ export default function ComparePage() {
         <h2>{t('guides.compare.betterHeading')}</h2>
         <p>{t('guides.compare.betterIntro')}</p>
         <ul>
-          <li>{t('guides.compare.betterAlerts')}</li>
+          <li>{t('guides.compare.betterAllInOne')}</li>
           <li>{t('guides.compare.betterTts')}</li>
           <li>{t('guides.compare.betterPlatforms')}</li>
           <li>{t('guides.compare.betterRestream')}</li>
