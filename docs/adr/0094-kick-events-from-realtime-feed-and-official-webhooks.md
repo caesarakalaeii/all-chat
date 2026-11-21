@@ -2,6 +2,7 @@
 
 **Date**: 2026-11-20
 **Status**: Accepted
+**Revised**: 2026-11-21
 **Deciders**: caesarakalaeii
 
 ## Context
@@ -56,6 +57,9 @@ kick-listener serves `POST /webhooks/kick` and runs a reconciler:
   access token, requests `channel.followed` and `kicks.gifted` for each Kick source of an
   active overlay, and deletes subscriptions for channels that are no longer sources. Kick
   drops a subscription whose deliveries fail for a day; the next pass brings it back.
+  Kick rate-limits these requests without publishing a limit (a burst of about five a
+  second was refused with `429`), so they go out one a second, at most 400 a pass, and a
+  pass stops at the first `429`.
 - A delivery is accepted only if Kick signed it: RSA PKCS#1 v1.5 over SHA-256 of
   `<message id>.<timestamp>.<body>`, checked against the key from
   `GET /public/v1/public-key` (cached, refetched once on a failed check because Kick may

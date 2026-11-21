@@ -66,6 +66,14 @@ const (
 	seenTTL       = time.Hour // longer than maxClockSkew, so a replay is refused by one or the other
 	targetsTTL    = time.Minute
 	slugsPerQuery = 50 // Kick's limit on GET /public/v1/channels
+
+	// DefaultPace is the pause between subscription requests. Kick answered
+	// 429 to a burst of about five a second on 2026-11-20; it publishes no
+	// limit, so this stays far below that.
+	DefaultPace = time.Second
+	// maxRequestsPerPass keeps a paced pass inside the reconcile lock; the
+	// next pass continues where this one stopped.
+	maxRequestsPerPass = 400
 )
 
 // Sources lists the Kick sources of active overlays.
@@ -92,6 +100,8 @@ type Service struct {
 	Publisher              Publisher
 	HTTP                   *http.Client
 	Logger                 *zap.Logger
+	// Pace is the pause between subscription requests; zero means none.
+	Pace time.Duration
 
 	mu          sync.Mutex
 	publicKey   *rsa.PublicKey
@@ -328,7 +338,7 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		Name    string `json:"name"`
 		Version int    `json:"version"`
 	}
-	added := 0
+	added, refused, requests := 0, 0, 0
 	for broadcaster := range wanted {
 		var missing []event
 		for _, name := range []string{eventFollowed, eventKicks} {
@@ -339,6 +349,10 @@ func (s *Service) Reconcile(ctx context.Context) error {
 		if len(missing) == 0 {
 			continue
 		}
+		if requests == maxRequestsPerPass {
+			break
+		}
+		requests++
 		body := map[string]any{"broadcaster_user_id": broadcaster, "method": "webhook", "events": missing}
 		var result struct {
 			Data []struct {
@@ -346,7 +360,23 @@ func (s *Service) Reconcile(ctx context.Context) error {
 				Error string `json:"error"`
 			} `json:"data"`
 		}
+		if requests > 1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(s.Pace):
+			}
+		}
 		if err := s.call(ctx, http.MethodPost, "/public/v1/events/subscriptions", token, body, &result); err != nil {
+			var status statusError
+			if errors.As(err, &status) && status.code == http.StatusTooManyRequests {
+				// More requests would only be refused too. The next pass
+				// requests what is still missing.
+				s.Logger.Warn("Kick rate limit reached, rest of the subscriptions wait for the next pass",
+					zap.Int("requested", added))
+				break
+			}
+			refused++
 			s.Logger.Warn("Kick event subscription refused", zap.Int64("broadcaster_user_id", broadcaster), zap.Error(err))
 			continue
 		}
@@ -451,6 +481,14 @@ func (s *Service) call(ctx context.Context, method, path, token string, body, ou
 	return s.do(req, out)
 }
 
+// statusError is a non-2xx answer from Kick.
+type statusError struct {
+	code    int
+	message string
+}
+
+func (e statusError) Error() string { return e.message }
+
 func (s *Service) do(req *http.Request, out any) error {
 	resp, err := s.HTTP.Do(req)
 	if err != nil {
@@ -459,7 +497,7 @@ func (s *Service) do(req *http.Request, out any) error {
 	defer resp.Body.Close()
 	payload, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("%s %s: status %d: %.200s", req.Method, req.URL.Path, resp.StatusCode, payload)
+		return statusError{resp.StatusCode, fmt.Sprintf("%s %s: status %d: %.200s", req.Method, req.URL.Path, resp.StatusCode, payload)}
 	}
 	if out == nil || len(payload) == 0 {
 		return nil

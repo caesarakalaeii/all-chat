@@ -49,8 +49,11 @@ type fakeKick struct {
 	mu   sync.Mutex
 	subs map[string]fakeSub // subscription id -> sub
 	next int
-	log  []string
-	srv  *httptest.Server
+	// postLimit, when set, is how many subscription POSTs succeed before Kick
+	// answers 429, as it does to a burst.
+	postLimit, posts int
+	log              []string
+	srv              *httptest.Server
 }
 
 type fakeSub struct {
@@ -104,6 +107,11 @@ func newFakeKick(t *testing.T) *fakeKick {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
 		case http.MethodPost:
+			f.posts++
+			if f.postLimit > 0 && f.posts > f.postLimit {
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
 			var body struct {
 				BroadcasterUserID int    `json:"broadcaster_user_id"`
 				Method            string `json:"method"`
@@ -314,5 +322,33 @@ func TestReconcile_SubscribesMissingAndDropsStale(t *testing.T) {
 	}
 	if len(f.log) != before {
 		t.Errorf("second pass called Kick again: %v", f.log[before:])
+	}
+}
+
+// Kick rate-limits subscription requests. A pass that runs into the limit must
+// stop there instead of spending the rest of its requests on more 429s; the
+// next pass picks up what is still missing.
+func TestReconcile_StopsAtTheRateLimitAndResumesNextPass(t *testing.T) {
+	f := newFakeKick(t)
+	f.postLimit = 1
+	s := newService(t, f, &capture{})
+	s.Sources = fakeSources{[]*channels.ActiveChannel{
+		{OverlayID: "o1", ChannelSlug: "alice"}, {OverlayID: "o2", ChannelSlug: "bob-b"}, {OverlayID: "o3", ChannelSlug: "gone"},
+	}}
+
+	if err := s.Reconcile(context.Background()); err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if f.posts != 2 {
+		t.Fatalf("POSTs = %d, want 2 (one accepted, one refused, then stop)", f.posts)
+	}
+
+	f.postLimit = 0
+	s.Store = &fakeStore{keys: map[string]bool{}} // the next interval
+	if err := s.Reconcile(context.Background()); err != nil {
+		t.Fatalf("second Reconcile: %v", err)
+	}
+	if len(f.subs) != 6 {
+		t.Errorf("subscriptions after the second pass = %v, want both events for all three channels", f.subs)
 	}
 }
