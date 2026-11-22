@@ -299,22 +299,11 @@ func main() {
 			msgType = models.WSMessageTypePredictionUpdate
 		}
 
-		// Check if this is a deletion event for replay buffer
 		// Parse the message to detect deletion events and to extract the stable
 		// message ID used for cross-pod buffer dedup.
-		var unifiedMsg struct {
-			ID       string `json:"id"`
-			Platform string `json:"platform"`
-			// Absent on messages published before the processor started stamping
-			// it, and on buffered deletions replayed from the registry.
-			IngestedAt *time.Time `json:"ingested_at"`
-			Event      *struct {
-				Type     string                 `json:"type"`
-				Metadata map[string]interface{} `json:"metadata"`
-			} `json:"event"`
-		}
+		unifiedMsg, decodeErr := decodeBroadcastEnvelope(message)
 		platform := "unknown"
-		if err := json.Unmarshal(message, &unifiedMsg); err == nil {
+		if decodeErr == nil {
 			// Record message received from Redis pub/sub
 			if unifiedMsg.Platform != "" {
 				platform = unifiedMsg.Platform
@@ -322,7 +311,7 @@ func main() {
 			gatewayMetrics.RecordMessageReceived("api-gateway", overlayID, platform)
 		}
 
-		if err := json.Unmarshal(message, &unifiedMsg); err == nil && unifiedMsg.Event != nil && unifiedMsg.Event.Type == "message_deletion" {
+		if decodeErr == nil && unifiedMsg.Event != nil && unifiedMsg.Event.Type == "message_deletion" {
 			// Add deletion event to replay buffer (best-effort, don't fail broadcast)
 			deletionEvent := &replay.DeletionEvent{
 				Platform:  unifiedMsg.Platform,
@@ -1161,6 +1150,31 @@ func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOv
 		overlayID != testStreamOverlayID &&
 		msgType != models.WSMessageTypePollUpdate &&
 		msgType != models.WSMessageTypePredictionUpdate
+}
+
+// broadcastEnvelope is the subset of a published UnifiedChatMessage the gateway
+// reads: enough to route deletions, dedup the replay buffer, and time the
+// pipeline. The full message is forwarded to overlays as opaque bytes.
+type broadcastEnvelope struct {
+	ID       string `json:"id"`
+	Platform string `json:"platform"`
+	// Nil on messages published before the processor started stamping it, on
+	// buffered deletions replayed from the registry, and when the processor
+	// could not parse the Redis stream ID. The key is a wire contract with the
+	// processor's models.UnifiedChatMessage.
+	IngestedAt *time.Time `json:"ingested_at"`
+	Event      *struct {
+		Type     string                 `json:"type"`
+		Metadata map[string]interface{} `json:"metadata"`
+	} `json:"event"`
+}
+
+// decodeBroadcastEnvelope reads the fields the gateway acts on out of a message
+// published to an overlay channel.
+func decodeBroadcastEnvelope(message []byte) (broadcastEnvelope, error) {
+	var envelope broadcastEnvelope
+	err := json.Unmarshal(message, &envelope)
+	return envelope, err
 }
 
 // recordDeliveryMetrics records the latency of one broadcast message.
