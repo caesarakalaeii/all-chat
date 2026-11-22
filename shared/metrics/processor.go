@@ -66,6 +66,20 @@ type ProcessorMetrics struct {
 	EngagementForwardTotal *prometheus.CounterVec
 }
 
+// stageDurationBuckets and emoteEnrichmentBuckets reach past 100ms because the
+// enrichment stages outgrew the old top finite bucket of 0.1s: emote, badge,
+// viewer-identity and event-avatar enrichment all read p95 = exactly 0.1, which
+// is what a quantile looks like when every slow observation has fallen into
+// +Inf. The fine-grained low end is kept so the stages that really do run in
+// microseconds stay readable.
+//
+// Changing bucket bounds resets the existing series' history but keeps the
+// metric names and labels, so dashboards and recording rules are unaffected.
+var (
+	stageDurationBuckets   = []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5}
+	emoteEnrichmentBuckets = []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5}
+)
+
 // NewProcessorMetrics creates a new set of processor metrics
 func NewProcessorMetrics() *ProcessorMetrics {
 	return &ProcessorMetrics{
@@ -95,7 +109,7 @@ func NewProcessorMetrics() *ProcessorMetrics {
 			prometheus.HistogramOpts{
 				Name:    "processor_stage_duration_seconds",
 				Help:    "Duration of each processing stage",
-				Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1},
+				Buckets: stageDurationBuckets,
 			},
 			[]string{"service", "platform", "stage"},
 		),
@@ -138,7 +152,7 @@ func NewProcessorMetrics() *ProcessorMetrics {
 			prometheus.HistogramOpts{
 				Name:    "processor_emote_enrichment_duration_seconds",
 				Help:    "Time to enrich message with emotes",
-				Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1},
+				Buckets: emoteEnrichmentBuckets,
 			},
 			[]string{"service", "emote_count_bucket"},
 		),

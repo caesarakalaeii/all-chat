@@ -691,7 +691,7 @@ func main() {
 			}
 
 		publish:
-			unified.IsUpdate = rawMsg.IsUpdate
+			carryRawFields(unified, rawMsg)
 
 			// Streamer send-to-all: collapse the per-platform echoes into one combined
 			// message. Reuse the shared group id (so all echoes share an id), attach the
@@ -1107,6 +1107,16 @@ func main() {
 	}
 
 	log.Info("Service exited")
+}
+
+// carryRawFields copies the fields that survive normalization unchanged from the
+// raw message onto the message about to be published. Called at the one point
+// all paths (chat, event, deletion) converge, so none of the ~15 normalizers has
+// to remember these. A nil IngestedAt stays nil so the gateway skips the
+// end-to-end observation rather than measuring from the zero instant.
+func carryRawFields(unified *models.UnifiedChatMessage, rawMsg *models.RawChatMessage) {
+	unified.IsUpdate = rawMsg.IsUpdate
+	unified.IngestedAt = rawMsg.IngestedAt
 }
 
 // getEnvOrDefault gets an environment variable or returns a default value

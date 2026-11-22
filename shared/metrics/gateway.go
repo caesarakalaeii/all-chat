@@ -17,9 +17,24 @@
 package metrics
 
 import (
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
+
+// pipelineEndToEndBuckets covers the ingest-to-overlay path, which spans the
+// stream read, enrichment (tens of milliseconds to a second), fanout and the
+// WebSocket write. It runs to 30s so a stalled consumer group shows as a real
+// quantile rather than saturating the top bucket, which is the failure that hid
+// the enrichment tail in processor_stage_duration_seconds.
+var pipelineEndToEndBuckets = []float64{0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30}
+
+// maxPipelineEndToEndLatency bounds what counts as a live message. Anything
+// older is a replay (a reconnecting overlay draining a buffer, a PEL redelivery
+// after an outage) whose age says nothing about current pipeline health, so it
+// is skipped rather than clamped into the top bucket.
+const maxPipelineEndToEndLatency = 5 * time.Minute
 
 // GatewayMetrics provides metrics for the API Gateway service
 type GatewayMetrics struct {
@@ -37,6 +52,11 @@ type GatewayMetrics struct {
 	MessagesSent               *prometheus.CounterVec
 	MessageDeliveryLatency     *prometheus.HistogramVec
 	MessagesDropped            *prometheus.CounterVec
+
+	// PipelineEndToEndLatency spans the whole pipeline: Redis accepting the raw
+	// message into chat:raw, through the processor, to this gateway handing it to
+	// the overlay sockets. Every other histogram times one stage.
+	PipelineEndToEndLatency *prometheus.HistogramVec
 
 	// HTTP Endpoints
 	HTTPRequestsTotal          *prometheus.CounterVec
@@ -106,6 +126,14 @@ func NewGatewayMetrics() *GatewayMetrics {
 				Buckets: []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1},
 			},
 			[]string{"service"},
+		),
+		PipelineEndToEndLatency: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "pipeline_end_to_end_latency_seconds",
+				Help:    "Time from Redis accepting the message into chat:raw to the gateway broadcasting it to overlay WebSockets",
+				Buckets: pipelineEndToEndBuckets,
+			},
+			[]string{"service", "platform"},
 		),
 		MessagesDropped: promauto.NewCounterVec(
 			prometheus.CounterOpts{
@@ -204,6 +232,14 @@ func NewGatewayMetricsForTest() *GatewayMetrics {
 			},
 			[]string{"service"},
 		),
+		PipelineEndToEndLatency: f.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "pipeline_end_to_end_latency_seconds",
+				Help:    "Time from Redis accepting the message into chat:raw to the gateway broadcasting it to overlay WebSockets",
+				Buckets: pipelineEndToEndBuckets,
+			},
+			[]string{"service", "platform"},
+		),
 		MessagesDropped: f.NewCounterVec(
 			prometheus.CounterOpts{
 				Name: "gateway_messages_dropped_total",
@@ -264,6 +300,24 @@ func (m *GatewayMetrics) RecordMessageReceived(service, overlayID, platform stri
 // RecordMessageSent records a message sent via WebSocket
 func (m *GatewayMetrics) RecordMessageSent(service, overlayID, result string) {
 	m.MessagesSent.WithLabelValues(service, overlayID, result).Inc()
+}
+
+// RecordMessageDeliveryLatency records how long the gateway took to get a
+// message from Redis onto the overlay WebSockets.
+func (m *GatewayMetrics) RecordMessageDeliveryLatency(service string, d time.Duration) {
+	m.MessageDeliveryLatency.WithLabelValues(service).Observe(d.Seconds())
+}
+
+// RecordPipelineEndToEndLatency records the ingest-to-overlay latency of one
+// message. Implausible values are skipped, not clamped: a negative duration
+// means the processor's Redis clock ran ahead of this pod's, and folding either
+// it or a replay into the distribution would move the quantiles the metric
+// exists to report.
+func (m *GatewayMetrics) RecordPipelineEndToEndLatency(service, platform string, d time.Duration) {
+	if d < 0 || d > maxPipelineEndToEndLatency {
+		return
+	}
+	m.PipelineEndToEndLatency.WithLabelValues(service, platform).Observe(d.Seconds())
 }
 
 // RecordMessageDropped records a dropped message
