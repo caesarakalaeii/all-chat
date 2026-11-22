@@ -305,12 +305,12 @@ func main() {
 		// Check if this is a deletion event for replay buffer
 		// Parse the message to detect deletion events and to extract the stable
 		// message ID used for cross-pod buffer dedup.
-		// IngestedAt is when Redis accepted the originating raw message into
-		// chat:raw. Absent on messages published before the processor started
-		// stamping it, and on buffered deletions replayed from the registry.
 		var unifiedMsg struct {
-			ID         string     `json:"id"`
-			Platform   string     `json:"platform"`
+			ID       string `json:"id"`
+			Platform string `json:"platform"`
+			// IngestedAt is when Redis accepted the originating raw message into
+			// chat:raw. Absent on messages published before the processor started
+			// stamping it, and on buffered deletions replayed from the registry.
 			IngestedAt *time.Time `json:"ingested_at"`
 			Event      *struct {
 				Type     string                 `json:"type"`
