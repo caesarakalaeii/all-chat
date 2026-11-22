@@ -51,6 +51,31 @@ func TestRecordMessageDeliveryLatency(t *testing.T) {
 	}
 }
 
+// Clock skew between the processor's Redis and a gateway pod, or a replay
+// draining a reconnect buffer, would otherwise drag the reported quantiles
+// toward whichever bucket the bogus value was clamped into.
+func TestRecordPipelineEndToEndLatencySkipsImplausibleDurations(t *testing.T) {
+	tests := []struct {
+		name string
+		d    time.Duration
+	}{
+		{name: "negative, the gateway clock trails the ingest clock", d: -time.Second},
+		{name: "over five minutes, a replayed message", d: 6 * time.Minute},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewGatewayMetricsForTest()
+
+			m.RecordPipelineEndToEndLatency("api-gateway", "twitch", tc.d)
+
+			if got := testutil.CollectAndCount(m.PipelineEndToEndLatency); got != 0 {
+				t.Errorf("collected %d series for a %v observation, want 0", got, tc.d)
+			}
+		})
+	}
+}
+
 // Enrichment p95 saturated the old top finite bucket of 0.1s, which hid the real
 // tail: every slow stage landed in +Inf and the quantile read exactly 0.1. The
 // buckets must reach past 100ms for the tail to be visible at all.
