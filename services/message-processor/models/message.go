@@ -45,6 +45,13 @@ type RawChatMessage struct {
 	// Tenor GIFs in a MESSAGE_UPDATE). It replaces that row on the overlay and
 	// never re-runs per-message side effects (stats, commands, send-to-all).
 	IsUpdate bool `json:"is_update,omitempty"`
+
+	// IngestedAt is when Redis accepted this message into the chat:raw stream,
+	// taken from the stream entry ID by the consumer. Not part of the wire
+	// format listeners produce — it is carried to the publisher, which copies it
+	// onto the UnifiedChatMessage for the gateway's end-to-end latency metric.
+	// Nil when the entry ID did not parse.
+	IngestedAt *time.Time `json:"-"`
 }
 
 // UnifiedChatMessage represents the normalized, enriched message published to Pub/Sub
@@ -70,6 +77,13 @@ type UnifiedChatMessage struct {
 	// IsUpdate is RawChatMessage.IsUpdate carried to the publisher, which routes
 	// the message to the overlay's updates channel. Not part of the wire format.
 	IsUpdate bool `json:"-"`
+
+	// IngestedAt is when Redis accepted the originating message into the
+	// chat:raw stream. The gateway subtracts it from its own clock to report
+	// pipeline_end_to_end_latency_seconds, so unlike Timestamp — which is the
+	// platform's own clock and carries platform-side delay and skew — this is a
+	// single ingest clock shared by every platform. Omitted when unset.
+	IngestedAt *time.Time `json:"ingested_at,omitempty"`
 }
 
 // UserInfo contains information about the message author

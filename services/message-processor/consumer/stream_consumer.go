@@ -371,6 +371,13 @@ func (c *StreamConsumer) processMessage(ctx context.Context, msg redis.XMessage)
 	}
 	promoteTagDeletion(rawMsg)
 
+	// Stamp the ingest clock the gateway measures end-to-end latency against.
+	// Left nil on a malformed entry ID so a bad id cannot become a 55-year
+	// observation in the latency histogram.
+	if ingestedAt, ok := StreamIDTime(msg.ID); ok {
+		rawMsg.IngestedAt = &ingestedAt
+	}
+
 	// Record message consumed
 	c.metrics.RecordMessageConsumed("message-processor", rawMsg.Platform, ConsumerGroup)
 
