@@ -47,10 +47,9 @@ type RawChatMessage struct {
 	IsUpdate bool `json:"is_update,omitempty"`
 
 	// IngestedAt is when Redis accepted this message into the chat:raw stream,
-	// taken from the stream entry ID by the consumer. Not part of the wire
-	// format listeners produce — it is carried to the publisher, which copies it
-	// onto the UnifiedChatMessage for the gateway's end-to-end latency metric.
-	// Nil when the entry ID did not parse.
+	// taken from the stream entry ID by the consumer, and nil when that id did
+	// not parse. Not part of the wire format listeners produce — it is carried to
+	// the publisher, which copies it onto the UnifiedChatMessage.
 	IngestedAt *time.Time `json:"-"`
 }
 

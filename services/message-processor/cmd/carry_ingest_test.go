@@ -23,10 +23,9 @@ import (
 	"github.com/caesar/all-chat/services/message-processor/models"
 )
 
-// This carry is the entire producer half of the end-to-end metric: the consumer
-// parses the ingest time off the stream ID, but if it is not copied onto the
-// published message it never reaches the wire and
-// pipeline_end_to_end_latency_seconds stays empty with a green build.
+// This carry is the entire producer half of the end-to-end metric: drop it and
+// the ingest time never reaches the wire, leaving
+// pipeline_end_to_end_latency_seconds empty with a green build.
 func TestCarryRawFields_CopiesIngestedAt(t *testing.T) {
 	ingestedAt := time.UnixMilli(1700000000123).UTC()
 	raw := &models.RawChatMessage{IngestedAt: &ingestedAt}
@@ -42,9 +41,9 @@ func TestCarryRawFields_CopiesIngestedAt(t *testing.T) {
 	}
 }
 
-// A stream ID the consumer could not parse leaves the raw ingest time nil. The
-// published message must stay nil too, so the gateway skips the observation
-// rather than recording a latency measured from the zero instant.
+// An unparseable stream ID leaves the raw ingest time nil; the published message
+// must stay nil too, so the gateway skips the observation rather than measuring
+// from the zero instant.
 func TestCarryRawFields_LeavesIngestedAtNilWhenRawHasNone(t *testing.T) {
 	unified := &models.UnifiedChatMessage{}
 

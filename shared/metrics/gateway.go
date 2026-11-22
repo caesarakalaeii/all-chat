@@ -309,12 +309,10 @@ func (m *GatewayMetrics) RecordMessageDeliveryLatency(service string, d time.Dur
 }
 
 // RecordPipelineEndToEndLatency records the ingest-to-overlay latency of one
-// message.
-//
-// Implausible values are skipped, not clamped. A negative duration means the
-// processor's Redis clock ran ahead of this pod's, and a duration over
-// maxPipelineEndToEndLatency means a replay; folding either into the
-// distribution would move the quantiles the metric exists to report.
+// message. Implausible values are skipped, not clamped: a negative duration
+// means the processor's Redis clock ran ahead of this pod's, and folding either
+// it or a replay into the distribution would move the quantiles the metric
+// exists to report.
 func (m *GatewayMetrics) RecordPipelineEndToEndLatency(service, platform string, d time.Duration) {
 	if d < 0 || d > maxPipelineEndToEndLatency {
 		return

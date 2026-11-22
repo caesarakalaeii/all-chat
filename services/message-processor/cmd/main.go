@@ -1110,12 +1110,9 @@ func main() {
 }
 
 // carryRawFields copies the fields that survive normalization unchanged from the
-// raw message onto the message about to be published.
-//
-// Called at the one point all paths (chat, event, deletion) converge, because
-// each of the ~15 normalizers builds its own UnifiedChatMessage and would
-// otherwise need the same two lines. A nil IngestedAt — a stream ID the consumer
-// could not parse — is carried through as nil so the gateway skips the
+// raw message onto the message about to be published. Called at the one point
+// all paths (chat, event, deletion) converge, so none of the ~15 normalizers has
+// to remember these. A nil IngestedAt stays nil so the gateway skips the
 // end-to-end observation rather than measuring from the zero instant.
 func carryRawFields(unified *models.UnifiedChatMessage, rawMsg *models.RawChatMessage) {
 	unified.IsUpdate = rawMsg.IsUpdate

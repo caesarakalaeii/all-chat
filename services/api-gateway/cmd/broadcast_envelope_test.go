@@ -23,15 +23,13 @@ import (
 )
 
 // The processor writes ingested_at and the gateway reads it back; nothing else
-// checks that the two agree on the key. A rename on either side silently empties
-// pipeline_end_to_end_latency_seconds, which is the defect this metric exists to
-// avoid, so the contract is pinned here against a payload the processor produced.
+// checks that the two agree on the key, and a rename on either side silently
+// empties pipeline_end_to_end_latency_seconds.
 func TestDecodeBroadcastEnvelope_ReadsProducerIngestedAt(t *testing.T) {
 	ingestedAt := time.UnixMilli(1700000000123).UTC()
-	// Literal rather than a models.UnifiedChatMessage: api-gateway does not
-	// import the processor's module, so the key is restated as it goes on the
-	// wire. models.TestUnifiedChatMessage_IngestedAtWireFormat pins the
-	// producer to this same spelling and encoding.
+	// A literal, not a models.UnifiedChatMessage: api-gateway does not import the
+	// processor's module. models.TestUnifiedChatMessage_IngestedAtWireFormat pins
+	// the producer to this same spelling and encoding.
 	payload := []byte(`{"id":"m-1","platform":"twitch","ingested_at":"2023-11-14T22:13:20.123Z"}`)
 
 	envelope, err := decodeBroadcastEnvelope(payload)
@@ -52,10 +50,9 @@ func TestDecodeBroadcastEnvelope_ReadsProducerIngestedAt(t *testing.T) {
 	}
 }
 
-// A message published before the processor stamped ingest times, and a buffered
-// deletion replayed from the registry, both arrive without the key. That must
-// decode cleanly with a nil time rather than erroring or yielding the zero
-// instant, which would be recorded as a ~55-year end-to-end latency.
+// Messages predating the field, and buffered deletions replayed from the
+// registry, arrive without the key. That must decode to a nil time rather than
+// the zero instant, which would record as a ~55-year end-to-end latency.
 func TestDecodeBroadcastEnvelope_LeavesIngestedAtNilWhenAbsent(t *testing.T) {
 	envelope, err := decodeBroadcastEnvelope([]byte(`{"id":"m-1","platform":"twitch"}`))
 	if err != nil {

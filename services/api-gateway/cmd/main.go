@@ -1158,10 +1158,9 @@ func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOv
 type broadcastEnvelope struct {
 	ID       string `json:"id"`
 	Platform string `json:"platform"`
-	// Nil on messages published before the processor started stamping it, on
-	// buffered deletions replayed from the registry, and when the processor
-	// could not parse the Redis stream ID. The key is a wire contract with the
-	// processor's models.UnifiedChatMessage.
+	// Nil on buffered deletions replayed from the registry and on messages the
+	// processor could not stamp. The key is a wire contract with the processor's
+	// models.UnifiedChatMessage.
 	IngestedAt *time.Time `json:"ingested_at"`
 	Event      *struct {
 		Type     string                 `json:"type"`
@@ -1169,24 +1168,17 @@ type broadcastEnvelope struct {
 	} `json:"event"`
 }
 
-// decodeBroadcastEnvelope reads the fields the gateway acts on out of a message
-// published to an overlay channel.
 func decodeBroadcastEnvelope(message []byte) (broadcastEnvelope, error) {
 	var envelope broadcastEnvelope
 	err := json.Unmarshal(message, &envelope)
 	return envelope, err
 }
 
-// recordDeliveryMetrics records the latency of one broadcast message.
-//
-// ingestedAt is nil for a message published before the field existed and for a
-// buffered deletion replayed from the registry, which carries no ingest time.
-// Those still have a meaningful delivery latency; their end-to-end latency is
-// unknown, so it is left unrecorded rather than guessed at.
-//
-// now is a parameter rather than a time.Now() call inside, so the end-to-end
-// duration is taken against the same clock reading the caller used to close the
-// delivery duration, and so tests do not have to race the wall clock.
+// recordDeliveryMetrics records the latency of one broadcast message. A nil
+// ingestedAt still has a meaningful delivery latency; its end-to-end latency is
+// unknown, so it is left unrecorded rather than guessed at. now is passed in so
+// the end-to-end duration uses the same clock reading that closed the delivery
+// duration.
 func recordDeliveryMetrics(m *metrics.GatewayMetrics, platform string, ingestedAt *time.Time, deliveryDuration time.Duration, now time.Time) {
 	m.RecordMessageDeliveryLatency("api-gateway", deliveryDuration)
 	if ingestedAt != nil {
