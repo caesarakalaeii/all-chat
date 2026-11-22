@@ -1183,6 +1183,10 @@ func decodeBroadcastEnvelope(message []byte) (broadcastEnvelope, error) {
 // buffered deletion replayed from the registry, which carries no ingest time.
 // Those still have a meaningful delivery latency; their end-to-end latency is
 // unknown, so it is left unrecorded rather than guessed at.
+//
+// now is a parameter rather than a time.Now() call inside, so the end-to-end
+// duration is taken against the same clock reading the caller used to close the
+// delivery duration, and so tests do not have to race the wall clock.
 func recordDeliveryMetrics(m *metrics.GatewayMetrics, platform string, ingestedAt *time.Time, deliveryDuration time.Duration, now time.Time) {
 	m.RecordMessageDeliveryLatency("api-gateway", deliveryDuration)
 	if ingestedAt != nil {
