@@ -21,11 +21,8 @@
  *
  * Each value maps to a `.msg-anim-<value>` class defined in globals.css
  * (document scope, so bundled themes and custom CSS can override it).
- * `undefined` keeps the default tailwindcss-animate fade + slide-up.
- *
- * `'none'` is the off switch, not a preset: it is still a real setting value
- * (and a real class) because `undefined` already means "fall back to the
- * default", so there is no spare state left to say "no animation at all".
+ * `undefined` keeps the default tailwindcss-animate fade + slide-up, so turning
+ * the animation off needs its own value — `'none'`, mapping to `animation: none`.
  */
 export const MESSAGE_ANIMATIONS = [
   'none',

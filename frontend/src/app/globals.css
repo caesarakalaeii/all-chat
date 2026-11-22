@@ -448,8 +448,6 @@
    Applied as .msg-anim-* on the chat bubble by the live overlay page and the
    editor's embed preview when visual_settings.messageAnimation is set; the
    class list lives in lib/types/visual-settings.ts (MESSAGE_ANIMATIONS).
-   `.msg-anim-none` is the off switch — no animation at all, which an unset
-   setting cannot express because that falls back to the default fade + slide.
    Bundled themes / custom CSS can override: themes are wrapped into
    @layer marketplace-themes at injection, which sits below unlayered rules.
    ============================================================ */
