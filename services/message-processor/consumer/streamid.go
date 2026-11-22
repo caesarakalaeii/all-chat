@@ -23,12 +23,8 @@ import (
 )
 
 // StreamIDTime returns the time Redis assigned to a stream entry, in UTC.
-//
-// Redis stream entry IDs have the format "{unix_ms}-{sequence}", where the
-// millisecond part is the server clock at XADD. That makes it the one ingest
-// clock shared by every platform: it does not depend on a listener stamping a
-// timestamp, and unlike the platform timestamp carried in the message body it
-// has no platform-side delay or client clock skew in it.
+// Entry IDs have the format "{unix_ms}-{sequence}", where the millisecond part
+// is the server clock at XADD.
 //
 // Returns false when the id is malformed, so a caller can leave an ingest
 // timestamp unset rather than stamp the Unix epoch.

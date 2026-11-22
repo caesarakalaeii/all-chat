@@ -692,10 +692,9 @@ func main() {
 
 		publish:
 			unified.IsUpdate = rawMsg.IsUpdate
-			// Carry the ingest clock onto the wire so the gateway can report
-			// ingest-to-overlay latency. Every normalizer builds its own
-			// UnifiedChatMessage, so this is stamped here, at the one point all
-			// paths (chat, event, deletion) converge before publishing.
+			// Stamped here because every normalizer builds its own
+			// UnifiedChatMessage; this is the one point all paths (chat, event,
+			// deletion) converge before publishing.
 			unified.IngestedAt = rawMsg.IngestedAt
 
 			// Streamer send-to-all: collapse the per-platform echoes into one combined

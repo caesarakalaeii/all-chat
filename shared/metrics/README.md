@@ -93,8 +93,8 @@ API Gateway metrics:
 - **WebSocket Connections**: Active connections, total attempts, duration
 - **Overlay Subscriptions**: Active subscriptions, lifecycle events
 - **Message Distribution**: Messages received/sent/dropped, delivery latency
-- **Delivery latency**: `gateway_message_delivery_latency_seconds` — Redis receipt to overlay WebSocket broadcast, recorded for chat and event frames (not alerts)
-- **Pipeline latency**: `pipeline_end_to_end_latency_seconds` — Redis accepting the raw message into `chat:raw` to this broadcast, by platform; skipped when the frame carries no `ingested_at`, and for negative or over-5-minute values (clock skew and replays)
+- **Delivery latency**: `gateway_message_delivery_latency_seconds` — Redis receipt to overlay WebSocket broadcast, for chat and event frames (not alerts)
+- **Pipeline latency**: `pipeline_end_to_end_latency_seconds` — `chat:raw` ingest to this broadcast, by platform; skipped when the frame carries no `ingested_at`, and for negative or over-5-minute values (clock skew and replays)
 - **HTTP Endpoints**: Request counts, duration
 
 ### Business Metrics

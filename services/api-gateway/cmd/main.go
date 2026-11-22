@@ -281,11 +281,8 @@ func main() {
 			return
 		}
 
-		// Delivery latency is measured from here, after the alert early-return
-		// above, so gateway_message_delivery_latency_seconds and
-		// pipeline_end_to_end_latency_seconds describe chat and event delivery
-		// only. Alerts are resolved against the overlay's alert profile and have a
-		// different shape of work in them.
+		// Measured from after the alert early-return above, so the delivery and
+		// end-to-end histograms describe chat and event delivery only.
 		deliveryStart := time.Now()
 
 		// Determine message type based on channel
@@ -308,9 +305,8 @@ func main() {
 		var unifiedMsg struct {
 			ID       string `json:"id"`
 			Platform string `json:"platform"`
-			// IngestedAt is when Redis accepted the originating raw message into
-			// chat:raw. Absent on messages published before the processor started
-			// stamping it, and on buffered deletions replayed from the registry.
+			// Absent on messages published before the processor started stamping
+			// it, and on buffered deletions replayed from the registry.
 			IngestedAt *time.Time `json:"ingested_at"`
 			Event      *struct {
 				Type     string                 `json:"type"`
@@ -1167,18 +1163,12 @@ func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOv
 		msgType != models.WSMessageTypePredictionUpdate
 }
 
-// recordDeliveryMetrics records the latency of one broadcast message: how long
-// this gateway took from receiving it off Redis to handing it to the overlay
-// sockets, and — when the processor stamped an ingest time — how long the whole
-// pipeline took from Redis accepting the raw message into chat:raw.
+// recordDeliveryMetrics records the latency of one broadcast message.
 //
 // ingestedAt is nil for a message published before the field existed and for a
 // buffered deletion replayed from the registry, which carries no ingest time.
 // Those still have a meaningful delivery latency; their end-to-end latency is
 // unknown, so it is left unrecorded rather than guessed at.
-//
-// now is a parameter so the end-to-end duration is taken against the same clock
-// reading the caller used, and so tests do not have to race the wall clock.
 func recordDeliveryMetrics(m *metrics.GatewayMetrics, platform string, ingestedAt *time.Time, deliveryDuration time.Duration, now time.Time) {
 	m.RecordMessageDeliveryLatency("api-gateway", deliveryDuration)
 	if ingestedAt != nil {
