@@ -281,6 +281,13 @@ func main() {
 			return
 		}
 
+		// Delivery latency is measured from here, after the alert early-return
+		// above, so gateway_message_delivery_latency_seconds and
+		// pipeline_end_to_end_latency_seconds describe chat and event delivery
+		// only. Alerts are resolved against the overlay's alert profile and have a
+		// different shape of work in them.
+		deliveryStart := time.Now()
+
 		// Determine message type based on channel
 		// Main channel: overlay:{id} -> regular messages/events
 		// Update channel: overlay:{id}:updates -> TikTok like aggregate updates and
@@ -298,19 +305,23 @@ func main() {
 		// Check if this is a deletion event for replay buffer
 		// Parse the message to detect deletion events and to extract the stable
 		// message ID used for cross-pod buffer dedup.
+		// IngestedAt is when Redis accepted the originating raw message into
+		// chat:raw. Absent on messages published before the processor started
+		// stamping it, and on buffered deletions replayed from the registry.
 		var unifiedMsg struct {
-			ID       string `json:"id"`
-			Platform string `json:"platform"`
-			Event    *struct {
+			ID         string     `json:"id"`
+			Platform   string     `json:"platform"`
+			IngestedAt *time.Time `json:"ingested_at"`
+			Event      *struct {
 				Type     string                 `json:"type"`
 				Metadata map[string]interface{} `json:"metadata"`
 			} `json:"event"`
 		}
+		platform := "unknown"
 		if err := json.Unmarshal(message, &unifiedMsg); err == nil {
 			// Record message received from Redis pub/sub
-			platform := unifiedMsg.Platform
-			if platform == "" {
-				platform = "unknown"
+			if unifiedMsg.Platform != "" {
+				platform = unifiedMsg.Platform
 			}
 			gatewayMetrics.RecordMessageReceived("api-gateway", overlayID, platform)
 		}
@@ -384,6 +395,8 @@ func main() {
 		// Engagement-only sockets (participate tabs) receive only poll/prediction
 		// update frames, never chat (#5).
 		count := wsManager.BroadcastToOverlayFiltered(overlayID, wsJSON, filter)
+		delivered := time.Now()
+		recordDeliveryMetrics(gatewayMetrics, platform, unifiedMsg.IngestedAt, delivered.Sub(deliveryStart), delivered)
 		log.Debug("Broadcast message to overlay",
 			zap.String("overlay_id", overlayID),
 			zap.Int("connections", count),
@@ -1152,6 +1165,25 @@ func shouldBufferForReplay(msgType models.WSMessageType, overlayID, testStreamOv
 		overlayID != testStreamOverlayID &&
 		msgType != models.WSMessageTypePollUpdate &&
 		msgType != models.WSMessageTypePredictionUpdate
+}
+
+// recordDeliveryMetrics records the latency of one broadcast message: how long
+// this gateway took from receiving it off Redis to handing it to the overlay
+// sockets, and — when the processor stamped an ingest time — how long the whole
+// pipeline took from Redis accepting the raw message into chat:raw.
+//
+// ingestedAt is nil for a message published before the field existed and for a
+// buffered deletion replayed from the registry, which carries no ingest time.
+// Those still have a meaningful delivery latency; their end-to-end latency is
+// unknown, so it is left unrecorded rather than guessed at.
+//
+// now is a parameter so the end-to-end duration is taken against the same clock
+// reading the caller used, and so tests do not have to race the wall clock.
+func recordDeliveryMetrics(m *metrics.GatewayMetrics, platform string, ingestedAt *time.Time, deliveryDuration time.Duration, now time.Time) {
+	m.RecordMessageDeliveryLatency("api-gateway", deliveryDuration)
+	if ingestedAt != nil {
+		m.RecordPipelineEndToEndLatency("api-gateway", platform, now.Sub(*ingestedAt))
+	}
 }
 
 // getEnvOrDefault gets an environment variable or returns a default value
