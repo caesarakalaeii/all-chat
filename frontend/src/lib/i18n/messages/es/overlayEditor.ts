@@ -706,6 +706,7 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     entryAnimationLabel: 'Animación de entrada',
     entryAnimationHint: 'Cómo aparecen los mensajes nuevos en el overlay',
     animationDefault: 'Fundido + deslizamiento hacia arriba (por defecto)',
+    animationNone: 'Ninguna (aparición instantánea)',
     animationFlyLeft: 'Entrada volando desde la izquierda',
     animationFlyRight: 'Entrada volando desde la derecha',
     animationFlySpring: 'Entrada volando con rebote',

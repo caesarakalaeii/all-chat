@@ -896,7 +896,9 @@ export default function OBSOverlayPage({ params }: { params: Promise<{ id: strin
         className={clsx(
           'overlay-live-body space-y-3',
           feedLayout.bodyClass,
-          messageAnimation && 'msg-anim-container'
+          // 'none' is the off switch, so there is no overshoot to clip and no
+          // reason to impose `overflow-x: clip` on the feed.
+          messageAnimation !== null && messageAnimation !== 'none' && 'msg-anim-container'
         )}
         style={{ textShadow: 'var(--chat-text-shadow, none)', ...containerStyle }}
         // React propagates media load events, so these fire for every

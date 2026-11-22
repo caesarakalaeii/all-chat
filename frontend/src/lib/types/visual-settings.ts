@@ -22,8 +22,13 @@
  * Each value maps to a `.msg-anim-<value>` class defined in globals.css
  * (document scope, so bundled themes and custom CSS can override it).
  * `undefined` keeps the default tailwindcss-animate fade + slide-up.
+ *
+ * `'none'` is the off switch, not a preset: it is still a real setting value
+ * (and a real class) because `undefined` already means "fall back to the
+ * default", so there is no spare state left to say "no animation at all".
  */
 export const MESSAGE_ANIMATIONS = [
+  'none',
   'fly-left',
   'fly-right',
   'fly-spring',
@@ -50,6 +55,7 @@ export function isBubbleColorFromUser(value: unknown): value is 'background' | '
  * be statically greppable, see DESIGN_SYSTEM.md). Classes live in globals.css.
  */
 export const MESSAGE_ANIMATION_CLASS: Record<MessageAnimation, string> = {
+  none: 'msg-anim-none',
   'fly-left': 'msg-anim-fly-left',
   'fly-right': 'msg-anim-fly-right',
   'fly-spring': 'msg-anim-fly-spring',

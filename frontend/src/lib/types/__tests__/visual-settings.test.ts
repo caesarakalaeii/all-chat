@@ -18,11 +18,7 @@
 
 import { describe, it, expect } from 'vitest'
 
-import {
-  MESSAGE_ANIMATIONS,
-  MESSAGE_ANIMATION_CLASS,
-  isMessageAnimation,
-} from '../visual-settings'
+import { MESSAGE_ANIMATIONS, MESSAGE_ANIMATION_CLASS, isMessageAnimation } from '../visual-settings'
 
 describe('isMessageAnimation', () => {
   it("accepts 'none', the off switch for the entry animation", () => {

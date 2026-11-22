@@ -231,13 +231,15 @@ function resolvedSevenTvNotice(t: TFunction, state: ResolvedSevenTvReference): s
   return t('overlayEditor.messages.seventvResolved')
 }
 
-// Entry-animation choices for new chat messages ('' = default fade + slide up).
+// Entry-animation choices for new chat messages ('' = default fade + slide up,
+// 'none' = no animation at all).
 // Values map to .msg-anim-* classes in globals.css via visual_settings.
 // Labels live in the catalog under `overlayEditor.messages.animation<Stem>`;
 // this list holds only the class-name values. `as const satisfies` keeps each
 // stem a string literal so a typo fails tsc at the lookup.
 const ENTRY_ANIMATION_OPTIONS = [
   { value: '', messageStem: 'Default' },
+  { value: 'none', messageStem: 'None' },
   { value: 'fly-left', messageStem: 'FlyLeft' },
   { value: 'fly-right', messageStem: 'FlyRight' },
   { value: 'fly-spring', messageStem: 'FlySpring' },

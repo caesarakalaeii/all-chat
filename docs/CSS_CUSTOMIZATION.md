@@ -120,6 +120,8 @@ Custom keyframes can read them too:
 
 Overriding a `.msg-anim-*` rule outright also works: they stay single unlayered class selectors, and these properties do not raise their specificity.
 
+To switch the entry animation off, pick **None (appear instantly)** in the Entry Animation dropdown. That applies `.msg-anim-none` (`animation: none`) instead of the default fade + slide, so new messages appear with no motion at all. Leaving the dropdown on **Default** keeps the fade + slide — the two are not the same choice. `.msg-anim-none` is an ordinary unlayered class selector like the presets, so a theme or your own CSS can still animate `.chat-message` over it.
+
 Never set `margin-top`, `justify-content` or `flex-direction` on `min-h-screen` or on `.overlay-live-body` itself. Bottom anchoring is a flex-column wrapper plus `margin-top: auto` on `.overlay-live-body`; overriding either re-pins the feed to an edge the user did not pick. Styling the list's children is fine and unaffected.
 
 ### The visual customizer and themes

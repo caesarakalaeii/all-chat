@@ -796,7 +796,8 @@ export default function OverlayEmbedPage({ params }: { params: Promise<{ id: str
             // The empty state centres itself in the frame, so it keeps the full
             // height in either mode; there is nothing to anchor yet.
             messages.length === 0 ? 'h-full' : feedLayout.scrollBodyClass,
-            messageAnimation && 'msg-anim-container'
+            // See the live overlay: 'none' has no overshoot to clip.
+            messageAnimation !== null && messageAnimation !== 'none' && 'msg-anim-container'
           )}
           style={{
             scrollbarWidth: 'thin',

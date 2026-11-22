@@ -791,6 +791,7 @@ export const overlayEditor = {
     entryAnimationLabel: 'Entry Animation',
     entryAnimationHint: 'How new messages appear on the overlay',
     animationDefault: 'Fade + slide up (default)',
+    animationNone: 'None (appear instantly)',
     animationFlyLeft: 'Fly in from left',
     animationFlyRight: 'Fly in from right',
     animationFlySpring: 'Fly in with overshoot',
