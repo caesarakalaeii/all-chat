@@ -244,6 +244,26 @@ test.describe('Live overlay — invert_message_order with feed_anchor', () => {
     expect(await firstFrameOffset(true), 'newest-first enters from above').toBeLessThan(0)
   })
 
+  test("the 'none' entry animation leaves a new row with no animation at all", async ({ page }) => {
+    // The off switch a streamer picks in the Entry Animation dropdown. Asserted
+    // on the COMPUTED animation-name rather than getAnimations(), because the
+    // latter is a race: the default animation is 300ms and `send` already waits
+    // for the row to be visible, so it may have finished before we look.
+    const animationName = async (animation?: string) => {
+      const send = await boot(page, { anchor: 'top', animation })
+      await send('m1', 'first')
+      return page.evaluate(
+        () =>
+          getComputedStyle(document.querySelector('[data-message-id="m1"]') as HTMLElement)
+            .animationName
+      )
+    }
+
+    expect(await animationName('none'), "'none' must not animate").toBe('none')
+    // The fallback is unchanged for everyone who never touched the dropdown.
+    expect(await animationName(undefined), 'an unset animation keeps the default').not.toBe('none')
+  })
+
   test('a bottom-anchored feed that fits does not scroll itself while a row animates', async ({
     page,
   }) => {

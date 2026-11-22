@@ -885,6 +885,7 @@ describe('message settings copy', () => {
       'How new messages appear on the overlay'
     )
     expect(t('overlayEditor.messages.animationDefault')).toBe('Fade + slide up (default)')
+    expect(t('overlayEditor.messages.animationNone')).toBe('None (appear instantly)')
     expect(t('overlayEditor.messages.animationFlyLeft')).toBe('Fly in from left')
     expect(t('overlayEditor.messages.animationFlyRight')).toBe('Fly in from right')
     expect(t('overlayEditor.messages.animationFlySpring')).toBe('Fly in with overshoot')

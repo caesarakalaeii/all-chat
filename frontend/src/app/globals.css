@@ -481,6 +481,10 @@
   --msg-enter-origin: 0%;
 }
 
+.msg-anim-none {
+  animation: none;
+}
+
 .msg-anim-fly-left {
   animation: msg-anim-fly-left 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }

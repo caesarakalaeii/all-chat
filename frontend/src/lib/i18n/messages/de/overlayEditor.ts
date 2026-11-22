@@ -711,6 +711,7 @@ export const overlayEditor: LocaleNamespace<'overlayEditor'> = {
     entryAnimationLabel: 'Einblend-Animation',
     entryAnimationHint: 'Wie neue Nachrichten auf dem Overlay erscheinen',
     animationDefault: 'Fade + nach oben gleiten (Standard)',
+    animationNone: 'Keine (sofort erscheinen)',
     animationFlyLeft: 'Von links einfliegen',
     animationFlyRight: 'Von rechts einfliegen',
     animationFlySpring: 'Mit Überschwung einfliegen',
