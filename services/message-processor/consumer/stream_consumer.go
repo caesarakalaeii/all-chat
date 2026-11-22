@@ -19,7 +19,6 @@ package consumer
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -572,18 +571,13 @@ func (c *StreamConsumer) processDeletionEvent(ctx context.Context, raw *models.R
 	return nil
 }
 
-// streamEntryLag parses the Redis stream entry ID to compute the age of the message.
-// Redis stream IDs have the format "{unix_ms}-{sequence}". Returns lag in seconds and true on success.
+// streamEntryLag computes the age of a stream entry from its Redis entry ID.
+// Returns lag in seconds and true on success.
 func streamEntryLag(streamID string) (float64, bool) {
-	parts := strings.SplitN(streamID, "-", 2)
-	if len(parts) == 0 {
+	msgTime, ok := StreamIDTime(streamID)
+	if !ok {
 		return 0, false
 	}
-	ms, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return 0, false
-	}
-	msgTime := time.UnixMilli(ms)
 	lagSeconds := time.Since(msgTime).Seconds()
 	if lagSeconds < 0 {
 		lagSeconds = 0
