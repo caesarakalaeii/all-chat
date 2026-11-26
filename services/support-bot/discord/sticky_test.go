@@ -284,6 +284,38 @@ func TestStickyPostsWhenPreviousStickyIsAlreadyGone(t *testing.T) {
 	}
 }
 
+// Manage Messages is granted by hand after the deploy, so the bot can be running
+// in a channel where every delete is refused. Posting anyway would pile up one
+// stray copy per debounce cycle, so a delete that failed for any reason other
+// than the message already being gone has to abort the cycle.
+func TestStickyDoesNotPostWhenPreviousStickyCannotBeDeleted(t *testing.T) {
+	fake := newFakeChannel()
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	fake.waitForPosts(t, 1)
+
+	// Missing Manage Messages, as Discord reports it.
+	fake.mu.Lock()
+	fake.delErr = &discordgo.RESTError{
+		Message: &discordgo.APIErrorMessage{Code: discordgo.ErrCodeMissingPermissions},
+	}
+	fake.mu.Unlock()
+
+	for i := 0; i < 3; i++ {
+		s.onMessage(testStickyChannel)
+		time.Sleep(60 * time.Millisecond)
+	}
+
+	posted, _ := fake.snapshot()
+	if len(posted) != 1 {
+		t.Fatalf("posted = %d copies, want 1: a refused delete must not add another sticky", len(posted))
+	}
+	if got := s.lastStickyID(testStickyChannel); got != "sticky-1" {
+		t.Fatalf("lastStickyID = %q, want sticky-1 to stay recorded so the next cycle retries the delete", got)
+	}
+}
+
 // A send failure must not leave a stale ID behind that the next cycle would try
 // to delete; the next cycle re-runs the restart sweep instead.
 func TestStickyForgetsIDWhenPostFails(t *testing.T) {
