@@ -68,7 +68,27 @@ func fakeClaude(mode string) int {
 	switch mode {
 	case "usage-limit":
 		return result(true, "success", "Claude AI usage limit reached|1763300000")
-	case "max-turns":
+	case "max-turns", "max-turns-synth-fails":
+		if flag("--mcp-config") == "" {
+			// No --mcp-config: this is the no-tools write-up step.
+			if mode == "max-turns-synth-fails" {
+				return result(true, "success", "API Error: 500 Internal server error")
+			}
+			if got := flag("--max-turns"); got != "1" {
+				fmt.Fprintf(os.Stderr, "write-up step --max-turns = %q, want 1\n", got)
+				return 2
+			}
+			return result(false, "success", "synthesized: "+string(prompt))
+		}
+		// The main run: spend a tool call, as the run that prompted this fix did,
+		// then report the turn limit with the empty result the real CLI prints.
+		call, err := mcpClient(flag("--mcp-config"))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 2
+		}
+		call("initialize", map[string]any{"protocolVersion": "2025-06-18"})
+		call("tools/call", map[string]any{"name": "echo", "arguments": map[string]any{"text": "no glow setting"}})
 		return result(true, "error_max_turns", "")
 	case "env":
 		// Report what the CLI was given: secrets the bot holds must not leak in.
@@ -76,18 +96,38 @@ func fakeClaude(mode string) int {
 			os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"), os.Getenv("GITHUB_TOKEN"), os.Getenv("HOME")))
 	}
 
+	call, err := mcpClient(flag("--mcp-config"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
+
+	call("initialize", map[string]any{"protocolVersion": "2025-06-18"})
+	listed := call("tools/list", map[string]any{})
+	var names []string
+	for _, t := range listed["result"].(map[string]any)["tools"].([]any) {
+		names = append(names, t.(map[string]any)["name"].(string))
+	}
+	called := call("tools/call", map[string]any{"name": "echo", "arguments": map[string]any{"text": "pong"}})
+	content := called["result"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	return result(false, "success", fmt.Sprintf("tools=%s echo=%s system=%t prompt=%s",
+		strings.Join(names, ","), content, flag("--system-prompt") == "be helpful", strings.TrimSpace(string(prompt))))
+}
+
+// mcpClient dials the MCP endpoint named in a --mcp-config value, and returns a
+// function that makes one JSON-RPC call against it.
+func mcpClient(mcpConfig string) (func(method string, params any) map[string]any, error) {
 	var cfg struct {
 		MCPServers map[string]struct {
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers"`
 		} `json:"mcpServers"`
 	}
-	if err := json.Unmarshal([]byte(flag("--mcp-config")), &cfg); err != nil {
-		fmt.Fprintln(os.Stderr, "bad --mcp-config:", err)
-		return 2
+	if err := json.Unmarshal([]byte(mcpConfig), &cfg); err != nil {
+		return nil, fmt.Errorf("bad --mcp-config: %w", err)
 	}
 	srv := cfg.MCPServers["allchat"]
-	call := func(method string, params any) map[string]any {
+	return func(method string, params any) map[string]any {
 		body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
 		req, _ := http.NewRequest(http.MethodPost, srv.URL, bytes.NewReader(body))
 		for k, v := range srv.Headers {
@@ -101,18 +141,7 @@ func fakeClaude(mode string) int {
 		var out map[string]any
 		_ = json.NewDecoder(resp.Body).Decode(&out)
 		return out
-	}
-
-	call("initialize", map[string]any{"protocolVersion": "2025-06-18"})
-	listed := call("tools/list", map[string]any{})
-	var names []string
-	for _, t := range listed["result"].(map[string]any)["tools"].([]any) {
-		names = append(names, t.(map[string]any)["name"].(string))
-	}
-	called := call("tools/call", map[string]any{"name": "echo", "arguments": map[string]any{"text": "pong"}})
-	content := called["result"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
-	return result(false, "success", fmt.Sprintf("tools=%s echo=%s system=%t prompt=%s",
-		strings.Join(names, ","), content, flag("--system-prompt") == "be helpful", strings.TrimSpace(string(prompt))))
+	}, nil
 }
 
 // ccEchoTool is available in both modes and reports a side effect.
@@ -230,6 +259,63 @@ func TestClaudeCodeRun_MaxTurnsIsPartial(t *testing.T) {
 	}
 	if res.Stop != StopMaxIterations {
 		t.Errorf("stop = %v, want max iterations", res.Stop)
+	}
+}
+
+func TestClaudeCodeRun_MaxTurnsSynthesizesAnswer(t *testing.T) {
+	cc := newTestClaudeCode(t, "max-turns")
+	res, err := cc.Run(context.Background(), &tool.ToolCtx{Mode: access.ModeSupport}, supportTranscript())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Stop != StopMaxIterations {
+		t.Errorf("stop = %v, want max iterations: the answer is still partial", res.Stop)
+	}
+	if !strings.HasPrefix(res.Text, "synthesized:") {
+		t.Errorf("text = %q, want the write-up step's answer", res.Text)
+	}
+	if !strings.Contains(res.Text, "Findings so far") {
+		t.Errorf("text = %q, want the recorded findings in the write-up prompt", res.Text)
+	}
+}
+
+func TestClaudeCodeRun_MaxTurnsKeepsEmptyTextWhenSynthesisFails(t *testing.T) {
+	cc := newTestClaudeCode(t, "max-turns-synth-fails")
+	res, err := cc.Run(context.Background(), &tool.ToolCtx{Mode: access.ModeSupport}, supportTranscript())
+	if err != nil {
+		t.Fatalf("a failed write-up step must not fail the run: %v", err)
+	}
+	if res.Stop != StopMaxIterations {
+		t.Errorf("stop = %v, want max iterations", res.Stop)
+	}
+	if res.Text != "" {
+		t.Errorf("text = %q, want empty", res.Text)
+	}
+}
+
+func TestCCSessionToolLog_DropsOldestAndClipsResults(t *testing.T) {
+	sess := &ccSession{}
+	sess.recordToolCall("echo", `{"n":0}`, strings.Repeat("a", maxToolLogResult+500))
+	for i := 1; i < 200; i++ {
+		sess.recordToolCall("echo", fmt.Sprintf(`{"n":%d}`, i), strings.Repeat("b", 1000))
+	}
+	log := sess.toolLogText()
+	if len(log) > maxToolLog {
+		t.Errorf("tool log is %d bytes, want at most %d", len(log), maxToolLog)
+	}
+	if strings.Contains(log, `{"n":0}`) {
+		t.Error("the oldest entry must be dropped first")
+	}
+	if !strings.Contains(log, `{"n":199}`) {
+		t.Error("the newest entry must be kept")
+	}
+}
+
+func TestCCSessionToolLog_ClipsALongResult(t *testing.T) {
+	sess := &ccSession{}
+	sess.recordToolCall("echo", "{}", strings.Repeat("a", maxToolLogResult+500))
+	if got := len(sess.toolLogText()); got > maxToolLogResult+300 {
+		t.Errorf("a single entry is %d bytes, want the result clipped to about %d", got, maxToolLogResult)
 	}
 }
 
