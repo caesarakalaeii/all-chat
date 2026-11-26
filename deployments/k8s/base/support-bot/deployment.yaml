@@ -141,6 +141,15 @@ spec:
               value: "198569499228766208"
             - name: MODERATION_GUILD_ID
               value: "1441528700259663884"
+            # Sticky reminder: the bot deletes its previous copy and posts it again at
+            # the bottom of these channels whenever somebody else writes there. There is
+            # no expiry — emptying or removing either var turns the sticky off. Needs the
+            # Manage Messages permission in each channel.
+            - name: STICKY_CHANNEL_IDS
+              value: "1441528702839164961,1441528843155280103"
+            # {bot} is replaced with the bot's own mention at post time.
+            - name: STICKY_MESSAGE
+              value: "🏖️ Heads up: the maintainer is on vacation right now. For any help, ping {bot} and it'll answer in a thread. Urgent issues will still be looked at when they're back."
             # --- Grafana (Loki + Prometheus, read-only) ---
             - name: GRAFANA_URL
               value: "https://grafana.caes.ar"
