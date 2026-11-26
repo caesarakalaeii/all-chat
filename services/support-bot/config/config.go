@@ -52,8 +52,8 @@ type Config struct {
 	ModerationGuildID string // optional: enables cross-channel-spam auto-ban in this guild
 
 	// Sticky message: a reminder the bot keeps at the bottom of the listed channels by
-	// deleting its previous copy and posting it again. Off unless both are set; there is
-	// no expiry, so it stays up until these vars are emptied or removed.
+	// deleting its previous copy and posting it again. Off unless both are set, and it
+	// has no expiry.
 	StickyChannelIDs []string // optional: channels the sticky is kept in
 	StickyMessage    string   // optional: the text; the literal {bot} becomes the bot's mention
 

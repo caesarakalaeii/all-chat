@@ -45,8 +45,7 @@ const (
 )
 
 // stickyAPI is the slice of *discordgo.Session the reposter uses, so tests can
-// substitute a fake. The signatures match the session's methods exactly, which is
-// what lets the session be passed in directly.
+// substitute a fake.
 type stickyAPI interface {
 	ChannelMessageSend(channelID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
 	ChannelMessageDelete(channelID, messageID string, options ...discordgo.RequestOption) error
@@ -140,10 +139,10 @@ func (s *stickyReposter) onMessage(channelID string) {
 func (s *stickyReposter) stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for id, t := range s.timers {
+	for _, t := range s.timers {
 		t.Stop()
-		delete(s.timers, id)
 	}
+	clear(s.timers)
 }
 
 // lastStickyID is the ID of the sticky the reposter believes is currently posted
@@ -170,9 +169,7 @@ func (s *stickyReposter) repost(channelID string) {
 	// The channel's timer is deliberately left in the map. A cycle can be queued
 	// behind an earlier one, by which time the entry may hold a newer, still-armed
 	// timer; removing it would leave nothing able to cancel that timer, so stop()
-	// could not prevent a post during shutdown. A fired timer is harmless to keep:
-	// onMessage stops it before replacing it, Stop() on a fired timer is a no-op,
-	// and the map is bounded by the number of configured channels.
+	// could not prevent a post during shutdown.
 	s.mu.Lock()
 	previous := s.lastID[channelID]
 	s.mu.Unlock()
@@ -200,6 +197,8 @@ func (s *stickyReposter) repost(channelID string) {
 	s.setLastID(channelID, msg.ID)
 }
 
+// setLastID records the sticky now posted in a channel. An empty ID forgets the
+// channel, which reads back the same as never having posted there.
 func (s *stickyReposter) setLastID(channelID, messageID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

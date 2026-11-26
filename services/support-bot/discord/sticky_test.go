@@ -40,10 +40,9 @@ type fakeChannel struct {
 	nextID   int
 	sendErr  error
 	delErr   error
+	listErr  error
 	// posts is signalled after every send so tests can wait instead of sleeping.
 	posts chan struct{}
-
-	listErr error
 }
 
 func newFakeChannel() *fakeChannel {
