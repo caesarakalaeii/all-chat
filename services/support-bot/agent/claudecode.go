@@ -78,6 +78,61 @@ type ccSession struct {
 	det         *loopDetector
 	effects     []tool.ToolEffect
 	attachments []tool.Attachment
+
+	// toolLog is what the run found, kept so that a run which spends its whole turn
+	// budget on tools can still be written up into an answer. It is bounded: the
+	// oldest entries go first, because the newest ones are the ones the model was
+	// closing in on.
+	toolLog      []toolLogEntry
+	toolLogBytes int
+}
+
+// toolLogEntry is one tool call and what it returned, blocked and failed calls
+// included: "that lookup found nothing" is itself a finding worth writing up.
+type toolLogEntry struct {
+	name   string
+	args   string
+	result string
+}
+
+func (e toolLogEntry) size() int { return len(e.name) + len(e.args) + len(e.result) }
+
+const (
+	// maxToolLogResult bounds one tool result, and maxToolLog the whole log, so the
+	// write-up prompt stays a small fraction of the model's context.
+	maxToolLogResult = 2 << 10
+	maxToolLog       = 24 << 10
+)
+
+// recordToolCall appends one call to the session's bounded log, dropping the oldest
+// entries once the log is full. call holds s.mu around it.
+func (s *ccSession) recordToolCall(name, args, result string) {
+	e := toolLogEntry{name: name, args: args, result: clipTo(result, maxToolLogResult)}
+	s.toolLog = append(s.toolLog, e)
+	s.toolLogBytes += e.size()
+	for s.toolLogBytes > maxToolLog && len(s.toolLog) > 1 {
+		s.toolLogBytes -= s.toolLog[0].size()
+		s.toolLog = s.toolLog[1:]
+	}
+}
+
+// toolLogText renders the recorded calls for the write-up prompt.
+func (s *ccSession) toolLogText() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var b strings.Builder
+	for _, e := range s.toolLog {
+		fmt.Fprintf(&b, "## %s %s\n%s\n\n", e.name, e.args, e.result)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// clipTo cuts s to at most n bytes, marking that it was cut.
+func clipTo(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "\n…(truncated)"
 }
 
 // NewClaudeCode starts the MCP endpoint on 127.0.0.1 and prepares the CLI's HOME.
@@ -165,12 +220,84 @@ func (c *ClaudeCode) Run(ctx context.Context, tctx *tool.ToolCtx, messages []llm
 	switch {
 	case out.Subtype == "error_max_turns":
 		res.Stop = StopMaxIterations
+		if strings.TrimSpace(out.Result) == "" {
+			text, err := c.synthesize(ctx, strings.Join(system, "\n\n"), strings.Join(prompt, "\n\n"), sess)
+			if ctx.Err() != nil {
+				res.Stop = StopCancelled
+				return res, ctx.Err()
+			}
+			// A failed write-up step must not fail the run, and in particular must not
+			// turn a usage limit there into a busy error for the whole request: the
+			// main run already succeeded at everything it managed to do.
+			if err != nil {
+				if c.cfg.Log != nil {
+					c.cfg.Log.Warn("write-up step after max turns failed", zap.Error(err))
+				}
+			} else {
+				res.Text = text
+			}
+		}
 		return res, nil
 	case out.IsError:
 		return res, classifyCLIError(out.Result)
 	}
 	res.Stop = StopEndTurn
 	return res, nil
+}
+
+// synthesize runs the CLI once more with no tools at all, to turn what the run did
+// find into an answer. The main run hit --max-turns and printed nothing, so without
+// this the user gets only the "I stopped early" prefix and no findings.
+//
+// It deliberately passes no --mcp-config, --strict-mcp-config or --allowedTools: with
+// the turn budget already gone, this step must write, not search.
+func (c *ClaudeCode) synthesize(ctx context.Context, system, prompt string, sess *ccSession) (string, error) {
+	findings := sess.toolLogText()
+	if findings == "" {
+		return "", fmt.Errorf("no findings to write up")
+	}
+	args := []string{
+		"-p", "--output-format", "json",
+		"--model", c.cfg.Model,
+		"--max-turns", "1",
+		"--system-prompt", system,
+		"--tools", "",
+		"--no-session-persistence",
+	}
+
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, c.cfg.Bin, args...)
+	cmd.WaitDelay = 5 * time.Second
+	cmd.Dir = filepath.Join(c.cfg.Home, "work")
+	cmd.Env = c.env()
+	cmd.Stdin = strings.NewReader(prompt + "\n\nFindings so far (tool budget exhausted):\n\n" + findings +
+		"\n\nThe tool budget is gone, so you cannot look anything up. Answer the user's " +
+		"question now from these findings alone, say plainly what is still unknown, and do not call tools.")
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
+	var out struct {
+		IsError bool   `json:"is_error"`
+		Result  string `json:"result"`
+	}
+	if err := json.Unmarshal(lastLine(stdout.Bytes()), &out); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if runErr != nil {
+			detail = runErr.Error() + ": " + detail
+		}
+		return "", fmt.Errorf("write-up step: %s", clip(detail))
+	}
+	if out.IsError {
+		return "", fmt.Errorf("write-up step: %s", clip(out.Result))
+	}
+	if strings.TrimSpace(out.Result) == "" {
+		return "", fmt.Errorf("write-up step returned no text")
+	}
+	return out.Result, nil
 }
 
 // env is the CLI's whole environment: the bot's own secrets (GitHub, Discord,
@@ -333,10 +460,13 @@ func (c *ClaudeCode) call(ctx context.Context, sess *ccSession, name, args strin
 		return map[string]any{"content": []map[string]any{{"type": "text", "text": s}}, "isError": isErr}
 	}
 	if sess.det.wouldBlock(name, args) {
-		return text(wrapErr(name, fmt.Sprintf("skipped: %q was already run %d times with the same arguments — change the approach or answer with what you have", name, sess.det.threshold)), true)
+		blocked := wrapErr(name, fmt.Sprintf("skipped: %q was already run %d times with the same arguments — change the approach or answer with what you have", name, sess.det.threshold))
+		sess.recordToolCall(name, args, blocked)
+		return text(blocked, true)
 	}
 	sess.det.record(name, args)
 	dr := c.reg.Dispatch(ctx, sess.tctx, name, json.RawMessage(args))
+	sess.recordToolCall(name, args, dr.Content)
 	if dr.Effect != nil {
 		sess.effects = append(sess.effects, *dr.Effect)
 	}
