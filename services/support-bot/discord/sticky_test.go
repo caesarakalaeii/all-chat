@@ -314,6 +314,37 @@ func TestStickyStopCancelsPendingRepost(t *testing.T) {
 	}
 }
 
+// A message arriving while a cycle is already running arms a fresh timer. stop
+// must still be able to cancel that timer: if the running cycle drops it from the
+// map, nothing can cancel it and the pod posts a sticky on its way out that it
+// will never clean up.
+func TestStickyStopCancelsTimerArmedDuringRepost(t *testing.T) {
+	fake := newFakeChannel()
+	// Park the first cycle inside the history scan so a second cycle can queue up
+	// behind it. That queued cycle is the one that clears the timer map, and it does
+	// so long after a third timer has been armed in the same slot.
+	release := make(chan struct{})
+	slow := newBlockingScan(fake, release)
+	s := newTestSticky(t, slow, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	slow.waitUntilScanning(t)
+
+	s.onMessage(testStickyChannel)
+	time.Sleep(60 * time.Millisecond) // this timer fires; its repost queues behind the parked one
+
+	s.onMessage(testStickyChannel) // arms the timer that must survive until stop
+	close(release)
+
+	fake.waitForPosts(t, 2) // both queued cycles finish
+	s.stop()
+	time.Sleep(200 * time.Millisecond)
+
+	if posted, _ := fake.snapshot(); len(posted) != 2 {
+		t.Fatalf("posted = %v, want two; stop could not cancel a timer the running cycle dropped from the map", posted)
+	}
+}
+
 // Rendering is exercised directly so a change to the placeholder is caught even
 // if the posting path changes.
 func TestRenderStickyReplacesEveryBotPlaceholder(t *testing.T) {
@@ -378,6 +409,38 @@ func (b *blockingChannel) waitUntilSending(t *testing.T) {
 	case <-b.sending:
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for the first send to start")
+	}
+}
+
+// blockingScan holds the first history scan open. repost reaches the scan after
+// it has already read and cleared the channel's timer, so parking there lets a
+// test act in the window where a re-armed timer can be lost.
+type blockingScan struct {
+	*fakeChannel
+	release  chan struct{} // closed by the test to let the first scan finish
+	scanning chan struct{} // closed once the first scan has been entered
+	once     sync.Once
+}
+
+func newBlockingScan(fake *fakeChannel, release chan struct{}) *blockingScan {
+	return &blockingScan{fakeChannel: fake, release: release, scanning: make(chan struct{})}
+}
+
+func (b *blockingScan) ChannelMessages(channelID string, limit int, before, after, around string, opts ...discordgo.RequestOption) ([]*discordgo.Message, error) {
+	b.once.Do(func() {
+		close(b.scanning)
+		<-b.release
+	})
+	return b.fakeChannel.ChannelMessages(channelID, limit, before, after, around, opts...)
+}
+
+// waitUntilScanning blocks until the first history scan has been entered and parked.
+func (b *blockingScan) waitUntilScanning(t *testing.T) {
+	t.Helper()
+	select {
+	case <-b.scanning:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the first history scan to start")
 	}
 }
 
