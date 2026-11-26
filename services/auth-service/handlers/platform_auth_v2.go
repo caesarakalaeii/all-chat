@@ -209,8 +209,6 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			hasChatScope := containsScope(grantedScopes, "user:read:chat")
 
 			shortCircuitOK := user.TwitchID != nil && *user.TwitchID != "" && user.AuthProvider == string(oauth.PlatformTwitch) && hasChatScope
-			// Declared out here because the source built below is keyed on the login the
-			// validation reports, not only on the scopes it reports.
 			var validation oauth.TokenValidation
 			if shortCircuitOK {
 				twitchProvider, ok := provider.(*oauth.TwitchOAuth)
@@ -1424,9 +1422,6 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 		}
 
 		if renamed {
-			// A rename can collide with an account that already holds the new login, which
-			// must not fail the login itself; updateRenamedUser keeps the old username in
-			// that case and still saves the rest of the row.
 			if err := updateRenamedUser(ctx, h.userRepo, user, previousUsername, h.logger); err != nil {
 				return nil, fmt.Errorf("failed to update user: %w", err)
 			}
@@ -1611,9 +1606,6 @@ func resolveTwitchLogin(stored, validated string) string {
 	return strings.ToLower(validated)
 }
 
-// twitchShortcutSourceUser builds the platform identity the add-source short-circuit hands
-// to overlay-manager, from the stored user row and the live token validation that the
-// short-circuit already performs for its scope check.
 func twitchShortcutSourceUser(user *models.User, validation oauth.TokenValidation) *oauth.TwitchUserInfoWrapper {
 	return &oauth.TwitchUserInfoWrapper{
 		ID:              *user.TwitchID,
@@ -1626,12 +1618,9 @@ func twitchShortcutSourceUser(user *models.User, validation oauth.TokenValidatio
 // refreshLoginProfile copies the profile the login provider just reported onto the stored
 // user row, and reports whether the Twitch login changed.
 //
-// Only ever called for the account's own login provider: a login through a linked platform
-// authenticates the account but must not overwrite its profile. The login is refreshed
-// alongside display name and avatar for Twitch because a streamer who renames keeps the
-// same twitch_id, so a relink or a later login lands on this same row — and leaving
-// users.username on the old login is what left an overlay source keyed to a channel
-// EventSub no longer names (2026-11-26: meileetv → justbugslive).
+// The login is refreshed alongside display name and avatar for Twitch because a streamer
+// who renames keeps the same twitch_id, so a later login lands on this same row; see
+// resolveTwitchLogin for what a stale users.username costs.
 func refreshLoginProfile(user *models.User, platform oauth.Platform, platformUser oauth.PlatformUserInfo) (renamed bool) {
 	user.DisplayName = platformUser.GetDisplayName()
 	user.ProfileImageURL = platformUser.GetProfileImageURL()
@@ -1645,7 +1634,7 @@ func refreshLoginProfile(user *models.User, platform oauth.Platform, platformUse
 }
 
 // userUpdater is the slice of repository.UserRepository that persisting a rename needs, so
-// the collision fallback can be tested without a database.
+// the collision fallback is testable without a database.
 type userUpdater interface {
 	Update(ctx context.Context, user *models.User) error
 }
