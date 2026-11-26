@@ -33,6 +33,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,9 +45,11 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -627,4 +630,140 @@ func TestKickCredentialChannel(t *testing.T) {
 		kickCredentialChannel(&OverlaySourceDetails{ChannelID: "scuffed-onigiri"}, user))
 	assert.Equal(t, "Scuffed_Onigiri", kickCredentialChannel(nil, user),
 		"without a resolved slug, fall back to the same name the source was added under")
+}
+
+// Scenario (2026-11-26, account 9096f152): a streamer renamed on Twitch
+// (meileetv → justbugslive). The add-source short-circuit built the overlay
+// source from users.username, which still held the OLD login, so the source
+// row got channel_id "meileetv" while EventSub delivers chat under
+// "justbugslive" — the overlay stayed silent forever. The short-circuit must
+// build the source from the login Twitch reports on the live token.
+func TestAddSourceShortcut_UsesValidatedLogin(t *testing.T) {
+	stored := &models.User{
+		Username:        "meileetv",
+		DisplayName:     "JustBugsLIVE",
+		ProfileImageURL: "https://example.invalid/avatar.png",
+		TwitchID:        strPtr("9096f152"),
+	}
+
+	sourceUser := twitchShortcutSourceUser(stored, oauth.TokenValidation{Login: "JustBugsLIVE"})
+
+	assert.Equal(t, "justbugslive", sourceUser.GetUsername(),
+		"the source channel_id must be the validated login, lowercased, not the stale stored one")
+	assert.Equal(t, "JustBugsLIVE", sourceUser.GetDisplayName())
+	assert.Equal(t, "9096f152", sourceUser.GetID())
+
+	// Twitch being unable to tell us a login is not a reason to add no source:
+	// keep the stored value, which is what the flow did before.
+	fallback := twitchShortcutSourceUser(stored, oauth.TokenValidation{})
+	assert.Equal(t, "meileetv", fallback.GetUsername())
+
+	// The channel_id that reaches overlay-manager is what the EventSub listener
+	// matches on, so assert the whole way out to the wire.
+	var gotChannelID string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		gotChannelID, _ = body["channel_id"].(string)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"added"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	h := &PlatformAuthHandlerV2{logger: zaptest.NewLogger(t), overlayManagerURL: srv.URL}
+	require.NoError(t, h.addSourceToOverlay(context.Background(), "user-1",
+		"274015e4-0000-0000-0000-000000000000", oauth.PlatformTwitch, sourceUser, nil, "jwt"))
+	assert.Equal(t, "justbugslive", gotChannelID)
+}
+
+// Companion to the short-circuit fix: a rename must also be written back to
+// users.username, otherwise every later flow that reads the stored login (the
+// short-circuit's fallback, the JWT subject, support lookups) keeps serving the
+// old one. getOrCreateUser's existing-user branch refreshes display name and
+// avatar via refreshLoginProfile and then persists the row, and
+// UserRepository.Update already writes username — the branch simply never set
+// it. Driven through the two seams that branch is built from rather than
+// getOrCreateUser itself, because that needs a *repository.UserRepository on a
+// live pool: the testcontainer tests above cover the DB round-trip, and they
+// SKIP wherever docker is absent, so the rename logic is asserted here instead.
+func TestGetOrCreateUser_UpdatesRenamedTwitchLogin(t *testing.T) {
+	assert.Equal(t, "justbugslive", resolveTwitchLogin("meileetv", "JustBugsLIVE"),
+		"a login change reported by Twitch wins over the stored one")
+	assert.Equal(t, "meileetv", resolveTwitchLogin("meileetv", ""),
+		"without a reported login there is nothing to rename to")
+
+	// The existing-user branch itself: a Twitch login reporting a new login must
+	// move users.username, not only the display name. This is the assertion that
+	// fails if the branch goes back to refreshing the profile alone.
+	stale := &models.User{ID: "9096f152", AuthProvider: "twitch", Username: "meileetv", DisplayName: "MeileeTV"}
+	renamedOnTwitch := refreshLoginProfile(stale, oauth.PlatformTwitch,
+		&oauth.TwitchUserInfoWrapper{ID: "9096f152", Login: "justbugslive", DisplayName: "JustBugsLIVE"})
+	assert.True(t, renamedOnTwitch, "a changed Twitch login must be reported as a rename to persist")
+	assert.Equal(t, "justbugslive", stale.Username,
+		"the existing-user branch must save the new login, not just the display name")
+	assert.Equal(t, "JustBugsLIVE", stale.DisplayName)
+
+	// An unchanged login is not a rename, so the login keeps taking the plain
+	// Update path and never pays for the collision fallback.
+	unchanged := &models.User{ID: "9096f152", AuthProvider: "twitch", Username: "justbugslive"}
+	assert.False(t, refreshLoginProfile(unchanged, oauth.PlatformTwitch,
+		&oauth.TwitchUserInfoWrapper{Login: "justbugslive", DisplayName: "JustBugsLIVE"}),
+		"the same login re-reported is not a rename")
+
+	// Only Twitch renames are tracked here: Kick and YouTube key their sources on
+	// a slug and a channel id, which this flow does not learn from the login.
+	kickUser := &models.User{ID: "k-1", AuthProvider: "kick", Username: "Scuffed_Onigiri"}
+	assert.False(t, refreshLoginProfile(kickUser, oauth.PlatformKick,
+		&fakePlatformUser{id: "k-1", username: "scuffed-onigiri", platform: oauth.PlatformKick}),
+		"a non-Twitch login must not be treated as a Twitch rename")
+	assert.Equal(t, "Scuffed_Onigiri", kickUser.Username,
+		"a non-Twitch login must leave the stored username alone")
+
+	logger := zaptest.NewLogger(t)
+
+	renamed := &models.User{ID: "9096f152", Username: "justbugslive", DisplayName: "JustBugsLIVE"}
+	store := &recordingUserUpdater{}
+	require.NoError(t, updateRenamedUser(context.Background(), store, renamed, "meileetv", logger))
+	require.Len(t, store.updated, 1)
+	assert.Equal(t, "justbugslive", store.updated[0],
+		"the new login must be the one persisted")
+
+	// Another account may already hold the new login (Twitch frees a login as
+	// soon as it is released). Losing the row's other updates over that is worse
+	// than carrying a stale username, so keep the old one and save the rest.
+	taken := &models.User{ID: "9096f152", Username: "justbugslive", DisplayName: "JustBugsLIVE"}
+	collidingStore := &recordingUserUpdater{failWhenUsernameIs: "justbugslive"}
+	require.NoError(t, updateRenamedUser(context.Background(), collidingStore, taken, "meileetv", logger))
+	assert.Equal(t, []string{"justbugslive", "meileetv"}, collidingStore.updated,
+		"a taken login must fall back to the stored one rather than failing the login")
+	assert.Equal(t, "meileetv", taken.Username,
+		"the in-memory user must match what was persisted")
+
+	// A failure that is not a username collision is a real error and must not be
+	// swallowed: the caller aborts the login rather than continuing on a user row
+	// that was never written.
+	brokenStore := &recordingUserUpdater{alwaysFail: errors.New("connection refused")}
+	assert.Error(t, updateRenamedUser(context.Background(),
+		brokenStore, &models.User{Username: "justbugslive"}, "meileetv", logger))
+}
+
+// recordingUserUpdater is a userUpdater that records the username of every
+// Update attempt, and can fail one specific username the way Postgres fails the
+// users_username_key unique index.
+type recordingUserUpdater struct {
+	updated            []string
+	failWhenUsernameIs string
+	alwaysFail         error
+}
+
+func (s *recordingUserUpdater) Update(_ context.Context, user *models.User) error {
+	s.updated = append(s.updated, user.Username)
+	if s.alwaysFail != nil {
+		return s.alwaysFail
+	}
+	if s.failWhenUsernameIs != "" && user.Username == s.failWhenUsernameIs {
+		return fmt.Errorf("failed to update user: %w",
+			&pgconn.PgError{Code: "23505", ConstraintName: "users_username_key"})
+	}
+	return nil
 }

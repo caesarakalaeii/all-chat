@@ -1567,6 +1567,40 @@ func kickCredentialChannel(sourceDetails *OverlaySourceDetails, platformUser oau
 	return platformUser.GetUsername()
 }
 
+// resolveTwitchLogin picks the Twitch login to key a chat source on.
+func resolveTwitchLogin(stored, validated string) string {
+	return stored
+}
+
+// twitchShortcutSourceUser builds the platform identity the add-source short-circuit hands
+// to overlay-manager.
+func twitchShortcutSourceUser(user *models.User, validation oauth.TokenValidation) *oauth.TwitchUserInfoWrapper {
+	return &oauth.TwitchUserInfoWrapper{
+		ID:              *user.TwitchID,
+		Login:           user.Username,
+		DisplayName:     user.DisplayName,
+		ProfileImageURL: user.ProfileImageURL,
+	}
+}
+
+// refreshLoginProfile copies the profile the login provider just reported onto the stored
+// user row, and reports whether the Twitch login changed.
+func refreshLoginProfile(user *models.User, platform oauth.Platform, platformUser oauth.PlatformUserInfo) (renamed bool) {
+	user.DisplayName = platformUser.GetDisplayName()
+	user.ProfileImageURL = platformUser.GetProfileImageURL()
+	return false
+}
+
+// userUpdater is the slice of repository.UserRepository that persisting a rename needs.
+type userUpdater interface {
+	Update(ctx context.Context, user *models.User) error
+}
+
+// updateRenamedUser persists user, whose Username has just been changed from previous.
+func updateRenamedUser(ctx context.Context, store userUpdater, user *models.User, previous string, logger *zap.Logger) error {
+	return store.Update(ctx, user)
+}
+
 // linkPlatformToUser links a new platform to an existing user account
 func (h *PlatformAuthHandlerV2) linkPlatformToUser(
 	ctx context.Context,
