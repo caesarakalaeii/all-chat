@@ -49,7 +49,7 @@ func newFakeChannel() *fakeChannel {
 	return &fakeChannel{posts: make(chan struct{}, 16)}
 }
 
-func (f *fakeChannel) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
+func (f *fakeChannel) ChannelMessageSend(channelID, content string, _ ...discordgo.RequestOption) (*discordgo.Message, error) {
 	f.mu.Lock()
 	if f.sendErr != nil {
 		err := f.sendErr
@@ -64,7 +64,7 @@ func (f *fakeChannel) ChannelMessageSend(channelID, content string) (*discordgo.
 	return msg, nil
 }
 
-func (f *fakeChannel) ChannelMessageDelete(_, messageID string) error {
+func (f *fakeChannel) ChannelMessageDelete(_, messageID string, _ ...discordgo.RequestOption) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.delErr != nil {
@@ -74,7 +74,7 @@ func (f *fakeChannel) ChannelMessageDelete(_, messageID string) error {
 	return nil
 }
 
-func (f *fakeChannel) ChannelMessages(_ string, limit int, _, _, _ string) ([]*discordgo.Message, error) {
+func (f *fakeChannel) ChannelMessages(_ string, limit int, _, _, _ string, _ ...discordgo.RequestOption) ([]*discordgo.Message, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.listErr != nil {
@@ -338,7 +338,7 @@ func TestOnMessageCreateArmsStickyForPlainMessage(t *testing.T) {
 	fake := newFakeChannel()
 	b := newStickyTestBot(t, fake)
 
-	b.onMessageCreate(newTestSession(t), &discordgo.MessageCreate{Message: &discordgo.Message{
+	b.onMessageCreate(b.session, &discordgo.MessageCreate{Message: &discordgo.Message{
 		ChannelID: testStickyChannel,
 		GuildID:   testStickyGuild,
 		Author:    &discordgo.User{ID: "human"},
@@ -353,7 +353,7 @@ func TestOnMessageCreateIgnoresBotAuthors(t *testing.T) {
 	fake := newFakeChannel()
 	b := newStickyTestBot(t, fake)
 
-	b.onMessageCreate(newTestSession(t), &discordgo.MessageCreate{Message: &discordgo.Message{
+	b.onMessageCreate(b.session, &discordgo.MessageCreate{Message: &discordgo.Message{
 		ChannelID: testStickyChannel,
 		GuildID:   testStickyGuild,
 		Author:    &discordgo.User{ID: testBotID, Bot: true},
@@ -372,7 +372,7 @@ func TestOnMessageCreateIgnoresForeignGuild(t *testing.T) {
 	fake := newFakeChannel()
 	b := newStickyTestBot(t, fake)
 
-	b.onMessageCreate(newTestSession(t), &discordgo.MessageCreate{Message: &discordgo.Message{
+	b.onMessageCreate(b.session, &discordgo.MessageCreate{Message: &discordgo.Message{
 		ChannelID: testStickyChannel,
 		GuildID:   "some-other-guild",
 		Author:    &discordgo.User{ID: "human"},
@@ -390,7 +390,6 @@ func TestOnMessageCreateIgnoresForeignGuild(t *testing.T) {
 func TestCloseCancelsPendingSticky(t *testing.T) {
 	fake := newFakeChannel()
 	b := newStickyTestBot(t, fake)
-	b.session = newTestSession(t)
 
 	b.sticky.onMessage(testStickyChannel)
 	if err := b.Close(); err != nil {
@@ -407,24 +406,20 @@ func TestCloseCancelsPendingSticky(t *testing.T) {
 // sticky reposter wired to a fake Discord.
 func newStickyTestBot(t *testing.T, api stickyAPI) *Bot {
 	t.Helper()
-	return &Bot{
-		cfg:    &config.Config{DiscordGuildID: testStickyGuild},
-		policy: access.NewPolicy(nil),
-		log:    zap.NewNop(),
-		queues: newSerialQueues(),
-		sticky: newTestSticky(t, api, []string{testStickyChannel}, testStickyText),
-	}
-}
-
-// newTestSession builds an unopened session. onMessageCreate reads its state for
-// thread lookups; nothing in these tests reaches the network.
-func newTestSession(t *testing.T) *discordgo.Session {
-	t.Helper()
-	s, err := discordgo.New("Bot test-token")
+	session, err := discordgo.New("Bot test-token")
 	if err != nil {
 		t.Fatalf("discordgo.New: %v", err)
 	}
-	return s
+	// The session is never opened: onMessageCreate only reads its cached state for
+	// thread lookups, and the sticky itself talks to the fake.
+	return &Bot{
+		session: session,
+		cfg:     &config.Config{DiscordGuildID: testStickyGuild},
+		policy:  access.NewPolicy(nil),
+		log:     zap.NewNop(),
+		queues:  newSerialQueues(),
+		sticky:  newTestSticky(t, api, []string{testStickyChannel}, testStickyText),
+	}
 }
 
 // Documents the fake's ID scheme the other tests depend on.

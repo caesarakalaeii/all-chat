@@ -48,9 +48,9 @@ const (
 // substitute a fake. The signatures match the session's methods exactly, which is
 // what lets the session be passed in directly.
 type stickyAPI interface {
-	ChannelMessageSend(channelID, content string) (*discordgo.Message, error)
-	ChannelMessageDelete(channelID, messageID string) error
-	ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string) ([]*discordgo.Message, error)
+	ChannelMessageSend(channelID, content string, options ...discordgo.RequestOption) (*discordgo.Message, error)
+	ChannelMessageDelete(channelID, messageID string, options ...discordgo.RequestOption) error
+	ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string, options ...discordgo.RequestOption) ([]*discordgo.Message, error)
 }
 
 // stickyDeps are the reposter's dependencies.
