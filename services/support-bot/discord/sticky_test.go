@@ -40,7 +40,6 @@ type fakeChannel struct {
 	nextID   int
 	sendErr  error
 	delErr   error
-	listErr  error
 	// posts is signalled after every send so tests can wait instead of sleeping.
 	posts chan struct{}
 }
@@ -74,15 +73,9 @@ func (f *fakeChannel) ChannelMessageDelete(_, messageID string, _ ...discordgo.R
 	return nil
 }
 
-func (f *fakeChannel) ChannelMessages(_ string, limit int, _, _, _ string, _ ...discordgo.RequestOption) ([]*discordgo.Message, error) {
+func (f *fakeChannel) ChannelMessages(_ string, _ int, _, _, _ string, _ ...discordgo.RequestOption) ([]*discordgo.Message, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.listErr != nil {
-		return nil, f.listErr
-	}
-	if limit < len(f.existing) {
-		return f.existing[:limit], nil
-	}
 	return f.existing, nil
 }
 

@@ -53,7 +53,6 @@ type stickyAPI interface {
 	ChannelMessages(channelID string, limit int, beforeID, afterID, aroundID string, options ...discordgo.RequestOption) ([]*discordgo.Message, error)
 }
 
-// stickyDeps are the reposter's dependencies.
 type stickyDeps struct {
 	API        stickyAPI
 	ChannelIDs []string
@@ -147,8 +146,8 @@ func (s *stickyReposter) stop() {
 	}
 }
 
-// lastStickyID returns the ID of the sticky the reposter believes is currently
-// posted in a channel, or empty when it does not know of one.
+// lastStickyID is the ID of the sticky the reposter believes is currently posted
+// in a channel, or empty when it does not know of one.
 func (s *stickyReposter) lastStickyID(channelID string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -230,7 +229,6 @@ func (s *stickyReposter) cleanUpOrphans(channelID, botID, text string) {
 	}
 }
 
-// renderSticky substitutes the bot's mention for every {bot} placeholder.
 func renderSticky(text, botID string) string {
 	return strings.ReplaceAll(text, stickyBotPlaceholder, "<@"+botID+">")
 }
