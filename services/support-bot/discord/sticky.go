@@ -178,7 +178,13 @@ func (s *stickyReposter) repost(channelID string) {
 	s.mu.Unlock()
 
 	if previous != "" {
-		s.deleteSticky(channelID, previous)
+		// Fail closed when the old copy is still there. The usual cause is Manage
+		// Messages not yet granted in the channel, and posting anyway would add a
+		// copy per debounce cycle. Keeping the ID means the next cycle retries the
+		// delete, so the channel recovers on its own once the permission arrives.
+		if !s.deleteSticky(channelID, previous) {
+			return
+		}
 	} else {
 		s.cleanUpOrphans(channelID, botID, text)
 	}
@@ -204,15 +210,17 @@ func (s *stickyReposter) setLastID(channelID, messageID string) {
 	s.lastID[channelID] = messageID
 }
 
-// deleteSticky removes one of our own stickies. A message somebody already deleted
-// by hand is the expected case, not an error.
-func (s *stickyReposter) deleteSticky(channelID, messageID string) {
+// deleteSticky removes one of our own stickies and reports whether the message is
+// now gone. A message somebody already deleted by hand counts as gone, not as an
+// error.
+func (s *stickyReposter) deleteSticky(channelID, messageID string) bool {
 	err := s.api.ChannelMessageDelete(channelID, messageID)
 	if err == nil || isUnknownMessage(err) {
-		return
+		return true
 	}
 	s.log.Warn("failed to delete previous sticky",
 		zap.String("channel", channelID), zap.String("message", messageID), zap.Error(err))
+	return false
 }
 
 // cleanUpOrphans deletes stickies left in a channel by a previous process. The last
@@ -230,7 +238,10 @@ func (s *stickyReposter) cleanUpOrphans(channelID, botID, text string) {
 		if msg.Author == nil || msg.Author.ID != botID || msg.Content != text {
 			continue
 		}
-		s.deleteSticky(channelID, msg.ID)
+		// Best effort, unlike the previous-sticky delete: an orphan we cannot remove
+		// is already logged, and refusing to post would then leave the channel with a
+		// stale reminder and no new one.
+		_ = s.deleteSticky(channelID, msg.ID)
 	}
 }
 
