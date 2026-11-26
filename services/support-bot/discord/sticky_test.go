@@ -42,6 +42,8 @@ type fakeChannel struct {
 	delErr   error
 	// posts is signalled after every send so tests can wait instead of sleeping.
 	posts chan struct{}
+
+	listErr error
 }
 
 func newFakeChannel() *fakeChannel {
@@ -76,6 +78,9 @@ func (f *fakeChannel) ChannelMessageDelete(_, messageID string, _ ...discordgo.R
 func (f *fakeChannel) ChannelMessages(_ string, _ int, _, _, _ string, _ ...discordgo.RequestOption) ([]*discordgo.Message, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	return f.existing, nil
 }
 
@@ -223,6 +228,23 @@ func TestStickyCleansUpOrphanAfterRestart(t *testing.T) {
 	_, deleted := fake.snapshot()
 	if len(deleted) != 1 || deleted[0] != "orphan" {
 		t.Fatalf("deleted = %v, want only [orphan]", deleted)
+	}
+}
+
+// A failed history scan leaves the bot unable to tell an orphan from ordinary
+// chatter. Posting anyway is deliberate: a duplicate reminder beats no reminder.
+// Pinned here so the branch is not quietly turned into an early return.
+func TestStickyPostsWhenTheOrphanScanFails(t *testing.T) {
+	fake := newFakeChannel()
+	fake.listErr = errors.New("discord unavailable")
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	fake.waitForPosts(t, 1)
+
+	posted, _ := fake.snapshot()
+	if len(posted) != 1 {
+		t.Fatalf("posted = %v, want the sticky despite the failed scan", posted)
 	}
 }
 
