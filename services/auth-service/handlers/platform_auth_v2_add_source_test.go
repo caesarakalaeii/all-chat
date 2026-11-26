@@ -57,6 +57,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/zap/zaptest"
+	"golang.org/x/oauth2"
 )
 
 // addSourceStub is one HTTP stub serving every upstream call the two flows
@@ -805,6 +806,67 @@ func TestAddSourceShortcut_UsesValidatedLogin_ThroughHandler(t *testing.T) {
 	// short-circuit's own fallback, support lookups) stop serving the dead login.
 	assert.Equal(t, []string{"justbugslive"}, store.updated,
 		"a detected rename must be persisted to the users row")
+}
+
+// Companion to the handler-level shortcut test, for the other half of the fix.
+// The assertions in TestGetOrCreateUser_UpdatesRenamedTwitchLogin pin
+// refreshLoginProfile and updateRenamedUser; this one pins the branch that calls
+// them, so dropping the rename handling from the login path fails here instead of
+// silently reintroducing the stale username.
+func TestRefreshExistingUserOnLogin_PersistsTwitchRename(t *testing.T) {
+	store := &fakeLoginStore{scopes: []string{"user:read:chat"}}
+	stored := &models.User{
+		ID:           "9096f152",
+		AuthProvider: string(oauth.PlatformTwitch),
+		Username:     "meileetv",
+		DisplayName:  "MeileeTV",
+	}
+	// Logging in again after the rename: same twitch_id, new login, so this lands
+	// on the stored row and must move users.username with it.
+	renamedOnTwitch := &oauth.TwitchUserInfoWrapper{
+		ID: "9096f152", Login: "justbugslive", DisplayName: "JustBugsLIVE",
+	}
+
+	require.NoError(t, refreshExistingUserOnLogin(context.Background(), store, stored,
+		oauth.PlatformTwitch, renamedOnTwitch,
+		&oauth2.Token{AccessToken: "new-token"}, zaptest.NewLogger(t)))
+
+	assert.Equal(t, "justbugslive", stored.Username,
+		"a login after a rename must save the new login, not only the display name")
+	assert.Equal(t, []string{"justbugslive"}, store.updated,
+		"the renamed row must be the one persisted")
+
+	// A login through a linked platform authenticates the account but must not
+	// overwrite the account's own identity with the linked platform's.
+	kickAccount := &models.User{
+		ID: "k-1", AuthProvider: string(oauth.PlatformKick), Username: "Scuffed_Onigiri",
+	}
+	linkedStore := &fakeLoginStore{}
+	require.NoError(t, refreshExistingUserOnLogin(context.Background(), linkedStore, kickAccount,
+		oauth.PlatformTwitch, renamedOnTwitch,
+		&oauth2.Token{AccessToken: "new-token"}, zaptest.NewLogger(t)))
+	assert.Equal(t, "Scuffed_Onigiri", kickAccount.Username,
+		"a login through a linked platform must leave the account's username alone")
+}
+
+// fakeLoginStore is the existing-user login branch's view of the user repository.
+type fakeLoginStore struct {
+	scopes  []string
+	updated []string
+}
+
+func (s *fakeLoginStore) GetGrantedScopes(_ context.Context, _ string) ([]string, error) {
+	return s.scopes, nil
+}
+
+func (s *fakeLoginStore) Update(_ context.Context, user *models.User) error {
+	s.updated = append(s.updated, user.Username)
+	return nil
+}
+
+func (s *fakeLoginStore) UpdateGrantedScopes(_ context.Context, _ string, scopes []string) error {
+	s.scopes = scopes
+	return nil
 }
 
 // fakeShortCircuitStore is the Twitch add-source short-circuit's view of the user

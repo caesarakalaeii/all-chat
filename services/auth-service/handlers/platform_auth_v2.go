@@ -1399,51 +1399,8 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			return nil, fmt.Errorf("user account is banned")
 		}
 
-		// The users row carries the login provider's profile and credentials. A login
-		// through a linked platform (a Kick account signing in with its linked Twitch)
-		// authenticates the account but must not overwrite either: a Twitch token on a
-		// Kick account's row breaks every Kick call that reads it.
-		//
-		// For the login provider itself, decide whether this login would downgrade the
-		// stored OAuth scopes. A plain Twitch login only requests the login scopes
-		// (withChatScopes=false); if the streamer previously granted the EventSub chat
-		// scopes via add-source, replacing their token here would knock their channel off
-		// EventSub on every login. So when the stored credentials already carry
-		// user:read:chat and this token does not, keep the existing token +
-		// granted_scopes and refresh only the profile fields.
-		samePlatform := string(platform) == user.AuthProvider
-		previousUsername := user.Username
-		renamed := false
-		if samePlatform {
-			renamed = refreshLoginProfile(user, platform, platformUser)
-		}
-
-		newScopes := oauth.ExtractGrantedScopes(token)
-		existingScopes, _ := h.userRepo.GetGrantedScopes(ctx, user.ID)
-		preserveScopes := !linkMayReplacePrimaryCredentials(user.AuthProvider, platform, existingScopes, newScopes)
-
-		if !preserveScopes {
-			user.AccessToken = token.AccessToken
-			user.RefreshToken = token.RefreshToken
-			user.TokenExpiresAt = token.Expiry
-		}
-
-		if renamed {
-			if err := updateRenamedUser(ctx, h.userRepo, user, previousUsername, h.logger); err != nil {
-				return nil, fmt.Errorf("failed to update user: %w", err)
-			}
-		} else if err := h.userRepo.Update(ctx, user); err != nil {
-			return nil, fmt.Errorf("failed to update user: %w", err)
-		}
-
-		// Keep granted_scopes in sync with the freshly issued token (unless we deliberately
-		// preserved a broader stored grant above). Kept separate from Update so unrelated
-		// user updates can never clobber the scope set.
-		if !preserveScopes {
-			if err := h.userRepo.UpdateGrantedScopes(ctx, user.ID, newScopes); err != nil {
-				h.logger.Warn("Failed to update granted scopes on login",
-					zap.String("user_id", user.ID), zap.Error(err))
-			}
+		if err := refreshExistingUserOnLogin(ctx, h.userRepo, user, platform, platformUser, token, h.logger); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1638,6 +1595,75 @@ func refreshLoginProfile(user *models.User, platform oauth.Platform, platformUse
 	previous := user.Username
 	user.Username = resolveTwitchLogin(previous, platformUser.GetUsername())
 	return user.Username != previous
+}
+
+// loginUserStore is what refreshing an existing user's row on login asks of the user
+// repository. Narrow so the branch can be tested without a live pool; see
+// PlatformAuthHandlerV2.shortCircuitStore for the same reasoning.
+type loginUserStore interface {
+	userUpdater
+	GetGrantedScopes(ctx context.Context, userID string) ([]string, error)
+	UpdateGrantedScopes(ctx context.Context, userID string, scopes []string) error
+}
+
+// refreshExistingUserOnLogin updates an existing account's row for a login that just
+// succeeded, and persists a Twitch rename when the login provider reports one.
+//
+// The users row carries the login provider's profile and credentials. A login through a
+// linked platform (a Kick account signing in with its linked Twitch) authenticates the
+// account but must not overwrite either: a Twitch token on a Kick account's row breaks
+// every Kick call that reads it.
+//
+// For the login provider itself, decide whether this login would downgrade the stored
+// OAuth scopes. A plain Twitch login only requests the login scopes (withChatScopes=false);
+// if the streamer previously granted the EventSub chat scopes via add-source, replacing
+// their token here would knock their channel off EventSub on every login. So when the
+// stored credentials already carry user:read:chat and this token does not, keep the
+// existing token + granted_scopes and refresh only the profile fields.
+func refreshExistingUserOnLogin(
+	ctx context.Context,
+	store loginUserStore,
+	user *models.User,
+	platform oauth.Platform,
+	platformUser oauth.PlatformUserInfo,
+	token *oauth2.Token,
+	logger *zap.Logger,
+) error {
+	samePlatform := string(platform) == user.AuthProvider
+	previousUsername := user.Username
+	renamed := false
+	if samePlatform {
+		renamed = refreshLoginProfile(user, platform, platformUser)
+	}
+
+	newScopes := oauth.ExtractGrantedScopes(token)
+	existingScopes, _ := store.GetGrantedScopes(ctx, user.ID)
+	preserveScopes := !linkMayReplacePrimaryCredentials(user.AuthProvider, platform, existingScopes, newScopes)
+
+	if !preserveScopes {
+		user.AccessToken = token.AccessToken
+		user.RefreshToken = token.RefreshToken
+		user.TokenExpiresAt = token.Expiry
+	}
+
+	if renamed {
+		if err := updateRenamedUser(ctx, store, user, previousUsername, logger); err != nil {
+			return fmt.Errorf("failed to update user: %w", err)
+		}
+	} else if err := store.Update(ctx, user); err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	// Keep granted_scopes in sync with the freshly issued token (unless we deliberately
+	// preserved a broader stored grant above). Kept separate from Update so unrelated
+	// user updates can never clobber the scope set.
+	if !preserveScopes {
+		if err := store.UpdateGrantedScopes(ctx, user.ID, newScopes); err != nil {
+			logger.Warn("Failed to update granted scopes on login",
+				zap.String("user_id", user.ID), zap.Error(err))
+		}
+	}
+	return nil
 }
 
 // userUpdater is the slice of repository.UserRepository that persisting a rename needs, so
