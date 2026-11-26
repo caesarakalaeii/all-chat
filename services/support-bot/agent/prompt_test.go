@@ -56,6 +56,22 @@ func TestBuildSystemPrompt_UnderstandsBeforeActing(t *testing.T) {
 	}
 }
 
+// Finding a reporter in the logs needs their handle on every platform they named, and
+// their previous handles too: a rename can leave the new login absent from stored data.
+func TestBuildSystemPrompt_AsksForPlatformHandles(t *testing.T) {
+	for _, mode := range []access.Mode{access.ModeSupport, access.ModeAdmin} {
+		p := BuildSystemPrompt(mode, nil, false)
+		for _, want := range []string{
+			"handle on each affected platform",
+			"old names",
+		} {
+			if !strings.Contains(p, want) {
+				t.Errorf("mode %v: prompt does not mention %q", mode, want)
+			}
+		}
+	}
+}
+
 // UI how-to answers should show the screen, not only describe it.
 func TestBuildSystemPrompt_ShowsScreensForUIQuestions(t *testing.T) {
 	p := BuildSystemPrompt(access.ModeSupport, nil, false)
