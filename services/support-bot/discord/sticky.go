@@ -167,9 +167,14 @@ func (s *stickyReposter) repost(channelID string) {
 	}
 	text := renderSticky(s.text, botID)
 
+	// The channel's timer is deliberately left in the map. A cycle can be queued
+	// behind an earlier one, by which time the entry may hold a newer, still-armed
+	// timer; removing it would leave nothing able to cancel that timer, so stop()
+	// could not prevent a post during shutdown. A fired timer is harmless to keep:
+	// onMessage stops it before replacing it, Stop() on a fired timer is a no-op,
+	// and the map is bounded by the number of configured channels.
 	s.mu.Lock()
 	previous := s.lastID[channelID]
-	delete(s.timers, channelID)
 	s.mu.Unlock()
 
 	if previous != "" {
