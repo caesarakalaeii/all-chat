@@ -79,6 +79,11 @@ type stickyReposter struct {
 	mu     sync.Mutex
 	timers map[string]*time.Timer // channel ID -> armed repost timer
 	lastID map[string]string      // channel ID -> ID of the sticky currently posted
+
+	// cycles serialises reposts per channel. Without it a timer that fires while the
+	// previous repost is still waiting on Discord would run a second delete-and-post
+	// against the same last-ID, leaving one of the two stickies orphaned.
+	cycles *serialQueues
 }
 
 func newStickyReposter(d stickyDeps) *stickyReposter {
@@ -99,6 +104,7 @@ func newStickyReposter(d stickyDeps) *stickyReposter {
 		log:      d.Log,
 		timers:   make(map[string]*time.Timer),
 		lastID:   make(map[string]string),
+		cycles:   newSerialQueues(),
 	}
 }
 
@@ -124,11 +130,14 @@ func (s *stickyReposter) onMessage(channelID string) {
 	if t := s.timers[channelID]; t != nil {
 		t.Stop()
 	}
-	s.timers[channelID] = time.AfterFunc(s.debounce, func() { s.repost(channelID) })
+	s.timers[channelID] = time.AfterFunc(s.debounce, func() {
+		s.cycles.enqueue(channelID, func() { s.repost(channelID) })
+	})
 }
 
 // stop cancels armed timers so shutdown does not post a sticky on the way out. A
-// repost already running is left to finish; it only writes to Discord.
+// cycle already queued or running is left to finish: it only writes to Discord, and
+// interrupting it between the delete and the post is what would lose the sticky.
 func (s *stickyReposter) stop() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
