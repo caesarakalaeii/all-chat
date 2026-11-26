@@ -33,6 +33,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,9 +45,11 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/caesar/all-chat/services/auth-service/models"
 	"github.com/caesar/all-chat/services/auth-service/oauth"
 	"github.com/caesar/all-chat/services/auth-service/repository"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -54,6 +57,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/zap/zaptest"
+	"golang.org/x/oauth2"
 )
 
 // addSourceStub is one HTTP stub serving every upstream call the two flows
@@ -627,4 +631,265 @@ func TestKickCredentialChannel(t *testing.T) {
 		kickCredentialChannel(&OverlaySourceDetails{ChannelID: "scuffed-onigiri"}, user))
 	assert.Equal(t, "Scuffed_Onigiri", kickCredentialChannel(nil, user),
 		"without a resolved slug, fall back to the same name the source was added under")
+}
+
+// Scenario (2026-11-26, account 9096f152): a streamer renamed on Twitch
+// (meileetv → justbugslive). The add-source short-circuit built the overlay
+// source from users.username, which still held the OLD login, so the source
+// row got channel_id "meileetv" while EventSub delivers chat under
+// "justbugslive" — the overlay stayed silent forever. The short-circuit must
+// build the source from the login Twitch reports on the live token.
+func TestAddSourceShortcut_UsesValidatedLogin(t *testing.T) {
+	stored := &models.User{
+		Username:        "meileetv",
+		DisplayName:     "JustBugsLIVE",
+		ProfileImageURL: "https://example.invalid/avatar.png",
+		TwitchID:        strPtr("9096f152"),
+	}
+
+	sourceUser := twitchShortcutSourceUser(stored, oauth.TokenValidation{Login: "JustBugsLIVE"})
+
+	assert.Equal(t, "justbugslive", sourceUser.GetUsername(),
+		"the source channel_id must be the validated login, lowercased, not the stale stored one")
+	assert.Equal(t, "JustBugsLIVE", sourceUser.GetDisplayName())
+	assert.Equal(t, "9096f152", sourceUser.GetID())
+
+	// Twitch being unable to tell us a login is not a reason to add no source:
+	// keep the stored value, which is what the flow did before.
+	fallback := twitchShortcutSourceUser(stored, oauth.TokenValidation{})
+	assert.Equal(t, "meileetv", fallback.GetUsername())
+}
+
+// Companion to the short-circuit fix: a rename must also be written back to
+// users.username, otherwise every later flow that reads the stored login (the
+// short-circuit's fallback, the JWT subject, support lookups) keeps serving the
+// old one. getOrCreateUser's existing-user branch refreshes display name and
+// avatar via refreshLoginProfile and then persists the row, and
+// UserRepository.Update already writes username — the branch simply never set
+// it. Driven through the two seams that branch is built from rather than
+// getOrCreateUser itself, because that needs a *repository.UserRepository on a
+// live pool: the testcontainer tests above cover the DB round-trip, and they
+// SKIP wherever docker is absent, so the rename logic is asserted here instead.
+func TestGetOrCreateUser_UpdatesRenamedTwitchLogin(t *testing.T) {
+	assert.Equal(t, "justbugslive", resolveTwitchLogin("meileetv", "JustBugsLIVE"),
+		"a login change reported by Twitch wins over the stored one")
+	assert.Equal(t, "meileetv", resolveTwitchLogin("meileetv", ""),
+		"without a reported login there is nothing to rename to")
+
+	// The existing-user branch itself, driven through refreshExistingUserOnLogin
+	// rather than the helper alone: this is what fails if that branch stops
+	// handling renames and goes back to refreshing the profile only.
+	stale := &models.User{ID: "9096f152", AuthProvider: "twitch", Username: "meileetv", DisplayName: "MeileeTV"}
+	staleStore := &fakeLoginStore{}
+	require.NoError(t, refreshExistingUserOnLogin(context.Background(), staleStore, stale,
+		oauth.PlatformTwitch,
+		&oauth.TwitchUserInfoWrapper{ID: "9096f152", Login: "justbugslive", DisplayName: "JustBugsLIVE"},
+		&oauth2.Token{AccessToken: "new-token"}, zaptest.NewLogger(t)))
+	assert.Equal(t, "justbugslive", stale.Username,
+		"the existing-user branch must save the new login, not just the display name")
+	assert.Equal(t, "JustBugsLIVE", stale.DisplayName)
+	assert.Equal(t, []string{"justbugslive"}, staleStore.updated,
+		"the renamed row must be the one persisted")
+
+	// A login through a linked platform authenticates the account but must not
+	// overwrite the account's own identity with the linked platform's.
+	kickAccount := &models.User{
+		ID: "k-1", AuthProvider: string(oauth.PlatformKick), Username: "Scuffed_Onigiri",
+	}
+	require.NoError(t, refreshExistingUserOnLogin(context.Background(), &fakeLoginStore{}, kickAccount,
+		oauth.PlatformTwitch,
+		&oauth.TwitchUserInfoWrapper{ID: "9096f152", Login: "justbugslive", DisplayName: "JustBugsLIVE"},
+		&oauth2.Token{AccessToken: "new-token"}, zaptest.NewLogger(t)))
+	assert.Equal(t, "Scuffed_Onigiri", kickAccount.Username,
+		"a login through a linked platform must leave the account's username alone")
+
+	// The helper underneath reports the rename so the branch knows to take the
+	// collision-aware save path.
+	renamedOnTwitch := refreshLoginProfile(
+		&models.User{ID: "9096f152", AuthProvider: "twitch", Username: "meileetv"},
+		oauth.PlatformTwitch,
+		&oauth.TwitchUserInfoWrapper{ID: "9096f152", Login: "justbugslive", DisplayName: "JustBugsLIVE"})
+	assert.True(t, renamedOnTwitch, "a changed Twitch login must be reported as a rename to persist")
+
+	// An unchanged login is not a rename, so the login keeps taking the plain
+	// Update path and never pays for the collision fallback.
+	unchanged := &models.User{ID: "9096f152", AuthProvider: "twitch", Username: "justbugslive"}
+	assert.False(t, refreshLoginProfile(unchanged, oauth.PlatformTwitch,
+		&oauth.TwitchUserInfoWrapper{Login: "justbugslive", DisplayName: "JustBugsLIVE"}),
+		"the same login re-reported is not a rename")
+
+	// Only Twitch renames are tracked here: Kick and YouTube key their sources on
+	// a slug and a channel id, which this flow does not learn from the login.
+	kickUser := &models.User{ID: "k-1", AuthProvider: "kick", Username: "Scuffed_Onigiri"}
+	assert.False(t, refreshLoginProfile(kickUser, oauth.PlatformKick,
+		&fakePlatformUser{id: "k-1", username: "scuffed-onigiri", platform: oauth.PlatformKick}),
+		"a non-Twitch login must not be treated as a Twitch rename")
+	assert.Equal(t, "Scuffed_Onigiri", kickUser.Username,
+		"a non-Twitch login must leave the stored username alone")
+
+	logger := zaptest.NewLogger(t)
+
+	renamed := &models.User{ID: "9096f152", Username: "justbugslive", DisplayName: "JustBugsLIVE"}
+	store := &recordingUserUpdater{}
+	require.NoError(t, updateRenamedUser(context.Background(), store, renamed, "meileetv", logger))
+	require.Len(t, store.updated, 1)
+	assert.Equal(t, "justbugslive", store.updated[0],
+		"the new login must be the one persisted")
+
+	// Another account may already hold the new login (Twitch frees a login as
+	// soon as it is released). Losing the row's other updates over that is worse
+	// than carrying a stale username, so keep the old one and save the rest.
+	taken := &models.User{ID: "9096f152", Username: "justbugslive", DisplayName: "JustBugsLIVE"}
+	collidingStore := &recordingUserUpdater{failWhenUsernameIs: "justbugslive"}
+	require.NoError(t, updateRenamedUser(context.Background(), collidingStore, taken, "meileetv", logger))
+	assert.Equal(t, []string{"justbugslive", "meileetv"}, collidingStore.updated,
+		"a taken login must fall back to the stored one rather than failing the login")
+	assert.Equal(t, "meileetv", taken.Username,
+		"the in-memory user must match what was persisted")
+
+	// A failure that is not a username collision is a real error and must not be
+	// swallowed: the caller aborts the login rather than continuing on a user row
+	// that was never written.
+	brokenStore := &recordingUserUpdater{alwaysFail: errors.New("connection refused")}
+	assert.Error(t, updateRenamedUser(context.Background(),
+		brokenStore, &models.User{Username: "justbugslive"}, "meileetv", logger))
+}
+
+// The two assertions above pin the helpers. This one pins the WIRING: it drives
+// the real HandleAddSource over its gin route and asserts the channel_id that
+// reaches overlay-manager, which is the exact value the EventSub listener
+// matches chat against. Without it, the short-circuit could go back to building
+// the source from the stale users.username and every other test here would stay
+// green — the helpers would still be correct and simply not called, which is the
+// shape the original bug had.
+//
+// Runs without docker, unlike the testcontainer tests above: the short-circuit
+// reaches the database through fakeShortCircuitStore, so this coverage survives
+// on a machine where those tests skip.
+func TestAddSourceShortcut_UsesValidatedLogin_ThroughHandler(t *testing.T) {
+	store := &fakeShortCircuitStore{
+		user: &models.User{
+			ID:           "9096f152",
+			Username:     "meileetv",
+			DisplayName:  "JustBugsLIVE",
+			AuthProvider: string(oauth.PlatformTwitch),
+			TwitchID:     strPtr("1532957417"),
+			AccessToken:  "live-token",
+			// Far-future expiry keeps this on the reuse path: the refresh branch is
+			// already covered by the testcontainer tests above.
+			TokenExpiresAt: time.Now().UTC().Add(time.Hour),
+		},
+		scopes: []string{"user:read:chat", "user:bot", "channel:bot"},
+	}
+
+	stub := newAddSourceStub(t)
+	stub.validateHandler = func(string) (int, string) {
+		// Twitch reports the CURRENT login for the live token; the stored row still
+		// holds the pre-rename one.
+		return http.StatusOK, `{"client_id":"cid","login":"justbugslive","user_id":"1532957417",
+			"scopes":["user:read:chat","user:bot","channel:bot"]}`
+	}
+
+	provider := oauth.NewTwitchOAuth("cid", "secret", "http://localhost:3000/cb").
+		WithHTTPClient(&http.Client{Transport: stub.transport()})
+	h := &PlatformAuthHandlerV2{
+		providers:         map[oauth.Platform]oauth.OAuthProvider{oauth.PlatformTwitch: provider},
+		shortCircuitStore: store,
+		overlayManagerURL: stub.srv.URL,
+		logger:            zaptest.NewLogger(t),
+		frontendURL:       "http://localhost:3000",
+	}
+
+	c, w := ginContext(t, store.user.ID, "274015e4-0000-0000-0000-000000000000")
+	h.HandleAddSource(oauth.PlatformTwitch)(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, 1, stub.overlayCallCount(),
+		"the short-circuit must add the source without an OAuth reflow")
+	assert.Equal(t, "justbugslive", stub.lastOverlayCall()["channel_id"],
+		"the source must be keyed on the validated login; a stale one gets no chat")
+
+	// The rename is written back, so later flows reading users.username (this
+	// short-circuit's own fallback, support lookups) stop serving the dead login.
+	assert.Equal(t, []string{"justbugslive"}, store.updated,
+		"a detected rename must be persisted to the users row")
+}
+
+// fakeLoginStore is the existing-user login branch's view of the user repository.
+type fakeLoginStore struct {
+	scopes  []string
+	updated []string
+}
+
+func (s *fakeLoginStore) GetGrantedScopes(_ context.Context, _ string) ([]string, error) {
+	return s.scopes, nil
+}
+
+func (s *fakeLoginStore) Update(_ context.Context, user *models.User) error {
+	s.updated = append(s.updated, user.Username)
+	return nil
+}
+
+func (s *fakeLoginStore) UpdateGrantedScopes(_ context.Context, _ string, scopes []string) error {
+	s.scopes = scopes
+	return nil
+}
+
+// fakeShortCircuitStore is the Twitch add-source short-circuit's view of the user
+// repository, so the handler can be driven without a live pool. Every method the
+// short-circuit calls is answered from memory; Update records the username it was
+// asked to persist.
+type fakeShortCircuitStore struct {
+	user    *models.User
+	scopes  []string
+	updated []string
+}
+
+func (s *fakeShortCircuitStore) GetByID(_ context.Context, id string) (*models.User, error) {
+	if s.user == nil || s.user.ID != id {
+		return nil, repository.ErrUserNotFound
+	}
+	return s.user, nil
+}
+
+func (s *fakeShortCircuitStore) GetGrantedScopes(_ context.Context, _ string) ([]string, error) {
+	return s.scopes, nil
+}
+
+func (s *fakeShortCircuitStore) Update(_ context.Context, user *models.User) error {
+	s.updated = append(s.updated, user.Username)
+	return nil
+}
+
+func (s *fakeShortCircuitStore) UpdateTokens(_ context.Context, _, accessToken, refreshToken string, expiresAt time.Time) error {
+	s.user.AccessToken = accessToken
+	s.user.RefreshToken = refreshToken
+	s.user.TokenExpiresAt = expiresAt
+	return nil
+}
+
+func (s *fakeShortCircuitStore) UpdateGrantedScopes(_ context.Context, _ string, scopes []string) error {
+	s.scopes = scopes
+	return nil
+}
+
+// recordingUserUpdater is a userUpdater that records the username of every
+// Update attempt, and can fail one specific username the way Postgres fails the
+// users_username_key unique index.
+type recordingUserUpdater struct {
+	updated            []string
+	failWhenUsernameIs string
+	alwaysFail         error
+}
+
+func (s *recordingUserUpdater) Update(_ context.Context, user *models.User) error {
+	s.updated = append(s.updated, user.Username)
+	if s.alwaysFail != nil {
+		return s.alwaysFail
+	}
+	if s.failWhenUsernameIs != "" && user.Username == s.failWhenUsernameIs {
+		return fmt.Errorf("failed to update user: %w",
+			&pgconn.PgError{Code: "23505", ConstraintName: "users_username_key"})
+	}
+	return nil
 }

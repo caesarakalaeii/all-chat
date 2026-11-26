@@ -35,6 +35,7 @@ import (
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -52,8 +53,14 @@ func (e *ErrDuplicateAccount) Error() string { return e.Message }
 
 // PlatformAuthHandlerV2 handles authentication for any OAuth platform with enhanced state management
 type PlatformAuthHandlerV2 struct {
-	providers         map[oauth.Platform]oauth.OAuthProvider
-	userRepo          *repository.UserRepository
+	providers map[oauth.Platform]oauth.OAuthProvider
+	userRepo  *repository.UserRepository
+	// shortCircuitStore is the Twitch add-source short-circuit's view of userRepo.
+	// That path decides the channel_id the EventSub listener matches chat against,
+	// so it is covered by a handler-level test; the narrow interface lets that test
+	// run without a live pool, on machines where the testcontainer tests skip.
+	// Always userRepo in production, set by NewPlatformAuthHandlerV2.
+	shortCircuitStore twitchShortCircuitStore
 	redis             *redis.Client
 	userKeyChain      *auth.KeyChain
 	jwtExpiry         time.Duration
@@ -80,6 +87,7 @@ func NewPlatformAuthHandlerV2(
 	return &PlatformAuthHandlerV2{
 		providers:         providers,
 		userRepo:          userRepo,
+		shortCircuitStore: userRepo,
 		redis:             redisClient,
 		userKeyChain:      userKeyChain,
 		jwtExpiry:         time.Duration(jwtExpiryHours) * time.Hour,
@@ -187,7 +195,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 		// the streamer is prompted to grant it — that is what moves their channel from the
 		// IRC listener to the EventSub listener.
 		if platform == oauth.PlatformTwitch {
-			user, err := h.userRepo.GetByID(c.Request.Context(), userIDStr)
+			user, err := h.shortCircuitStore.GetByID(c.Request.Context(), userIDStr)
 			if err != nil {
 				if errors.Is(err, repository.ErrUserNotFound) {
 					c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
@@ -200,7 +208,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 
 			// granted_scopes is not populated by GetByID (scanUser), so read it directly.
 			// On error, treat as "no chat scope" and fall through to the OAuth flow.
-			grantedScopes, scopeErr := h.userRepo.GetGrantedScopes(c.Request.Context(), userIDStr)
+			grantedScopes, scopeErr := h.shortCircuitStore.GetGrantedScopes(c.Request.Context(), userIDStr)
 			if scopeErr != nil {
 				h.logger.Warn("Failed to read granted scopes for Twitch add-source short-circuit",
 					zap.String("user_id", userIDStr), zap.Error(scopeErr))
@@ -208,6 +216,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			hasChatScope := containsScope(grantedScopes, "user:read:chat")
 
 			shortCircuitOK := user.TwitchID != nil && *user.TwitchID != "" && user.AuthProvider == string(oauth.PlatformTwitch) && hasChatScope
+			var validation oauth.TokenValidation
 			if shortCircuitOK {
 				twitchProvider, ok := provider.(*oauth.TwitchOAuth)
 				if !ok {
@@ -246,7 +255,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 					user.RefreshToken = newToken.RefreshToken
 					user.TokenExpiresAt = newToken.Expiry
 
-					if err := h.userRepo.UpdateTokens(c.Request.Context(), user.ID, newToken.AccessToken, newToken.RefreshToken, newToken.Expiry); err != nil {
+					if err := h.shortCircuitStore.UpdateTokens(c.Request.Context(), user.ID, newToken.AccessToken, newToken.RefreshToken, newToken.Expiry); err != nil {
 						h.logger.Error("Failed to save refreshed token",
 							zap.String("user_id", user.ID),
 							zap.Error(err),
@@ -268,7 +277,9 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 				// consent screen and could never recover their chat (prod incident:
 				// overlay 36847b00, chat silent for days). Ask Twitch what the token can
 				// actually do; only short-circuit on a validated live grant.
-				validation, valid, validateErr := twitchProvider.ValidateToken(c.Request.Context(), user.AccessToken)
+				var valid bool
+				var validateErr error
+				validation, valid, validateErr = twitchProvider.ValidateToken(c.Request.Context(), user.AccessToken)
 				if validateErr != nil {
 					// Transient failure to verify — do not silently reuse stale
 					// credentials; fall through to the consent flow, which either
@@ -286,7 +297,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 					// The stored scope record is stale — clear it so every other
 					// scope-gated decision (partition predicate, eventsub gating, this
 					// short-circuit) stops believing the dead grant until re-consent.
-					if clearErr := h.userRepo.UpdateGrantedScopes(c.Request.Context(), user.ID, validation.Scopes); clearErr != nil {
+					if clearErr := h.shortCircuitStore.UpdateGrantedScopes(c.Request.Context(), user.ID, validation.Scopes); clearErr != nil {
 						h.logger.Warn("Failed to clear stale granted scopes",
 							zap.String("user_id", user.ID),
 							zap.Error(clearErr),
@@ -304,11 +315,24 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 					return
 				}
 
-				platformUser := &oauth.TwitchUserInfoWrapper{
-					ID:              *user.TwitchID,
-					Login:           user.Username,
-					DisplayName:     user.DisplayName,
-					ProfileImageURL: user.ProfileImageURL,
+				platformUser := twitchShortcutSourceUser(user, validation)
+
+				// The validation above is the only moment this flow learns the streamer's
+				// current login, so a rename is saved here too: every later flow that reads
+				// users.username (this short-circuit's own fallback, support lookups) would
+				// otherwise keep serving the dead login. A failure to save is not worth
+				// refusing the source over — the source carries the right login regardless.
+				if renamed := platformUser.Login; renamed != "" && renamed != user.Username {
+					previousUsername := user.Username
+					user.Username = renamed
+					if err := updateRenamedUser(c.Request.Context(), h.shortCircuitStore, user, previousUsername, h.logger); err != nil {
+						h.logger.Warn("Failed to save renamed Twitch login",
+							zap.String("user_id", user.ID),
+							zap.String("old_username", previousUsername),
+							zap.String("new_username", renamed),
+							zap.Error(err),
+						)
+					}
 				}
 
 				if err := h.addSourceToOverlay(c.Request.Context(), user.ID, overlayID, platform, platformUser, nil, jwtToken); err != nil {
@@ -1375,46 +1399,8 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			return nil, fmt.Errorf("user account is banned")
 		}
 
-		// The users row carries the login provider's profile and credentials. A login
-		// through a linked platform (a Kick account signing in with its linked Twitch)
-		// authenticates the account but must not overwrite either: a Twitch token on a
-		// Kick account's row breaks every Kick call that reads it.
-		//
-		// For the login provider itself, decide whether this login would downgrade the
-		// stored OAuth scopes. A plain Twitch login only requests the login scopes
-		// (withChatScopes=false); if the streamer previously granted the EventSub chat
-		// scopes via add-source, replacing their token here would knock their channel off
-		// EventSub on every login. So when the stored credentials already carry
-		// user:read:chat and this token does not, keep the existing token +
-		// granted_scopes and refresh only the profile fields.
-		samePlatform := string(platform) == user.AuthProvider
-		if samePlatform {
-			user.DisplayName = platformUser.GetDisplayName()
-			user.ProfileImageURL = platformUser.GetProfileImageURL()
-		}
-
-		newScopes := oauth.ExtractGrantedScopes(token)
-		existingScopes, _ := h.userRepo.GetGrantedScopes(ctx, user.ID)
-		preserveScopes := !linkMayReplacePrimaryCredentials(user.AuthProvider, platform, existingScopes, newScopes)
-
-		if !preserveScopes {
-			user.AccessToken = token.AccessToken
-			user.RefreshToken = token.RefreshToken
-			user.TokenExpiresAt = token.Expiry
-		}
-
-		if err := h.userRepo.Update(ctx, user); err != nil {
-			return nil, fmt.Errorf("failed to update user: %w", err)
-		}
-
-		// Keep granted_scopes in sync with the freshly issued token (unless we deliberately
-		// preserved a broader stored grant above). Kept separate from Update so unrelated
-		// user updates can never clobber the scope set.
-		if !preserveScopes {
-			if err := h.userRepo.UpdateGrantedScopes(ctx, user.ID, newScopes); err != nil {
-				h.logger.Warn("Failed to update granted scopes on login",
-					zap.String("user_id", user.ID), zap.Error(err))
-			}
+		if err := refreshExistingUserOnLogin(ctx, h.userRepo, user, platform, platformUser, token, h.logger); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1565,6 +1551,180 @@ func kickCredentialChannel(sourceDetails *OverlaySourceDetails, platformUser oau
 		return sourceDetails.ChannelID
 	}
 	return platformUser.GetUsername()
+}
+
+// resolveTwitchLogin picks the Twitch login to key a chat source on, preferring the
+// login Twitch reports for the live token over the one stored on the users row.
+//
+// Twitch lets a streamer rename, and nothing tells us when they do: users.username keeps
+// the login recorded at the last login. The EventSub listener matches sources by
+// channel_id against BroadcasterUserLogin, so a source built from a stale username is
+// matched against a login that no longer exists and the overlay silently receives no chat
+// (2026-11-26: meileetv → justbugslive). Validated logins are lowercased because that is
+// the form EventSub delivers and the form the listener compares against; an empty
+// validated login means Twitch told us nothing, so the stored value stands.
+func resolveTwitchLogin(stored, validated string) string {
+	if validated == "" {
+		return stored
+	}
+	return strings.ToLower(validated)
+}
+
+// twitchShortcutSourceUser builds the platform identity the add-source short-circuit hands
+// to overlay-manager, from the stored user row and the live token validation the
+// short-circuit already performs for its scope check — the validation is reused here
+// rather than fetched again.
+func twitchShortcutSourceUser(user *models.User, validation oauth.TokenValidation) *oauth.TwitchUserInfoWrapper {
+	return &oauth.TwitchUserInfoWrapper{
+		ID:              *user.TwitchID,
+		Login:           resolveTwitchLogin(user.Username, validation.Login),
+		DisplayName:     user.DisplayName,
+		ProfileImageURL: user.ProfileImageURL,
+	}
+}
+
+// refreshLoginProfile copies the profile the login provider just reported onto the stored
+// user row, and reports whether the Twitch login changed.
+//
+// Only ever called for the account's own login provider: a login through a linked platform
+// authenticates the account but must not overwrite its profile. The guard lives in the
+// caller (refreshExistingUserOnLogin's samePlatform check), not here.
+//
+// The login is refreshed alongside display name and avatar for Twitch because a streamer
+// who renames keeps the same twitch_id, so a later login lands on this same row; see
+// resolveTwitchLogin for what a stale users.username costs.
+func refreshLoginProfile(user *models.User, platform oauth.Platform, platformUser oauth.PlatformUserInfo) (renamed bool) {
+	user.DisplayName = platformUser.GetDisplayName()
+	user.ProfileImageURL = platformUser.GetProfileImageURL()
+	if platform != oauth.PlatformTwitch {
+		return false
+	}
+
+	previous := user.Username
+	user.Username = resolveTwitchLogin(previous, platformUser.GetUsername())
+	return user.Username != previous
+}
+
+// loginUserStore is what refreshing an existing user's row on login asks of the user
+// repository. Narrow so the branch can be tested without a live pool; see
+// PlatformAuthHandlerV2.shortCircuitStore for the same reasoning.
+type loginUserStore interface {
+	userUpdater
+	GetGrantedScopes(ctx context.Context, userID string) ([]string, error)
+	UpdateGrantedScopes(ctx context.Context, userID string, scopes []string) error
+}
+
+// refreshExistingUserOnLogin updates an existing account's row for a login that just
+// succeeded, and persists a Twitch rename when the login provider reports one.
+//
+// The users row carries the login provider's profile and credentials. A login through a
+// linked platform (a Kick account signing in with its linked Twitch) authenticates the
+// account but must not overwrite either: a Twitch token on a Kick account's row breaks
+// every Kick call that reads it.
+//
+// For the login provider itself, decide whether this login would downgrade the stored
+// OAuth scopes. A plain Twitch login only requests the login scopes (withChatScopes=false);
+// if the streamer previously granted the EventSub chat scopes via add-source, replacing
+// their token here would knock their channel off EventSub on every login. So when the
+// stored credentials already carry user:read:chat and this token does not, keep the
+// existing token + granted_scopes and refresh only the profile fields.
+func refreshExistingUserOnLogin(
+	ctx context.Context,
+	store loginUserStore,
+	user *models.User,
+	platform oauth.Platform,
+	platformUser oauth.PlatformUserInfo,
+	token *oauth2.Token,
+	logger *zap.Logger,
+) error {
+	samePlatform := string(platform) == user.AuthProvider
+	previousUsername := user.Username
+	renamed := false
+	if samePlatform {
+		renamed = refreshLoginProfile(user, platform, platformUser)
+	}
+
+	newScopes := oauth.ExtractGrantedScopes(token)
+	existingScopes, _ := store.GetGrantedScopes(ctx, user.ID)
+	preserveScopes := !linkMayReplacePrimaryCredentials(user.AuthProvider, platform, existingScopes, newScopes)
+
+	if !preserveScopes {
+		user.AccessToken = token.AccessToken
+		user.RefreshToken = token.RefreshToken
+		user.TokenExpiresAt = token.Expiry
+	}
+
+	if renamed {
+		if err := updateRenamedUser(ctx, store, user, previousUsername, logger); err != nil {
+			return fmt.Errorf("failed to update user: %w", err)
+		}
+	} else if err := store.Update(ctx, user); err != nil {
+		return fmt.Errorf("failed to update user: %w", err)
+	}
+
+	// Keep granted_scopes in sync with the freshly issued token (unless we deliberately
+	// preserved a broader stored grant above). Kept separate from Update so unrelated
+	// user updates can never clobber the scope set.
+	if !preserveScopes {
+		if err := store.UpdateGrantedScopes(ctx, user.ID, newScopes); err != nil {
+			logger.Warn("Failed to update granted scopes on login",
+				zap.String("user_id", user.ID), zap.Error(err))
+		}
+	}
+	return nil
+}
+
+// userUpdater is the slice of repository.UserRepository that persisting a rename needs, so
+// the collision fallback is testable without a database.
+type userUpdater interface {
+	Update(ctx context.Context, user *models.User) error
+}
+
+// twitchShortCircuitStore is everything the Twitch add-source short-circuit asks of the
+// user repository. See PlatformAuthHandlerV2.shortCircuitStore for why it is an interface.
+type twitchShortCircuitStore interface {
+	userUpdater
+	GetByID(ctx context.Context, id string) (*models.User, error)
+	GetGrantedScopes(ctx context.Context, userID string) ([]string, error)
+	UpdateTokens(ctx context.Context, userID, accessToken, refreshToken string, expiresAt time.Time) error
+	UpdateGrantedScopes(ctx context.Context, userID string, scopes []string) error
+}
+
+// updateRenamedUser persists user, whose Username has just been changed from previous, and
+// falls back to previous if the new login is already taken.
+//
+// Twitch releases a login as soon as its owner renames away from it, so another account on
+// this service may already hold it; users.username is uniquely indexed
+// (migrations/043_unique_lower_username.sql), so writing it would fail the whole Update and
+// with it the token and profile columns in the same statement. A stale username is
+// survivable — the source channel_id is taken from the validated login either way — so on a
+// unique violation we keep the old name and save the rest of the row. Any other failure is
+// a real write failure and is returned.
+func updateRenamedUser(ctx context.Context, store userUpdater, user *models.User, previous string, logger *zap.Logger) error {
+	err := store.Update(ctx, user)
+	if err == nil {
+		logger.Info("twitch_login_renamed",
+			zap.String("user_id", user.ID),
+			zap.String("old_username", previous),
+			zap.String("new_username", user.Username),
+		)
+		return nil
+	}
+
+	// Keyed on SQLSTATE alone: migration 043 replaced the users_username_key constraint
+	// with the index idx_users_username_lower_unique, so the constraint name is not stable.
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+		return err
+	}
+
+	logger.Warn("Twitch login already belongs to another account; keeping the stored username",
+		zap.String("user_id", user.ID),
+		zap.String("old_username", previous),
+		zap.String("new_username", user.Username),
+	)
+	user.Username = previous
+	return store.Update(ctx, user)
 }
 
 // linkPlatformToUser links a new platform to an existing user account
