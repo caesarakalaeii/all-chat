@@ -693,16 +693,28 @@ func TestGetOrCreateUser_UpdatesRenamedTwitchLogin(t *testing.T) {
 	assert.Equal(t, "meileetv", resolveTwitchLogin("meileetv", ""),
 		"without a reported login there is nothing to rename to")
 
-	// The existing-user branch itself: a Twitch login reporting a new login must
-	// move users.username, not only the display name. This is the assertion that
-	// fails if the branch goes back to refreshing the profile alone.
+	// The existing-user branch itself, driven through refreshExistingUserOnLogin
+	// rather than the helper alone: this is what fails if that branch stops
+	// handling renames and goes back to refreshing the profile only.
 	stale := &models.User{ID: "9096f152", AuthProvider: "twitch", Username: "meileetv", DisplayName: "MeileeTV"}
-	renamedOnTwitch := refreshLoginProfile(stale, oauth.PlatformTwitch,
-		&oauth.TwitchUserInfoWrapper{ID: "9096f152", Login: "justbugslive", DisplayName: "JustBugsLIVE"})
-	assert.True(t, renamedOnTwitch, "a changed Twitch login must be reported as a rename to persist")
+	staleStore := &fakeLoginStore{}
+	require.NoError(t, refreshExistingUserOnLogin(context.Background(), staleStore, stale,
+		oauth.PlatformTwitch,
+		&oauth.TwitchUserInfoWrapper{ID: "9096f152", Login: "justbugslive", DisplayName: "JustBugsLIVE"},
+		&oauth2.Token{AccessToken: "new-token"}, zaptest.NewLogger(t)))
 	assert.Equal(t, "justbugslive", stale.Username,
 		"the existing-user branch must save the new login, not just the display name")
 	assert.Equal(t, "JustBugsLIVE", stale.DisplayName)
+	assert.Equal(t, []string{"justbugslive"}, staleStore.updated,
+		"the renamed row must be the one persisted")
+
+	// The helper underneath reports the rename so the branch knows to take the
+	// collision-aware save path.
+	renamedOnTwitch := refreshLoginProfile(
+		&models.User{ID: "9096f152", AuthProvider: "twitch", Username: "meileetv"},
+		oauth.PlatformTwitch,
+		&oauth.TwitchUserInfoWrapper{ID: "9096f152", Login: "justbugslive", DisplayName: "JustBugsLIVE"})
+	assert.True(t, renamedOnTwitch, "a changed Twitch login must be reported as a rename to persist")
 
 	// An unchanged login is not a rename, so the login keeps taking the plain
 	// Update path and never pays for the collision fallback.
