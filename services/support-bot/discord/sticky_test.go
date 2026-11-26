@@ -1,0 +1,345 @@
+// This file is part of All-Chat.
+// Copyright (C) 2026 caesarakalaeii
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+package discord
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/bwmarrin/discordgo"
+	"go.uber.org/zap"
+)
+
+// fakeChannel records what the sticky reposter did to one channel so a test can
+// assert on posts and deletes without touching the Discord API.
+type fakeChannel struct {
+	mu       sync.Mutex
+	existing []*discordgo.Message // newest-first, as Discord returns history
+	posted   []string             // contents sent, in order
+	deleted  []string             // message IDs deleted, in order
+	nextID   int
+	sendErr  error
+	delErr   error
+	listErr  error
+	// posts is signalled after every send so tests can wait instead of sleeping.
+	posts chan struct{}
+}
+
+func newFakeChannel() *fakeChannel {
+	return &fakeChannel{posts: make(chan struct{}, 16)}
+}
+
+func (f *fakeChannel) ChannelMessageSend(channelID, content string) (*discordgo.Message, error) {
+	f.mu.Lock()
+	if f.sendErr != nil {
+		err := f.sendErr
+		f.mu.Unlock()
+		return nil, err
+	}
+	f.nextID++
+	msg := &discordgo.Message{ID: "sticky-" + strconv.Itoa(f.nextID), ChannelID: channelID, Content: content}
+	f.posted = append(f.posted, content)
+	f.mu.Unlock()
+	f.posts <- struct{}{}
+	return msg, nil
+}
+
+func (f *fakeChannel) ChannelMessageDelete(_, messageID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.delErr != nil {
+		return f.delErr
+	}
+	f.deleted = append(f.deleted, messageID)
+	return nil
+}
+
+func (f *fakeChannel) ChannelMessages(_ string, limit int, _, _, _ string) ([]*discordgo.Message, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	if limit < len(f.existing) {
+		return f.existing[:limit], nil
+	}
+	return f.existing, nil
+}
+
+func (f *fakeChannel) snapshot() (posted, deleted []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.posted...), append([]string(nil), f.deleted...)
+}
+
+// waitForPosts blocks until n sends have happened, failing the test on timeout.
+func (f *fakeChannel) waitForPosts(t *testing.T, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		select {
+		case <-f.posts:
+		case <-time.After(2 * time.Second):
+			posted, _ := f.snapshot()
+			t.Fatalf("timed out waiting for post %d of %d; got %d: %v", i+1, n, len(posted), posted)
+		}
+	}
+}
+
+const (
+	testStickyChannel = "chan-1"
+	testBotID         = "bot-42"
+	testStickyText    = "Ping {bot} for help."
+	testStickyIDs     = "chan-1"
+)
+
+func newTestSticky(t *testing.T, api stickyAPI, channelIDs []string, text string) *stickyReposter {
+	t.Helper()
+	return newStickyReposter(stickyDeps{
+		API:        api,
+		ChannelIDs: channelIDs,
+		Text:       text,
+		BotID:      func() string { return testBotID },
+		Debounce:   20 * time.Millisecond,
+		Log:        zap.NewNop(),
+	})
+}
+
+// The reposter is off unless both the channel list and the text are configured,
+// so emptying either env var turns the feature off without a code change.
+func TestStickyDisabledWhenEitherSettingIsEmpty(t *testing.T) {
+	cases := map[string]struct {
+		channels []string
+		text     string
+	}{
+		"no channels": {nil, testStickyText},
+		"no text":     {[]string{testStickyChannel}, ""},
+		"neither":     {nil, ""},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			fake := newFakeChannel()
+			s := newTestSticky(t, fake, tc.channels, tc.text)
+			if s.enabled() {
+				t.Fatal("reposter reports enabled with an empty setting")
+			}
+			s.onMessage(testStickyChannel)
+			time.Sleep(60 * time.Millisecond)
+			posted, deleted := fake.snapshot()
+			if len(posted) != 0 || len(deleted) != 0 {
+				t.Fatalf("disabled reposter acted: posted=%v deleted=%v", posted, deleted)
+			}
+		})
+	}
+}
+
+// One message in a configured channel posts the sticky exactly once, with {bot}
+// rendered as a real Discord mention.
+func TestStickyPostsOnceAndRendersBotMention(t *testing.T) {
+	fake := newFakeChannel()
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	fake.waitForPosts(t, 1)
+
+	posted, deleted := fake.snapshot()
+	want := "Ping <@" + testBotID + "> for help."
+	if len(posted) != 1 || posted[0] != want {
+		t.Fatalf("posted = %v, want exactly [%q]", posted, want)
+	}
+	if len(deleted) != 0 {
+		t.Fatalf("deleted = %v, want none on the first post", deleted)
+	}
+}
+
+// A burst within the debounce window must collapse into a single repost: posting
+// per message would hit Discord's rate limit and leave stickies behind.
+func TestStickyBurstCollapsesIntoOnePost(t *testing.T) {
+	fake := newFakeChannel()
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	for i := 0; i < 10; i++ {
+		s.onMessage(testStickyChannel)
+	}
+	fake.waitForPosts(t, 1)
+	time.Sleep(60 * time.Millisecond)
+
+	posted, deleted := fake.snapshot()
+	if len(posted) != 1 {
+		t.Fatalf("posted = %v, want exactly one message for a burst", posted)
+	}
+	if len(deleted) != 0 {
+		t.Fatalf("deleted = %v, want none when there was no previous sticky", deleted)
+	}
+}
+
+// The second cycle deletes the sticky posted by the first before posting again,
+// so only the newest copy survives.
+func TestStickyDeletesPreviousStickyOnNextCycle(t *testing.T) {
+	fake := newFakeChannel()
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	fake.waitForPosts(t, 1)
+	s.onMessage(testStickyChannel)
+	fake.waitForPosts(t, 1)
+
+	posted, deleted := fake.snapshot()
+	if len(posted) != 2 {
+		t.Fatalf("posted = %v, want two messages", posted)
+	}
+	if len(deleted) != 1 || deleted[0] != "sticky-1" {
+		t.Fatalf("deleted = %v, want [sticky-1]", deleted)
+	}
+}
+
+// A pod restart loses the in-memory ID, so the first cycle sweeps the recent
+// history for the bot's own identical message and removes it.
+func TestStickyCleansUpOrphanAfterRestart(t *testing.T) {
+	fake := newFakeChannel()
+	rendered := "Ping <@" + testBotID + "> for help."
+	fake.existing = []*discordgo.Message{
+		{ID: "other", Author: &discordgo.User{ID: "someone"}, Content: rendered},
+		{ID: "orphan", Author: &discordgo.User{ID: testBotID}, Content: rendered},
+		{ID: "bot-chatter", Author: &discordgo.User{ID: testBotID}, Content: "unrelated bot message"},
+	}
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	fake.waitForPosts(t, 1)
+
+	_, deleted := fake.snapshot()
+	if len(deleted) != 1 || deleted[0] != "orphan" {
+		t.Fatalf("deleted = %v, want only [orphan]", deleted)
+	}
+}
+
+// Channels that are not configured are ignored entirely.
+func TestStickyIgnoresUnconfiguredChannel(t *testing.T) {
+	fake := newFakeChannel()
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage("some-other-channel")
+	time.Sleep(60 * time.Millisecond)
+
+	posted, deleted := fake.snapshot()
+	if len(posted) != 0 || len(deleted) != 0 {
+		t.Fatalf("acted on an unconfigured channel: posted=%v deleted=%v", posted, deleted)
+	}
+}
+
+// Posting before the gateway has reported the bot's identity would render a
+// broken mention, so that cycle is skipped instead.
+func TestStickySkipsCycleWhileBotIDUnknown(t *testing.T) {
+	fake := newFakeChannel()
+	s := newStickyReposter(stickyDeps{
+		API:        fake,
+		ChannelIDs: []string{testStickyChannel},
+		Text:       testStickyText,
+		BotID:      func() string { return "" },
+		Debounce:   20 * time.Millisecond,
+		Log:        zap.NewNop(),
+	})
+
+	s.onMessage(testStickyChannel)
+	time.Sleep(60 * time.Millisecond)
+
+	posted, _ := fake.snapshot()
+	if len(posted) != 0 {
+		t.Fatalf("posted = %v while the bot ID was unknown", posted)
+	}
+}
+
+// Discord returns unknown-message when the sticky was already deleted by hand.
+// That is not a failure: the new sticky still goes up.
+func TestStickyPostsWhenPreviousStickyIsAlreadyGone(t *testing.T) {
+	fake := newFakeChannel()
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	fake.waitForPosts(t, 1)
+
+	fake.mu.Lock()
+	fake.delErr = &discordgo.RESTError{Message: &discordgo.APIErrorMessage{Code: discordgo.ErrCodeUnknownMessage}}
+	fake.mu.Unlock()
+
+	s.onMessage(testStickyChannel)
+	fake.waitForPosts(t, 1)
+
+	posted, _ := fake.snapshot()
+	if len(posted) != 2 {
+		t.Fatalf("posted = %v, want the new sticky despite the stale delete", posted)
+	}
+}
+
+// A send failure must not leave a stale ID behind that the next cycle would try
+// to delete; the next cycle re-runs the restart sweep instead.
+func TestStickyForgetsIDWhenPostFails(t *testing.T) {
+	fake := newFakeChannel()
+	fake.sendErr = errors.New("discord unavailable")
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	time.Sleep(60 * time.Millisecond)
+
+	if got := s.lastStickyID(testStickyChannel); got != "" {
+		t.Fatalf("lastStickyID = %q after a failed send, want empty", got)
+	}
+}
+
+// stop cancels armed timers so a shutdown does not post after Close.
+func TestStickyStopCancelsPendingRepost(t *testing.T) {
+	fake := newFakeChannel()
+	s := newTestSticky(t, fake, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	s.stop()
+	time.Sleep(60 * time.Millisecond)
+
+	posted, _ := fake.snapshot()
+	if len(posted) != 0 {
+		t.Fatalf("posted = %v after stop", posted)
+	}
+}
+
+// Rendering is exercised directly so a change to the placeholder is caught even
+// if the posting path changes.
+func TestRenderStickyReplacesEveryBotPlaceholder(t *testing.T) {
+	got := renderSticky("{bot} and {bot}", "9")
+	want := "<@9> and <@9>"
+	if got != want {
+		t.Fatalf("renderSticky = %q, want %q", got, want)
+	}
+}
+
+// Documents the fake's ID scheme the other tests depend on.
+func TestFakeChannelAssignsSequentialIDs(t *testing.T) {
+	fake := newFakeChannel()
+	for i := 1; i <= 2; i++ {
+		msg, err := fake.ChannelMessageSend("c", "x")
+		if err != nil {
+			t.Fatalf("send: %v", err)
+		}
+		if want := fmt.Sprintf("sticky-%d", i); msg.ID != want {
+			t.Fatalf("ID = %q, want %q", msg.ID, want)
+		}
+		<-fake.posts
+	}
+}
