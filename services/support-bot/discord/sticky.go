@@ -191,8 +191,8 @@ func (s *stickyReposter) repost(channelID string) {
 
 	msg, err := s.api.ChannelMessageSend(channelID, text)
 	if err != nil {
-		// Forget the old ID either way: it has just been deleted, and keeping it would
-		// make the next cycle delete a message that no longer exists.
+		// The old copy is already gone by this point, so forget its ID: keeping it
+		// would make the next cycle delete a message that no longer exists.
 		s.setLastID(channelID, "")
 		s.log.Warn("failed to post sticky", zap.String("channel", channelID), zap.Error(err))
 		return
