@@ -1406,7 +1406,6 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 		// EventSub on every login. So when the stored credentials already carry
 		// user:read:chat and this token does not, keep the existing token +
 		// granted_scopes and refresh only the profile fields.
-		//
 		samePlatform := string(platform) == user.AuthProvider
 		previousUsername := user.Username
 		renamed := false
