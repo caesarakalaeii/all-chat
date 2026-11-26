@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/caesar/all-chat/services/support-bot/access"
+	"github.com/caesar/all-chat/services/support-bot/config"
 	"go.uber.org/zap"
 )
 
@@ -107,7 +109,7 @@ const (
 	testStickyChannel = "chan-1"
 	testBotID         = "bot-42"
 	testStickyText    = "Ping {bot} for help."
-	testStickyIDs     = "chan-1"
+	testStickyGuild   = "guild-7"
 )
 
 func newTestSticky(t *testing.T, api stickyAPI, channelIDs []string, text string) *stickyReposter {
@@ -327,6 +329,102 @@ func TestRenderStickyReplacesEveryBotPlaceholder(t *testing.T) {
 	if got != want {
 		t.Fatalf("renderSticky = %q, want %q", got, want)
 	}
+}
+
+// An ordinary message — one that neither mentions the bot nor sits in a bot
+// thread — is what the handler returns early on, so the sticky hook has to run
+// before that check or the reminder never moves.
+func TestOnMessageCreateArmsStickyForPlainMessage(t *testing.T) {
+	fake := newFakeChannel()
+	b := newStickyTestBot(t, fake)
+
+	b.onMessageCreate(newTestSession(t), &discordgo.MessageCreate{Message: &discordgo.Message{
+		ChannelID: testStickyChannel,
+		GuildID:   testStickyGuild,
+		Author:    &discordgo.User{ID: "human"},
+		Content:   "anyone around?",
+	}})
+	fake.waitForPosts(t, 1)
+}
+
+// The bot's own repost must not arm another cycle, or the sticky would move for
+// ever on its own.
+func TestOnMessageCreateIgnoresBotAuthors(t *testing.T) {
+	fake := newFakeChannel()
+	b := newStickyTestBot(t, fake)
+
+	b.onMessageCreate(newTestSession(t), &discordgo.MessageCreate{Message: &discordgo.Message{
+		ChannelID: testStickyChannel,
+		GuildID:   testStickyGuild,
+		Author:    &discordgo.User{ID: testBotID, Bot: true},
+		Content:   "the sticky itself",
+	}})
+	time.Sleep(60 * time.Millisecond)
+
+	if posted, _ := fake.snapshot(); len(posted) != 0 {
+		t.Fatalf("posted = %v in response to the bot's own message", posted)
+	}
+}
+
+// A guild the bot does not serve must not get a sticky even if the channel ID
+// happens to be listed.
+func TestOnMessageCreateIgnoresForeignGuild(t *testing.T) {
+	fake := newFakeChannel()
+	b := newStickyTestBot(t, fake)
+
+	b.onMessageCreate(newTestSession(t), &discordgo.MessageCreate{Message: &discordgo.Message{
+		ChannelID: testStickyChannel,
+		GuildID:   "some-other-guild",
+		Author:    &discordgo.User{ID: "human"},
+		Content:   "hello",
+	}})
+	time.Sleep(60 * time.Millisecond)
+
+	if posted, _ := fake.snapshot(); len(posted) != 0 {
+		t.Fatalf("posted = %v for a guild the bot does not serve", posted)
+	}
+}
+
+// Close must cancel armed timers so a shutting-down pod does not post a sticky
+// it will never clean up.
+func TestCloseCancelsPendingSticky(t *testing.T) {
+	fake := newFakeChannel()
+	b := newStickyTestBot(t, fake)
+	b.session = newTestSession(t)
+
+	b.sticky.onMessage(testStickyChannel)
+	if err := b.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	time.Sleep(60 * time.Millisecond)
+
+	if posted, _ := fake.snapshot(); len(posted) != 0 {
+		t.Fatalf("posted = %v after Close", posted)
+	}
+}
+
+// newStickyTestBot builds the minimum Bot that onMessageCreate needs, with the
+// sticky reposter wired to a fake Discord.
+func newStickyTestBot(t *testing.T, api stickyAPI) *Bot {
+	t.Helper()
+	return &Bot{
+		cfg:    &config.Config{DiscordGuildID: testStickyGuild},
+		policy: access.NewPolicy(nil),
+		log:    zap.NewNop(),
+		queues: newSerialQueues(),
+		sticky: newTestSticky(t, api, []string{testStickyChannel}, testStickyText),
+	}
+}
+
+// newTestSession builds an unopened session. onMessageCreate reads its state for
+// thread lookups; nothing in these tests reaches the network.
+func newTestSession(t *testing.T) *discordgo.Session {
+	t.Helper()
+	s, err := discordgo.New("Bot test-token")
+	if err != nil {
+		t.Fatalf("discordgo.New: %v", err)
+	}
+	return s
 }
 
 // Documents the fake's ID scheme the other tests depend on.
