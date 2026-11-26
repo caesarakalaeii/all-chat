@@ -81,6 +81,7 @@ type Bot struct {
 	agentCfg agent.Config
 	log      *zap.Logger
 
+	sticky     *stickyReposter
 	botThreads sync.Map // channelID -> struct{}: threads the bot manages
 	queues     *serialQueues
 	busyQ      *busyQueue
@@ -108,6 +109,13 @@ func New(d Deps) (*Bot, error) {
 		log:      d.Log,
 		queues:   newSerialQueues(),
 	}
+	b.sticky = newStickyReposter(stickyDeps{
+		API:        session,
+		ChannelIDs: d.Config.StickyChannelIDs,
+		Text:       d.Config.StickyMessage,
+		BotID:      b.botID,
+		Log:        d.Log,
+	})
 	b.busyQ = newBusyQueue(b)
 	session.AddHandler(b.onReady)
 	session.AddHandler(b.onMessageCreate)
@@ -128,10 +136,13 @@ func (b *Bot) Start() error {
 	return nil
 }
 
-// Close stops the busy worker and disconnects.
+// Close stops the busy worker, cancels pending sticky reposts, and disconnects.
 func (b *Bot) Close() error {
 	if b.busyCancel != nil {
 		b.busyCancel()
+	}
+	if b.sticky != nil {
+		b.sticky.stop()
 	}
 	return b.session.Close()
 }
@@ -172,6 +183,13 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 	if !b.inHomeGuild(m.GuildID) {
 		return
+	}
+
+	// Keep the sticky reminder at the bottom of its channels. This runs before the
+	// mention/thread check below because ordinary chatter is exactly what buries the
+	// sticky; onMessage only arms a timer, so the gateway handler is not blocked.
+	if b.sticky != nil {
+		b.sticky.onMessage(m.ChannelID)
 	}
 
 	inThread := b.inBotThread(s, m.ChannelID)

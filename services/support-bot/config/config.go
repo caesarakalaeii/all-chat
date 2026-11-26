@@ -51,6 +51,12 @@ type Config struct {
 	DiscordGuildID    string // optional: the only guild the bot answers in; also scopes slash-command registration (instant)
 	ModerationGuildID string // optional: enables cross-channel-spam auto-ban in this guild
 
+	// Sticky message: a reminder the bot keeps at the bottom of the listed channels by
+	// deleting its previous copy and posting it again. Off unless both are set, and it
+	// has no expiry.
+	StickyChannelIDs []string // optional: channels the sticky is kept in
+	StickyMessage    string   // optional: the text; the literal {bot} becomes the bot's mention
+
 	// Local LLM (OpenAI-compatible /v1/chat/completions)
 	LLMBaseURL   string
 	LLMModel     string
@@ -124,6 +130,9 @@ func Load() *Config {
 		DiscordAppID:      getEnv("DISCORD_CLIENT_ID", ""),
 		DiscordGuildID:    getEnv("DISCORD_GUILD_ID", ""),
 		ModerationGuildID: getEnv("MODERATION_GUILD_ID", ""),
+
+		StickyChannelIDs: splitIDs(getEnv("STICKY_CHANNEL_IDS", "")),
+		StickyMessage:    strings.TrimSpace(getEnv("STICKY_MESSAGE", "")),
 
 		LLMBaseURL:   getEnv("LOCAL_LLM_BASE_URL", "http://localhost:8000"),
 		LLMModel:     getEnv("LOCAL_LLM_MODEL", ""),
