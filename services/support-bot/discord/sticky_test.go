@@ -331,6 +331,63 @@ func TestRenderStickyReplacesEveryBotPlaceholder(t *testing.T) {
 	}
 }
 
+// Two cycles for one channel must not overlap: a message arriving while a repost
+// is mid-flight arms a new timer, and if that ran concurrently both sends would
+// race, each record an ID, and one sticky would be left orphaned in the channel.
+func TestStickyRepostsForOneChannelDoNotOverlap(t *testing.T) {
+	fake := newFakeChannel()
+	// Block the first send until the second cycle has had its chance to start.
+	release := make(chan struct{})
+	slow := newBlockingChannel(fake, release)
+	s := newTestSticky(t, slow, []string{testStickyChannel}, testStickyText)
+
+	s.onMessage(testStickyChannel)
+	slow.waitUntilSending(t)
+	s.onMessage(testStickyChannel)
+	time.Sleep(60 * time.Millisecond) // the second timer fires while the first send is stuck
+	close(release)
+
+	fake.waitForPosts(t, 2)
+	posted, deleted := fake.snapshot()
+	if len(posted) != 2 {
+		t.Fatalf("posted = %v, want two sequential posts", posted)
+	}
+	if len(deleted) != 1 || deleted[0] != "sticky-1" {
+		t.Fatalf("deleted = %v, want the second cycle to remove [sticky-1]", deleted)
+	}
+}
+
+// blockingChannel holds the first send open so a test can drive two cycles into
+// each other on purpose.
+type blockingChannel struct {
+	*fakeChannel
+	release chan struct{} // closed by the test to let the first send finish
+	sending chan struct{} // closed once the first send has been entered
+	once    sync.Once
+}
+
+func newBlockingChannel(fake *fakeChannel, release chan struct{}) *blockingChannel {
+	return &blockingChannel{fakeChannel: fake, release: release, sending: make(chan struct{})}
+}
+
+func (b *blockingChannel) ChannelMessageSend(channelID, content string, opts ...discordgo.RequestOption) (*discordgo.Message, error) {
+	b.once.Do(func() {
+		close(b.sending)
+		<-b.release
+	})
+	return b.fakeChannel.ChannelMessageSend(channelID, content, opts...)
+}
+
+// waitUntilSending blocks until the first send has been entered and parked.
+func (b *blockingChannel) waitUntilSending(t *testing.T) {
+	t.Helper()
+	select {
+	case <-b.sending:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the first send to start")
+	}
+}
+
 // An ordinary message — one that neither mentions the bot nor sits in a bot
 // thread — is what the handler returns early on, so the sticky hook has to run
 // before that check or the reminder never moves.
