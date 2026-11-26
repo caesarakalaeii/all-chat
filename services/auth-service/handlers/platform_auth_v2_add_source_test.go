@@ -747,6 +747,104 @@ func TestGetOrCreateUser_UpdatesRenamedTwitchLogin(t *testing.T) {
 		brokenStore, &models.User{Username: "justbugslive"}, "meileetv", logger))
 }
 
+// The two assertions above pin the helpers. This one pins the WIRING: it drives
+// the real HandleAddSource over its gin route and asserts the channel_id that
+// reaches overlay-manager, which is the exact value the EventSub listener
+// matches chat against. Without it, the short-circuit could go back to building
+// the source from the stale users.username and every other test here would stay
+// green — the helpers would still be correct and simply not called, which is the
+// shape the original bug had.
+//
+// Runs without docker, unlike the testcontainer tests above: the short-circuit
+// reaches the database through fakeShortCircuitStore, so this coverage survives
+// on a machine where those tests skip.
+func TestAddSourceShortcut_UsesValidatedLogin_ThroughHandler(t *testing.T) {
+	store := &fakeShortCircuitStore{
+		user: &models.User{
+			ID:           "9096f152",
+			Username:     "meileetv",
+			DisplayName:  "JustBugsLIVE",
+			AuthProvider: string(oauth.PlatformTwitch),
+			TwitchID:     strPtr("1532957417"),
+			AccessToken:  "live-token",
+			// Far-future expiry keeps this on the reuse path: the refresh branch is
+			// already covered by the testcontainer tests above.
+			TokenExpiresAt: time.Now().UTC().Add(time.Hour),
+		},
+		scopes: []string{"user:read:chat", "user:bot", "channel:bot"},
+	}
+
+	stub := newAddSourceStub(t)
+	stub.validateHandler = func(string) (int, string) {
+		// Twitch reports the CURRENT login for the live token; the stored row still
+		// holds the pre-rename one.
+		return http.StatusOK, `{"client_id":"cid","login":"justbugslive","user_id":"1532957417",
+			"scopes":["user:read:chat","user:bot","channel:bot"]}`
+	}
+
+	provider := oauth.NewTwitchOAuth("cid", "secret", "http://localhost:3000/cb").
+		WithHTTPClient(&http.Client{Transport: stub.transport()})
+	h := &PlatformAuthHandlerV2{
+		providers:         map[oauth.Platform]oauth.OAuthProvider{oauth.PlatformTwitch: provider},
+		shortCircuitStore: store,
+		overlayManagerURL: stub.srv.URL,
+		logger:            zaptest.NewLogger(t),
+		frontendURL:       "http://localhost:3000",
+	}
+
+	c, w := ginContext(t, store.user.ID, "274015e4-0000-0000-0000-000000000000")
+	h.HandleAddSource(oauth.PlatformTwitch)(c)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, 1, stub.overlayCallCount(),
+		"the short-circuit must add the source without an OAuth reflow")
+	assert.Equal(t, "justbugslive", stub.lastOverlayCall()["channel_id"],
+		"the source must be keyed on the validated login; a stale one gets no chat")
+
+	// The rename is written back, so later flows reading users.username (this
+	// short-circuit's own fallback, support lookups) stop serving the dead login.
+	assert.Equal(t, []string{"justbugslive"}, store.updated,
+		"a detected rename must be persisted to the users row")
+}
+
+// fakeShortCircuitStore is the Twitch add-source short-circuit's view of the user
+// repository, so the handler can be driven without a live pool. Every method the
+// short-circuit calls is answered from memory; Update records the username it was
+// asked to persist.
+type fakeShortCircuitStore struct {
+	user    *models.User
+	scopes  []string
+	updated []string
+}
+
+func (s *fakeShortCircuitStore) GetByID(_ context.Context, id string) (*models.User, error) {
+	if s.user == nil || s.user.ID != id {
+		return nil, repository.ErrUserNotFound
+	}
+	return s.user, nil
+}
+
+func (s *fakeShortCircuitStore) GetGrantedScopes(_ context.Context, _ string) ([]string, error) {
+	return s.scopes, nil
+}
+
+func (s *fakeShortCircuitStore) Update(_ context.Context, user *models.User) error {
+	s.updated = append(s.updated, user.Username)
+	return nil
+}
+
+func (s *fakeShortCircuitStore) UpdateTokens(_ context.Context, _, accessToken, refreshToken string, expiresAt time.Time) error {
+	s.user.AccessToken = accessToken
+	s.user.RefreshToken = refreshToken
+	s.user.TokenExpiresAt = expiresAt
+	return nil
+}
+
+func (s *fakeShortCircuitStore) UpdateGrantedScopes(_ context.Context, _ string, scopes []string) error {
+	s.scopes = scopes
+	return nil
+}
+
 // recordingUserUpdater is a userUpdater that records the username of every
 // Update attempt, and can fail one specific username the way Postgres fails the
 // users_username_key unique index.

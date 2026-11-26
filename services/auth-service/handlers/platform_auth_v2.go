@@ -53,8 +53,14 @@ func (e *ErrDuplicateAccount) Error() string { return e.Message }
 
 // PlatformAuthHandlerV2 handles authentication for any OAuth platform with enhanced state management
 type PlatformAuthHandlerV2 struct {
-	providers         map[oauth.Platform]oauth.OAuthProvider
-	userRepo          *repository.UserRepository
+	providers map[oauth.Platform]oauth.OAuthProvider
+	userRepo  *repository.UserRepository
+	// shortCircuitStore is the Twitch add-source short-circuit's view of userRepo.
+	// That path decides the channel_id the EventSub listener matches chat against,
+	// so it is covered by a handler-level test; the narrow interface lets that test
+	// run without a live pool, on machines where the testcontainer tests skip.
+	// Always userRepo in production, set by NewPlatformAuthHandlerV2.
+	shortCircuitStore twitchShortCircuitStore
 	redis             *redis.Client
 	userKeyChain      *auth.KeyChain
 	jwtExpiry         time.Duration
@@ -81,6 +87,7 @@ func NewPlatformAuthHandlerV2(
 	return &PlatformAuthHandlerV2{
 		providers:         providers,
 		userRepo:          userRepo,
+		shortCircuitStore: userRepo,
 		redis:             redisClient,
 		userKeyChain:      userKeyChain,
 		jwtExpiry:         time.Duration(jwtExpiryHours) * time.Hour,
@@ -188,7 +195,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 		// the streamer is prompted to grant it — that is what moves their channel from the
 		// IRC listener to the EventSub listener.
 		if platform == oauth.PlatformTwitch {
-			user, err := h.userRepo.GetByID(c.Request.Context(), userIDStr)
+			user, err := h.shortCircuitStore.GetByID(c.Request.Context(), userIDStr)
 			if err != nil {
 				if errors.Is(err, repository.ErrUserNotFound) {
 					c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
@@ -201,7 +208,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 
 			// granted_scopes is not populated by GetByID (scanUser), so read it directly.
 			// On error, treat as "no chat scope" and fall through to the OAuth flow.
-			grantedScopes, scopeErr := h.userRepo.GetGrantedScopes(c.Request.Context(), userIDStr)
+			grantedScopes, scopeErr := h.shortCircuitStore.GetGrantedScopes(c.Request.Context(), userIDStr)
 			if scopeErr != nil {
 				h.logger.Warn("Failed to read granted scopes for Twitch add-source short-circuit",
 					zap.String("user_id", userIDStr), zap.Error(scopeErr))
@@ -248,7 +255,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 					user.RefreshToken = newToken.RefreshToken
 					user.TokenExpiresAt = newToken.Expiry
 
-					if err := h.userRepo.UpdateTokens(c.Request.Context(), user.ID, newToken.AccessToken, newToken.RefreshToken, newToken.Expiry); err != nil {
+					if err := h.shortCircuitStore.UpdateTokens(c.Request.Context(), user.ID, newToken.AccessToken, newToken.RefreshToken, newToken.Expiry); err != nil {
 						h.logger.Error("Failed to save refreshed token",
 							zap.String("user_id", user.ID),
 							zap.Error(err),
@@ -290,7 +297,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 					// The stored scope record is stale — clear it so every other
 					// scope-gated decision (partition predicate, eventsub gating, this
 					// short-circuit) stops believing the dead grant until re-consent.
-					if clearErr := h.userRepo.UpdateGrantedScopes(c.Request.Context(), user.ID, validation.Scopes); clearErr != nil {
+					if clearErr := h.shortCircuitStore.UpdateGrantedScopes(c.Request.Context(), user.ID, validation.Scopes); clearErr != nil {
 						h.logger.Warn("Failed to clear stale granted scopes",
 							zap.String("user_id", user.ID),
 							zap.Error(clearErr),
@@ -318,7 +325,7 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 				if renamed := platformUser.Login; renamed != "" && renamed != user.Username {
 					previousUsername := user.Username
 					user.Username = renamed
-					if err := updateRenamedUser(c.Request.Context(), h.userRepo, user, previousUsername, h.logger); err != nil {
+					if err := updateRenamedUser(c.Request.Context(), h.shortCircuitStore, user, previousUsername, h.logger); err != nil {
 						h.logger.Warn("Failed to save renamed Twitch login",
 							zap.String("user_id", user.ID),
 							zap.String("old_username", previousUsername),
@@ -1637,6 +1644,16 @@ func refreshLoginProfile(user *models.User, platform oauth.Platform, platformUse
 // the collision fallback is testable without a database.
 type userUpdater interface {
 	Update(ctx context.Context, user *models.User) error
+}
+
+// twitchShortCircuitStore is everything the Twitch add-source short-circuit asks of the
+// user repository. See PlatformAuthHandlerV2.shortCircuitStore for why it is an interface.
+type twitchShortCircuitStore interface {
+	userUpdater
+	GetByID(ctx context.Context, id string) (*models.User, error)
+	GetGrantedScopes(ctx context.Context, userID string) ([]string, error)
+	UpdateTokens(ctx context.Context, userID, accessToken, refreshToken string, expiresAt time.Time) error
+	UpdateGrantedScopes(ctx context.Context, userID string, scopes []string) error
 }
 
 // updateRenamedUser persists user, whose Username has just been changed from previous, and
