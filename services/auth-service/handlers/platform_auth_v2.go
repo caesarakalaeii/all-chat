@@ -1570,6 +1570,10 @@ func resolveTwitchLogin(stored, validated string) string {
 	return strings.ToLower(validated)
 }
 
+// twitchShortcutSourceUser builds the platform identity the add-source short-circuit hands
+// to overlay-manager, from the stored user row and the live token validation the
+// short-circuit already performs for its scope check — the validation is reused here
+// rather than fetched again.
 func twitchShortcutSourceUser(user *models.User, validation oauth.TokenValidation) *oauth.TwitchUserInfoWrapper {
 	return &oauth.TwitchUserInfoWrapper{
 		ID:              *user.TwitchID,
@@ -1581,6 +1585,10 @@ func twitchShortcutSourceUser(user *models.User, validation oauth.TokenValidatio
 
 // refreshLoginProfile copies the profile the login provider just reported onto the stored
 // user row, and reports whether the Twitch login changed.
+//
+// Only ever called for the account's own login provider: a login through a linked platform
+// authenticates the account but must not overwrite its profile. The guard lives in the
+// caller (refreshExistingUserOnLogin's samePlatform check), not here.
 //
 // The login is refreshed alongside display name and avatar for Twitch because a streamer
 // who renames keeps the same twitch_id, so a later login lands on this same row; see
