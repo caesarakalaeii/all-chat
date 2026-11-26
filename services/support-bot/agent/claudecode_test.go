@@ -68,8 +68,19 @@ func fakeClaude(mode string) int {
 	switch mode {
 	case "usage-limit":
 		return result(true, "success", "Claude AI usage limit reached|1763300000")
-	case "max-turns":
-		return result(true, "error_max_turns", "")
+	case "max-turns", "max-turns-synth-fails":
+		if flag("--mcp-config") != "" {
+			return result(true, "error_max_turns", "")
+		}
+		// No --mcp-config: this is the no-tools write-up step.
+		if mode == "max-turns-synth-fails" {
+			return result(true, "success", "API Error: 500 Internal server error")
+		}
+		if got := flag("--max-turns"); got != "1" {
+			fmt.Fprintf(os.Stderr, "write-up step --max-turns = %q, want 1\n", got)
+			return 2
+		}
+		return result(false, "success", "synthesized: "+string(prompt))
 	case "env":
 		// Report what the CLI was given: secrets the bot holds must not leak in.
 		return result(false, "success", fmt.Sprintf("token=%s github=%q home=%s",
@@ -230,6 +241,63 @@ func TestClaudeCodeRun_MaxTurnsIsPartial(t *testing.T) {
 	}
 	if res.Stop != StopMaxIterations {
 		t.Errorf("stop = %v, want max iterations", res.Stop)
+	}
+}
+
+func TestClaudeCodeRun_MaxTurnsSynthesizesAnswer(t *testing.T) {
+	cc := newTestClaudeCode(t, "max-turns")
+	res, err := cc.Run(context.Background(), &tool.ToolCtx{Mode: access.ModeSupport}, supportTranscript())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Stop != StopMaxIterations {
+		t.Errorf("stop = %v, want max iterations: the answer is still partial", res.Stop)
+	}
+	if !strings.HasPrefix(res.Text, "synthesized:") {
+		t.Errorf("text = %q, want the write-up step's answer", res.Text)
+	}
+	if !strings.Contains(res.Text, "Findings so far") {
+		t.Errorf("text = %q, want the recorded findings in the write-up prompt", res.Text)
+	}
+}
+
+func TestClaudeCodeRun_MaxTurnsKeepsEmptyTextWhenSynthesisFails(t *testing.T) {
+	cc := newTestClaudeCode(t, "max-turns-synth-fails")
+	res, err := cc.Run(context.Background(), &tool.ToolCtx{Mode: access.ModeSupport}, supportTranscript())
+	if err != nil {
+		t.Fatalf("a failed write-up step must not fail the run: %v", err)
+	}
+	if res.Stop != StopMaxIterations {
+		t.Errorf("stop = %v, want max iterations", res.Stop)
+	}
+	if res.Text != "" {
+		t.Errorf("text = %q, want empty", res.Text)
+	}
+}
+
+func TestCCSessionToolLog_DropsOldestAndClipsResults(t *testing.T) {
+	sess := &ccSession{}
+	sess.recordToolCall("echo", `{"n":0}`, strings.Repeat("a", maxToolLogResult+500))
+	for i := 1; i < 200; i++ {
+		sess.recordToolCall("echo", fmt.Sprintf(`{"n":%d}`, i), strings.Repeat("b", 1000))
+	}
+	log := sess.toolLogText()
+	if len(log) > maxToolLog {
+		t.Errorf("tool log is %d bytes, want at most %d", len(log), maxToolLog)
+	}
+	if strings.Contains(log, `{"n":0}`) {
+		t.Error("the oldest entry must be dropped first")
+	}
+	if !strings.Contains(log, `{"n":199}`) {
+		t.Error("the newest entry must be kept")
+	}
+}
+
+func TestCCSessionToolLog_ClipsALongResult(t *testing.T) {
+	sess := &ccSession{}
+	sess.recordToolCall("echo", "{}", strings.Repeat("a", maxToolLogResult+500))
+	if got := len(sess.toolLogText()); got > maxToolLogResult+300 {
+		t.Errorf("a single entry is %d bytes, want the result clipped to about %d", got, maxToolLogResult)
 	}
 }
 
