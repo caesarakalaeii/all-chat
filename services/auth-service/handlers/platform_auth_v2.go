@@ -35,6 +35,7 @@ import (
 	"github.com/caesar/all-chat/shared/auth"
 	"github.com/caesar/all-chat/shared/metrics"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -208,6 +209,9 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 			hasChatScope := containsScope(grantedScopes, "user:read:chat")
 
 			shortCircuitOK := user.TwitchID != nil && *user.TwitchID != "" && user.AuthProvider == string(oauth.PlatformTwitch) && hasChatScope
+			// Declared out here because the source built below is keyed on the login the
+			// validation reports, not only on the scopes it reports.
+			var validation oauth.TokenValidation
 			if shortCircuitOK {
 				twitchProvider, ok := provider.(*oauth.TwitchOAuth)
 				if !ok {
@@ -268,7 +272,9 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 				// consent screen and could never recover their chat (prod incident:
 				// overlay 36847b00, chat silent for days). Ask Twitch what the token can
 				// actually do; only short-circuit on a validated live grant.
-				validation, valid, validateErr := twitchProvider.ValidateToken(c.Request.Context(), user.AccessToken)
+				var valid bool
+				var validateErr error
+				validation, valid, validateErr = twitchProvider.ValidateToken(c.Request.Context(), user.AccessToken)
 				if validateErr != nil {
 					// Transient failure to verify — do not silently reuse stale
 					// credentials; fall through to the consent flow, which either
@@ -304,11 +310,24 @@ func (h *PlatformAuthHandlerV2) HandleAddSource(platform oauth.Platform) gin.Han
 					return
 				}
 
-				platformUser := &oauth.TwitchUserInfoWrapper{
-					ID:              *user.TwitchID,
-					Login:           user.Username,
-					DisplayName:     user.DisplayName,
-					ProfileImageURL: user.ProfileImageURL,
+				platformUser := twitchShortcutSourceUser(user, validation)
+
+				// The validation above is the only moment this flow learns the streamer's
+				// current login, so a rename is saved here too: every later flow that reads
+				// users.username (this short-circuit's own fallback, support lookups) would
+				// otherwise keep serving the dead login. A failure to save is not worth
+				// refusing the source over — the source carries the right login regardless.
+				if renamed := platformUser.Login; renamed != "" && renamed != user.Username {
+					previousUsername := user.Username
+					user.Username = renamed
+					if err := updateRenamedUser(c.Request.Context(), h.userRepo, user, previousUsername, h.logger); err != nil {
+						h.logger.Warn("Failed to save renamed Twitch login",
+							zap.String("user_id", user.ID),
+							zap.String("old_username", previousUsername),
+							zap.String("new_username", renamed),
+							zap.Error(err),
+						)
+					}
 				}
 
 				if err := h.addSourceToOverlay(c.Request.Context(), user.ID, overlayID, platform, platformUser, nil, jwtToken); err != nil {
@@ -1387,10 +1406,12 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 		// EventSub on every login. So when the stored credentials already carry
 		// user:read:chat and this token does not, keep the existing token +
 		// granted_scopes and refresh only the profile fields.
+		//
 		samePlatform := string(platform) == user.AuthProvider
+		previousUsername := user.Username
+		renamed := false
 		if samePlatform {
-			user.DisplayName = platformUser.GetDisplayName()
-			user.ProfileImageURL = platformUser.GetProfileImageURL()
+			renamed = refreshLoginProfile(user, platform, platformUser)
 		}
 
 		newScopes := oauth.ExtractGrantedScopes(token)
@@ -1403,7 +1424,14 @@ func (h *PlatformAuthHandlerV2) getOrCreateUser(
 			user.TokenExpiresAt = token.Expiry
 		}
 
-		if err := h.userRepo.Update(ctx, user); err != nil {
+		if renamed {
+			// A rename can collide with an account that already holds the new login, which
+			// must not fail the login itself; updateRenamedUser keeps the old username in
+			// that case and still saves the rest of the row.
+			if err := updateRenamedUser(ctx, h.userRepo, user, previousUsername, h.logger); err != nil {
+				return nil, fmt.Errorf("failed to update user: %w", err)
+			}
+		} else if err := h.userRepo.Update(ctx, user); err != nil {
 			return nil, fmt.Errorf("failed to update user: %w", err)
 		}
 
@@ -1567,17 +1595,30 @@ func kickCredentialChannel(sourceDetails *OverlaySourceDetails, platformUser oau
 	return platformUser.GetUsername()
 }
 
-// resolveTwitchLogin picks the Twitch login to key a chat source on.
+// resolveTwitchLogin picks the Twitch login to key a chat source on, preferring the
+// login Twitch reports for the live token over the one stored on the users row.
+//
+// Twitch lets a streamer rename, and nothing tells us when they do: users.username keeps
+// the login recorded at the last login. The EventSub listener matches sources by
+// channel_id against BroadcasterUserLogin, so a source built from a stale username is
+// matched against a login that no longer exists and the overlay silently receives no chat
+// (2026-11-26: meileetv → justbugslive). Validated logins are lowercased because that is
+// the form EventSub delivers and the form the listener compares against; an empty
+// validated login means Twitch told us nothing, so the stored value stands.
 func resolveTwitchLogin(stored, validated string) string {
-	return stored
+	if validated == "" {
+		return stored
+	}
+	return strings.ToLower(validated)
 }
 
 // twitchShortcutSourceUser builds the platform identity the add-source short-circuit hands
-// to overlay-manager.
+// to overlay-manager, from the stored user row and the live token validation that the
+// short-circuit already performs for its scope check.
 func twitchShortcutSourceUser(user *models.User, validation oauth.TokenValidation) *oauth.TwitchUserInfoWrapper {
 	return &oauth.TwitchUserInfoWrapper{
 		ID:              *user.TwitchID,
-		Login:           user.Username,
+		Login:           resolveTwitchLogin(user.Username, validation.Login),
 		DisplayName:     user.DisplayName,
 		ProfileImageURL: user.ProfileImageURL,
 	}
@@ -1585,19 +1626,65 @@ func twitchShortcutSourceUser(user *models.User, validation oauth.TokenValidatio
 
 // refreshLoginProfile copies the profile the login provider just reported onto the stored
 // user row, and reports whether the Twitch login changed.
+//
+// Only ever called for the account's own login provider: a login through a linked platform
+// authenticates the account but must not overwrite its profile. The login is refreshed
+// alongside display name and avatar for Twitch because a streamer who renames keeps the
+// same twitch_id, so a relink or a later login lands on this same row — and leaving
+// users.username on the old login is what left an overlay source keyed to a channel
+// EventSub no longer names (2026-11-26: meileetv → justbugslive).
 func refreshLoginProfile(user *models.User, platform oauth.Platform, platformUser oauth.PlatformUserInfo) (renamed bool) {
 	user.DisplayName = platformUser.GetDisplayName()
 	user.ProfileImageURL = platformUser.GetProfileImageURL()
-	return false
+	if platform != oauth.PlatformTwitch {
+		return false
+	}
+
+	previous := user.Username
+	user.Username = resolveTwitchLogin(previous, platformUser.GetUsername())
+	return user.Username != previous
 }
 
-// userUpdater is the slice of repository.UserRepository that persisting a rename needs.
+// userUpdater is the slice of repository.UserRepository that persisting a rename needs, so
+// the collision fallback can be tested without a database.
 type userUpdater interface {
 	Update(ctx context.Context, user *models.User) error
 }
 
-// updateRenamedUser persists user, whose Username has just been changed from previous.
+// updateRenamedUser persists user, whose Username has just been changed from previous, and
+// falls back to previous if the new login is already taken.
+//
+// Twitch releases a login as soon as its owner renames away from it, so another account on
+// this service may already hold it; users.username is uniquely indexed
+// (migrations/043_unique_lower_username.sql), so writing it would fail the whole Update and
+// with it the token and profile columns in the same statement. A stale username is
+// survivable — the source channel_id is taken from the validated login either way — so on a
+// unique violation we keep the old name and save the rest of the row. Any other failure is
+// a real write failure and is returned.
 func updateRenamedUser(ctx context.Context, store userUpdater, user *models.User, previous string, logger *zap.Logger) error {
+	err := store.Update(ctx, user)
+	if err == nil {
+		logger.Info("twitch_login_renamed",
+			zap.String("user_id", user.ID),
+			zap.String("old_username", previous),
+			zap.String("new_username", user.Username),
+		)
+		return nil
+	}
+
+	// Keyed on SQLSTATE alone: migration 043 replaced the users_username_key constraint
+	// with the index idx_users_username_lower_unique, so the constraint name is not stable.
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {
+		return err
+	}
+
+	logger.Warn("Twitch login already belongs to another account; keeping the stored username",
+		zap.String("user_id", user.ID),
+		zap.String("old_username", previous),
+		zap.String("new_username", user.Username),
+	)
+	user.Username = previous
 	return store.Update(ctx, user)
 }
 
