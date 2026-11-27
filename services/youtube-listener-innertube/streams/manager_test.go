@@ -462,6 +462,49 @@ func TestManager_CleanupDiscoveryState_ReleasesOwnReservation(t *testing.T) {
 	assert.False(t, exists, "the reservation holder must release its own slot")
 }
 
+// TestManager_AcceptBackoffReset_RestartsAggressivePhaseWhenRested covers the
+// signal this feature exists for: a sibling platform going live after a quiet
+// period means the streamer is probably about to be live on YouTube too, so the
+// loop should return to the 10s/20s/30s phase.
+func TestManager_AcceptBackoffReset_RestartsAggressivePhaseWhenRested(t *testing.T) {
+	manager := &Manager{logger: zap.NewNop()}
+
+	state := &DiscoveryState{
+		ChannelID: "UCrested",
+		Attempts:  12,
+		// Last reset is older than one full backoff cycle, so this event is a
+		// fresh signal rather than part of a storm.
+		LastBackoffReset: time.Now().Add(-2 * minBackoffResetInterval),
+	}
+
+	accepted := manager.acceptBackoffReset(state)
+
+	assert.True(t, accepted, "a reset after a quiet period must restart the aggressive phase")
+	assert.Zero(t, state.Attempts, "restarting the aggressive phase means the attempt counter goes back to zero")
+}
+
+// TestManager_AcceptBackoffReset_KeepsBackoffDuringResetStorm reproduces
+// AllChatYouTubeDiscoveryRetryStorm on channel UCWEN7sIzZ7Mp56CsOleXzdw: its
+// overlay received a Twitch stream.online roughly every 2-11 minutes for hours
+// (twitch-eventsub-listener webhooks/handler.go:682, overlay
+// 2333b97a-c434-4492-ac14-ca7915a3a64b). Each one zeroed Attempts, so discovery
+// never reached the 60s step and polled YouTube at ~0.037/sec indefinitely.
+// A repeat reset may still retry immediately, but it must not rewind the ladder.
+func TestManager_AcceptBackoffReset_KeepsBackoffDuringResetStorm(t *testing.T) {
+	manager := &Manager{logger: zap.NewNop()}
+
+	state := &DiscoveryState{
+		ChannelID:        "UCWEN7sIzZ7Mp56CsOleXzdw",
+		Attempts:         12,
+		LastBackoffReset: time.Now(),
+	}
+
+	accepted := manager.acceptBackoffReset(state)
+
+	assert.False(t, accepted, "a reset arriving inside the cooldown must not restart the aggressive phase")
+	assert.Equal(t, 12, state.Attempts, "the attempt counter must keep climbing so backoff reaches its 60s cap")
+}
+
 // TestManager_DiscoveryLoop_ExitsWhenReservationLost covers the orphan case:
 // a loop that no longer owns its channel is unreachable by reconcileDemand (that
 // only cancels states still in m.discovering), so the loop must notice and stop
