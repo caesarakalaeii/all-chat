@@ -485,7 +485,7 @@ func TestManager_AcceptBackoffReset_RestartsAggressivePhaseWhenRested(t *testing
 
 // TestManager_AcceptBackoffReset_KeepsBackoffDuringResetStorm reproduces
 // AllChatYouTubeDiscoveryRetryStorm on channel UCWEN7sIzZ7Mp56CsOleXzdw: its
-// overlay received a Twitch stream.online roughly every 2-11 minutes for hours
+// overlay received a Twitch stream.online every 2-6 minutes for hours
 // (twitch-eventsub-listener webhooks/handler.go:682, overlay
 // 2333b97a-c434-4492-ac14-ca7915a3a64b). Each one zeroed Attempts, so discovery
 // never reached the 60s step and polled YouTube at ~0.037/sec indefinitely.
@@ -503,6 +503,33 @@ func TestManager_AcceptBackoffReset_KeepsBackoffDuringResetStorm(t *testing.T) {
 
 	assert.Equal(t, 12, state.Attempts,
 		"a reset inside the cooldown must leave the attempt counter alone so backoff reaches its 60s cap")
+}
+
+// TestManager_AcceptBackoffReset_ReachesBackoffCapUnderSustainedStorm asserts the
+// property the alert actually measures. Holding the counter steady for one reset
+// is not enough: the observed storm delivered a stream.online every few minutes
+// for hours, so what matters is that the ladder still climbs to its 60s cap while
+// they keep arriving. The loop indexes backoffSequence by Attempts-1 and clamps
+// to the last entry, so "capped" means Attempts has reached len(backoffSequence).
+func TestManager_AcceptBackoffReset_ReachesBackoffCapUnderSustainedStorm(t *testing.T) {
+	manager := &Manager{logger: zap.NewNop()}
+
+	// A fresh loop: no reset has been honoured yet, so the first one restarts the
+	// aggressive phase exactly as the feature intends.
+	state := &DiscoveryState{ChannelID: "UCWEN7sIzZ7Mp56CsOleXzdw"}
+
+	// backoffSequence is 10s, 20s, 30s, 60s; four attempts reach the 60s step.
+	const attemptsToReachCap = 4
+
+	for range attemptsToReachCap + 2 {
+		state.Attempts++
+		// Every iteration another stream.online lands mid-backoff, the way the
+		// flapping Twitch source delivered them.
+		manager.acceptBackoffReset(state)
+	}
+
+	assert.GreaterOrEqual(t, state.Attempts, attemptsToReachCap,
+		"a sustained reset storm must still let backoff climb to its 60s cap")
 }
 
 // TestManager_DiscoveryLoop_ExitsWhenReservationLost covers the orphan case:
