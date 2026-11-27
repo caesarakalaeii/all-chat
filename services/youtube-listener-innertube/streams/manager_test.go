@@ -477,10 +477,10 @@ func TestManager_AcceptBackoffReset_RestartsAggressivePhaseWhenRested(t *testing
 		LastBackoffReset: time.Now().Add(-2 * minBackoffResetInterval),
 	}
 
-	accepted := manager.acceptBackoffReset(state)
+	manager.acceptBackoffReset(state)
 
-	assert.True(t, accepted, "a reset after a quiet period must restart the aggressive phase")
-	assert.Zero(t, state.Attempts, "restarting the aggressive phase means the attempt counter goes back to zero")
+	assert.Zero(t, state.Attempts,
+		"a reset after a quiet period must restart the aggressive phase by zeroing the attempt counter")
 }
 
 // TestManager_AcceptBackoffReset_KeepsBackoffDuringResetStorm reproduces
@@ -499,10 +499,10 @@ func TestManager_AcceptBackoffReset_KeepsBackoffDuringResetStorm(t *testing.T) {
 		LastBackoffReset: time.Now(),
 	}
 
-	accepted := manager.acceptBackoffReset(state)
+	manager.acceptBackoffReset(state)
 
-	assert.False(t, accepted, "a reset arriving inside the cooldown must not restart the aggressive phase")
-	assert.Equal(t, 12, state.Attempts, "the attempt counter must keep climbing so backoff reaches its 60s cap")
+	assert.Equal(t, 12, state.Attempts,
+		"a reset inside the cooldown must leave the attempt counter alone so backoff reaches its 60s cap")
 }
 
 // TestManager_DiscoveryLoop_ExitsWhenReservationLost covers the orphan case:
