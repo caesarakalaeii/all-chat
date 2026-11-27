@@ -656,7 +656,7 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 // reset before the next one may restart the aggressive discovery phase.
 //
 // It has to exceed the spacing of a storm to damp one: the events that fired the
-// alert arrived 2-11 minutes apart, so anything under ~11m would still have let
+// alert arrived 2-6 minutes apart, so anything under ~6m would still have let
 // every one of them rewind the ladder. 15m clears that with margin and is still
 // far below maxDiscoveryDuration (1h), so a genuinely dormant channel can be
 // re-triggered several times before discovery gives up.
