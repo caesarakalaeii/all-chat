@@ -436,6 +436,13 @@ Alerted on as `AllChatYouTubeDiscoveryRetryStorm`. A fresh loop briefly reaches
 ≈0.027/sec during its 10s/20s/30s aggressive phase; sustained values above that mean
 duplicate loops or something forcing constant rediscovery.
 
+A cross-platform `stream.online` (another platform on the same overlay went live)
+restarts that aggressive phase, but at most once per `minBackoffResetInterval`
+(15m) per channel. A source that emits `stream.online` every few minutes would
+otherwise rewind the backoff ladder forever and hold one loop at ≈0.037/sec — the
+cause of a past `AllChatYouTubeDiscoveryRetryStorm`. Look for "Cross-platform
+reset ignored for backoff" in the logs to see the suppression working.
+
 **Channels parked after 1h of fruitless polling:**
 ```promql
 sum by (channel_id) (increase(youtube_listener_discovery_gave_up_total{namespace="allchat"}[6h]))

@@ -92,6 +92,9 @@ type DiscoveryState struct {
 	Attempts          int
 	CancelFunc        context.CancelFunc
 	ResetBackoffChan  chan struct{} // Signal to reset backoff when other platforms go live
+	// LastBackoffReset is when a cross-platform event last restarted the
+	// aggressive phase. Zero means never. See acceptBackoffReset.
+	LastBackoffReset time.Time
 }
 
 // Manager manages active YouTube streams and coordinates with source-manager
@@ -640,20 +643,54 @@ func (m *Manager) discoveryLoop(ctx context.Context, state *DiscoveryState) {
 			return
 		case <-state.ResetBackoffChan:
 			// Cross-platform trigger: another platform went live, retry immediately.
-			// Reset the attempt counter so a dormant channel returns to aggressive
-			// discovery — a sibling platform going live is a strong signal this
-			// streamer is about to be live too.
 			timer.Stop()
-			state.Attempts = 0
-			m.logger.Info("Backoff reset by cross-platform event, retrying discovery immediately",
-				zap.String("channel_id", state.ChannelID),
-				zap.String("overlay_id", state.OverlayID),
-			)
+			m.acceptBackoffReset(state)
 			// Continue to next attempt immediately
 		case <-timer.C:
 			// Backoff elapsed, continue to next attempt
 		}
 	}
+}
+
+// minBackoffResetInterval is how long a channel must go without a cross-platform
+// reset before the next one may restart the aggressive discovery phase.
+//
+// It has to exceed the spacing of a storm to damp one: the events that fired the
+// alert arrived 2-6 minutes apart, so anything under ~6m would still have let
+// every one of them rewind the ladder. 15m clears that with margin and is still
+// far below maxDiscoveryDuration (1h), so a genuinely dormant channel can be
+// re-triggered several times before discovery gives up.
+const minBackoffResetInterval = 15 * time.Minute
+
+// acceptBackoffReset decides whether a cross-platform event may restart the
+// aggressive discovery phase, and zeroes the attempt counter when it may.
+//
+// The signal is worth acting on because a sibling platform going live means this
+// streamer is probably about to be live on YouTube too. But it is only worth
+// acting on ONCE per going-live: a source that emits stream.online every few
+// minutes (a flapping Twitch stream, or an overlay whose subscriptions churn)
+// otherwise rewinds the ladder forever and the loop never reaches its 60s cap.
+// That is exactly what fired AllChatYouTubeDiscoveryRetryStorm for channel
+// UCWEN7sIzZ7Mp56CsOleXzdw at 0.037/sec. A rejected reset still retries
+// immediately — the caller has already stopped the timer — it just leaves
+// Attempts alone so the next wait is the next step up, not 10s again.
+func (m *Manager) acceptBackoffReset(state *DiscoveryState) {
+	if !state.LastBackoffReset.IsZero() && time.Since(state.LastBackoffReset) < minBackoffResetInterval {
+		m.logger.Info("Cross-platform reset ignored for backoff, retrying without restarting the aggressive phase",
+			zap.String("channel_id", state.ChannelID),
+			zap.String("overlay_id", state.OverlayID),
+			zap.Int("attempt", state.Attempts),
+			zap.Duration("since_last_reset", time.Since(state.LastBackoffReset)),
+		)
+		return
+	}
+
+	state.Attempts = 0
+	state.LastBackoffReset = time.Now()
+	m.logger.Info("Backoff reset by cross-platform event, retrying discovery immediately",
+		zap.String("channel_id", state.ChannelID),
+		zap.String("overlay_id", state.OverlayID),
+	)
 }
 
 // giveUpDiscovery stops discovery for a channel that has been polled for

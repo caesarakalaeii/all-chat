@@ -462,6 +462,76 @@ func TestManager_CleanupDiscoveryState_ReleasesOwnReservation(t *testing.T) {
 	assert.False(t, exists, "the reservation holder must release its own slot")
 }
 
+// TestManager_AcceptBackoffReset_RestartsAggressivePhaseWhenRested covers the
+// signal this feature exists for: a sibling platform going live after a quiet
+// period means the streamer is probably about to be live on YouTube too, so the
+// loop should return to the 10s/20s/30s phase.
+func TestManager_AcceptBackoffReset_RestartsAggressivePhaseWhenRested(t *testing.T) {
+	manager := &Manager{logger: zap.NewNop()}
+
+	state := &DiscoveryState{
+		ChannelID: "UCrested",
+		Attempts:  12,
+		// Last reset is older than one full backoff cycle, so this event is a
+		// fresh signal rather than part of a storm.
+		LastBackoffReset: time.Now().Add(-2 * minBackoffResetInterval),
+	}
+
+	manager.acceptBackoffReset(state)
+
+	assert.Zero(t, state.Attempts,
+		"a reset after a quiet period must restart the aggressive phase by zeroing the attempt counter")
+}
+
+// TestManager_AcceptBackoffReset_KeepsBackoffDuringResetStorm reproduces
+// AllChatYouTubeDiscoveryRetryStorm on channel UCWEN7sIzZ7Mp56CsOleXzdw: its
+// overlay received a Twitch stream.online every 2-6 minutes for hours
+// (twitch-eventsub-listener webhooks/handler.go:682, overlay
+// 2333b97a-c434-4492-ac14-ca7915a3a64b). Each one zeroed Attempts, so discovery
+// never reached the 60s step and polled YouTube at ~0.037/sec indefinitely.
+// A repeat reset may still retry immediately, but it must not rewind the ladder.
+func TestManager_AcceptBackoffReset_KeepsBackoffDuringResetStorm(t *testing.T) {
+	manager := &Manager{logger: zap.NewNop()}
+
+	state := &DiscoveryState{
+		ChannelID:        "UCWEN7sIzZ7Mp56CsOleXzdw",
+		Attempts:         12,
+		LastBackoffReset: time.Now(),
+	}
+
+	manager.acceptBackoffReset(state)
+
+	assert.Equal(t, 12, state.Attempts,
+		"a reset inside the cooldown must leave the attempt counter alone so backoff reaches its 60s cap")
+}
+
+// TestManager_AcceptBackoffReset_ReachesBackoffCapUnderSustainedStorm asserts the
+// property the alert actually measures. Holding the counter steady for one reset
+// is not enough: the observed storm delivered a stream.online every few minutes
+// for hours, so what matters is that the ladder still climbs to its 60s cap while
+// they keep arriving. The loop indexes backoffSequence by Attempts-1 and clamps
+// to the last entry, so "capped" means Attempts has reached len(backoffSequence).
+func TestManager_AcceptBackoffReset_ReachesBackoffCapUnderSustainedStorm(t *testing.T) {
+	manager := &Manager{logger: zap.NewNop()}
+
+	// A fresh loop: no reset has been honoured yet, so the first one restarts the
+	// aggressive phase exactly as the feature intends.
+	state := &DiscoveryState{ChannelID: "UCWEN7sIzZ7Mp56CsOleXzdw"}
+
+	// backoffSequence is 10s, 20s, 30s, 60s; four attempts reach the 60s step.
+	const attemptsToReachCap = 4
+
+	for range attemptsToReachCap + 2 {
+		state.Attempts++
+		// Every iteration another stream.online lands mid-backoff, the way the
+		// flapping Twitch source delivered them.
+		manager.acceptBackoffReset(state)
+	}
+
+	assert.GreaterOrEqual(t, state.Attempts, attemptsToReachCap,
+		"a sustained reset storm must still let backoff climb to its 60s cap")
+}
+
 // TestManager_DiscoveryLoop_ExitsWhenReservationLost covers the orphan case:
 // a loop that no longer owns its channel is unreachable by reconcileDemand (that
 // only cancels states still in m.discovering), so the loop must notice and stop
